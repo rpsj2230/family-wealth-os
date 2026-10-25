@@ -64,7 +64,7 @@ Tooling: pnpm workspaces · Vitest · Playwright (phone/tablet/desktop) · ESLin
 | P0.1 | Repo created; Phase 1 docs, logo and `.gitignore` pushed | `[x]` |
 | P0.2 | pnpm monorepo scaffold (`apps/web`, `packages/core`, `workers`, `supabase`) — `packages/db` and `packages/ingest` are created when first needed | `[x]` |
 | P0.3 | TypeScript strict ✅, Vitest ✅; ESLint, Prettier scripts and Playwright config still to add | `[~]` |
-| P0.4 | GitHub Actions CI (typecheck, test, build on every push) written; **lint step pending ESLint**; first run to be confirmed green | `[~]` |
+| P0.4 | GitHub Actions CI (typecheck, test, build on every push) written; **lint step pending ESLint**; **first run confirmed green on GitHub** | `[~]` |
 | P0.5 | Supabase project linked; `supabase/config.toml`; migrations pipeline (CI applies to a shadow DB) | `[!]` U1 |
 | P0.6 | Vercel project connected; preview deployments; env-var template `.env.example` | `[!]` U2 |
 | P0.7 | Secrets inventory and rotation notes (`docs/runbooks/secrets.md`) | `[ ]` |
