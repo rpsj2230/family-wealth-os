@@ -1,0 +1,11 @@
+# Never commit personal financial data
+.local/
+*.xlsx
+*.xls
+*.csv
+*.pdf
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
