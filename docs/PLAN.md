@@ -1,6 +1,6 @@
 # Family Wealth OS — Master Build Plan (living document)
 
-**Owner:** Rupash · **Repo:** `rpsj2230/family-wealth-os` · **Last updated:** 25 Oct 2026 · **Current phase:** P0 (setup)
+**Owner:** Rupash · **Repo:** `rpsj2230/family-wealth-os` · **Last updated:** 25 Oct 2026 · **Current phase:** P0 (setup) — core engine started
 
 > This file is updated at the end of every work session. Status of every task is recorded here; nothing is "done" until its acceptance tests pass in CI. See the [change log](#change-log) at the bottom.
 
@@ -61,10 +61,10 @@ Tooling: pnpm workspaces · Vitest · Playwright (phone/tablet/desktop) · ESLin
 
 | ID | Task | Status |
 |---|---|---|
-| P0.1 | Repo created; Phase 1 docs, logo and `.gitignore` pushed | `[~]` |
-| P0.2 | pnpm monorepo scaffold (`apps/web`, `packages/*`, `workers`, `supabase`) | `[ ]` |
-| P0.3 | TypeScript strict, ESLint, Prettier, Vitest, Playwright config | `[ ]` |
-| P0.4 | GitHub Actions CI: lint, type-check, unit tests on every push | `[ ]` |
+| P0.1 | Repo created; Phase 1 docs, logo and `.gitignore` pushed | `[x]` |
+| P0.2 | pnpm monorepo scaffold (`apps/web`, `packages/core`, `workers`, `supabase`) — `packages/db` and `packages/ingest` are created when first needed | `[x]` |
+| P0.3 | TypeScript strict ✅, Vitest ✅; ESLint, Prettier scripts and Playwright config still to add | `[~]` |
+| P0.4 | GitHub Actions CI (typecheck, test, build on every push) written; **lint step pending ESLint**; first run to be confirmed green | `[~]` |
 | P0.5 | Supabase project linked; `supabase/config.toml`; migrations pipeline (CI applies to a shadow DB) | `[!]` U1 |
 | P0.6 | Vercel project connected; preview deployments; env-var template `.env.example` | `[!]` U2 |
 | P0.7 | Secrets inventory and rotation notes (`docs/runbooks/secrets.md`) | `[ ]` |
@@ -79,7 +79,7 @@ Tooling: pnpm workspaces · Vitest · Playwright (phone/tablet/desktop) · ESLin
 | P2.2 | RLS policies + pgTAP tests (member sees household; non-member sees nothing; tax tables single-owner) | `[ ]` |
 | P2.3 | Authentication: email + password with email verification, optional TOTP; two users; session hardening | `[ ]` |
 | P2.4 | Design system and app shell with RP logo; mobile-first nav; light/dark; accessibility baseline | `[ ]` |
-| P2.5 | `core`: money/units types (decimal), net-worth aggregation without double counting, freshness engine | `[ ]` |
+| P2.5 | `core`: money/units types (decimal), net-worth aggregation without double counting, freshness engine — **freshness engine done (6 tests)**; money types and aggregation pending | `[~]` |
 | P2.6 | Dashboard v1: household / per-owner net worth, liquid / investable / illiquid views, freshness chips | `[ ]` |
 | P2.7 | **Monthly Update Mode**: spreadsheet-style grid, inline edit, paste, keyboard nav, validation, Save All, change summary | `[ ]` |
 | P2.8 | **Review Queue**: stale, missing, unverified, unexplained-change items | `[ ]` |
@@ -105,7 +105,7 @@ Tooling: pnpm workspaces · Vitest · Playwright (phone/tablet/desktop) · ESLin
 | ID | Task | Status |
 |---|---|---|
 | P3.1 | FD register UI; renewal linkage; status model (active/matured/renewed/closed/unconfirmed) | `[ ]` |
-| P3.2 | FD accrual engine (quarterly compounding), variance vs bank maturity, TDS-adjusted view for NRO | `[ ]` |
+| P3.2 | FD accrual engine (quarterly compounding), variance vs bank maturity, TDS-adjusted view for NRO — **accrual + variance function done (11 tests, 7 workbook FDs within 0.05%)**; DB integration and TDS view pending | `[~]` |
 | P3.3 | Maturity calendar and alerts at 7/15/30/60/90 days; maturity-instruction tracker | `[ ]` |
 | P3.4 | FD maturity cashflow: configure proceeds destination (cash / new FD / other); no double count | `[ ]` |
 | P3.5 | DICGC calculator: per bank, per depositor capacity, principal + accrued interest; concentration report | `[ ]` |
@@ -126,7 +126,7 @@ Tooling: pnpm workspaces · Vitest · Playwright (phone/tablet/desktop) · ESLin
 | P4.3 | CAS importer (CAMS/KFintech) via parser; Kuvera CSV importer as fallback | `[ ]` |
 | P4.4 | Transaction ledger, folios, dedupe, gap detection, units reconciliation vs statement | `[ ]` |
 | P4.5 | Lot engine (FIFO/specific), switches, IDCW, stamp duty handling, historical holdings reconstruction | `[ ]` |
-| P4.6 | **XIRR** (scheme, folio, owner, household, selected date, realised): Newton + bracketed fallback, explicit failure statuses | `[ ]` |
+| P4.6 | **XIRR** (scheme, folio, owner, household, selected date, realised): Newton + bracketed fallback, explicit failure statuses — **core solver done (9 tests incl. Microsoft's published example 0.373362535, multiple-root detection)**; aggregation by scope pending | `[~]` |
 | P4.7 | SIP plans: expected vs actual, skipped SIP flag, changes history | `[ ]` |
 | P4.8 | **Goal allocations** (percent/amount, many-to-many, no double count) incl. FD/cash allocations | `[ ]` |
 | P4.9 | Performance charts: value vs invested, P/L, yearly, fund comparison, allocation, drawdown | `[ ]` |
@@ -245,3 +245,4 @@ After each milestone I will: update this file, publish release notes, and list t
 | Date | Change |
 |---|---|
 | 25 Oct 2026 | Plan created. Phase 1 closed. Somesh loan finding corrected per your clarification. Repo attached; Phase 1 documents committed. |
+| 25 Oct 2026 | Monorepo scaffolded (Next.js 16, React 19, TS 5.9, Vitest). First tested core modules: XIRR, FD accrual, freshness (26 tests passing). CI workflow added. |

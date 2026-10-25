@@ -1,0 +1,16 @@
+{
+  "name": "family-wealth-os",
+  "private": true,
+  "version": "0.0.1",
+  "packageManager": "pnpm@10.9.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @fwos/web dev"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
