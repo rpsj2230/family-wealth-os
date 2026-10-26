@@ -15,7 +15,7 @@ interface Hit {
 const EXTRA: Hit[] = [
   { label: 'Update fund units and prices', hint: 'Investments', href: '/investments?tab=update' },
   { label: 'Match funds to official schemes', hint: 'Investments', href: '/investments?tab=match' },
-  { label: 'Correct account tags and details', hint: 'Accounts', href: '/accounts/edit' },
+  { label: 'Edit many accounts at once', hint: 'Accounts', href: '/accounts/edit' },
   { label: 'Change the order of banks', hint: 'Accounts', href: '/accounts/reorder' },
   { label: 'Move bank-level notes up to the bank', hint: 'Accounts', href: '/accounts/tidy-notes' },
   { label: 'Tax harvest: gains, losses and refunds', hint: 'Tax', href: '/tax' },

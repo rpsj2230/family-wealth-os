@@ -6,7 +6,7 @@ import { gridBanks } from '@/lib/account-edit';
 import { demoModel } from '@/lib/demo-fixture';
 
 export const metadata: Metadata = {
-  title: 'Sample: correct tags and details',
+  title: 'Sample: edit many accounts',
   robots: { index: false, follow: false },
 };
 
@@ -30,9 +30,10 @@ export default function DemoEditAccounts() {
             Sample with invented names. Nothing is saved here. <Link href="/login">Sign in</Link> to
             correct your own accounts.
           </p>
-          <h1>Correct tags and details</h1>
+          <h1>Edit many accounts at once</h1>
           <p className="muted">
-            Tick rows to change many at once, or suggest types for the empty ones.
+            Tick rows to change many at once, or suggest types for the empty ones. Press Edit on a
+            line under Accounts to change just one.
           </p>
           <AccountEditGrid
             banks={gridBanks(blocks, assets, fds)}

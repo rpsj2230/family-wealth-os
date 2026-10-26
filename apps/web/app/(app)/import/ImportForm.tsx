@@ -3,6 +3,8 @@
 import { startTransition, useActionState, useState } from 'react';
 import Link from 'next/link';
 import { formatInr } from '@fwos/core';
+import { FilePicker } from '@/components/FilePicker';
+import { guessOwner, plainCountName } from '@/lib/import-detect';
 import {
   commitFundCsv,
   commitImport,
@@ -22,7 +24,7 @@ const SEV: Record<string, string> = {
   info: 'For information',
 };
 
-export function ImportForm({ today }: { today: string }) {
+export function ImportForm({ today, file }: { today: string; file?: File | null }) {
   const [preview, previewAction, previewing] = useActionState(previewImport, idle);
   const [commit, commitAction, committing] = useActionState(commitImport, idle);
   const shown = commit.stage === 'idle' ? preview : commit;
@@ -31,10 +33,7 @@ export function ImportForm({ today }: { today: string }) {
 
   return (
     <form className="form" aria-busy={previewing || committing}>
-      <label>
-        Workbook (.xlsx)
-        <input name="file" type="file" accept=".xlsx" required />
-      </label>
+      <FilePicker label="Workbook (.xlsx)" accept=".xlsx" file={file} />
       <label>
         The balances in this file are as of
         <input name="asOf" type="date" defaultValue={today} required />
@@ -54,8 +53,8 @@ export function ImportForm({ today }: { today: string }) {
       {shown.stage === 'committed' && (
         <div className="notice ok" role="status">
           <p>
-            Imported {shown.committed?.assets} assets and {shown.committed?.observations} values
-            from {shown.fileName}.
+            Imported {shown.committed?.assets} accounts and holdings and{' '}
+            {shown.committed?.observations} balances from {shown.fileName}.
           </p>
           <Link className="btn primary" href="/">
             Go to the dashboard
@@ -65,11 +64,11 @@ export function ImportForm({ today }: { today: string }) {
 
       {shown.stage === 'previewed' && (
         <>
-          <h2>What will be imported</h2>
+          <h2>What will be added</h2>
           <ul className="chips">
             {Object.entries(shown.counts ?? {}).map(([k, v]) => (
               <li key={k} className="chip">
-                {v} {k}
+                {v} {plainCountName(k)}
               </li>
             ))}
           </ul>
@@ -77,7 +76,7 @@ export function ImportForm({ today }: { today: string }) {
           <ul className="list">
             {shown.reconciliation?.map((r) => (
               <li key={r.check} className={r.ok ? 'pass' : 'fail'}>
-                <strong>{r.ok ? 'Matches' : 'DIFFERS'}</strong> — {r.check}
+                <strong>{r.ok ? 'Matches' : 'Does not match'}</strong> — {r.check}
               </li>
             ))}
           </ul>
@@ -113,7 +112,7 @@ export function ImportForm({ today }: { today: string }) {
             className="btn primary"
             formAction={commitAction}
             disabled={committing || !allOk}
-            title={allOk ? '' : 'Totals do not match the workbook'}
+            title={allOk ? '' : 'The totals do not match your sheet, so nothing can be imported'}
           >
             {committing
               ? 'Importing…'
@@ -125,18 +124,15 @@ export function ImportForm({ today }: { today: string }) {
   );
 }
 
-export function SyncLayoutForm({ today }: { today: string }) {
+export function SyncLayoutForm({ today, file }: { today: string; file?: File | null }) {
   const [state, action, pending] = useActionState(syncLayout, idle);
   return (
     <form className="form" action={action} aria-busy={pending}>
-      <label>
-        Workbook (.xlsx)
-        <input name="file" type="file" accept=".xlsx" required />
-      </label>
+      <FilePicker label="Workbook (.xlsx)" accept=".xlsx" file={file} />
       <input type="hidden" name="asOf" value={today} />
       <div className="row">
         <button className="btn primary" disabled={pending}>
-          {pending ? 'Applying…' : 'Apply the sheet layout'}
+          {pending ? 'Updating…' : 'Update order, names and links'}
         </button>
       </div>
       {state.stage === 'error' && (
@@ -153,18 +149,27 @@ export function SyncLayoutForm({ today }: { today: string }) {
   );
 }
 
-export function CasForm({ owners }: { owners: { id: string; name: string }[] }) {
+export function CasForm({
+  owners,
+  file,
+  defaultOwner,
+}: {
+  owners: { id: string; name: string }[];
+  file?: File | null;
+  defaultOwner?: string;
+}) {
   const [res, act, pending] = useActionState<CasState | null, FormData>(importCas, null);
   return (
     <form action={act} className="form" aria-busy={pending}>
-      <label>
-        Fund statement (CAS, PDF) from CAMS, KFintech, MF Central or CDSL
-        <input name="file" type="file" accept=".pdf" required />
-      </label>
+      <FilePicker
+        label="Fund statement (PDF) from CAMS, KFintech, MF Central or CDSL"
+        accept=".pdf"
+        file={file}
+      />
       <div className="formgrid g3">
         <label>
           Whose statement
-          <select name="owner" required>
+          <select name="owner" required defaultValue={defaultOwner || undefined}>
             {owners.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
@@ -206,23 +211,22 @@ const FUND_STATUS = {
 } as const;
 const csvIdle: FundCsvState = { stage: 'idle' };
 
-/** First name in a file name ("Rupash__Advika_-_transactions.csv") against the people's names. */
-function guessOwner(file: string, owners: { id: string; name: string }[]): string {
-  const first =
-    file
-      .toLowerCase()
-      .split(/[^a-z]+/)
-      .find(Boolean) ?? '';
-  return owners.find((o) => first && o.name.toLowerCase().startsWith(first))?.id ?? '';
-}
-
 /**
  * Fund transactions from an investment app's CSV export. Files and the person chosen for each are held here (not in the form),
  * so the preview and the import both send the same files.
  */
-export function FundCsvForm({ owners }: { owners: { id: string; name: string }[] }) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [who, setWho] = useState<string[]>([]);
+export function FundCsvForm({
+  owners,
+  initialFiles = [],
+}: {
+  owners: { id: string; name: string }[];
+  /** files already chosen on the Import front page */
+  initialFiles?: File[];
+}) {
+  const [files, setFiles] = useState<File[]>(initialFiles);
+  const [who, setWho] = useState<string[]>(() =>
+    initialFiles.map((f) => guessOwner(f.name, owners)),
+  );
   const [preview, previewAct, previewing] = useActionState(previewFundCsv, csvIdle);
   const [commit, commitAct, committing] = useActionState(commitFundCsv, csvIdle);
   const [done, setDone] = useState(false);

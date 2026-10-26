@@ -29,6 +29,7 @@ const links: DepositLinks = {
   asset: () => '/demo/asset',
   monthly: () => '/demo/monthly',
   edit: '/demo/accounts/edit',
+  editOne: () => '/demo/accounts',
   sample: true,
 };
 

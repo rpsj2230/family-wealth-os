@@ -77,7 +77,7 @@ export const MENU: MenuGroup[] = [
       {
         href: '/import',
         label: 'Import',
-        hint: 'The workbook, fund statements and the sheet layout.',
+        hint: 'Choose any file: workbook, fund statement, fund export or tax statement.',
         icon: Upload,
       },
     ],

@@ -14,7 +14,7 @@ export default async function ImportPage({
   const sp = await searchParams;
   const tab: ImportTab = (IMPORT_TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as ImportTab)
-    : 'workbook';
+    : 'start';
   const { supabase } = await loadContext();
   const today = new Date().toISOString().slice(0, 10);
   const [owners, batch, cas, tax, auto] = await Promise.all([
@@ -82,7 +82,7 @@ export default async function ImportPage({
     <>
       <PageHead
         title="Import"
-        subtitle="Bring in data from a file. Most of it arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
+        subtitle="Choose a file and the app works out what it is. Most of this arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
       />
       <ImportHub base="/import" tab={tab} data={data} />
     </>

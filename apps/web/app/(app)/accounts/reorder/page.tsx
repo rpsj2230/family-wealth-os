@@ -42,8 +42,8 @@ export default async function ReorderPage() {
         subtitle="Drag a bank or a row, or use the arrow buttons, then save. Accounts and the monthly update follow this order."
       />
       <p className="small muted">
-        Uploading your workbook again with &ldquo;Apply the sheet layout&rdquo; sets the order back
-        to the sheet&apos;s.
+        Uploading your workbook again under Import (&ldquo;Update order, names and links&rdquo;)
+        sets the order back to the sheet&apos;s.
       </p>
       <ReorderList banks={banks} styles={styles} save={saveOrder} />
     </>

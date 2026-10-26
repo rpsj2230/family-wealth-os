@@ -4,8 +4,10 @@ test.describe('joint holder and the order of names (sample)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/demo/accounts/edit');
     await expect(
-      page.getByRole('heading', { name: 'Correct tags and details', level: 1 }),
+      page.getByRole('heading', { name: 'Edit many accounts at once', level: 1 }),
     ).toBeVisible();
+    // the joint columns are among the ones kept behind "Show every column"
+    await page.getByLabel('Show every column').check();
   });
 
   test('ticking Joint shows the second name; choosing it and swapping marks the row changed', async ({

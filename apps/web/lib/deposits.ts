@@ -141,7 +141,7 @@ export function buildDeposits(
   const pos = dicgcPosition(deposits, limit);
   const assumptions: string[] = [];
   assumptions.push(
-    'Cover is counted per bank and per ownership name as written. Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately; the order of the names matters. Set the second name of each joint account under Correct tags and details.',
+    'Cover is counted per bank and per ownership name as written. Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately; the order of the names matters. Set the second name of each joint account: press Edit on it, then More details.',
   );
   if (deposits.some((d) => partnerMissing(d.capacityKey))) {
     assumptions.push(

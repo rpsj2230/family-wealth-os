@@ -1,26 +1,33 @@
 'use client';
 
 import { useActionState } from 'react';
+import { FilePicker } from '@/components/FilePicker';
 import { uploadTaxFile, type TaxFileState } from './actions';
 
 export function TaxFileForm({
   owners,
   fy,
+  file,
+  defaultOwner,
 }: {
   owners: { id: string; name: string }[];
   fy: string;
+  /** a file already chosen on the Import front page */
+  file?: File | null;
+  defaultOwner?: string;
 }) {
   const [res, act, pending] = useActionState<TaxFileState | null, FormData>(uploadTaxFile, null);
   return (
     <form action={act} className="form" aria-busy={pending}>
-      <label>
-        Form 26AS or Annual Information Statement (PDF, text file, saved web page or JSON)
-        <input name="file" type="file" accept=".pdf,.txt,.htm,.html,.json,.csv" required />
-      </label>
+      <FilePicker
+        label="Form 26AS or Annual Information Statement (PDF, text file, saved web page or JSON)"
+        accept=".pdf,.txt,.htm,.html,.json,.csv"
+        file={file}
+      />
       <div className="formgrid g3">
         <label>
           Whose statement
-          <select name="owner" required>
+          <select name="owner" required defaultValue={defaultOwner || undefined}>
             {owners.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}

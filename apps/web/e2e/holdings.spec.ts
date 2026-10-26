@@ -45,16 +45,18 @@ test.describe('Accounts (public sample)', () => {
     await noSideways(page);
   });
 
-  test('Manage holds the editor, the order and the notes in one place', async ({ page }) => {
+  test('Manage holds the many-at-once table, the order, the notes and adding an account', async ({
+    page,
+  }) => {
     await page.goto('/demo/accounts');
     await tabs(page)
       .getByRole('link', { name: /Manage/ })
       .click();
     await expect(page).toHaveURL(/tab=manage/);
-    await expect(page.getByRole('heading', { name: 'Correct tags and details' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Edit many accounts at once' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Change the order' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Tidy bank notes' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open the editor' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Open the table' })).toHaveAttribute(
       'href',
       '/demo/accounts/edit',
     );

@@ -64,6 +64,7 @@ export function AccountEditGrid({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [proposed, setProposed] = useState<Set<string>>(new Set());
   const [moveTo, setMoveTo] = useState('');
+  const [wide, setWide] = useState(false);
   const [msg, setMsg] = useState<SaveResult | null>(null);
   const [pending, start] = useTransition();
 
@@ -234,6 +235,10 @@ export function AccountEditGrid({
             Clear selection
           </button>
         )}
+        <label className="check aeg-wide">
+          <input type="checkbox" checked={wide} onChange={(e) => setWide(e.target.checked)} />
+          Show every column
+        </label>
       </div>
 
       {banks.map((b) => {
@@ -259,7 +264,7 @@ export function AccountEditGrid({
               role="region"
               aria-label={`${b.name} accounts, scrolls sideways`}
             >
-              <table className="aeg-table" data-notools>
+              <table className={`aeg-table ${wide ? 'wide' : ''}`} data-notools>
                 <thead>
                   <tr>
                     <th className="c-mark" aria-label="Changed" />
@@ -267,15 +272,15 @@ export function AccountEditGrid({
                     <th className="c-person">Person</th>
                     <th className="c-label">Account</th>
                     <th className="c-type">Type</th>
-                    <th className="c-joint">Joint</th>
-                    <th className="c-d4">Last-4</th>
-                    <th className="c-d4">Linked to</th>
+                    {wide && <th className="c-joint">Joint</th>}
+                    {wide && <th className="c-d4">Last four digits</th>}
+                    {wide && <th className="c-d4">Linked savings</th>}
                     <th className="c-rate">Rate %</th>
-                    <th className="c-date">Start</th>
-                    <th className="c-date">Maturity</th>
+                    {wide && <th className="c-date">Start</th>}
+                    <th className="c-date">Matures</th>
                     <th className="c-amt">Invested</th>
-                    <th className="c-amt">At maturity</th>
-                    <th className="c-d4">FD no.</th>
+                    {wide && <th className="c-amt">At maturity</th>}
+                    {wide && <th className="c-d4">Deposit no.</th>}
                     <th className="c-notes">Notes</th>
                     <th className="c-status">Status</th>
                   </tr>
@@ -343,61 +348,65 @@ export function AccountEditGrid({
                               ))}
                             </select>
                           </td>
-                          <td className="c-joint">
-                            <input
-                              type="checkbox"
-                              checked={r.isJoint}
-                              onChange={(e) =>
-                                set(r.id, {
-                                  isJoint: e.target.checked,
-                                  ...(e.target.checked ? {} : { jointHolderId: '' }),
-                                })
-                              }
-                              aria-label={`Joint, ${r0.code}`}
-                            />
-                            {r.isJoint && (
-                              <div className="aeg-with">
-                                <select
-                                  value={r.jointHolderId}
-                                  onChange={(e) => set(r.id, { jointHolderId: e.target.value })}
-                                  aria-label={`Joint with, ${r0.code}`}
-                                >
-                                  <option value="">second name not set</option>
-                                  {owners
-                                    .filter((o) => o.id !== r.ownerId)
-                                    .map((o) => (
-                                      <option key={o.id} value={o.id}>
-                                        {o.name}
-                                      </option>
-                                    ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  className="btn compact ghost"
-                                  disabled={!r.jointHolderId}
-                                  onClick={() => {
-                                    const p = swapNames(r);
-                                    if (p) set(r.id, p);
-                                  }}
-                                  aria-label={`Swap names, ${r0.code}`}
-                                  title="Swap the first and second name (Rupash & Ragini becomes Ragini & Rupash)"
-                                >
-                                  Swap names
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                          {col(r, 'last4', 'Last four digits', 'c-d4', {
-                            disabled: fd,
-                            placeholder: fd ? '' : '0266',
-                          })}
-                          {fd ? (
-                            col(r, 'linkedLast4', 'Linked savings last four', 'c-d4', {
-                              placeholder: '0266',
-                            })
-                          ) : (
-                            <td className="na" />
+                          {wide && (
+                            <td className="c-joint">
+                              <input
+                                type="checkbox"
+                                checked={r.isJoint}
+                                onChange={(e) =>
+                                  set(r.id, {
+                                    isJoint: e.target.checked,
+                                    ...(e.target.checked ? {} : { jointHolderId: '' }),
+                                  })
+                                }
+                                aria-label={`Joint, ${r0.code}`}
+                              />
+                              {r.isJoint && (
+                                <div className="aeg-with">
+                                  <select
+                                    value={r.jointHolderId}
+                                    onChange={(e) => set(r.id, { jointHolderId: e.target.value })}
+                                    aria-label={`Joint with, ${r0.code}`}
+                                  >
+                                    <option value="">second name not set</option>
+                                    {owners
+                                      .filter((o) => o.id !== r.ownerId)
+                                      .map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                          {o.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    className="btn compact ghost"
+                                    disabled={!r.jointHolderId}
+                                    onClick={() => {
+                                      const p = swapNames(r);
+                                      if (p) set(r.id, p);
+                                    }}
+                                    aria-label={`Swap names, ${r0.code}`}
+                                    title="Swap the first and second name (Rupash & Ragini becomes Ragini & Rupash)"
+                                  >
+                                    Swap names
+                                  </button>
+                                </div>
+                              )}
+                            </td>
                           )}
+                          {wide &&
+                            col(r, 'last4', 'Last four digits', 'c-d4', {
+                              disabled: fd,
+                              placeholder: fd ? '' : '0266',
+                            })}
+                          {wide &&
+                            (fd ? (
+                              col(r, 'linkedLast4', 'Linked savings last four', 'c-d4', {
+                                placeholder: '0266',
+                              })
+                            ) : (
+                              <td className="na" />
+                            ))}
                           {fd ? (
                             col(r, 'fdRate', 'Rate percent', 'c-rate', {
                               inputMode: 'decimal',
@@ -406,11 +415,12 @@ export function AccountEditGrid({
                           ) : (
                             <td className="na" />
                           )}
-                          {fd ? (
-                            col(r, 'fdBookedOn', 'Start date', 'c-date', { type: 'date' })
-                          ) : (
-                            <td className="na" />
-                          )}
+                          {wide &&
+                            (fd ? (
+                              col(r, 'fdBookedOn', 'Start date', 'c-date', { type: 'date' })
+                            ) : (
+                              <td className="na" />
+                            ))}
                           {fd ? (
                             col(r, 'fdMaturityOn', 'Maturity date', 'c-date', { type: 'date' })
                           ) : (
@@ -423,21 +433,23 @@ export function AccountEditGrid({
                           ) : (
                             <td className="na" />
                           )}
-                          {fd ? (
-                            col(r, 'fdMaturityAmount', 'Amount at maturity', 'c-amt', {
-                              inputMode: 'numeric',
-                              placeholder: 'worked out',
-                            })
-                          ) : (
-                            <td className="na" />
-                          )}
-                          {fd ? (
-                            col(r, 'fdRefLast4', 'Deposit number last four', 'c-d4', {
-                              placeholder: '5076',
-                            })
-                          ) : (
-                            <td className="na" />
-                          )}
+                          {wide &&
+                            (fd ? (
+                              col(r, 'fdMaturityAmount', 'Amount at maturity', 'c-amt', {
+                                inputMode: 'numeric',
+                                placeholder: 'worked out',
+                              })
+                            ) : (
+                              <td className="na" />
+                            ))}
+                          {wide &&
+                            (fd ? (
+                              col(r, 'fdRefLast4', 'Deposit number last four', 'c-d4', {
+                                placeholder: '5076',
+                              })
+                            ) : (
+                              <td className="na" />
+                            ))}
                           {col(r, 'notes', 'Notes', 'c-notes', {
                             placeholder: 'AMB, cards, lounge…',
                           })}
@@ -457,7 +469,7 @@ export function AccountEditGrid({
                         </tr>
                         {bad.length > 0 && (
                           <tr>
-                            <td colSpan={16} className="aeg-problem" role="alert">
+                            <td colSpan={wide ? 16 : 10} className="aeg-problem" role="alert">
                               {r0.code}: {bad.join('; ')}
                             </td>
                           </tr>

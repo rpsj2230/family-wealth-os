@@ -4,9 +4,12 @@ import { AutomationCards } from '@/components/AutomationCards';
 import { Tabs } from '@/components/Tabs';
 import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
+import { ImportDoor } from './ImportDoor';
+import { plainCountName } from '@/lib/import-detect';
 import '@/components/datain.css';
 
-export const IMPORT_TABS = ['workbook', 'cas', 'csv', 'tax'] as const;
+/** `start` is the front door (choose any file); the others are the pages for one kind of file. */
+export const IMPORT_TABS = ['start', 'workbook', 'cas', 'csv', 'tax'] as const;
 export type ImportTab = (typeof IMPORT_TABS)[number];
 
 export interface ImportData {
@@ -60,15 +63,93 @@ export function ImportHub({
 }) {
   const casReview = data.cas.filter((c) => c.outcome !== 'imported');
   const taxReview = data.tax.filter((t) => t.readBy === 'ai');
+  if (tab === 'start')
+    return (
+      <>
+        <ImportDoor
+          owners={data.owners}
+          today={data.today}
+          taxFy={data.taxFy}
+          hasWorkbook={!!data.workbook}
+          demo={demo}
+        />
+        <h2 className="doorsub">Or choose the kind of file yourself</h2>
+        <div className="doorkinds">
+          <article className="pickcard">
+            <h3>Excel workbook</h3>
+            <p className="meta">Your banks, savings and deposits, in your sheet&rsquo;s order.</p>
+            <p className="small muted">
+              {data.workbook ? `Last imported ${longDate(data.workbook.at)}` : 'Not imported yet'}
+            </p>
+            <div className="cardactions">
+              <Link className="btn" href={`${base}?tab=workbook`}>
+                Open
+              </Link>
+            </div>
+          </article>
+          <article className={`pickcard ${casReview.length ? 'attention' : ''}`}>
+            <h3>Fund statement</h3>
+            <p className="meta">A PDF from CAMS, KFintech, MF Central or CDSL.</p>
+            <p className="small">
+              {casReview.length ? (
+                <strong>
+                  {casReview.length} need{casReview.length === 1 ? 's' : ''} a look
+                </strong>
+              ) : (
+                <span className="muted">
+                  {data.cas.length ? `Last one ${longDate(data.cas[0]!.at)}` : 'None yet'}
+                </span>
+              )}
+            </p>
+            <div className="cardactions">
+              <Link className="btn" href={`${base}?tab=cas`}>
+                Open
+              </Link>
+            </div>
+          </article>
+          <article className="pickcard">
+            <h3>Fund app export (CSV)</h3>
+            <p className="meta">The transactions file of an investment app, one per person.</p>
+            <div className="cardactions">
+              <Link className="btn" href={`${base}?tab=csv`}>
+                Open
+              </Link>
+            </div>
+          </article>
+          <article className={`pickcard ${taxReview.length ? 'attention' : ''}`}>
+            <h3>Tax statement</h3>
+            <p className="meta">Form 26AS or the Annual Information Statement (AIS).</p>
+            <p className="small">
+              {taxReview.length ? (
+                <strong>{taxReview.length} to check</strong>
+              ) : (
+                <span className="muted">
+                  {data.tax.length ? `${data.tax.length} on file` : 'None yet'}
+                </span>
+              )}
+            </p>
+            <div className="cardactions">
+              <Link className="btn" href={`${base}?tab=tax`}>
+                Open
+              </Link>
+            </div>
+          </article>
+        </div>
+        {data.email && <AutomationCards cards={[data.email]} />}
+      </>
+    );
   return (
     <>
+      <p className="small">
+        <Link href={base}>‹ Import any file</Link>
+      </p>
       <Tabs
         base={base}
         current={tab}
         tabs={[
-          { key: 'workbook', label: 'Workbook' },
-          { key: 'cas', label: 'Fund statement (CAS)', badge: casReview.length || null },
-          { key: 'csv', label: 'Fund transactions (CSV)' },
+          { key: 'workbook', label: 'Excel workbook' },
+          { key: 'cas', label: 'Fund statement', badge: casReview.length || null },
+          { key: 'csv', label: 'Fund app export (CSV)' },
           { key: 'tax', label: 'Tax statement (26AS, AIS)', badge: taxReview.length || null },
         ]}
       />
@@ -102,7 +183,7 @@ export function ImportHub({
                 <dd>
                   {Object.entries(data.workbook.counts)
                     .filter(([, v]) => v > 0)
-                    .map(([k, v]) => `${v} ${k}`)
+                    .map(([k, v]) => `${v} ${plainCountName(k)}`)
                     .join(', ') || 'Nothing'}
                 </dd>
               </dl>

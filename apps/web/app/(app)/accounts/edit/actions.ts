@@ -8,7 +8,7 @@ export interface SaveResult {
   message: string;
 }
 
-/** Saves the changed rows of the "correct tags and details" grid in one go; the database function checks every value. */
+/** Saves the changed rows of the "edit many accounts" table in one go; the database function checks every value. */
 export async function saveAccountDetails(rows: Record<string, unknown>[]): Promise<SaveResult> {
   const { supabase, householdId } = await loadContext();
   if (!householdId) return { ok: false, message: 'Create your household first.' };

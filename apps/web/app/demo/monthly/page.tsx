@@ -5,9 +5,11 @@ import { BottomNav, Sidebar } from '@/components/AppNav';
 import { AutomationStrip } from '@/components/AutomationCards';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
+import { QuickEditProvider } from '@/components/QuickEdit';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { demoModel } from '@/lib/demo-fixture';
 import { demoAutomation } from '@/lib/demo-datain';
+import { quickModel } from '@/lib/quick-edit';
 import type { GridRow } from '@/lib/monthly';
 import { MonthlyGrid } from '@/app/(app)/monthly/MonthlyGrid';
 
@@ -67,7 +69,14 @@ export default async function DemoMonthly({
 }) {
   const sp = await searchParams;
   const tab = sp.tab === 'other' ? 'other' : 'banks';
-  const { blocks, styles } = demoModel();
+  const { blocks, styles, assets, fds, people, institutionNames } = demoModel();
+  const quick = quickModel({
+    blocks,
+    assets,
+    fds,
+    ownerNames: Object.fromEntries(people.map((x) => [x.id, x.name])),
+    institutions: Object.entries(institutionNames).map(([id, name]) => ({ id, name })),
+  });
   const shown = blocks.slice(0, 6);
   const sum = summarizeStandings(standings(shown, '2026-10-26'));
   const waiting = sum.waiting + sum.attention;
@@ -107,13 +116,15 @@ export default async function DemoMonthly({
               <AutomationStrip
                 cards={demoAutomation().filter((c) => c.key !== 'digest' && c.key !== 'rates')}
               />
-              <UpdateGrid
-                blocks={shown}
-                styles={styles}
-                today="2026-10-26"
-                fxHint={{}}
-                institutions={false}
-              />
+              <QuickEditProvider {...quick} styles={styles} today="2026-10-26">
+                <UpdateGrid
+                  blocks={shown}
+                  styles={styles}
+                  today="2026-10-26"
+                  fxHint={{}}
+                  institutions
+                />
+              </QuickEditProvider>
             </>
           )}
         </main>

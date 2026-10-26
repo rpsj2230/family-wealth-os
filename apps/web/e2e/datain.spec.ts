@@ -134,12 +134,116 @@ test.describe('Bank emails (public sample)', () => {
 
 test.describe('Import (public sample)', () => {
   test('workbook tab: layout, last import and the rules', async ({ page }) => {
-    await page.goto('/demo/import');
+    await page.goto('/demo/import?tab=workbook');
     await expect(page.getByRole('heading', { name: 'Import', level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Keep your Excel order' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Last workbook import' })).toBeVisible();
     await expect(page.getByText('sample-household.xlsx')).toBeVisible();
+    // the kind pages lead back to the front door
+    await expect(page.getByRole('link', { name: '‹ Import any file' })).toHaveAttribute(
+      'href',
+      '/demo/import',
+    );
     await noOverflow(page);
+  });
+
+  test('the front door has one box for any file and a card for each kind', async ({ page }) => {
+    await page.goto('/demo/import');
+    await expect(page.getByRole('heading', { name: 'Choose a file' })).toBeVisible();
+    await expect(page.getByText('nothing is uploaded')).toBeVisible();
+    for (const [name, tab] of [
+      ['Excel workbook', 'workbook'],
+      ['Fund statement', 'cas'],
+      ['Fund app export (CSV)', 'csv'],
+      ['Tax statement', 'tax'],
+    ] as const) {
+      const card = page.locator('article.pickcard', {
+        has: page.getByRole('heading', { name, exact: true }),
+      });
+      await expect(card.getByRole('link', { name: 'Open' })).toHaveAttribute(
+        'href',
+        `/demo/import?tab=${tab}`,
+      );
+    }
+    await noOverflow(page);
+  });
+
+  test('a workbook is recognised and offers the two things it can do', async ({ page }) => {
+    await page.goto('/demo/import');
+    await page.locator('.dropzone input[type=file]').setInputFiles({
+      name: 'Family finances 2026.xlsx',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('PK\x03\x04 sample'),
+    });
+    await expect(page.getByText(/This is an Excel workbook/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your Excel workbook' })).toBeVisible();
+    const choice = page.getByRole('group', { name: 'What should the workbook do' });
+    await expect(
+      choice.getByRole('button', { name: 'Update order, names and links' }),
+    ).toHaveAttribute('aria-pressed', 'true'); // a workbook was imported before, so the safe choice comes first
+    await expect(page.getByText('Family finances 2026.xlsx').first()).toBeVisible();
+    await choice.getByRole('button', { name: 'Import balances and deposits' }).click();
+    await expect(page.getByRole('button', { name: /^Preview/ })).toBeVisible();
+    await noOverflow(page);
+  });
+
+  test('a fund export, a fund statement and a tax statement each open their own form', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import');
+    const input = page.locator('.dropzone input[type=file]');
+    await input.setInputFiles({
+      name: 'Anil_transactions.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        'Date,Folio Number,Name of the Fund,Order,Units,NAV,Current Nav,Amount\n2025-01-01,1,X,Buy,1,1,1,1\n',
+      ),
+    });
+    await expect(page.getByText(/Folio, Units and Amount columns/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Fund app export', level: 2 })).toBeVisible();
+    // the person is taken from the first name in the file name
+    await expect(page.getByLabel('Whose is Anil_transactions.csv')).toHaveValue('p1');
+
+    await input.setInputFiles({
+      name: 'Beena CAS 2026.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7'),
+    });
+    await expect(page.getByRole('heading', { name: 'Fund statement', level: 2 })).toBeVisible();
+    await expect(page.getByLabel('Whose statement')).toHaveValue('p2');
+    await expect(page.getByRole('button', { name: 'Import statement' })).toBeVisible();
+
+    await input.setInputFiles({
+      name: 'Form26AS_2025-26.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7'),
+    });
+    await expect(page.getByRole('heading', { name: 'Tax statement', level: 2 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Read this file' })).toBeVisible();
+    await noOverflow(page);
+  });
+
+  test('a file whose kind cannot be told asks, and the answer opens the right form', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import');
+    const input = page.locator('.dropzone input[type=file]');
+    await input.setInputFiles({
+      name: 'scan0001.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7'),
+    });
+    await expect(page.getByText(/does not say which kind/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Import statement' })).toHaveCount(0);
+    await page.getByLabel('What is this file?').selectOption('cas');
+    await expect(page.getByRole('button', { name: 'Import statement' })).toBeVisible();
+
+    await input.setInputFiles({
+      name: 'holiday.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('x'),
+    });
+    await expect(page.getByText(/not one the app can read/)).toBeVisible();
   });
 
   test('fund statement tab: password rule, PAN on file, recent results and what needs review', async ({

@@ -45,9 +45,15 @@
 }
 table.aeg-table {
   border-collapse: collapse;
-  min-width: 1380px;
+  min-width: 1040px;
   width: 100%;
   font-size: 0.82rem;
+}
+table.aeg-table.wide {
+  min-width: 1380px;
+}
+.aeg-tools .aeg-wide {
+  margin-left: auto;
 }
 .aeg-table th,
 .aeg-table td {

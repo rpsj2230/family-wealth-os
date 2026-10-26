@@ -3,9 +3,13 @@ import { notFound } from 'next/navigation';
 import { buildBankBlocks, personStyles, standings } from '@fwos/core';
 import { BankBadge } from '@/components/BankBadge';
 import { PageHead } from '@/components/PageHead';
+import { QuickEditHost } from '@/components/QuickEditHost';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { quickModel } from '@/lib/quick-edit';
+import { loadJointHolders } from '@/lib/quick-edit-data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { slugify } from '@/lib/slug';
 
 export const dynamic = 'force-dynamic';
@@ -14,8 +18,8 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
   const { bank } = await params;
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, fx] = await Promise.all(
-    [
+  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, fx, jointHolders] =
+    await Promise.all([
       loadPortfolio(supabase),
       supabase.from('institutions').select('id, name'),
       supabase
@@ -23,8 +27,8 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
         .select('currency, rate_date, inr_per_unit')
         .order('rate_date', { ascending: false })
         .limit(20),
-    ],
-  );
+      loadJointHolders(supabase as unknown as SupabaseClient),
+    ]);
   const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const names = Object.fromEntries(
@@ -44,8 +48,16 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
   for (const r of fx.data ?? [])
     if (!((r.currency as string) in fxHint)) fxHint[r.currency as string] = Number(r.inr_per_unit);
   const st = standings(blocks, iso)[0]!;
+  const quick = quickModel({
+    blocks: all,
+    assets: assetRows,
+    fds: fdRows,
+    ownerNames: Object.fromEntries(ownerName),
+    institutions: (inst.data ?? []).map((i) => ({ id: i.id as string, name: i.name as string })),
+    jointHolders,
+  });
   return (
-    <>
+    <QuickEditHost model={quick} styles={styles} today={iso} fxHint={fxHint}>
       <p className="small">
         <Link href="/monthly">← All banks</Link>
       </p>
@@ -67,6 +79,6 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
         institutions
         summary={false}
       />
-    </>
+    </QuickEditHost>
   );
 }

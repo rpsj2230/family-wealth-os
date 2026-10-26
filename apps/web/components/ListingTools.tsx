@@ -28,7 +28,11 @@ const cellText = (td: Element) => {
     return f instanceof HTMLSelectElement
       ? clean(f.selectedOptions[0]?.textContent)
       : clean(f.value);
-  return clean(td.textContent);
+  if (!td.querySelector('.editbtn')) return clean(td.textContent);
+  // the "Edit" button is an action, not data: it is left out of sorting, filtering and the CSV
+  const c = td.cloneNode(true) as HTMLElement;
+  c.querySelectorAll('.editbtn').forEach((n) => n.remove());
+  return clean(c.textContent);
 };
 const isDataRow = (tr: HTMLTableRowElement, cols: number) =>
   tr.cells.length >= Math.max(2, Math.min(cols, 3)) &&

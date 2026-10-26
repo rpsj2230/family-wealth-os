@@ -141,7 +141,7 @@ export async function syncLayout(_prev: ImportState, formData: FormData): Promis
   revalidatePath('/monthly');
   return {
     stage: 'committed',
-    message: `Layout applied to ${r.matched} records.${r.unmatched.length ? ` ${r.unmatched.length} could not be matched and were left as they are: ${r.unmatched.slice(0, 6).join(', ')}${r.unmatched.length > 6 ? '…' : ''}.` : ''}`,
+    message: `Done. ${r.matched} account${r.matched === 1 ? '' : 's'} and deposit${r.matched === 1 ? '' : 's'} now follow your sheet's order, names and links. No balance was changed.${r.unmatched.length ? ` ${r.unmatched.length} line${r.unmatched.length === 1 ? '' : 's'} in the sheet had no match in the app and ${r.unmatched.length === 1 ? 'was' : 'were'} left alone: ${r.unmatched.slice(0, 6).join(', ')}${r.unmatched.length > 6 ? '…' : ''}.` : ''}`,
     fileName: f.name,
   };
 }

@@ -4,6 +4,7 @@ import '@/app/detail.css';
 import './accounts.css';
 import { PersonBadge } from '@/components/Person';
 import { KpiStrip } from '@/components/KpiStrip';
+import { AddButton } from '@/components/QuickEdit';
 import { niceDate } from '@/lib/dates';
 import type { AccountsSummary, ForeignLine } from '@/lib/accounts-summary';
 
@@ -137,10 +138,10 @@ export function ManageCards({
   return (
     <div className="cardgrid">
       <article className={`pickcard ${facts.assumedTypes > 0 ? 'attention' : ''}`}>
-        <h3>Correct tags and details</h3>
+        <h3>Edit many accounts at once</h3>
         <p className="meta">
-          Type (NRE, NRO), joint flag, last four digits, label, owner, bank or status of any account
-          or deposit, and a deposit&apos;s rate, dates and amounts.
+          One table of every account and deposit: set the type (NRE, NRO), the name, a note or a
+          deposit&apos;s terms for several lines together.
         </p>
         <p className="small">
           {facts.assumedTypes > 0 ? (
@@ -153,7 +154,7 @@ export function ManageCards({
         </p>
         <div className="cardactions">
           <Link className="btn primary" href={href('edit')}>
-            Open the editor
+            Open the table
           </Link>
         </div>
       </article>
@@ -198,20 +199,16 @@ export function ManageCards({
       <article className="pickcard">
         <h3>Add an account or a deposit</h3>
         <p className="meta">
-          Open the bank in the monthly update and press &ldquo;Add a deposit or account here&rdquo;.
-          It is placed where it belongs in your order.
+          Choose the bank and the person; it is placed where it belongs in your bank order.
         </p>
         <div className="cardactions">
-          <Link className="btn" href={sample ? '/demo/monthly' : '/monthly'}>
-            Go to the monthly update
-          </Link>
+          <AddButton label="Add an account or a deposit" />
         </div>
       </article>
       <p className="small muted" style={{ gridColumn: '1 / -1' }}>
         A note about one bank is edited on that bank&apos;s card under{' '}
-        <Link href={base}>Banks</Link> (&ldquo;Edit note&rdquo;). Uploading your workbook again with
-        &ldquo;Apply the sheet layout&rdquo; (<Link href="/import">Import</Link>) sets the order
-        back to the sheet&apos;s.
+        <Link href={base}>Banks</Link> (&ldquo;Edit note&rdquo;). To put the order back to your
+        Excel sheet&apos;s, upload the workbook under <Link href="/import">Import</Link>.
       </p>
     </div>
   );
