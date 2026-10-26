@@ -31,7 +31,16 @@ describe('month tab names', () => {
   });
 
   it('does not take other tabs, or the safety copy, for a month', () => {
-    for (const t of ['Summary', 'Oct 2026 - before sync', 'Oct 2026 (old)', 'Sheet1', 'Mon 2026', 'Ma 2026', '13-2026', ''])
+    for (const t of [
+      'Summary',
+      'Oct 2026 - before sync',
+      'Oct 2026 (old)',
+      'Sheet1',
+      'Mon 2026',
+      'Ma 2026',
+      '13-2026',
+      '',
+    ])
       expect(parseMonthTitle(t), t).toBeNull();
   });
 
@@ -90,7 +99,11 @@ describe('month tab names', () => {
   it('decides the month in the household time zone, not in UTC', () => {
     // 31 October 2026, 17:30 UTC is already 1 November in Singapore
     const now = new Date('2026-10-31T17:30:00Z');
-    expect(monthIn('Asia/Singapore', now)).toMatchObject({ year: 2026, month: 11, iso: '2026-11-01' });
+    expect(monthIn('Asia/Singapore', now)).toMatchObject({
+      year: 2026,
+      month: 11,
+      iso: '2026-11-01',
+    });
     expect(monthIn('UTC', now)).toMatchObject({ year: 2026, month: 10, iso: '2026-10-31' });
   });
 });

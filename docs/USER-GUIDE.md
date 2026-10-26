@@ -32,6 +32,17 @@ Open **Import**, press **Choose a file** and pick whatever you have: your Excel 
 
 Each kind keeps its own page (open its card) with the last result and anything that needs a look.
 
+## Sync with Google Sheet
+
+Your monthly Google Sheet has one tab per month. **Sync with Google Sheet** (on **Import**, and as a button in the header of **Monthly update**) writes the app's figures into this month's tab, in your sheet's own format, so you no longer type them twice.
+
+1. **Preview sync** shows, row by row, what would change (old → new), new rows, rows closed in the app, rows it could not match and accounts to place by hand. Nothing is written.
+2. **Confirm and write to Google Sheet** does it. If this month's tab does not exist, the latest earlier month is copied first (so the layout and formulas stay); if it exists, a hidden copy named `Oct 2026 - before sync` is kept and the data is replaced. Syncing twice gives the same sheet. Other months are never touched, rows are never deleted, and cells with formulas are never overwritten.
+
+What goes in: savings and cash balances, S$ balances (the amount and rate in the note), deposits (rate, dates, principal, maturity value, deposit number), funds (value, invested, start date, the "(STOPPED)" mark), money lent and money held by others. Account numbers and PANs are never written. To undo a sync, unhide the `… - before sync` tab and copy it back (see the runbook).
+
+First time: **Settings > Connections > Google Sheet** has the steps (create a free Google service account, enable the Sheets API, share the sheet with its e-mail as Editor, paste the sheet's link and the key) and a **Test connection** button. The full guide is `docs/runbooks/google-sheet-sync.md`.
+
 ## Cash, and the total on Accounts
 
 **Cash** (the *Savings and cash* tile on Accounts opens it) is to savings what Deposits is to fixed deposits: the cash available today, what the balances are estimated to earn (a year, a month, a day), which bank holds how much with each bank's share and average rate, the balances that are out of date, the largest balance, the split by person and by NRE and NRO, and a register of every savings account with its rate, last recorded balance, value today and interest a year. The person filter narrows all of it. Interest is an estimate: balance times rate, less the tax at source set in Settings.

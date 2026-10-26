@@ -24,9 +24,14 @@ describe('the importer’s row rules are shared, not copied', () => {
   it('classifies rows by what they are', () => {
     const g = parseGroup('Sample Bank - Asha', ['Asha']);
     expect(classifyRegisterRow({ b: 'FD', e: new Date(), f: 5 }, g).kind).toBe('fd');
-    expect(classifyRegisterRow({ b: 'Cash', e: 'Cash-NRE', f: 5 }, g)).toMatchObject({ kind: 'cash', accountKind: 'NRE' });
+    expect(classifyRegisterRow({ b: 'Cash', e: 'Cash-NRE', f: 5 }, g)).toMatchObject({
+      kind: 'cash',
+      accountKind: 'NRE',
+    });
     expect(classifyRegisterRow({ b: 'Cash', e: 'Cash SG', f: 5 }, g).kind).toBe('cash_sg');
-    expect(classifyRegisterRow({ b: '(STOPPED) Fund X', e: 'SIP Kiran Education', f: 5 }, g)).toMatchObject({ kind: 'fund', stopped: true, name: 'Fund X' });
+    expect(
+      classifyRegisterRow({ b: '(STOPPED) Fund X', e: 'SIP Kiran Education', f: 5 }, g),
+    ).toMatchObject({ kind: 'fund', stopped: true, name: 'Fund X' });
     expect(classifyRegisterRow({ b: 'Friend', e: 'Cash Loan', f: 5 }, g).kind).toBe('loan');
     expect(classifyRegisterRow({ b: 'Shares', e: 'Shares', f: 5 }, g).kind).toBe('third_party');
     expect(classifyRegisterRow({ b: 'FD', e: null, f: null }, g).kind).toBe('placeholder');
@@ -36,7 +41,11 @@ describe('the importer’s row rules are shared, not copied', () => {
   });
 
   it('reads group headings, deposit numbers and Singapore notes with the importer’s functions', () => {
-    expect(parseGroup('SIP - Kiran (Asha)\nRs 10k/month', ['Asha', 'Kiran'])).toMatchObject({ kind: 'sip', owner: 'Asha', goalPerson: 'Kiran' });
+    expect(parseGroup('SIP - Kiran (Asha)\nRs 10k/month', ['Asha', 'Kiran'])).toMatchObject({
+      kind: 'sip',
+      owner: 'Asha',
+      goalPerson: 'Kiran',
+    });
     expect(parseGroup('Atul IDFC', ['Asha'])).toMatchObject({ kind: 'person' });
     expect(fdNumberIn('x FD Number : 555500001111-1, 99999').ref).toBe('555500001111-1');
     expect(foreignNoteIn('Base: $1= Rs 65\nBal : $1,100.50')).toEqual({ sgd: 1100.5, base: 65 });
@@ -45,7 +54,11 @@ describe('the importer’s row rules are shared, not copied', () => {
   it('finds where the register ends from the total row, whatever the configured last row says', async () => {
     const grid = await gridOf(monthRows());
     expect(registerEnd(grid, OPTS)).toBe(19);
-    expect(layoutOf(grid, OPTS)).toMatchObject({ registerEnd: 19, recognised: 14, unclassified: 0 });
+    expect(layoutOf(grid, OPTS)).toMatchObject({
+      registerEnd: 19,
+      recognised: 14,
+      unclassified: 0,
+    });
   });
 });
 
@@ -54,8 +67,14 @@ describe('what is written for each kind of row', () => {
     const { plan, w } = await writesOf(appAssets());
     expect(w.F5).toBe(25_678.12);
     expect(Object.keys(w).filter((k) => /^[A-Z]+5$/.test(k))).toEqual(['F5']);
-    expect(row(plan.rows, 5)).toMatchObject({ status: 'update', kind: 'cash', asset: 'Cash-NRE-1111' });
-    expect(row(plan.rows, 5).changes).toEqual([{ cell: 'F5', column: 'Amount', old: '25,000', next: '25,678.12' }]);
+    expect(row(plan.rows, 5)).toMatchObject({
+      status: 'update',
+      kind: 'cash',
+      asset: 'Cash-NRE-1111',
+    });
+    expect(row(plan.rows, 5).changes).toEqual([
+      { cell: 'F5', column: 'Amount', old: '25,000', next: '25,678.12' },
+    ]);
     // an unchanged balance produces no change at all
     expect(row(plan.rows, 6).status).toBe('same');
     expect(w.F6).toBeUndefined();
@@ -68,7 +87,11 @@ describe('what is written for each kind of row', () => {
     expect(w.G3).toBe(1_161_000);
     // row 4: the rate moved
     expect(w.C4).toBe(0.0725);
-    expect(row(plan.rows, 4).changes[0]).toMatchObject({ column: 'Rate', old: '7.00%', next: '7.25%' });
+    expect(row(plan.rows, 4).changes[0]).toMatchObject({
+      column: 'Rate',
+      old: '7.00%',
+      next: '7.25%',
+    });
     expect(w.D4).toBeUndefined();
     // the joint deposit has no deposit number in the app: its note is left alone
     expect(row(plan.rows, 7).status).toBe('same');
@@ -87,7 +110,10 @@ describe('what is written for each kind of row', () => {
     expect(plan.writes.find((x) => x.ref === 'D3')!.isDate).toBe(true);
     // the cells are already date-formatted, so no format is touched
     expect(plan.dateFormats).toEqual([]);
-    expect(row(plan.rows, 3).changes.find((c) => c.cell === 'D3')).toMatchObject({ old: '1 Nov 2024', next: '4 Nov 2024' });
+    expect(row(plan.rows, 3).changes.find((c) => c.cell === 'D3')).toMatchObject({
+      old: '1 Nov 2024',
+      next: '4 Nov 2024',
+    });
   });
 
   it('Singapore cash: rupee value in F and the S$ amount and rate in the note, in the note’s own format', async () => {
@@ -130,7 +156,10 @@ describe('what is written for each kind of row', () => {
   it('money held by someone else: the value in F', async () => {
     const { w, plan } = await writesOf(appAssets());
     expect(w.F15).toBe(30_000);
-    expect(row(plan.rows, 15)).toMatchObject({ kind: 'third_party', asset: 'Account held by Atul' });
+    expect(row(plan.rows, 15)).toMatchObject({
+      kind: 'third_party',
+      asset: 'Account held by Atul',
+    });
   });
 
   it('never writes a cell that holds a formula, and says which it kept', async () => {
@@ -174,7 +203,13 @@ describe('matching rows to assets', () => {
     });
     const mk = (joint: boolean, value: number): SyncAsset =>
       appAssets().find((a) => a.last4 === '2222')
-        ? { ...appAssets().find((a) => a.last4 === '2222')!, id: joint ? 'j' : 's', joint, value, label: joint ? 'Cash-NRO JO-2222' : 'Cash-NRO-2222' }
+        ? {
+            ...appAssets().find((a) => a.last4 === '2222')!,
+            id: joint ? 'j' : 's',
+            joint,
+            value,
+            label: joint ? 'Cash-NRO JO-2222' : 'Cash-NRO-2222',
+          }
         : (undefined as never);
     const { w } = await writesOf([mk(true, 222), mk(false, 111)], rows);
     expect(w.F3).toBe(111);
@@ -183,8 +218,20 @@ describe('matching rows to assets', () => {
 
   it('matches the same fund under two people by the owner and the start date', async () => {
     const rows = build({
-      3: { A: 'SIP - Kiran (Asha)', B: 'Alpha Fund', D: { d: '2024-01-10' }, E: 'SIP Kiran Education', F: 1 },
-      4: { A: 'SIP - Kiran (Vikram)', B: 'Alpha Fund', D: { d: '2024-02-20' }, E: 'SIP Kiran Education', F: 2 },
+      3: {
+        A: 'SIP - Kiran (Asha)',
+        B: 'Alpha Fund',
+        D: { d: '2024-01-10' },
+        E: 'SIP Kiran Education',
+        F: 1,
+      },
+      4: {
+        A: 'SIP - Kiran (Vikram)',
+        B: 'Alpha Fund',
+        D: { d: '2024-02-20' },
+        E: 'SIP Kiran Education',
+        F: 2,
+      },
     });
     const mk = (owner: string, started: string, value: number): SyncAsset => ({
       ...appAssets().find((a) => a.kind === 'fund')!,
@@ -194,7 +241,10 @@ describe('matching rows to assets', () => {
       value,
       fund: { invested: null, startedOn: started, stopped: false },
     });
-    const { w } = await writesOf([mk('Vikram', '2024-02-20', 20), mk('Asha', '2024-01-10', 10)], rows);
+    const { w } = await writesOf(
+      [mk('Vikram', '2024-02-20', 20), mk('Asha', '2024-01-10', 10)],
+      rows,
+    );
     expect(w.F3).toBe(10);
     expect(w.F4).toBe(20);
   });
@@ -282,11 +332,20 @@ describe('accounts the sheet does not have', () => {
   });
 
   it('does not add a copy when the sheet has an unmatched line of the same kind in that group', async () => {
-    const assets = [...appAssets(), ...newAssets()].filter((a) => a.last4 !== '6666' && a.last4 !== '8888');
-    const extra = { ...newAssets()[1]!, last4: '6667', institution: 'Fourth Bank', owner: 'Vikram' };
+    const assets = [...appAssets(), ...newAssets()].filter(
+      (a) => a.last4 !== '6666' && a.last4 !== '8888',
+    );
+    const extra = {
+      ...newAssets()[1]!,
+      last4: '6667',
+      institution: 'Fourth Bank',
+      owner: 'Vikram',
+    };
     const { plan } = await writesOf([...assets, extra]);
     expect(plan.rows.some((r) => r.status === 'added' && r.kind === 'cash')).toBe(false);
-    expect(plan.placeByHand.some((p) => /could not match in the same group \(row 18\)/.test(p.reason))).toBe(true);
+    expect(
+      plan.placeByHand.some((p) => /could not match in the same group \(row 18\)/.test(p.reason)),
+    ).toBe(true);
   });
 
   it('a date written into a cell with no date format also gets the sheet’s date format', async () => {
@@ -301,18 +360,28 @@ describe('accounts the sheet does not have', () => {
 
 describe('text of the notes', () => {
   it('rewrites the S$ amount and the rate in place and keeps other words', () => {
-    expect(withForeignNote('Base: $1= Rs 65\nBal : $100.00', 250.5, 74.2563)).toBe('Base: $1= Rs 74.2563\nBal : $250.50');
-    expect(withForeignNote('Joint with Asha. Base: $1= Rs 65 Bal : $1,100.50', 2000, 74.26)).toBe('Joint with Asha. Base: $1= Rs 74.26 Bal : $2,000.00');
+    expect(withForeignNote('Base: $1= Rs 65\nBal : $100.00', 250.5, 74.2563)).toBe(
+      'Base: $1= Rs 74.2563\nBal : $250.50',
+    );
+    expect(withForeignNote('Joint with Asha. Base: $1= Rs 65 Bal : $1,100.50', 2000, 74.26)).toBe(
+      'Joint with Asha. Base: $1= Rs 74.26 Bal : $2,000.00',
+    );
     expect(withForeignNote('', 100, 74.26)).toBe('Base: $1= Rs 74.26\nBal : $100.00');
-    expect(withForeignNote('Lounge card', 100, 74.26)).toBe('Lounge card\nBase: $1= Rs 74.26\nBal : $100.00');
+    expect(withForeignNote('Lounge card', 100, 74.26)).toBe(
+      'Lounge card\nBase: $1= Rs 74.26\nBal : $100.00',
+    );
     // and the importer reads back what was written
-    expect(foreignNoteIn(withForeignNote('Base: $1= Rs 65\nBal : $100.00', 250.5, 74.2563))).toEqual({ sgd: 250.5, base: 74.2563 });
+    expect(
+      foreignNoteIn(withForeignNote('Base: $1= Rs 65\nBal : $100.00', 250.5, 74.2563)),
+    ).toEqual({ sgd: 250.5, base: 74.2563 });
   });
 
   it('puts the full deposit number in the note, keeping the rest', () => {
     expect(withFdNumber('', '555500001111-1')).toBe('FD Number : 555500001111-1');
     expect(withFdNumber('FD Number : 555500001111-1', '555500001111-1')).toBeNull();
-    expect(withFdNumber('Auto renew. FD Number : 111-1, 222-1', '999-1')).toBe('Auto renew. FD Number : 999-1, 222-1');
+    expect(withFdNumber('Auto renew. FD Number : 111-1, 222-1', '999-1')).toBe(
+      'Auto renew. FD Number : 999-1, 222-1',
+    );
     expect(withFdNumber('Lounge card', '999-1')).toBe('Lounge card\nFD Number : 999-1');
   });
 });

@@ -39,7 +39,10 @@ export function world(opts: { clock?: () => number } = {}) {
 }
 
 /** A workbook the way the household keeps it: a summary tab and one tab per month, newest on the left. */
-export function workbook(months: string[] = ['Sep 2026', 'Aug 2026'], rows: () => FakeCell[][] = monthRows) {
+export function workbook(
+  months: string[] = ['Sep 2026', 'Aug 2026'],
+  rows: () => FakeCell[][] = monthRows,
+) {
   const w = world();
   w.google.add('Notes', [[{ v: 'not a month' }]]);
   for (const m of months) w.google.add(m, rows());

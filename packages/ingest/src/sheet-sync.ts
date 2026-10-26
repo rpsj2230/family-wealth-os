@@ -186,6 +186,25 @@ const norm = (s: string | null | undefined): string =>
   (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 
+const KIND_WORD: Record<SyncKind, string> = {
+  cash: 'Savings account',
+  cash_sg: 'S$ account',
+  fd: 'Fixed deposit',
+  fund: 'Fund',
+  ulip: 'ULIP',
+  loan: 'Loan',
+  third_party: 'Held by someone else',
+};
+
+/** How an asset is called in the lists: its own name when it has one, else what it is, where and whose. */
+function assetName(a: SyncAsset): string {
+  return (
+    a.label ||
+    a.names[0] ||
+    `${KIND_WORD[a.kind]}${a.institution ? ` at ${a.institution}` : ''}${a.owner ? ` (${a.owner})` : ''}`
+  );
+}
+
 // ----------------------------------------------------------------------------------------------
 // Showing values the way a person reads them
 // ----------------------------------------------------------------------------------------------
@@ -745,7 +764,7 @@ export function planSheetSync(grid: SheetGrid, assets: SyncAsset[], opts: SyncOp
       continue;
     }
     usedAssets.add(a);
-    plan.asset = a.label || a.names[0] || a.id;
+    plan.asset = assetName(a);
     if (CLOSED.has(a.status) || (a.kind === 'loan' && a.value !== null && a.value <= 0)) {
       plan.status = 'closed';
       plan.note =
@@ -815,7 +834,7 @@ export function planSheetSync(grid: SheetGrid, assets: SyncAsset[], opts: SyncOp
       !usedAssets.has(a) && IN_REGISTER.has(a.status) && (a.kind !== 'fund' || a.fund !== null),
   );
   for (const a of unplaced) {
-    const name = a.label || a.names[0] || a.id;
+    const name = assetName(a);
     const span = groupFor(spans, a);
     if (!span) {
       placeByHand.push({

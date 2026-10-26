@@ -14,6 +14,7 @@ rates page, "I need money" planner, family emergency handbook; repository privat
 4. **Settings → Rate pages and AI key**: add the bank rate-page URLs and a free Groq or Gemini key so rates and PDF statements are read automatically.
 5. **Delete the old branch `claude/phase1-docs`** on GitHub (Branches page): it still holds the early history and I cannot delete it from here.
 6. Optional: moving Supabase to Mumbai (needs a new project; say the word and I will script the move).
+7. **Connect your Google Sheet (about ten minutes, free)** so *Sync with Google Sheet* can fill each month's tab: create a Google Cloud service account, enable the Google Sheets API, download its JSON key, share the sheet with the account's e-mail as **Editor**, then paste the sheet's link and the key in **Settings → Connections → Google Sheet** and press **Test connection**. Step by step: `docs/runbooks/google-sheet-sync.md`. The first real sync was only tested against a simulated Google, so read the **Preview** before confirming; a hidden `… - before sync` tab keeps the old data.
 
 Form 26AS and the AIS: the reader is built (Tax filing papers; or e-mail the files to the inbox label). The department does not publish the
 file layouts, so it reads what every version has and falls back to the AI reader; the first real file will show whether anything needs

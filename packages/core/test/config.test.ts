@@ -172,8 +172,6 @@ describe('sheet sync settings', () => {
     }).sheetSync;
     expect(bad).toEqual(DEFAULT_CONFIG.sheetSync);
     // the last row can never be above the first
-    expect(configFromJson({ sheetSync: { firstRow: 50, lastRow: 10 } }).sheetSync.lastRow).toBe(
-      50,
-    );
+    expect(configFromJson({ sheetSync: { firstRow: 50, lastRow: 10 } }).sheetSync.lastRow).toBe(50);
   });
 });

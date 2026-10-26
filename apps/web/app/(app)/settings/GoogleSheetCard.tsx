@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRef, useState, useTransition } from 'react';
 import { saveGoogleSheet, testGoogleSheet, type GsheetTestState } from '../gsheet/actions';
 import { niceDate } from '@/lib/dates';
-import { lastSyncText, type SheetSyncInfo } from '@/lib/sheet-sync-status';
+import type { SheetSyncInfo } from '@/lib/sheet-sync-status';
 import { Field, SaveRow, Tick, useForm } from './fields';
 import '@/components/sheetsync.css';
 
@@ -23,7 +23,6 @@ export function GoogleSheetCard({
   const [test, setTest] = useState<GsheetTestState | null>(null);
   const [testing, startTest] = useTransition();
   const keyBox = useRef<HTMLTextAreaElement>(null);
-  const last = lastSyncText(info.last, niceDate);
   const tested = info.tested
     ? `${niceDate(info.tested.at)}: ${info.tested.ok ? 'working' : 'not working'}${info.tested.note ? ` (${info.tested.note})` : ''}`
     : 'not tested yet';
@@ -67,7 +66,11 @@ export function GoogleSheetCard({
         <dt>Last test</dt>
         <dd className={info.tested ? (info.tested.ok ? 'ok' : 'fail') : 'muted'}>{tested}</dd>
         <dt>Last sync</dt>
-        <dd className={info.last ? (info.last.ok ? '' : 'fail') : 'muted'}>{last ?? 'none yet'}</dd>
+        <dd className={info.last ? (info.last.ok ? '' : 'fail') : 'muted'}>
+          {info.last
+            ? `${info.last.ok ? '' : 'failed: '}${info.last.month ? `${info.last.month}, ` : ''}${niceDate(info.last.at)}${info.last.note ? `: ${info.last.note}` : ''}`
+            : 'none yet'}
+        </dd>
       </dl>
 
       <div className="aiconn" aria-live="polite">
