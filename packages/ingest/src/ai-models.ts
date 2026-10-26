@@ -99,7 +99,7 @@ export function pickModel(provider: AiProvider, listJson: unknown): string | nul
 type Fetch = (
   u: string,
   init?: Record<string, unknown>,
-) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text?(): Promise<string> }>;
 
 /** The model to use for this key, or null when the provider's list cannot be read (the caller then uses its default). */
 export async function resolveModel(
@@ -152,4 +152,37 @@ export async function resolveWorkingModel(
     }
   }
   return null;
+}
+
+/** What each candidate model answered to the one-word question, for the self-test (no key, no personal text). */
+export async function probeModels(
+  f: Fetch,
+  provider: AiProvider,
+  apiKey: string,
+  tries = 6,
+): Promise<{ model: string; status: number; note: string }[]> {
+  const out: { model: string; status: number; note: string }[] = [];
+  try {
+    const req = modelsRequest(provider, apiKey);
+    const res = await f(req.url, req.init as unknown as Record<string, unknown>);
+    if (!res.ok)
+      return [{ model: '(model list)', status: res.status, note: 'the model list was refused' }];
+    for (const model of rankModels(provider, await res.json()).slice(0, tries)) {
+      const ping = buildAiChat(
+        provider,
+        apiKey,
+        'Answer with the single word OK.',
+        'Say OK.',
+        model,
+      );
+      const r = await f(ping.url, ping.init as unknown as Record<string, unknown>);
+      const body = r.ok
+        ? ''
+        : ((await r.text?.().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 160);
+      out.push({ model, status: r.status, note: body });
+    }
+  } catch (e) {
+    out.push({ model: '(error)', status: 0, note: (e as Error).message });
+  }
+  return out;
 }
