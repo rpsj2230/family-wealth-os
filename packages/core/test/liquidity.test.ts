@@ -101,6 +101,18 @@ describe('sources', () => {
     expect(brk.fixedCostRate).toBeLessThan(0.02);
     expect(s.find((x) => x.kind === 'fd_maturing')!.availableOn).toBe('2027-01-01');
   });
+  it('lists a deposit booked in the last few weeks as its own, cheap source', () => {
+    const s = buildSources(
+      input(
+        [asset('fdNew', 'fixed_deposit', A, 200_000)],
+        [fd('fdNew', 200_000, '2026-10-10', '2027-10-10')],
+      ),
+    );
+    expect(s.map((x) => x.kind).sort()).toEqual(['fd_maturing', 'fd_recent']);
+    const recent = s.find((x) => x.kind === 'fd_recent')!;
+    expect(recent.fixedCostRate).toBeLessThan(0.001); // a few days of interest at most
+    expect(recent.notes.join(' ')).toContain('costs little');
+  });
   it('estimates fund gain from the invested amount and treats SIP funds as short-term', () => {
     const [long] = buildSources(
       input(

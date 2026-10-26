@@ -6,6 +6,8 @@
 import {
   buildPortfolio,
   lastNavMove,
+  rateOfferFromRow,
+  savingsRateFor,
   type AssetRow,
   type FdRow,
   type ObservationRow,
@@ -55,25 +57,32 @@ export async function loadPortfolioData(
   };
   // settings are read in step with the first batch, not after it
   const settingsP = loadSettings(supabase, opts.householdId);
-  const [owners, assets, observations, fds, positions] = await Promise.all([
-    sel('owners', 'id, display_name'),
-    sel(
-      'assets',
-      'id, owner_id, type, status, nickname, currency, account_kind, expected_freshness_days, interest_rate, tds_rate, institution_id, identifier_last4, holder_name, label, sort_order, is_joint, linked_last4, notes',
-    ),
-    sel(
-      'observations',
-      'id, asset_id, kind, amount, currency, fx_rate, as_of, confidence, source, created_at, superseded_by',
-    ),
-    sel(
-      'fixed_deposits',
-      'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4',
-    ),
-    sel(
-      'mf_positions',
-      'asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of',
-    ),
-  ]);
+  const [owners, assets, observations, fds, positions, institutions, offerRows] = await Promise.all(
+    [
+      sel('owners', 'id, display_name'),
+      sel(
+        'assets',
+        'id, owner_id, type, status, nickname, currency, account_kind, expected_freshness_days, interest_rate, tds_rate, institution_id, identifier_last4, holder_name, label, sort_order, is_joint, linked_last4, notes',
+      ),
+      sel(
+        'observations',
+        'id, asset_id, kind, amount, currency, fx_rate, as_of, confidence, source, created_at, superseded_by',
+      ),
+      sel(
+        'fixed_deposits',
+        'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4',
+      ),
+      sel(
+        'mf_positions',
+        'asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of',
+      ),
+      sel('institutions', 'id, name'),
+      sel(
+        'rate_offers',
+        'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to',
+      ).eq('product', 'savings'),
+    ],
+  );
   const today = opts.today ?? todayDate();
   const code = new Map(
     ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [
@@ -99,14 +108,43 @@ export async function loadPortfolioData(
         },
       ]),
   );
+  const obsRows = (observations.data ?? []) as unknown as ObservationRow[];
+  // a savings account with no rate of its own earns what the rate list says for its bank, kind and balance slab
+  const bankName = new Map(
+    ((institutions.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [
+      i.id,
+      i.name,
+    ]),
+  );
+  const savingsOffers = ((offerRows.data ?? []) as unknown as Record<string, unknown>[]).map(
+    rateOfferFromRow,
+  );
+  const lastBalance = new Map<string, { asOf: string; amount: number }>();
+  for (const o of obsRows) {
+    if (o.superseded_by) continue;
+    const cur = lastBalance.get(o.asset_id);
+    if (!cur || o.as_of > cur.asOf)
+      lastBalance.set(o.asset_id, { asOf: o.as_of, amount: o.amount });
+  }
+  const listedRate = (a: AssetRow): number | null => {
+    if (a.type !== 'bank_account' || a.currency !== 'INR' || (a.interest_rate ?? null) !== null)
+      return null;
+    const bank = a.institution_id ? bankName.get(a.institution_id) : undefined;
+    if (!bank) return null;
+    const kind = a.account_kind === 'NRE' || a.account_kind === 'NRO' ? a.account_kind : null;
+    return (
+      savingsRateFor(savingsOffers, bank, kind, Math.max(0, lastBalance.get(a.id)?.amount ?? 0))
+        ?.rate ?? null
+    );
+  };
   const assetRows = ((assets.data ?? []) as unknown as AssetRow[]).map((a) => ({
     ...a,
     amfi_code: code.get(a.id) ?? null,
     units: units.get(a.id)?.units ?? null,
     units_as_of: units.get(a.id)?.asOf ?? null,
     sip: sip.get(a.id) ?? null,
+    listed_rate: listedRate(a),
   }));
-  const obsRows = (observations.data ?? []) as unknown as ObservationRow[];
   const fdRows = (fds.data ?? []) as unknown as FdRow[];
   const ownerName = new Map(
     ((owners.data ?? []) as unknown as { id: string; display_name: string }[]).map((o) => [

@@ -1,4 +1,10 @@
-import { buildBankBlocks, type AppConfig, type RateHolding, type RateOffer } from '@fwos/core';
+import {
+  buildBankBlocks,
+  rateOfferFromRow,
+  type AppConfig,
+  type RateHolding,
+  type RateOffer,
+} from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
 import { loadSettings } from './settings';
@@ -52,7 +58,7 @@ export async function loadRatesContext(
     institutionNames: names,
     today: l.today,
   });
-  const ownRate = new Map(l.assetRows.map((a) => [a.id, a.interest_rate ?? null]));
+  const ownRate = new Map(l.assetRows.map((a) => [a.id, a.interest_rate ?? a.listed_rate ?? null]));
   const holdings: RateHolding[] = [];
   for (const b of blocks) {
     for (const s of b.sections) {
@@ -83,24 +89,7 @@ export async function loadRatesContext(
     }
   }
   const offers: RateOffer[] = ((offerRows.data ?? []) as unknown as Record<string, unknown>[]).map(
-    (o) => ({
-      id: o.id as string,
-      bank: o.bank as string,
-      product: o.product as 'savings' | 'fd',
-      accountKind: o.account_kind as RateOffer['accountKind'],
-      tenureFrom: Number(o.tenure_from_months),
-      tenureTo: Number(o.tenure_to_months),
-      rate: Number(o.rate),
-      conditions: (o.conditions as string | null) ?? null,
-      sourceKind: o.source_kind as 'manual' | 'ai',
-      checkedOn: o.checked_on as string,
-      balanceFrom:
-        o.balance_from === null || o.balance_from === undefined ? null : Number(o.balance_from),
-      balanceTo: o.balance_to === null || o.balance_to === undefined ? null : Number(o.balance_to),
-      tenureDays: (o.tenure_days as number | null | undefined) ?? null,
-      sourceNote: (o.source_note as string | null | undefined) ?? null,
-      sourceUrl: (o.source_url as string | null | undefined) ?? null,
-    }),
+    rateOfferFromRow,
   );
   return {
     offers,

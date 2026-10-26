@@ -38,6 +38,28 @@ export interface RateOffer {
 export type RatePrefs = AppConfig['rates'];
 
 /** Interest after Indian tax: NRO is taxed at the configured rate, NRE is not. */
+/** A stored rate (database row) as a rate offer. */
+export function rateOfferFromRow(o: Record<string, unknown>): RateOffer {
+  return {
+    id: o.id as string,
+    bank: o.bank as string,
+    product: o.product as 'savings' | 'fd',
+    accountKind: o.account_kind as RateKind,
+    tenureFrom: Number(o.tenure_from_months),
+    tenureTo: Number(o.tenure_to_months),
+    rate: Number(o.rate),
+    conditions: (o.conditions as string | null) ?? null,
+    sourceKind: o.source_kind as 'manual' | 'ai',
+    checkedOn: o.checked_on as string,
+    balanceFrom:
+      o.balance_from === null || o.balance_from === undefined ? null : Number(o.balance_from),
+    balanceTo: o.balance_to === null || o.balance_to === undefined ? null : Number(o.balance_to),
+    tenureDays: (o.tenure_days as number | null | undefined) ?? null,
+    sourceNote: (o.source_note as string | null | undefined) ?? null,
+    sourceUrl: (o.source_url as string | null | undefined) ?? null,
+  };
+}
+
 export const afterTaxRate = (rate: number, kind: RateKind | null, nroTaxRate: number) =>
   kind === 'NRO' ? rate * (1 - nroTaxRate) : rate;
 

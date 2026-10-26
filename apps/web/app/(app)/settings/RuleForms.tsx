@@ -132,6 +132,13 @@ export function LiquidityForm({ c, confirmed }: { c: AppConfig['liquidity']; con
           <input name="fdPenalty" inputMode="decimal" defaultValue={pc(c.fdPenaltyPoints)} />
         </Field>
         <Field
+          label="A deposit counts as recently added for"
+          unit="days"
+          hint="Deposits booked within this time are listed as their own source, since breaking them loses little interest."
+        >
+          <input name="recentFdDays" inputMode="numeric" defaultValue={c.recentFdDays} />
+        </Field>
+        <Field
           label="Days for a broken deposit to reach the bank"
           unit="days"
           hint="Sets the date a deposit break shows as available."

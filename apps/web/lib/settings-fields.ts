@@ -146,8 +146,8 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       },
       {
         name: 'savingsRate',
-        label: 'Savings interest assumed until an account has its own rate',
-        hint: 'Used to estimate today’s balance of a savings account between updates.',
+        label: 'Savings interest assumed when no rate is known',
+        hint: 'Estimating today’s balance of a savings account uses, in this order: the rate set on the account, then the Rates list for its bank (NRE or NRO, and the slab its balance falls in), then this figure.',
         kind: 'pct',
         path: ['estimates', 'savingsRate'],
         unit: '% a year',

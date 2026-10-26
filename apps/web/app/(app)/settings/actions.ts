@@ -400,6 +400,7 @@ export async function saveLiquidity(_p: FormResult | null, f: FormData): Promise
   const needed: [string, string][] = [
     ['keepInBank', 'Leave in each savings account'],
     ['fdPenalty', 'Interest lost when a deposit is broken early'],
+    ['recentFdDays', 'Days a deposit counts as recently added'],
     ['fdBreakDays', 'Days for a broken deposit to reach the bank'],
     ['mfDays', 'Working days from selling a fund'],
     ['stockDays', 'Working days from selling shares'],
@@ -421,6 +422,7 @@ export async function saveLiquidity(_p: FormResult | null, f: FormData): Promise
       keepInBank: numeric(f, 'keepInBank'),
       fdPenaltyPoints: pct(f, 'fdPenalty'),
       fdPartialBreak: f.get('fdPartial') === 'on',
+      recentFdDays: numeric(f, 'recentFdDays'),
       fdBreakDays: numeric(f, 'fdBreakDays'),
       mfSettlementDays: numeric(f, 'mfDays'),
       stockSettlementDays: numeric(f, 'stockDays'),

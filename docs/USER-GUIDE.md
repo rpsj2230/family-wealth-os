@@ -146,3 +146,10 @@ Open a bank to change its rates in place: edit the figure and press Save. If you
 ## Rates from banks that block automatic reading
 
 Every bank with a rate page saved in Settings is read, including banks where you hold nothing yet (so you can compare before you move money). When a bank's own page cannot be read by a program, the weekly job reads the bank's published rate-sheet PDFs where they exist (AU Small Finance Bank), and otherwise public comparison pages, which are marked **Reference only (third party)** with the date to check. A comparison page never deletes a rate that is not on it. If nothing can be read, the reason is shown beside the bank in Settings; paste the rates from your notes on the Rates page. The program does not pretend to be a browser and does not get around a block.
+
+
+## Savings interest from the Rates list, and recently added deposits
+
+- A savings account with no rate of its own is estimated at the rate on the **Rates** list for its bank, its kind (NRE or NRO) and the slab its balance falls in. The flat figure in Settings is used only when the list has nothing for that bank.
+- **Recently added deposits** are their own source on the "I need money" page: a deposit booked within the number of days set in Settings (default 90) can be broken with little interest lost, so it ranks right after deposits that mature in time. You can change its priority or switch it off in Settings > Where money may come from.
+- **Gifts**: on Others > Money lent, choose *Gift (will not come back, not counted)*, or mark an existing loan as a gift. It stays on the list for the record but is left out of net worth, totals, reminders and the monthly update.

@@ -40,6 +40,8 @@ export interface AssetRow {
   notes?: string | null;
   /** annual interest rate (decimal) for savings-type accounts; null = use the default assumption */
   interest_rate?: number | null;
+  /** the rate on file for this bank, kind and balance slab (decimal), used when the account has no rate of its own */
+  listed_rate?: number | null;
   /** tax deducted at source on interest (decimal); null = use the default assumption */
   tds_rate?: number | null;
   /** AMFI scheme code once you have confirmed which scheme this fund is */
@@ -172,12 +174,12 @@ export function buildPortfolio(
       freshness = f.status;
       ageDays = f.ageDays;
       if (a.type === 'bank_account' && a.currency === 'INR') {
-        usedAssumption = (a.interest_rate ?? null) === null;
+        usedAssumption = (a.interest_rate ?? null) === null && (a.listed_rate ?? null) === null;
         estimate = estimateSavings({
           balance: obs.amount,
           balanceAsOf: asOf,
           today,
-          annualRate: a.interest_rate ?? defaults.savingsRate,
+          annualRate: a.interest_rate ?? a.listed_rate ?? defaults.savingsRate,
           tdsRate: a.tds_rate ?? defaults.tdsRate,
         });
       } else if (a.currency !== 'INR') {

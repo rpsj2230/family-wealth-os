@@ -66,6 +66,8 @@ export interface AppConfig {
     fdPenaltyPoints: number;
     /** whether the bank lets you break part of a deposit; otherwise the whole deposit is used */
     fdPartialBreak: boolean;
+    /** a deposit booked within this many days counts as recently added: breaking it loses little, so it ranks as its own kind of source */
+    recentFdDays: number;
     /** days for a deposit break to reach your account */
     fdBreakDays: number;
     /** working days from selling a fund to money in the bank */
@@ -120,11 +122,21 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   refunds: { incomeLimit: 400_000, otherIncome: 0 },
   liquidity: {
-    order: ['cash', 'fd_maturing', 'mf', 'fd_break', 'stock', 'receivable', 'property'],
+    order: [
+      'cash',
+      'fd_maturing',
+      'fd_recent',
+      'mf',
+      'fd_break',
+      'stock',
+      'receivable',
+      'property',
+    ],
     mode: 'cheapest',
     keepInBank: 10_000,
     fdPenaltyPoints: 0.01,
     fdPartialBreak: false,
+    recentFdDays: 90,
     fdBreakDays: 1,
     mfSettlementDays: 3,
     stockSettlementDays: 2,
@@ -155,6 +167,18 @@ const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 /** Reads the saved JSON defensively: anything missing or out of range falls back to the default. */
+/**
+ * An order saved before "recently added deposits" existed has no place for them, which would mean they are never used.
+ * They take the place right after deposits that mature in time (or just before early breaks), so nothing changes silently.
+ */
+function withRecentDeposits(order: LiquidityKind[]): LiquidityKind[] {
+  if (order.includes('fd_recent') || !order.includes('fd_break')) return order;
+  const out = [...order];
+  const at = out.includes('fd_maturing') ? out.indexOf('fd_maturing') + 1 : out.indexOf('fd_break');
+  out.splice(at, 0, 'fd_recent');
+  return out;
+}
+
 export function configFromJson(raw: unknown): AppConfig {
   const d = DEFAULT_CONFIG;
   const r = obj(raw);
@@ -211,13 +235,13 @@ export function configFromJson(raw: unknown): AppConfig {
     },
     liquidity: {
       order: Array.isArray(liq.order)
-        ? [
+        ? withRecentDeposits([
             ...new Set(
               liq.order.filter((k): k is LiquidityKind =>
                 (LIQUIDITY_KINDS as readonly unknown[]).includes(k),
               ),
             ),
-          ]
+          ])
         : d.liquidity.order,
       mode:
         liq.mode === 'cheapest' || liq.mode === 'fastest' || liq.mode === 'order'
@@ -226,6 +250,7 @@ export function configFromJson(raw: unknown): AppConfig {
       keepInBank: num(liq.keepInBank, d.liquidity.keepInBank, 0, 1e9),
       fdPenaltyPoints: num(liq.fdPenaltyPoints, d.liquidity.fdPenaltyPoints, 0, 0.1),
       fdPartialBreak: bool(liq.fdPartialBreak, d.liquidity.fdPartialBreak),
+      recentFdDays: Math.round(num(liq.recentFdDays, d.liquidity.recentFdDays, 0, 365)),
       fdBreakDays: Math.round(num(liq.fdBreakDays, d.liquidity.fdBreakDays, 0, 30)),
       mfSettlementDays: Math.round(num(liq.mfSettlementDays, d.liquidity.mfSettlementDays, 0, 30)),
       stockSettlementDays: Math.round(

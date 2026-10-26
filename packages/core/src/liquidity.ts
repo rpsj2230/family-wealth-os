@@ -235,9 +235,10 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
         compounding: fd.compounding,
       });
       const received = Math.min(value, early);
+      const recent = heldDays <= cfg.recentFdDays;
       out.push({
         ...base,
-        kind: 'fd_break',
+        kind: recent ? 'fd_recent' : 'fd_break',
         max: value,
         availableOn: addDays(today, cfg.fdBreakDays),
         divisible: cfg.fdPartialBreak,
@@ -246,6 +247,11 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
           `Break ${bank} ${code} early ({amt}) through net banking, the branch or phone banking, and ask for the money to go to ${into}.`,
         ],
         notes: [
+          ...(recent
+            ? [
+                `Added only ${heldDays < 1 ? 'today' : Math.round(heldDays) + ' days ago'}, so breaking it costs little.`,
+              ]
+            : []),
           `Held ${heldDays < 1 ? 'under a day' : Math.round(heldDays) + ' days'}; about ${inr(value - received)} of interest is lost to the early-break rate (${(cfg.fdPenaltyPoints * 100).toFixed(2)} points lower).`,
           ...(years < 7 / 365
             ? ['Many banks pay no interest on a deposit broken within 7 days.']

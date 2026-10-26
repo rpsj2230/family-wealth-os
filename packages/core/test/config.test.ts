@@ -77,3 +77,29 @@ describe('tax rules from Settings', () => {
     expect(effectiveRules('2010-01-01', RULES)).toBeNull();
   });
 });
+
+describe('saved order of sources', () => {
+  it('gives recently added deposits a place in an order saved before they existed', () => {
+    const c = configFromJson({
+      liquidity: { order: ['cash', 'fd_maturing', 'mf', 'fd_break', 'stock'] },
+    });
+    expect(c.liquidity.order).toEqual([
+      'cash',
+      'fd_maturing',
+      'fd_recent',
+      'mf',
+      'fd_break',
+      'stock',
+    ]);
+    expect(c.liquidity.recentFdDays).toBe(90);
+  });
+  it('leaves an order alone when the user left early breaks out, or already ranked recent deposits', () => {
+    expect(configFromJson({ liquidity: { order: ['cash', 'mf'] } }).liquidity.order).toEqual([
+      'cash',
+      'mf',
+    ]);
+    expect(
+      configFromJson({ liquidity: { order: ['fd_recent', 'cash', 'fd_break'] } }).liquidity.order,
+    ).toEqual(['fd_recent', 'cash', 'fd_break']);
+  });
+});

@@ -24,6 +24,7 @@ const nice = (iso: string | null) =>
 const SHORT: Record<string, string> = {
   cash: 'Cash',
   fd_maturing: 'Deposits maturing',
+  fd_recent: 'Recent deposits broken',
   fd_break: 'Deposits broken early',
   mf: 'Mutual funds',
   stock: 'Shares',
@@ -47,7 +48,10 @@ function summarise(picks: RaisePlan['picks']): string {
 
 /** Where a pick comes from, the way the sheet writes it: bank and account code, or the fund or property name. */
 function holding(x: RaisePick): string {
-  return x.kind === 'cash' || x.kind === 'fd_maturing' || x.kind === 'fd_break'
+  return x.kind === 'cash' ||
+    x.kind === 'fd_maturing' ||
+    x.kind === 'fd_recent' ||
+    x.kind === 'fd_break'
     ? `${x.bank} · ${x.code}`
     : x.name;
 }

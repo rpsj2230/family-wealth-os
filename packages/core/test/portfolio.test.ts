@@ -95,6 +95,24 @@ describe('buildPortfolio', () => {
     expect(p.lines.b!.usedAssumption).toBe(false);
   });
 
+  it('uses the rate on file for the bank and slab when the account has none, and the account rate beats it', () => {
+    const rows = [obs({ id: 'o', asset_id: 'b', amount: 100_000, as_of: '2026-07-26' })];
+    const own = buildPortfolio([asset({ id: 'b', interest_rate: 0.0275 })], rows, [], today);
+    const listed = buildPortfolio([asset({ id: 'b', listed_rate: 0.065 })], rows, [], today);
+    const both = buildPortfolio(
+      [asset({ id: 'b', interest_rate: 0.0275, listed_rate: 0.065 })],
+      rows,
+      [],
+      today,
+    );
+    const plain = buildPortfolio([asset({ id: 'b' })], rows, [], today);
+    expect(listed.lines.b!.usedAssumption).toBe(false);
+    expect(plain.lines.b!.usedAssumption).toBe(true);
+    const amount = (p: typeof own) => p.valued[0]!.estimate!.estimatedAmount;
+    expect(amount(listed)).toBeGreaterThan(amount(plain)); // 6.5% beats the 3% default
+    expect(amount(both)).toBe(amount(own));
+  });
+
   it('values an FD from its contract (calculated), independent of observations', () => {
     const p = buildPortfolio([asset({ id: 'fd1', type: 'fixed_deposit' })], [], [fd], today);
     expect(p.lines.fd1).toMatchObject({ basis: 'calculated', freshness: 'calculated' });
