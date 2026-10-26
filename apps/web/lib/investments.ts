@@ -24,6 +24,13 @@ import {
   sourceTag,
   type SourceTag,
   returnsFor,
+  flowsOfFund,
+  perfDates,
+  trailingTable,
+  type Flow,
+  type IndexPoint,
+  type PeriodDef,
+  type TrailingReturn,
   type FundForReturns,
   type FundTxn,
   type SeriesPoint,
@@ -72,6 +79,21 @@ export interface FundRow {
   category: FundCategory;
   amc: string | null;
   taxClass: FundTaxClass;
+  /** the name given on the Accounts side (empty when none), and the asset's status: active, or closed once sold */
+  label: string | null;
+  status: string;
+  /** this fund's own exit load as a fraction and in days; null = the default in Settings */
+  exitLoadPct: number | null;
+  exitLoadDays: number | null;
+  /** Direct or Regular plan, from the saved position (unknown until a statement or the scheme list says) */
+  plan: 'direct' | 'regular' | 'unknown';
+  /** the fund's own price return over each period, from its published prices; empty without a price history */
+  navReturns: { def: PeriodDef; r: TrailingReturn | null }[];
+  /** the fund valued on every month end, the start of each period and today: the input of the performance figures */
+  perf: SeriesPoint[];
+  /** money in (positive) and out (negative), from the statement or, marked estimated, from the start date and SIP */
+  flows: Flow[];
+  flowsEstimated: boolean;
   /** transactions of a fund statement are on file */
   hasStatement: boolean;
   txns: StatTxn[];
@@ -120,6 +142,8 @@ export interface InvestmentView {
   holdingMonths: number | null;
   config: AppConfig['funds'];
   goals: { id: string; name: string }[];
+  /** the benchmark proxy: an index fund's published prices, when the daily job has loaded them */
+  benchmark: { code: string; name: string | null; navs: IndexPoint[] } | null;
 }
 
 type Supabase = Ctx['supabase'];
@@ -167,8 +191,11 @@ export async function loadInvestmentView(
     await Promise.all([
       supabase
         .from('mf_positions')
-        .select('asset_id, fund_name, invested, started_on, sip_monthly, sip_stopped, folio_last4'),
+        .select(
+          'asset_id, fund_name, invested, started_on, sip_monthly, sip_stopped, folio_last4, plan_type, exit_load_pct, exit_load_days',
+        ),
       pageAll<{
+        id: string;
         asset_id: string;
         txn_on: string;
         kind: CasTxn['kind'];
@@ -177,10 +204,13 @@ export async function loadInvestmentView(
         nav: number | null;
         balance_units: number | null;
         description: string | null;
+        source: string | null;
       }>((from, to) =>
         supabase
           .from('mf_transactions')
-          .select('asset_id, txn_on, kind, units, amount, nav, balance_units, description')
+          .select(
+            'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source',
+          )
           .order('txn_on')
           .order('id')
           .range(from, to),
@@ -223,12 +253,13 @@ export async function loadInvestmentView(
     ]);
   const today = l.today.toISOString().slice(0, 10);
   const ownerOf = new Map(l.assetRows.map((a) => [a.id, a.owner_id]));
+  const assetOf = new Map(l.assetRows.map((a) => [a.id, a]));
   const value = new Map(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
   const methodOf = new Map(l.portfolio.valued.map((v) => [v.assetId, v.estimate?.method] as const));
   const txBy = new Map<string, FundTxn[]>();
-  const casBy = new Map<string, CasTxn[]>();
+  const casBy = new Map<string, (CasTxn & { source: string | null; id: string })[]>();
   for (const t of tx) {
     txBy.set(t.asset_id, [
       ...(txBy.get(t.asset_id) ?? []),
@@ -244,6 +275,8 @@ export async function loadInvestmentView(
         units: Number(t.units),
         nav: t.nav === null ? null : Number(t.nav),
         balance: t.balance_units === null ? null : Number(t.balance_units),
+        source: t.source,
+        id: t.id,
       },
     ]);
   }
@@ -292,6 +325,33 @@ export async function loadInvestmentView(
       ...(navBy.get(n.amfi_code) ?? []),
       { date: n.nav_date, nav: Number(n.nav) },
     ]);
+  // the benchmark proxy: the daily job fetches its prices like those of a held fund; until then there is none to show
+  const benchCode = settings.config.funds.benchmarkCode;
+  let benchmark: InvestmentView['benchmark'] = null;
+  if (benchCode) {
+    const rows = codes.includes(benchCode)
+      ? (navBy.get(benchCode) ?? []).map((n) => ({ nav_date: n.date, nav: n.nav }))
+      : await pageAll<{ nav_date: string; nav: number }>((from, to) =>
+          supabase
+            .from('mf_navs')
+            .select('nav_date, nav')
+            .eq('amfi_code', benchCode)
+            .order('nav_date')
+            .range(from, to),
+        );
+    if (rows.length >= 2) {
+      const one = await supabase
+        .from('amfi_schemes')
+        .select('name')
+        .eq('code', benchCode)
+        .maybeSingle();
+      benchmark = {
+        code: benchCode,
+        name: (one.data as { name?: string } | null)?.name ?? null,
+        navs: rows.map((n) => ({ date: n.nav_date, value: Number(n.nav) })),
+      };
+    }
+  }
   const codeOf = new Map(l.assetRows.map((a) => [a.id, a.amfi_code ?? null]));
   const forRet = new Map<string, FundForReturns>();
   const every: FundRow[] = [];
@@ -303,6 +363,9 @@ export async function loadInvestmentView(
     sip_monthly: number | null;
     sip_stopped: boolean;
     folio_last4: string | null;
+    plan_type: string | null;
+    exit_load_pct: number | null;
+    exit_load_days: number | null;
   }[]) {
     const ownerId = ownerOf.get(p.asset_id);
     if (!ownerId) continue;
@@ -375,6 +438,38 @@ export async function loadInvestmentView(
             { value: v, invested },
             chartDates(range, history[0]?.date ?? today, today),
           );
+    const navLine = (navBy.get(code ?? '') ?? []).map((n) => ({ date: n.date, value: n.nav }));
+    const fl = flowsOfFund({
+      txns: cas.map((c) => ({
+        date: c.date,
+        units: c.units,
+        amount: c.amount,
+        nav: c.nav,
+        balance: c.balance,
+      })),
+      plan: {
+        invested,
+        startedOn: p.started_on,
+        sipMonthly: p.sip_monthly === null ? null : Number(p.sip_monthly),
+        sipStopped: p.sip_stopped,
+      },
+      today,
+    });
+    const firstDate = history[0]?.date;
+    const perf = firstDate
+      ? fundSeries(
+          {
+            txns: txBy.get(p.asset_id) ?? [],
+            navs: navBy.get(code ?? '') ?? [],
+            observations: obsBy.get(p.asset_id) ?? [],
+            snapshots: snapBy.get(p.asset_id) ?? [],
+            plan: { invested, startedOn: p.started_on },
+          },
+          today,
+          { value: v, invested },
+          perfDates(firstDate, today, settings.config.funds.weeksShown),
+        )
+      : [];
     every.push({
       assetId: p.asset_id,
       ownerId,
@@ -405,16 +500,33 @@ export async function loadInvestmentView(
       category: fundCategory(p.fund_name, scheme?.category ?? null),
       amc: amcLabel(scheme?.amc ?? null),
       taxClass: fundTaxClass(p.fund_name, scheme?.category ?? null).class,
-      // lines assumed from the SIP plan are not a statement
-      hasStatement: cas.some((c) => !isEstimatedTxn(c)),
+      label: assetOf.get(p.asset_id)?.label ?? null,
+      status: assetOf.get(p.asset_id)?.status ?? 'active',
+      exitLoadPct: p.exit_load_pct === null ? null : Number(p.exit_load_pct),
+      exitLoadDays: p.exit_load_days === null ? null : Number(p.exit_load_days),
+      plan: p.plan_type === 'direct' || p.plan_type === 'regular' ? p.plan_type : 'unknown',
+      navReturns:
+        navLine.length >= 2
+          ? trailingTable(navLine, today, {
+              gapDays: settings.config.funds.navGapDays,
+              annualiseAfterMonths: settings.config.funds.annualiseAfterMonths,
+            })
+          : [],
+      perf,
+      flows: fl.flows,
+      flowsEstimated: fl.estimated,
+      // lines assumed from the SIP plan (source 'estimate') are not a statement
+      hasStatement: cas.some((c) => c.source !== 'estimate' && !isEstimatedTxn(c)),
       txns: cas.map((c) => ({
+        id: c.id,
         date: c.date,
         kind: c.kind,
         units: c.units,
         amount: c.amount,
         nav: c.nav,
         balance: c.balance,
-        description: c.description,
+        description: c.description || null,
+        source: c.source,
       })),
       lots,
       lotsBasis,
@@ -472,6 +584,7 @@ export async function loadInvestmentView(
     palette,
     holdingMonths,
     config: settings.config.funds,
+    benchmark,
     goals: ((goals.data ?? []) as unknown as { id: string; name: string }[]).map((g) => ({
       id: g.id,
       name: g.name,
@@ -482,16 +595,25 @@ export async function loadInvestmentView(
 /** "If this pace holds": this month's SIPs and the return achieved so far (kept within 0–20% so one lucky year does not mislead). */
 export function fundPace(view: InvestmentView) {
   const h = view.household;
+  const cfg = view.config;
   const assumed = h.xirr === null;
   const rate = Math.max(
     0,
-    Math.min(0.2, h.xirr ?? paceFromSeries(view.series)?.annualGrowth ?? 0.1),
+    Math.min(
+      cfg.projectionCap,
+      h.xirr ?? paceFromSeries(view.series)?.annualGrowth ?? cfg.projectionCap / 2,
+    ),
   );
   const args = { today: view.today, value: h.value, monthly: h.sipMonthly, annualReturn: rate };
   return {
     rate,
     assumed,
-    projections: projectCorpus({ ...args, horizons: [1, 3, 5, 10] }),
-    path: projectionPath({ ...args, years: 10 }),
+    spread: cfg.projectionSpread,
+    projections: projectCorpus({
+      ...args,
+      horizons: cfg.projectionYears,
+      spread: cfg.projectionSpread,
+    }),
+    path: projectionPath({ ...args, years: Math.max(...cfg.projectionYears) }),
   };
 }

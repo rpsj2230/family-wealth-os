@@ -119,4 +119,29 @@ describe('saved order of sources', () => {
       configFromJson({ liquidity: { order: ['fd_recent', 'cash', 'fd_break'] } }).liquidity.order,
     ).toEqual(['fd_recent', 'cash', 'fd_break']);
   });
+
+  it('reads the performance settings: lists are sorted and cleaned, bad values fall back', () => {
+    const f = configFromJson({
+      funds: {
+        rollingYears: [5, 3, 3, 0, 99, 'x'],
+        ageBucketsMonths: [36, 3, 12],
+        projectionYears: [],
+        riskFreeRate: 0.07,
+        benchmarkCode: ' 119063 ',
+        weeksShown: 2,
+        plRows: 36,
+      },
+    }).funds;
+    expect(f.rollingYears).toEqual([3, 5]);
+    expect(f.ageBucketsMonths).toEqual([3, 12, 36]);
+    expect(f.projectionYears).toEqual(DEFAULT_CONFIG.funds.projectionYears);
+    expect(f.riskFreeRate).toBe(0.07);
+    expect(f.benchmarkCode).toBe('119063');
+    expect(f.weeksShown).toBe(DEFAULT_CONFIG.funds.weeksShown);
+    expect(f.plRows).toBe(36);
+    expect(configFromJson({ funds: { benchmarkCode: 'abc' } }).funds.benchmarkCode).toBe(
+      DEFAULT_CONFIG.funds.benchmarkCode,
+    );
+    expect(configFromJson({ funds: { benchmarkCode: '' } }).funds.benchmarkCode).toBe('');
+  });
 });

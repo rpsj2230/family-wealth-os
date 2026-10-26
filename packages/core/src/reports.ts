@@ -336,6 +336,8 @@ export interface ReportFund {
   invested: number;
   units: number | null;
   startedOn: string | null;
+  /** names of the goals the fund counts towards (none, one, or several when it is split) */
+  goals?: string[];
   xirr: number | null;
   sipMonthly: number | null;
   sipStopped: boolean;
@@ -345,16 +347,21 @@ export interface ReportFund {
   hasStatement: boolean;
 }
 
-export type FundBy = 'fund' | 'owner' | 'category' | 'amc' | 'start';
+export type FundBy = 'fund' | 'owner' | 'category' | 'amc' | 'goal' | 'start';
 export const FUND_BY: { key: FundBy; label: string }[] = [
   { key: 'fund', label: 'Fund' },
   { key: 'owner', label: 'Person' },
   { key: 'category', label: 'Kind of fund' },
   { key: 'amc', label: 'Fund house' },
+  { key: 'goal', label: 'Goal' },
   { key: 'start', label: 'Start date' },
 ];
 export const parseFundBy = (v: string | undefined): FundBy =>
   FUND_BY.some((b) => b.key === v) ? (v as FundBy) : 'fund';
+
+/** Group heading of a fund that counts towards no goal, and of one split between several. */
+export const REPORT_NO_GOAL = { key: '~nogoal', label: 'No goal' };
+export const REPORT_MANY_GOALS = { key: '~manygoals', label: 'Split between goals' };
 
 const weightedXirr = (list: ReportFund[]) => {
   const w = list.filter((f) => f.xirr !== null && f.value > 0);
@@ -372,6 +379,14 @@ export function fundSummary(
   period: Period = 'month',
 ): ReportTable {
   const totalValue = sum(funds.map((f) => f.value));
+  const goalGroup = (f: ReportFund) => {
+    const g = f.goals ?? [];
+    return g.length === 0
+      ? REPORT_NO_GOAL
+      : g.length > 1
+        ? REPORT_MANY_GOALS
+        : { key: `goal:${g[0]!}`, label: g[0]! };
+  };
   const key = (f: ReportFund): { key: string; label: string } =>
     by === 'fund'
       ? { key: f.id, label: f.name }
@@ -381,9 +396,11 @@ export function fundSummary(
           ? { key: f.category, label: f.category }
           : by === 'amc'
             ? { key: f.amc ?? '~', label: f.amc ?? 'Not known' }
-            : f.startedOn
-              ? periodOf(f.startedOn, period === 'date' ? 'month' : period)
-              : { key: '~', label: 'Start not known' };
+            : by === 'goal'
+              ? goalGroup(f)
+              : f.startedOn
+                ? periodOf(f.startedOn, period === 'date' ? 'month' : period)
+                : { key: '~', label: 'Start not known' };
   const groups = new Map<string, { label: string; list: ReportFund[] }>();
   for (const f of funds) {
     const k = key(f);
@@ -391,10 +408,14 @@ export function fundSummary(
     g.list.push(f);
     groups.set(k.key, g);
   }
+  // goals read first, largest first; funds split between goals and funds with none come last
+  const goalRank = (k: string) =>
+    k === REPORT_NO_GOAL.key ? 2 : k === REPORT_MANY_GOALS.key ? 1 : 0;
   const order = [...groups.keys()].sort((a, b) =>
     by === 'start'
       ? a.localeCompare(b)
-      : sum(groups.get(b)!.list.map((f) => f.value)) - sum(groups.get(a)!.list.map((f) => f.value)),
+      : (by === 'goal' ? goalRank(a) - goalRank(b) : 0) ||
+        sum(groups.get(b)!.list.map((f) => f.value)) - sum(groups.get(a)!.list.map((f) => f.value)),
   );
   const line = (label: string, list: ReportFund[]): Record<string, Cell> => {
     const invested = r2(sum(list.map((f) => f.invested)));

@@ -29,7 +29,7 @@ export function CashRegister({
   return (
     <section className="card" aria-labelledby="cash-reg-h">
       <h2 id="cash-reg-h">All savings accounts</h2>
-      <table className="tbl lines">
+      <table className="tbl lines responsive">
         <thead>
           <tr>
             <th>Account</th>
@@ -48,7 +48,7 @@ export function CashRegister({
             const inr = r.currency === 'INR';
             return (
               <tr key={r.assetId}>
-                <td>
+                <td data-label="Account">
                   <div className="codeline">
                     <BankBadge name={bank} size={26} />
                     <div>
@@ -57,27 +57,29 @@ export function CashRegister({
                     </div>
                   </div>
                 </td>
-                <td>
+                <td data-label="Person">
                   <PersonBadge p={styles[r.ownerId]} name size={18} />
                 </td>
-                <td>
+                <td data-label="Type">
                   {r.accountKind ?? '–'}
                   {r.joint ? ' · joint' : ''}
                   {!inr ? ` · ${r.currency}` : ''}
                 </td>
-                <td className="num">{inr ? pctText(rate) : '–'}</td>
-                <td className="num">
+                <td data-label="Rate" className="num">
+                  {inr ? pctText(rate) : '–'}
+                </td>
+                <td data-label="Last recorded" className="num">
                   {r.recorded === null ? '–' : formatInr(Math.round(r.recorded))}
                 </td>
-                <td className="num">
+                <td data-label="Value today" className="num">
                   <b>{formatInr(Math.round(r.current ?? 0))}</b>
                 </td>
-                <td className="num">
+                <td data-label="Interest a year" className="num">
                   {inr
                     ? formatInr(Math.round(Math.max(0, r.current ?? 0) * rate * (1 - tdsRate)))
                     : '–'}
                 </td>
-                <td>
+                <td data-label="Updated">
                   <UpdatedCell asOf={r.asOf} source={r.source} />
                 </td>
               </tr>

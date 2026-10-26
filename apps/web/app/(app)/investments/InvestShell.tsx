@@ -1,0 +1,647 @@
+import Link from 'next/link';
+import type { ReactNode } from 'react';
+import {
+  CATEGORY_ORDER,
+  foldShares,
+  formatInr,
+  groupLines,
+  GROUP_BYS,
+  heroModel,
+  lotAgeing,
+  parseGroupBy,
+  splitByPlan,
+  totalsOfLines,
+  upcomingSips,
+  type GroupBy,
+  type PersonStyle,
+  type ShareRow,
+  type YearKind,
+} from '@fwos/core';
+import { StackBar } from '@/components/FundViz';
+import { PageHead } from '@/components/PageHead';
+import { PersonFilter } from '@/components/Person';
+import { PlotChart } from '@/components/PlotChart';
+import { Tabs } from '@/components/Tabs';
+import {
+  AddFundButton,
+  AddTxnButton,
+  FundEditProvider,
+  type FundEditActions,
+} from '@/components/invest/FundEdit';
+import { FundsTable } from '@/components/invest/FundsTable';
+import { Ledger } from '@/components/invest/Ledger';
+import {
+  Movers,
+  GoalSummary,
+  PersonCompare,
+  UpcomingSips,
+} from '@/components/invest/OverviewParts';
+import { PortfolioHero } from '@/components/invest/PortfolioHero';
+import { ReturnsByPeriod, type PeriodRow } from '@/components/invest/PerfParts';
+import { fundEditRows, householdLedger } from '@/lib/invest-ledger';
+import { buildPl, parseCompareMode } from '@/lib/invest-pl';
+import { fundLines, investPerformance, xirrOfIds } from '@/lib/invest-perf';
+import { personRows } from '@/lib/invest-people';
+import { investGrowth, investStats } from '@/lib/invest-view';
+import { fundPace, type InvestmentView } from '@/lib/investments';
+import { colourOf, slotColours } from '@/lib/viz';
+import { parsePlKind } from '@fwos/core';
+import { BreakdownTab } from './Insights';
+import { PerformanceTab } from './PerfTab';
+import './investments.css';
+import '@/components/invest/invest.css';
+
+export const TABS = [
+  'overview',
+  'performance',
+  'funds',
+  'transactions',
+  'breakdown',
+  'update',
+  'match',
+] as const;
+export type InvestTab = (typeof TABS)[number];
+/** the tabs that read the funds and can be narrowed to one person */
+export const PERSON_TABS: InvestTab[] = [
+  'overview',
+  'performance',
+  'funds',
+  'transactions',
+  'breakdown',
+];
+
+export const parseTab = (v: string | undefined): InvestTab =>
+  v === 'growth'
+    ? 'performance'
+    : (TABS as readonly string[]).includes(v ?? '')
+      ? (v as InvestTab)
+      : 'overview';
+
+export interface InvestQuery {
+  tab: InvestTab;
+  p?: string | undefined;
+  range?: string | undefined;
+  by?: string | undefined;
+  compare?: string | undefined;
+  heat?: string | undefined;
+  group?: string | undefined;
+  edit?: string | undefined;
+}
+
+const fmtShare = (rows: ShareRow[]) => rows;
+
+/**
+ * The whole Investments page for the real portal and the public sample: header with the main actions, tabs, the person filter and the
+ * content of the reading tabs. The two tabs that change things (Update funds, Match funds) arrive as `children`, because the real
+ * page and the sample save differently. Every figure is worked out in packages/core; this lays them out.
+ */
+export function InvestShell({
+  base,
+  demo,
+  q,
+  view,
+  styles,
+  owners,
+  noPrice,
+  actions,
+  children,
+}: {
+  /** '/investments' or '/demo/investments' */
+  base: string;
+  demo: boolean;
+  q: InvestQuery;
+  view: InvestmentView;
+  styles: Record<string, PersonStyle>;
+  owners: { id: string; name: string }[];
+  noPrice: number;
+  actions?: FundEditActions;
+  children?: ReactNode;
+}) {
+  const tab = q.tab;
+  const who = q.p && styles[q.p] && PERSON_TABS.includes(tab) ? q.p : null;
+  const link = (patch: Record<string, string | undefined>) => {
+    const merged: Record<string, string | undefined> = {
+      tab,
+      p: who ?? undefined,
+      range: q.range,
+      by: q.by,
+      compare: q.compare,
+      heat: q.heat,
+      group: q.group,
+      ...patch,
+    };
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(merged))
+      if (v !== undefined && v !== '' && !(k === 'tab' && v === 'overview')) sp.set(k, v);
+    const s = sp.toString();
+    return s ? `${base}?${s}` : base;
+  };
+  const tabHref = (t: InvestTab) =>
+    link({
+      tab: t,
+      range: undefined,
+      by: undefined,
+      compare: undefined,
+      heat: undefined,
+      group: undefined,
+    });
+
+  const funds = view.groups.flatMap((g) => g.funds);
+  const stats = investStats(view);
+  const lines = fundLines(view);
+  const xirrOf = xirrOfIds(view);
+  const everything = lines.reduce((a, l) => a + l.value, 0);
+  const grand = totalsOfLines(lines, everything, xirrOf);
+  const cfg = view.config;
+  const goalName = Object.fromEntries(view.goals.map((g) => [g.id, g.name]));
+  const needsPerf = tab === 'overview' || tab === 'performance';
+  const perf = needsPerf ? investPerformance(view) : null;
+  const h = view.household;
+  const pace = fundPace(view);
+  const hero = heroModel({
+    funds: stats.all.funds,
+    folios: stats.all.folios,
+    invested: stats.all.invested,
+    value: stats.all.value,
+    dayAmount: h.dayAmount,
+    dayPct: h.dayPct,
+    xirr: h.xirr,
+    xirrEstimated: h.xirrEstimated,
+    sipMonthly: h.sipMonthly,
+    withStatement: stats.all.withStatement,
+    estimated: stats.all.estimated,
+    longShare: stats.all.holding.longShare,
+    realised: stats.all.realised,
+  });
+  const totals = Object.fromEntries(
+    view.groups.map((g) => [g.ownerId, formatInr(Math.round(g.totals.value))]),
+  );
+  const editRows = fundEditRows(view);
+  const matchHref = link({ tab: 'match', p: undefined });
+  const keepForPerson = Object.fromEntries(
+    Object.entries({
+      tab,
+      range: q.range,
+      by: q.by,
+      compare: q.compare,
+      heat: q.heat,
+      group: q.group,
+    }).filter(([k, v]) => v !== undefined && !(k === 'tab' && v === 'overview')),
+  ) as Record<string, string>;
+
+  return (
+    <FundEditProvider
+      rows={editRows}
+      owners={owners}
+      goals={view.goals}
+      styles={styles}
+      today={view.today}
+      {...(actions ? { actions } : {})}
+      linkBase={{ match: matchHref, demo }}
+      initialOpen={q.edit ?? null}
+    >
+      <PageHead
+        title="Investments"
+        subtitle={
+          <>
+            What your mutual funds are worth, what they have earned and how they have performed,
+            with every transaction. Prices are fetched every day for funds you have matched.
+          </>
+        }
+        pills={[
+          {
+            label: `${view.household.funds} fund${view.household.funds === 1 ? '' : 's'}`,
+            tone: 'info',
+          },
+          noPrice > 0
+            ? { label: `${noPrice} without a live price`, tone: 'warn' }
+            : { label: 'all funds follow their price', tone: 'ok' },
+        ]}
+        actions={
+          <>
+            <Link className="btn primary" href={link({ tab: 'update', p: undefined })}>
+              Update funds
+            </Link>
+            <AddFundButton />
+            <AddTxnButton />
+            <Link className="btn" href={demo ? '/demo/tax-harvest' : '/tax'}>
+              Tax harvest
+            </Link>
+          </>
+        }
+      />
+
+      <Tabs
+        base={base}
+        current={tab}
+        keep={who ? { p: who } : {}}
+        tabs={[
+          { key: 'overview', label: 'Overview' },
+          { key: 'performance', label: 'Performance' },
+          { key: 'funds', label: 'Funds' },
+          { key: 'transactions', label: 'Transactions' },
+          { key: 'breakdown', label: 'Breakdown' },
+          { key: 'update', label: 'Update funds' },
+          { key: 'match', label: 'Match funds', badge: noPrice },
+        ]}
+      />
+      {PERSON_TABS.includes(tab) && (
+        <PersonFilter
+          people={Object.values(styles)}
+          basePath={base}
+          current={who}
+          totals={totals}
+          keep={keepForPerson}
+        />
+      )}
+
+      {tab === 'overview' && perf && (
+        <>
+          <PortfolioHero
+            hero={hero}
+            asOf={view.today}
+            history={view.series}
+            projection={pace.projections.map((x) => ({ years: x.years, expected: x.expected }))}
+            projectionRate={pace.rate}
+            projectionAssumed={pace.assumed}
+            holdingMonths={view.holdingMonths}
+            base={base}
+            tabLinks={{
+              performance: tabHref('performance'),
+              transactions: tabHref('transactions'),
+              breakdown: tabHref('breakdown'),
+            }}
+          />
+          <OverviewBody
+            view={view}
+            perf={perf}
+            lines={lines}
+            xirrOf={xirrOf}
+            styles={styles}
+            who={who}
+            goalName={goalName}
+            tabHref={tabHref}
+            link={link}
+            demo={demo}
+            stats={stats}
+            funds={funds}
+          />
+        </>
+      )}
+
+      {tab === 'performance' && perf && (
+        <PerformanceTab
+          view={view}
+          stats={stats.all}
+          perf={perf}
+          growth={investGrowth(view)}
+          pace={pace}
+          pl={buildPl(view, perf, styles, parsePlKind(q.by), parseCompareMode(q.compare))}
+          who={who}
+          styles={styles}
+          heat={(q.heat === 'calendar' ? 'calendar' : 'financial') as YearKind}
+          link={(patch) => link({ tab: 'performance', ...patch })}
+        />
+      )}
+
+      {tab === 'funds' && (
+        <FundsBody
+          view={view}
+          lines={lines}
+          xirrOf={xirrOf}
+          grand={grand}
+          group={parseGroupBy(q.group)}
+          styles={styles}
+          goalName={goalName}
+          demo={demo}
+          matchHref={matchHref}
+          groupHref={(g) => link({ tab: 'funds', group: g === 'person' ? undefined : g })}
+          who={who}
+        />
+      )}
+
+      {tab === 'transactions' && (
+        <section aria-labelledby="tx">
+          <h2 id="tx" className="sr-only">
+            Every transaction
+          </h2>
+          <p className="lead muted">
+            Every purchase, SIP instalment, switch, dividend and sale on your fund statements and
+            the ones you typed, with the units and the cost held after each.{' '}
+            {funds.some((f) => !f.hasStatement) &&
+              `${funds.filter((f) => !f.hasStatement).length} fund${funds.filter((f) => !f.hasStatement).length === 1 ? ' has' : 's have'} no transactions on file yet: import a statement under Import or add them with Add a transaction.`}
+          </p>
+          <Ledger
+            rows={householdLedger(view, styles)}
+            withFund
+            pageSize={cfg.ledgerPageSize}
+            name="transactions"
+            today={view.today}
+            demo={demo}
+            empty="No transaction is on file yet. Import a fund statement on the Import page, or add one with Add a transaction."
+          />
+        </section>
+      )}
+
+      {tab === 'breakdown' && (
+        <BreakdownTab
+          view={view}
+          stats={stats.all}
+          who={who}
+          styles={styles}
+          people={
+            <PersonCompare
+              rows={personRows(
+                view,
+                stats.byOwner,
+                (id) => groupLines(lines, 'person', xirrOf).find((g) => g.key === id)!.totals,
+              )}
+              styles={styles}
+              topN={cfg.concentrationTop}
+            />
+          }
+          plans={splitByPlan(lines)}
+          ageing={lotAgeing(funds, view.today, cfg.ageBucketsMonths)}
+        />
+      )}
+
+      {(tab === 'update' || tab === 'match') && children}
+    </FundEditProvider>
+  );
+}
+
+/* ----------------------------------------------------------------------------------------------- overview */
+
+function OverviewBody({
+  view,
+  perf,
+  lines,
+  xirrOf,
+  styles,
+  who,
+  goalName,
+  tabHref,
+  link,
+  demo,
+  stats,
+  funds,
+}: {
+  view: InvestmentView;
+  perf: ReturnType<typeof investPerformance>;
+  lines: ReturnType<typeof fundLines>;
+  xirrOf: ReturnType<typeof xirrOfIds>;
+  styles: Record<string, PersonStyle>;
+  who: string | null;
+  goalName: Record<string, string>;
+  tabHref: (t: InvestTab) => string;
+  link: (patch: Record<string, string | undefined>) => string;
+  demo: boolean;
+  stats: ReturnType<typeof investStats>;
+  funds: InvestmentView['groups'][number]['funds'];
+}) {
+  void goalName;
+  const cfg = view.config;
+  if (view.groups.length === 0)
+    return (
+      <p className="empty">
+        No mutual funds yet. Import your workbook or a fund statement on the{' '}
+        <Link href="/import">Import page</Link>, or press Add a fund.
+      </p>
+    );
+  const profile = perf.profile;
+  const bench = view.benchmark;
+  const hasBench = !!bench && perf.versus.some((x) => x.v.benchmark !== null);
+  const KEYS = ['1m', '3m', '6m', 'fy', '1y', '3y', 'all'];
+  const rows: PeriodRow[] = perf.versus
+    .filter((x) => KEYS.includes(x.def.key))
+    .map((x) => ({
+      def: x.def,
+      r: profile.trailing.find((t) => t.def.key === x.def.key)?.r ?? null,
+      gain: perf.periodGains[x.def.key],
+      v: x.v,
+    }));
+  const goals = groupLines(lines, 'goal', xirrOf, view.goals);
+  const anyGoal = goals.some((g) => !g.key.startsWith('__'));
+  const total = lines.reduce((a, l) => a + l.value, 0);
+  const grand = totalsOfLines(lines, total, xirrOf);
+  const catColour = slotColours(CATEGORY_ORDER.filter((k) => view.palette.categories.includes(k)));
+  const cat = foldShares(stats.all.byCategory, cfg.maxSlices);
+  const fundHref = (id: string) => (demo ? `/demo/asset?kind=fund&id=${id}` : `/asset/${id}`);
+  const people = who ? null : groupLines(lines, 'person', xirrOf);
+  return (
+    <>
+      <div className="invgrid two">
+        <section className="card" aria-labelledby="ov-v">
+          <div className="cardhead">
+            <h2 id="ov-v">Value and money put in</h2>
+            <Link className="sectionlink" href={tabHref('performance')}>
+              Performance
+            </Link>
+          </div>
+          <PlotChart
+            unit="inr"
+            caption="Value of mutual funds against the money put in, whole history"
+            series={[
+              {
+                key: 'value',
+                name: 'Value',
+                colour: who ? (styles[who]?.colour ?? 'var(--viz-1)') : 'var(--viz-1)',
+                area: true,
+                points: view.series.map((p) => ({ date: p.date, value: p.value })),
+              },
+              {
+                key: 'in',
+                name: 'Money put in',
+                colour: 'var(--viz-line)',
+                points: view.series
+                  .filter((p) => p.invested !== null)
+                  .map((p) => ({ date: p.date, value: p.invested as number })),
+              },
+            ]}
+          />
+        </section>
+        <section className="card" aria-labelledby="ov-r">
+          <div className="cardhead">
+            <h2 id="ov-r">Return over time</h2>
+            <Link className="sectionlink" href={tabHref('performance')}>
+              All periods
+            </Link>
+          </div>
+          <ReturnsByPeriod
+            rows={rows}
+            benchName={bench?.name ?? null}
+            hasBench={hasBench}
+            bars={false}
+            showGain={false}
+          />
+        </section>
+      </div>
+
+      <div className="invgrid">
+        <section className="card" aria-labelledby="ov-g">
+          <div className="cardhead">
+            <h2 id="ov-g">Goal by goal</h2>
+            <span className="small muted">Funds set aside for each goal</span>
+          </div>
+          {anyGoal ? (
+            <GoalSummary
+              groups={goals}
+              grand={grand}
+              groupHref={link({ tab: 'funds', group: 'goal' })}
+              goalsHref={demo ? '/demo/goals' : '/goals'}
+            />
+          ) : (
+            <p className="empty">
+              No fund is set aside for a goal yet. Choose a goal in a fund&apos;s Edit panel, or add
+              goals on the <Link href={demo ? '/demo/goals' : '/goals'}>Goals page</Link>.
+            </p>
+          )}
+        </section>
+        <section className="card" aria-labelledby="ov-k">
+          <div className="cardhead">
+            <h2 id="ov-k">Where the money is</h2>
+            <Link className="sectionlink" href={tabHref('breakdown')}>
+              Breakdown
+            </Link>
+          </div>
+          <StackBar
+            caption="Mutual fund value by kind of fund"
+            parts={fmtShare(cat).map((r) => ({
+              key: r.key,
+              label: r.label,
+              value: r.value,
+              colour: colourOf(catColour, r.key),
+            }))}
+          />
+        </section>
+        <section className="card" aria-labelledby="ov-m">
+          <div className="cardhead">
+            <h2 id="ov-m">Movers</h2>
+            <span className="small muted">Today and overall</span>
+          </div>
+          <Movers
+            best={stats.all.best}
+            worst={stats.all.worst}
+            bestDay={stats.all.bestDay}
+            worstDay={stats.all.worstDay}
+            href={fundHref}
+            count={cfg.moversShown}
+          />
+        </section>
+        <section className="card" aria-labelledby="ov-s">
+          <div className="cardhead">
+            <h2 id="ov-s">Next monthly investments</h2>
+            <span className="small muted">SIP calendar</span>
+          </div>
+          <UpcomingSips
+            list={upcomingSips(funds, view.today, cfg.upcomingSips)}
+            today={view.today}
+          />
+        </section>
+      </div>
+
+      {people && people.length > 1 && (
+        <section className="card wide" aria-labelledby="ov-p">
+          <div className="cardhead">
+            <h2 id="ov-p">Person against person</h2>
+            <Link className="sectionlink" href={tabHref('breakdown')}>
+              Breakdown
+            </Link>
+          </div>
+          <PersonCompare
+            rows={personRows(view, stats.byOwner, (id) => people.find((g) => g.key === id)!.totals)}
+            styles={styles}
+            topN={cfg.concentrationTop}
+          />
+        </section>
+      )}
+    </>
+  );
+}
+
+/* ----------------------------------------------------------------------------------------------- funds */
+
+function FundsBody({
+  view,
+  lines,
+  xirrOf,
+  grand,
+  group,
+  styles,
+  goalName,
+  demo,
+  matchHref,
+  groupHref,
+  who,
+}: {
+  view: InvestmentView;
+  lines: ReturnType<typeof fundLines>;
+  xirrOf: ReturnType<typeof xirrOfIds>;
+  grand: ReturnType<typeof totalsOfLines>;
+  group: GroupBy;
+  styles: Record<string, PersonStyle>;
+  goalName: Record<string, string>;
+  demo: boolean;
+  matchHref: string;
+  groupHref: (g: GroupBy) => string;
+  who: string | null;
+}) {
+  if (view.groups.length === 0)
+    return (
+      <p className="empty">
+        No mutual funds yet. Import your workbook or a fund statement on the{' '}
+        <Link href="/import">Import page</Link>, or press Add a fund.
+      </p>
+    );
+  const groups = groupLines(lines, group, xirrOf, view.goals);
+  const goalGroups = group === 'goal' ? groups : null;
+  void who;
+  return (
+    <>
+      <nav className="rangeswitch groupby" aria-label="Group by">
+        <span className="rangelabel">Group by</span>
+        {GROUP_BYS.map((g) => (
+          <Link
+            key={g.key}
+            href={groupHref(g.key)}
+            scroll={false}
+            className={`fchip ${group === g.key ? 'on' : ''}`}
+            aria-current={group === g.key ? 'true' : undefined}
+          >
+            {g.label}
+          </Link>
+        ))}
+      </nav>
+      {goalGroups && (
+        <section className="card" aria-labelledby="fg">
+          <div className="cardhead">
+            <h2 id="fg">Goal by goal</h2>
+            <span className="small muted">Money put in, growth and value</span>
+          </div>
+          <GoalSummary
+            groups={goalGroups}
+            grand={grand}
+            groupHref={groupHref('goal')}
+            goalsHref={demo ? '/demo/goals' : '/goals'}
+          />
+        </section>
+      )}
+      <FundsTable
+        groups={groups}
+        grand={grand}
+        by={group}
+        styles={styles}
+        goalName={goalName}
+        demo={demo}
+        matchHref={matchHref}
+      />
+      {view.household.xirrEstimated && (
+        <p className="muted small">
+          A return marked ~ is estimated from each fund&apos;s start date and SIP until its fund
+          statement is imported (<Link href="/import">Import</Link>). Each row shows the units, the
+          start and the price; hover a fund for the full line.
+        </p>
+      )}
+    </>
+  );
+}

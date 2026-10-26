@@ -195,6 +195,8 @@ export function xirrOverTime(args: {
 // Money put in, by month
 // ------------------------------------------------------------------------------------------------
 export interface StatTxn {
+  /** the stored line, for a link to its own page */
+  id?: string | null;
   date: string;
   kind: string;
   units: number;
@@ -203,8 +205,9 @@ export interface StatTxn {
   nav?: number | null;
   /** units held after this transaction, when the statement gives it */
   balance?: number | null;
-  /** the line's wording; marks an instalment assumed from the SIP plan (see isEstimatedTxn) */
+  /** the line's wording and where it came from (statement, form, import); an instalment assumed from the SIP plan is marked (see isEstimatedTxn) */
   description?: string | null;
+  source?: string | null;
 }
 
 export interface MonthContribution {

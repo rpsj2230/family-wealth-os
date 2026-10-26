@@ -41,7 +41,21 @@ describe('the sample funds', () => {
       holdingMonths: DEMO_HOLDING_MONTHS,
       config: one.config,
     });
-    expect(b.funds).toBe(3);
+    expect(b.funds).toBe(4);
+  });
+  it('have years of history, every kind of transaction and a benchmark, so every new view has something to show', () => {
+    const kinds = new Set(funds.flatMap((f) => f.txns.map((t) => t.kind)));
+    for (const k of ['purchase', 'sip', 'redeem', 'switch_in', 'switch_out', 'dividend_reinvest'])
+      expect(kinds.has(k)).toBe(true);
+    expect(funds.reduce((a, f) => a + f.txns.length, 0)).toBeGreaterThan(150);
+    expect(view.benchmark!.navs.length).toBeGreaterThan(1000);
+    const first = view.series[0]!.date;
+    expect(first <= '2021-12-31').toBe(true);
+    // a switch moves money out of one fund and into another on the same day
+    const out = funds.flatMap((f) => f.txns).find((t) => t.kind === 'switch_out')!;
+    const into = funds.flatMap((f) => f.txns).find((t) => t.kind === 'switch_in')!;
+    expect(out.date).toBe(into.date);
+    expect(Math.abs(out.amount)).toBeCloseTo(into.amount, 1);
   });
   it('growth for each range has points inside the range', () => {
     for (const r of ['1m', '6m', '1y', '3y', 'all'] as const) {

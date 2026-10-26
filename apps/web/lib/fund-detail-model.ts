@@ -1,6 +1,24 @@
+import { profileConfig } from './invest-perf';
 import {
   avgCostPerUnit,
+  buildIndex,
+  buildLedger,
   cagr,
+  chainPeriods,
+  ledgerTotals,
+  rebase,
+  returnProfile,
+  shownReturn,
+  versus,
+  trailingTable,
+  type Flow,
+  type IndexPoint,
+  type LedgerRow,
+  type LedgerTotals,
+  type PeriodDef,
+  type ReturnProfile,
+  type TrailingReturn,
+  type Versus,
   clipSeries,
   FUND_RANGE_WORDS,
   holdingProfile,
@@ -37,7 +55,30 @@ export type DetailFund = StatFund & {
   xirr: number | null;
   xirrEstimated: boolean;
   amfiCode: string | null;
+  plan: 'direct' | 'regular' | 'unknown';
+  perf: SeriesPoint[];
+  flows: Flow[];
+  flowsEstimated: boolean;
 };
+
+/** The fund's returns: where they come from and every view of them. */
+export interface FundReturns {
+  /** from the fund's published prices, or (when none are loaded) from the values recorded and the money put in */
+  basis: 'price' | 'values';
+  /** the cash flows behind a value-based line are worked out from the start date and SIP, not a statement */
+  estimated: boolean;
+  profile: ReturnProfile;
+  /** the benchmark's returns over the same periods, and the difference */
+  versus: {
+    def: PeriodDef;
+    yours: TrailingReturn | null;
+    bench: TrailingReturn | null;
+    v: Versus;
+  }[];
+  benchName: string | null;
+  /** growth of 100 from one start for the fund and the benchmark, to draw */
+  growth: { from: string; fund: IndexPoint[]; bench: IndexPoint[] } | null;
+}
 
 export interface FundDetail {
   range: FundRangeKey;
@@ -47,6 +88,10 @@ export interface FundDetail {
   startsLate: boolean;
   change: PeriodChange | null;
   nav: NavChartModel;
+  returns: FundReturns | null;
+  /** every transaction with running figures; empty without a statement */
+  ledger: LedgerRow[];
+  ledgerTotals: LedgerTotals;
   /** units held after each transaction; empty without a statement */
   units: ValuePoint[];
   contributions: MonthContribution[];
@@ -77,6 +122,8 @@ export function buildFundDetail(args: {
   config: AppConfig['funds'];
   /** the most points drawn on the price line */
   maxPoints: number;
+  /** the benchmark proxy's prices, when loaded */
+  benchmark?: { name: string | null; navs: IndexPoint[] } | null;
 }): FundDetail {
   const f = args.fund;
   const clipped = clipSeries(f.trend, args.range, args.today);
@@ -97,7 +144,66 @@ export function buildFundDetail(args: {
   const first = f.txns.length > 0 ? f.txns.map((t) => t.date).sort()[0]! : f.startedOn;
   const equity = f.taxClass === 'equity';
   const holding = equity && profile && profile.basis !== 'none' ? profile : null;
+  const cfgP = profileConfig(args.config);
+  const navLine: IndexPoint[] = args.navs.map((n) => ({ date: n.date, value: n.nav }));
+  const ledger = buildLedger({
+    txns: f.txns,
+    navs: navLine,
+    navNow: nav,
+    today: args.today,
+    holdingMonths: equity ? args.holdingMonths : null,
+    gapDays: args.config.navGapDays,
+  });
+  let returns: FundReturns | null = null;
+  if (navLine.length >= 2 || f.perf.length >= 3) {
+    const byPrice = navLine.length >= 2;
+    const line: IndexPoint[] = byPrice
+      ? navLine
+      : buildIndex(
+          chainPeriods(
+            f.perf.map((p) => ({ date: p.date, value: p.value })),
+            f.flows,
+          ),
+        );
+    const profile = returnProfile(line, args.today, cfgP);
+    const benchLine = args.benchmark?.navs ?? [];
+    const benchTable = benchLine.length >= 2 ? trailingTable(benchLine, args.today, cfgP) : [];
+    const rows = profile.trailing.map(({ def, r }) => {
+      const b = benchTable.find((x) => x.def.key === def.key)?.r ?? null;
+      const [v] = versus(
+        [{ key: def.key, ret: r ? shownReturn(r) : null }],
+        [{ key: def.key, ret: b ? shownReturn(b) : null }],
+      );
+      return { def, yours: r, bench: b, v: v! };
+    });
+    // growth of 100 from the first day both lines exist (never before the first purchase)
+    let growth: FundReturns['growth'] = null;
+    if (byPrice && benchLine.length >= 2) {
+      const buys = f.txns
+        .filter((t) => t.units > 0)
+        .map((t) => t.date)
+        .sort();
+      const from = [navLine[0]!.date, benchLine[0]!.date, buys[0] ?? f.startedOn ?? '']
+        .filter(Boolean)
+        .sort()
+        .pop()!;
+      const a = rebase(navLine, from);
+      const b = rebase(benchLine, from);
+      if (a.length >= 2 && b.length >= 2) growth = { from, fund: a, bench: b };
+    }
+    returns = {
+      basis: byPrice ? 'price' : 'values',
+      estimated: !byPrice && f.flowsEstimated,
+      profile,
+      versus: rows,
+      benchName: args.benchmark?.name ?? null,
+      growth,
+    };
+  }
   return {
+    returns,
+    ledger,
+    ledgerTotals: ledgerTotals(ledger),
     range: args.range,
     rangeWords: FUND_RANGE_WORDS[args.range],
     points: clipped.points,

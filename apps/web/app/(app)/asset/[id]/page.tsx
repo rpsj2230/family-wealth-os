@@ -8,7 +8,11 @@ import { EditButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
 import { loadAssetDetail } from '@/lib/detail-data';
 import { loadFundDetail } from '@/lib/fund-detail-data';
-import { parseRange } from '@fwos/core';
+import { fundEditRows } from '@/lib/invest-ledger';
+import { parseRange, personStyles } from '@fwos/core';
+import { FundEditProvider } from '@/components/invest/FundEdit';
+import { FundPage, parseFundTab } from '@/components/invest/FundPage';
+import { addFund, addFundTxn, saveFundEdit } from '../../investments/edit-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +21,7 @@ export default async function AssetPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; tab?: string; heat?: string; edit?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -43,6 +47,67 @@ export default async function AssetPage({
           },
         ];
   crumbs.push({ label: d.view.title });
+  if (fundView && d.type === 'mutual_fund') {
+    const v = fundView.view;
+    const styles = personStyles(v.groups.map((g) => ({ id: g.ownerId, name: g.name })));
+    const records = (
+      <>
+        <AssetFacts facts={d.view.facts} />
+        <DetailTables tables={d.view.tables.filter((t) => t.title === 'Recorded values')} />
+        <ActivityLog items={d.activity} />
+      </>
+    );
+    return (
+      <FundEditProvider
+        rows={fundEditRows(v)}
+        owners={v.groups.map((g) => ({ id: g.ownerId, name: g.name }))}
+        goals={v.goals}
+        styles={styles}
+        today={v.today}
+        actions={{ save: saveFundEdit, addFund, addTxn: addFundTxn }}
+        linkBase={{ match: '/investments?tab=match', demo: false }}
+        initialOpen={sp.edit ?? null}
+      >
+        <DetailHeader
+          crumbs={crumbs}
+          title={d.view.title}
+          subtitle={d.view.subtitle}
+          {...(d.person ? { person: d.person } : {})}
+          {...(d.view.headline ? { headline: d.view.headline } : {})}
+          {...(d.view.headlineNote ? { headlineNote: d.view.headlineNote } : {})}
+          actions={
+            <Link className="btn compact" href="/investments?tab=update">
+              Update units and price
+            </Link>
+          }
+        />
+        <FundPage
+          fund={fundView.fund}
+          detail={fundView.detail}
+          tab={parseFundTab(sp.tab)}
+          heat={sp.heat === 'calendar' ? 'calendar' : 'financial'}
+          base={`/asset/${id}`}
+          keep={{}}
+          today={fundView.today}
+          demo={false}
+          holdingMonths={fundView.holdingMonths}
+          config={v.config}
+          colour={d.person?.colour ?? 'var(--viz-1)'}
+          overview={
+            <FundDetailPanel
+              fund={fundView.fund}
+              detail={fundView.detail}
+              base={`/asset/${id}`}
+              links={{ update: '/investments?tab=update', match: '/investments?tab=match' }}
+              holdingMonths={fundView.holdingMonths}
+              {...(d.person ? { colour: d.person.colour } : {})}
+            />
+          }
+          records={records}
+        />
+      </FundEditProvider>
+    );
+  }
   const page = (
     <>
       <DetailHeader

@@ -2,7 +2,7 @@ import type { FundRangeKey } from '@fwos/core';
 import { pageAll } from '@fwos/data';
 import { loadContext } from './data';
 import { buildFundDetail, NAV_POINTS, type FundDetail } from './fund-detail-model';
-import { loadInvestmentView, type FundRow } from './investments';
+import { loadInvestmentView, type FundRow, type InvestmentView } from './investments';
 
 /** Everything the fund page adds for a mutual fund: the fund as the Investments page sees it, and the numbers behind its graphs. */
 export async function loadFundDetail(
@@ -10,6 +10,7 @@ export async function loadFundDetail(
   range: FundRangeKey,
 ): Promise<{
   fund: FundRow;
+  view: InvestmentView;
   today: string;
   holdingMonths: number | null;
   detail: FundDetail;
@@ -31,6 +32,7 @@ export async function loadFundDetail(
   const navs = rows.map((n) => ({ date: n.nav_date, nav: Number(n.nav) }));
   return {
     fund,
+    view,
     today: view.today,
     holdingMonths: view.holdingMonths,
     detail: buildFundDetail({
@@ -41,6 +43,7 @@ export async function loadFundDetail(
       holdingMonths: view.holdingMonths,
       config: view.config,
       maxPoints: NAV_POINTS,
+      benchmark: view.benchmark,
     }),
   };
 }

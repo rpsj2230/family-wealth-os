@@ -49,6 +49,7 @@ export function reportFds(lines: FdLine[], fdRows: FdRow[], ownerId: string | nu
 
 /** The funds of the Investments view in the shape the summaries need, for one person or everyone. */
 export function reportFunds(view: InvestmentView, ownerId: string | null): ReportFund[] {
+  const goalName = new Map(view.goals.map((g) => [g.id, g.name]));
   return view.groups
     .filter((g) => !ownerId || g.ownerId === ownerId)
     .flatMap((g) =>
@@ -62,6 +63,7 @@ export function reportFunds(view: InvestmentView, ownerId: string | null): Repor
         invested: f.invested,
         units: f.units,
         startedOn: f.startedOn,
+        goals: f.goalIds.map((id) => goalName.get(id) ?? 'A goal'),
         xirr: f.xirr,
         sipMonthly: f.sipMonthly,
         sipStopped: f.sipStopped,
