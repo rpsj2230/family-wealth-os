@@ -1,8 +1,10 @@
-import { formatInr } from '@fwos/core';
+import { formatInr, formatInrCompact } from '@fwos/core';
 import type { Totals } from '@/lib/investments';
 
 export const sign = (n: number) => (n >= 0 ? '+' : '−');
 export const rupees = (n: number) => `${sign(n)}${formatInr(Math.abs(Math.round(n)))}`;
+/** The same with lakhs and crores, for a narrow tile. */
+export const rupeesCompact = (n: number) => `${sign(n)}${formatInrCompact(Math.abs(n))}`;
 export const pct = (n: number, digits = 2) => `${sign(n)}${Math.abs(n * 100).toFixed(digits)}%`;
 export const tone = (n: number | null) => (n === null ? '' : n >= 0 ? 'gain' : 'fail');
 

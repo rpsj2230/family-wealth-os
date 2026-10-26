@@ -39,3 +39,6 @@ export * from './automation';
 export * from './rate-view';
 export * from './tasks-view';
 export * from './goal-card';
+export * from './fund-category';
+export * from './fund-timeline';
+export * from './fund-stats';

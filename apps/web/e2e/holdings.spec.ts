@@ -186,9 +186,50 @@ test.describe('Investments (public sample)', () => {
     await page.goto('/demo/investments');
     await expect(page.getByRole('heading', { name: 'Investments', level: 1 })).toBeVisible();
     await expect(page.getByRole('region', { name: /at a glance/ })).toContainText('Value now');
-    await expect(page.getByText('Sample Flexi Cap Fund')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sample Flexi Cap Fund' })).toBeVisible();
     await expect(page.getByText(/PAN/).first()).toBeVisible();
-    await expect(tabs(page).getByRole('link')).toHaveCount(4);
+    await expect(tabs(page).getByRole('link')).toHaveCount(5);
+    // the new headline figures and the per-fund detail under each name
+    await expect(page.getByRole('region', { name: /at a glance/ })).toContainText(
+      'Gain on units held',
+    );
+    await expect(page.getByRole('region', { name: /at a glance/ })).toContainText(
+      'Already long-term',
+    );
+    await expect(page.getByText('Flexi and multi cap').first()).toBeVisible();
+    await expect(page.getByText(/average cost ₹/).first()).toBeVisible();
+    await noSideways(page);
+  });
+
+  test('breakdown: by person, kinds, houses, concentration, gains, long-term share, SIP and booked gains', async ({
+    page,
+  }) => {
+    await page.goto('/demo/investments?tab=breakdown');
+    await expect(page.getByRole('heading', { name: 'By person' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Key figures' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'By kind of fund' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'By fund house' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'By fund', exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: /value by kind of fund/i })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Gain or loss on each fund' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'How much is long-term already' }),
+    ).toBeVisible();
+    await expect(page.getByText(/rebuilt from the SIP plan/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Monthly investments (SIP)' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Gains already booked by selling' }),
+    ).toBeVisible();
+    await expect(page.getByRole('cell', { name: /2026-27/ })).toBeVisible();
+    await noSideways(page);
+  });
+
+  test('breakdown for one person drops the person table and keeps the colours', async ({
+    page,
+  }) => {
+    await page.goto('/demo/investments?tab=breakdown&p=p2');
+    await expect(page.getByRole('heading', { name: 'By person' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Key figures' })).toBeVisible();
     await noSideways(page);
   });
 
@@ -198,7 +239,40 @@ test.describe('Investments (public sample)', () => {
     await expect(page).toHaveURL(/tab=growth/);
     await expect(page.getByRole('heading', { name: 'If you carry on like this' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Who holds what' })).toBeVisible();
+    await expect(
+      page.getByRole('img', { name: /Value of mutual funds against the money put in/ }),
+    ).toBeVisible();
+    await expect(page.getByRole('img', { name: /Gain on the money put in/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Money put in each month' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Value by person' })).toBeVisible();
     await noSideways(page);
+  });
+
+  test('growth: the time range is in the address and changes the period', async ({ page }) => {
+    await page.goto('/demo/investments?tab=growth');
+    const range = page.getByRole('navigation', { name: 'Time range' });
+    await expect(range.getByRole('link')).toHaveCount(5);
+    await range.getByRole('link', { name: '6M' }).click();
+    await expect(page).toHaveURL(/range=6m/);
+    await expect(page.getByRole('heading', { name: /value and money put in/ })).toBeVisible();
+    await expect(page.getByText('Change in the last 6 months')).toBeVisible();
+    await range.getByRole('link', { name: '1M' }).click();
+    await expect(page.getByText('Change in the last month')).toBeVisible();
+    await range.getByRole('link', { name: 'All' }).click();
+    await expect(page.getByText('Change in the whole history')).toBeVisible();
+    await noSideways(page);
+  });
+
+  test('growth: the chart reads out values with the arrow keys and offers a table', async ({
+    page,
+  }) => {
+    await page.goto('/demo/investments?tab=growth');
+    const chart = page.getByRole('img', { name: /Value of mutual funds against the money put in/ });
+    await chart.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.locator('.plot-tip').first()).toContainText('Value');
+    await page.getByText('Show the figures as a table').first().click();
+    await expect(page.getByRole('table').first()).toBeVisible();
   });
 
   test('update funds: the monthly grid and the transaction form', async ({ page }) => {

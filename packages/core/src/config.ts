@@ -103,6 +103,23 @@ export interface AppConfig {
     sttPct: number;
     stampDutyPct: number;
   };
+  /** how the mutual-fund statistics and graphs are cut */
+  funds: {
+    /** an annual figure (CAGR, XIRR over time) is shown only after money has been invested this many months */
+    annualiseAfterMonths: number;
+    /** how many of the largest funds make up "concentration" */
+    concentrationTop: number;
+    /** months shown in the SIP calendar */
+    calendarMonths: number;
+    /** months shown in the monthly-contribution bars */
+    contributionMonths: number;
+    /** allocation graphs show this many slices and fold the rest into "Other" */
+    maxSlices: number;
+    /** a price older than this many days before a purchase is not used to estimate that purchase's units */
+    navGapDays: number;
+    /** a fund is flagged as lagging or leading when its return differs from the household's by more than this (0.05 = 5 points) */
+    outlierPoints: number;
+  };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -146,6 +163,15 @@ export const DEFAULT_CONFIG: AppConfig = {
     sttPct: 0.00001,
     stampDutyPct: 0.00005,
   },
+  funds: {
+    annualiseAfterMonths: 12,
+    concentrationTop: 3,
+    calendarMonths: 24,
+    contributionMonths: 24,
+    maxSlices: 7,
+    navGapDays: 10,
+    outlierPoints: 0.05,
+  },
 };
 
 const num = (v: unknown, d: number, lo: number, hi: number) =>
@@ -165,6 +191,7 @@ export function configFromJson(raw: unknown): AppConfig {
   const rat = obj(r.rates);
   const liq = obj(r.liquidity);
   const ref = obj(r.refunds);
+  const fun = obj(r.funds);
   const days = Array.isArray(dep.maturityAlertDays)
     ? [
         ...new Set(
@@ -263,6 +290,19 @@ export function configFromJson(raw: unknown): AppConfig {
       exitLoadDays: Math.round(num(har.exitLoadDays, d.harvest.exitLoadDays, 0, 1095)),
       sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
       stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
+    },
+    funds: {
+      annualiseAfterMonths: Math.round(
+        num(fun.annualiseAfterMonths, d.funds.annualiseAfterMonths, 1, 120),
+      ),
+      concentrationTop: Math.round(num(fun.concentrationTop, d.funds.concentrationTop, 1, 20)),
+      calendarMonths: Math.round(num(fun.calendarMonths, d.funds.calendarMonths, 6, 60)),
+      contributionMonths: Math.round(
+        num(fun.contributionMonths, d.funds.contributionMonths, 6, 120),
+      ),
+      maxSlices: Math.round(num(fun.maxSlices, d.funds.maxSlices, 2, 7)),
+      navGapDays: Math.round(num(fun.navGapDays, d.funds.navGapDays, 1, 60)),
+      outlierPoints: num(fun.outlierPoints, d.funds.outlierPoints, 0, 1),
     },
   };
 }

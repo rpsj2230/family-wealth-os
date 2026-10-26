@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { combineSeries, formatInr, personStyles, type SeriesPoint } from '@fwos/core';
-import { FundsTab, GrowthTab, InvestKpis, MatchTab } from '@/app/(app)/investments/Parts';
+import { formatInr, parseRange, personStyles } from '@fwos/core';
+import { BreakdownTab, GrowthTab } from '@/app/(app)/investments/Insights';
+import { FundsTab, InvestKpis, MatchTab } from '@/app/(app)/investments/Parts';
 import { DemoShell } from '@/components/DemoShell';
 import { FundTransactionForm } from '@/components/FundTransactionForm';
 import { FundUpdateGrid, type FundInput } from '@/components/FundUpdateGrid';
@@ -9,7 +10,9 @@ import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
-import { fundPace, type FundRow, type InvestmentView, type Totals } from '@/lib/investments';
+import { DEMO_PEOPLE, DEMO_TODAY, demoView } from '@/lib/demo-funds';
+import { investGrowth, investStats } from '@/lib/invest-view';
+import { fundPace } from '@/lib/investments';
 import type { MatchRow } from '@/lib/match-data';
 import { sampleSave } from '../sample-actions';
 
@@ -18,145 +21,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const TODAY = '2026-10-26';
-const TABS = ['funds', 'growth', 'update', 'match'] as const;
-const PEOPLE = [
-  { id: 'p1', name: 'Anil' },
-  { id: 'p2', name: 'Beena' },
-];
-
-const month = (back: number) => {
-  const d = new Date(Date.UTC(2026, 9 - back, 1));
-  d.setUTCMonth(d.getUTCMonth() + 1, 0);
-  return d.toISOString().slice(0, 10);
-};
-/** 18 months of value growing from `start` to `value`, and money put in growing from `inv0` to `invested`. */
-const history = (start: number, value: number, inv0: number, invested: number): SeriesPoint[] =>
-  Array.from({ length: 19 }, (_, i) => {
-    const t = i / 18;
-    return {
-      date: i === 18 ? TODAY : month(17 - i),
-      value: Math.round(start + (value - start) * t + Math.sin(i * 1.3) * value * 0.012),
-      invested: Math.round(inv0 + (invested - inv0) * t),
-    };
-  });
-
-const fund = (
-  o: Partial<FundRow> & Pick<FundRow, 'assetId' | 'ownerId' | 'name' | 'value' | 'invested'>,
-): FundRow => ({
-  startedOn: '2021-06-01',
-  sipMonthly: null,
-  sipStopped: false,
-  xirr: 0.132,
-  xirrEstimated: false,
-  gain: o.value - o.invested,
-  dayAmount: Math.round(o.value * 0.0024),
-  dayPct: 0.0024,
-  dayFrom: '2026-10-22',
-  dayTo: '2026-10-23',
-  goalIds: [],
-  valueBasis: 'units × live price',
-  units: Math.round((o.value / 52.1) * 1000) / 1000,
-  nav: 52.1,
-  navDate: '2026-10-23',
-  amfiCode: '120503',
-  history: history(o.invested * 0.5, o.value, o.invested * 0.45, o.invested),
-  updatedOn: '2026-10-23',
-  updatedSource: { label: 'Automatic, 23 Oct', kind: 'auto' },
-  ...o,
-});
-
-const FUNDS: FundRow[] = [
-  fund({
-    assetId: 'f1',
-    ownerId: 'p1',
-    name: 'Sample Flexi Cap Fund',
-    value: 1_820_000,
-    invested: 1_300_000,
-    sipMonthly: 25_000,
-    goalIds: ['g1'],
-  }),
-  fund({
-    assetId: 'f2',
-    ownerId: 'p1',
-    name: 'Sample Small Cap Fund',
-    value: 940_000,
-    invested: 700_000,
-    sipMonthly: 15_000,
-    xirr: 0.186,
-    startedOn: '2024-02-01',
-  }),
-  fund({
-    assetId: 'f3',
-    ownerId: 'p2',
-    name: 'Sample Index Fund',
-    value: 1_160_000,
-    invested: 980_000,
-    xirr: 0.104,
-    xirrEstimated: true,
-    sipMonthly: 10_000,
-    sipStopped: true,
-    goalIds: ['g1'],
-  }),
-  fund({
-    assetId: 'f4',
-    ownerId: 'p2',
-    name: 'Sample Hybrid Fund',
-    value: 410_000,
-    invested: 430_000,
-    xirr: -0.021,
-    amfiCode: null,
-    dayAmount: null,
-    dayPct: null,
-    dayFrom: null,
-    dayTo: null,
-    nav: null,
-    navDate: null,
-    valueBasis: 'last recorded value (no live price yet)',
-    updatedOn: '2026-09-28',
-    updatedSource: { label: 'You, 28 Sep', kind: 'manual' },
-  }),
-];
-
-function totals(rows: FundRow[]): Totals {
-  const value = rows.reduce((a, f) => a + f.value, 0);
-  const invested = rows.reduce((a, f) => a + f.invested, 0);
-  const withDay = rows.filter((f) => f.dayAmount !== null);
-  const day = withDay.reduce((a, f) => a + (f.dayAmount ?? 0), 0);
-  return {
-    funds: rows.length,
-    value,
-    invested,
-    gain: value - invested,
-    xirr: 0.124,
-    xirrEstimated: rows.some((f) => f.xirrEstimated),
-    dayAmount: day,
-    dayPct: withDay.length > 0 ? day / (value - day) : null,
-    sipMonthly: rows.filter((f) => !f.sipStopped).reduce((a, f) => a + (f.sipMonthly ?? 0), 0),
-  };
-}
-
-function viewFor(who: string | null): InvestmentView {
-  const groups = PEOPLE.filter((p) => !who || p.id === who).map((p) => {
-    const funds = FUNDS.filter((f) => f.ownerId === p.id);
-    return {
-      ownerId: p.id,
-      name: p.name,
-      panLast4: p.id === 'p1' ? '4321' : null,
-      funds,
-      totals: totals(funds),
-      series: combineSeries(funds.map((f) => f.history)),
-    };
-  });
-  const all = groups.flatMap((g) => g.funds);
-  return {
-    today: TODAY,
-    groups,
-    household: totals(all),
-    series: combineSeries(all.map((f) => f.history)),
-    goals: [{ id: 'g1', name: 'Education fund' }],
-  };
-}
+const TODAY = DEMO_TODAY;
+const TABS = ['funds', 'breakdown', 'growth', 'update', 'match'] as const;
+const PEOPLE = DEMO_PEOPLE;
+const FUNDS = demoView(null, 'all').groups.flatMap((g) => g.funds);
 
 const MATCH: MatchRow[] = [
   {
@@ -210,17 +78,19 @@ const actions = { confirmMatch: sampleSave, clearMatch: sampleSave, setExitLoad:
 export default async function DemoInvestments({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string; tab?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string; range?: string }>;
 }) {
   const sp = await searchParams;
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as (typeof TABS)[number])
     : 'funds';
   const styles = personStyles(PEOPLE);
-  const filtered = tab === 'funds' || tab === 'growth';
+  const filtered = tab === 'funds' || tab === 'breakdown' || tab === 'growth';
   const who = filtered && sp.p && styles[sp.p] ? sp.p : null;
-  const view = viewFor(who);
-  const full = viewFor(null);
+  const range = tab === 'growth' ? parseRange(sp.range) : 'all';
+  const view = demoView(who, range);
+  const full = demoView(null, 'all');
+  const stats = investStats(view);
   const noPrice = view.groups.flatMap((g) => g.funds).filter((f) => !f.amfiCode).length;
   const updateFunds: FundInput[] = full.groups.flatMap((g) =>
     g.funds.map((f) => ({
@@ -258,13 +128,14 @@ export default async function DemoInvestments({
           </>
         }
       />
-      <InvestKpis view={view} noPrice={noPrice} />
+      <InvestKpis view={view} noPrice={noPrice} stats={stats.all} />
       <Tabs
         base="/demo/investments"
         current={tab}
         keep={who ? { p: who } : {}}
         tabs={[
           { key: 'funds', label: 'Funds' },
+          { key: 'breakdown', label: 'Breakdown' },
           { key: 'growth', label: 'Growth' },
           { key: 'update', label: 'Update funds' },
           { key: 'match', label: 'Match funds', badge: noPrice },
@@ -278,16 +149,32 @@ export default async function DemoInvestments({
           totals={Object.fromEntries(
             view.groups.map((g) => [g.ownerId, formatInr(Math.round(g.totals.value))]),
           )}
-          keep={{ tab }}
+          keep={{ tab, ...(tab === 'growth' ? { range } : {}) }}
         />
       )}
       {tab === 'funds' && (
         <ListingTools name="investments">
-          <FundsTab view={view} styles={styles} />
+          <FundsTab view={view} styles={styles} stats={stats.byOwner} />
         </ListingTools>
       )}
+      {tab === 'breakdown' && (
+        <BreakdownTab
+          view={view}
+          stats={stats.all}
+          byOwner={stats.byOwner}
+          who={who}
+          styles={styles}
+        />
+      )}
       {tab === 'growth' && (
-        <GrowthTab view={view} pace={fundPace(view)} who={who} styles={styles} />
+        <GrowthTab
+          view={view}
+          growth={investGrowth(view)}
+          pace={fundPace(view)}
+          who={who}
+          styles={styles}
+          base="/demo/investments"
+        />
       )}
       {tab === 'update' && (
         <>

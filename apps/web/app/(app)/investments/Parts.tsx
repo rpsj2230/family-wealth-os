@@ -1,16 +1,21 @@
 import Link from 'next/link';
-import { formatInr, formatInrCompact, type PersonStyle } from '@fwos/core';
+import {
+  avgCostPerUnit,
+  formatInr,
+  formatInrCompact,
+  type PersonStyle,
+  type StatBlock,
+} from '@fwos/core';
 import { ActionForm, type ActionResult } from '@/components/ActionForm';
 import { UpdatedCell } from '@/components/BankTable';
-import { BarList, Sparkline } from '@/components/charts';
-import { FundChart } from '@/components/FundChart';
+import { Sparkline } from '@/components/charts';
 import { GoalTag } from '@/components/GoalTag';
-import { InvestHeadline, pct, rupees, tone } from '@/components/InvestHeadline';
+import { InvestHeadline, pct, rupees, rupeesCompact, tone } from '@/components/InvestHeadline';
 import { KpiStrip } from '@/components/KpiStrip';
 import { Meter } from '@/components/Meter';
 import { PersonBadge } from '@/components/Person';
 import { niceDate, niceMonth } from '@/lib/dates';
-import type { InvestmentView, FundRow, fundPace } from '@/lib/investments';
+import type { InvestmentView, FundRow } from '@/lib/investments';
 import type { MatchRow } from '@/lib/match-data';
 import { exitLoadPercentText, matchProgress, orderForMatching } from '@/lib/match-funds';
 import './investments.css';
@@ -29,15 +34,21 @@ export function InvestKpis({
   view,
   noPrice,
   title,
+  stats,
 }: {
   view: InvestmentView;
   noPrice: number;
   title?: string;
+  stats?: StatBlock;
 }) {
   const h = view.household;
+  const hold = stats?.holding;
+  const gainPct = stats?.unrealisedPct ?? null;
+  const longShare = hold?.longShare ?? null;
   return (
     <KpiStrip
       label={title ?? 'Mutual funds at a glance'}
+      six
       items={[
         {
           label: 'Value now',
@@ -46,19 +57,36 @@ export function InvestKpis({
           main: true,
         },
         {
+          label: 'Gain on units held',
+          value: rupeesCompact(stats ? stats.unrealised : h.gain),
+          sub: gainPct === null ? 'no cost recorded yet' : `${pct(gainPct, 1)} on the money put in`,
+          tone: (stats ? stats.unrealised : h.gain) >= 0 ? 'gain' : 'fail',
+        },
+        {
+          label: 'Return a year (XIRR)',
+          value: h.xirr === null ? '–' : pct(h.xirr, 1),
+          sub:
+            h.xirr === null
+              ? 'needs a start date or a fund statement'
+              : h.xirrEstimated
+                ? 'partly estimated from start dates'
+                : 'from fund statement transactions',
+          tone: h.xirr === null ? undefined : h.xirr >= 0 ? 'gain' : 'fail',
+        },
+        {
           label: 'Today',
-          value: h.dayPct === null ? '–' : rupees(h.dayAmount),
+          value: h.dayPct === null ? '–' : rupeesCompact(h.dayAmount),
           sub: h.dayPct === null ? 'no price change yet' : pct(h.dayPct),
           tone: h.dayPct === null ? undefined : h.dayAmount >= 0 ? 'gain' : 'fail',
         },
         {
-          label: 'Total gain',
-          value: rupees(h.gain),
+          label: 'Already long-term',
+          value: longShare === null ? '–' : `${Math.round(longShare * 100)}%`,
           sub:
-            h.xirr === null
-              ? 'annual return not available'
-              : `${pct(h.xirr, 1)} a year (XIRR)${h.xirrEstimated ? ', estimated' : ''}`,
-          tone: h.gain >= 0 ? 'gain' : 'fail',
+            longShare === null
+              ? 'needs a fund statement or prices'
+              : `${formatInrCompact(hold?.longValue ?? 0)} of equity funds held over ${view.holdingMonths} months`,
+          href: '/investments?tab=breakdown',
         },
         {
           label: 'Without a live price',
@@ -76,6 +104,8 @@ export function InvestKpis({
 
 function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
   const goalName = new Map(view.goals.map((g) => [g.id, g.name]));
+  const avg = avgCostPerUnit(f.invested, f.units);
+  const share = view.household.value > 0 ? f.value / view.household.value : null;
   return (
     <tr>
       <td data-label="Fund">
@@ -84,6 +114,16 @@ function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
             <Link href={`/asset/${f.assetId}`} className="fundlink">
               {f.name}
             </Link>
+            <div className="small muted">
+              <span
+                className="kindchip"
+                title={f.category.certain ? undefined : 'Guessed from the fund name'}
+              >
+                {f.category.label}
+                {f.category.certain ? '' : ' ?'}
+              </span>
+              {f.amc ? ` · ${f.amc}` : ''}
+            </div>
             <div className="small muted">
               {f.units !== null && f.nav !== null
                 ? `${f.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units × ₹${f.nav.toLocaleString(
@@ -95,6 +135,16 @@ function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
                   : 'units not recorded'}
             </div>
             <div className="small muted">
+              {avg !== null && (
+                <span title="Money put in divided by the units held">
+                  average cost ₹
+                  {avg.toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  {' · '}
+                </span>
+              )}
               {f.startedOn ? `since ${niceMonth(f.startedOn)}` : ''}
               {f.dayTo ? ` · price of ${niceDate(f.dayTo)}` : ''}
               {!f.amfiCode && (
@@ -119,7 +169,12 @@ function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
       </td>
       <td className="num amount" data-label="Value today">
         {f.value ? rupee(f.value) : '–'}
-        <div className="small muted">{f.valueBasis}</div>
+        <div className="small muted">
+          {share !== null && f.value > 0
+            ? `${(share * 100).toFixed(share < 0.1 ? 1 : 0)}% of the total · `
+            : ''}
+          {f.valueBasis}
+        </div>
       </td>
       <td className={`num ${tone(f.dayAmount)}`} data-label="Today">
         {f.dayAmount === null ? '–' : rupees(f.dayAmount)}
@@ -127,6 +182,9 @@ function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
       </td>
       <td className={`num ${f.invested ? tone(f.gain) : ''}`} data-label="Gain">
         {f.invested ? rupees(f.gain) : '–'}
+        {f.invested > 0 && f.value > 0 && (
+          <div className="small">{pct(f.value / f.invested - 1, 1)}</div>
+        )}
       </td>
       <td className={`num ${tone(f.xirr)}`} data-label="XIRR">
         {f.xirr === null ? '–' : pct(f.xirr, 1)}
@@ -162,9 +220,11 @@ function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
 export function FundsTab({
   view,
   styles,
+  stats,
 }: {
   view: InvestmentView;
   styles: Record<string, PersonStyle>;
+  stats: Record<string, StatBlock>;
 }) {
   if (view.groups.length === 0)
     return (
@@ -192,6 +252,16 @@ export function FundsTab({
               </h2>
               <div className="muted small">
                 {g.totals.funds} fund{g.totals.funds === 1 ? '' : 's'}
+                {stats[g.ownerId] && stats[g.ownerId]!.folios > 0
+                  ? ` · ${stats[g.ownerId]!.folios} folio${stats[g.ownerId]!.folios === 1 ? '' : 's'}`
+                  : ''}
+                {stats[g.ownerId]?.holding.longShare !== null &&
+                stats[g.ownerId]?.holding.longShare !== undefined
+                  ? ` · ${Math.round(stats[g.ownerId]!.holding.longShare! * 100)}% long-term`
+                  : ''}
+                {stats[g.ownerId] && stats[g.ownerId]!.funds > 1
+                  ? ` · largest ${stats[g.ownerId]!.concentration.top[0]?.label ?? ''} ${Math.round((stats[g.ownerId]!.concentration.top[0]?.share ?? 0) * 100)}%`
+                  : ''}
               </div>
             </div>
             <InvestHeadline t={g.totals} />
@@ -225,78 +295,6 @@ export function FundsTab({
           XIRR marked with ~ is estimated from each fund&apos;s start date and SIP until its fund
           statement is imported (<Link href="/import">Import</Link>).
         </p>
-      )}
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------------------------------ growth */
-
-export function GrowthTab({
-  view,
-  pace,
-  who,
-  styles,
-}: {
-  view: InvestmentView;
-  pace: ReturnType<typeof fundPace>;
-  who: string | null;
-  styles: Record<string, PersonStyle>;
-}) {
-  const h = view.household;
-  return (
-    <>
-      <section className="card" aria-labelledby="gr">
-        <div className="cardhead">
-          <h2 id="gr">{who ? `${styles[who]?.name}'s funds` : 'All funds'} over time</h2>
-          <span className="small muted">Value against the money put in</span>
-        </div>
-        <FundChart
-          history={view.series}
-          today={view.today}
-          caption="Value of all mutual funds against the money put in"
-          projection={pace.path}
-        />
-      </section>
-      <section className="card pace" aria-labelledby="pc">
-        <div className="cardhead">
-          <h2 id="pc">If you carry on like this</h2>
-          <span className="small muted">Arithmetic, not a promise</span>
-        </div>
-        <p className="muted small">
-          {formatInr(Math.round(h.sipMonthly))} a month in SIPs and {(pace.rate * 100).toFixed(1)}%
-          a year ({h.xirr === null ? 'assumed' : 'your return so far'}), with a range of ±3 points.
-        </p>
-        <div className="pacegrid">
-          {pace.projections.map((x) => (
-            <div key={x.years} className="pacecell">
-              <div className="muted small">
-                In {x.years} year{x.years === 1 ? '' : 's'}
-              </div>
-              <b className="num">{formatInr(x.expected)}</b>
-              <div className="muted small">
-                {formatInr(x.low)} – {formatInr(x.high)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-      {!who && view.groups.length > 1 && (
-        <section className="card" aria-labelledby="share">
-          <div className="cardhead">
-            <h2 id="share">Who holds what</h2>
-          </div>
-          <BarList
-            caption="Value of mutual funds by person"
-            format={formatInrCompact}
-            items={view.groups.map((g) => ({
-              label: <PersonBadge p={styles[g.ownerId]} name size={18} />,
-              value: g.totals.value,
-              colour: styles[g.ownerId]?.colour ?? 'var(--primary, #4f46e5)',
-              sub: `${rupees(g.totals.gain)} gain${g.totals.xirr === null ? '' : ` · ${pct(g.totals.xirr, 1)} a year`}`,
-            }))}
-          />
-        </section>
       )}
     </>
   );

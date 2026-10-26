@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatInr, personStyles } from '@fwos/core';
+import { formatInr, parseRange, personStyles } from '@fwos/core';
 import { FundTransactionForm } from '@/components/FundTransactionForm';
 import { FundUpdateGrid, type FundInput } from '@/components/FundUpdateGrid';
 import { ListingTools } from '@/components/ListingTools';
@@ -7,20 +7,22 @@ import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
 import { loadContext } from '@/lib/data';
+import { investGrowth, investStats } from '@/lib/invest-view';
 import { fundPace, loadInvestmentView } from '@/lib/investments';
 import { loadMatchView } from '@/lib/match-data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { clearMatch, confirmMatch, setExitLoad } from '../funds/actions';
-import { FundsTab, GrowthTab, InvestKpis, MatchTab } from './Parts';
+import { BreakdownTab, GrowthTab } from './Insights';
+import { FundsTab, InvestKpis, MatchTab } from './Parts';
 
 export const dynamic = 'force-dynamic';
 
-const TABS = ['funds', 'growth', 'update', 'match'] as const;
+const TABS = ['funds', 'breakdown', 'growth', 'update', 'match'] as const;
 
 export default async function InvestmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string; tab?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string; range?: string }>;
 }) {
   const sp = await searchParams;
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
@@ -31,9 +33,11 @@ export default async function InvestmentsPage({
   const loaded = await loadPortfolio(supabase);
   const styles = personStyles([...loaded.ownerName.entries()].map(([id, name]) => ({ id, name })));
   // the person filter only narrows the two read-only tabs; updating and matching always cover every fund
-  const filtered = tab === 'funds' || tab === 'growth';
+  const filtered = tab === 'funds' || tab === 'breakdown' || tab === 'growth';
   const who = filtered && sp.p && styles[sp.p] ? sp.p : null;
-  const view = await loadInvestmentView(supabase, loaded, who);
+  const range = tab === 'growth' ? parseRange(sp.range) : 'all';
+  const view = await loadInvestmentView(supabase, loaded, who, range);
+  const stats = investStats(view);
   const noPrice = view.groups.flatMap((g) => g.funds).filter((f) => !f.amfiCode).length;
   const totals = Object.fromEntries(
     view.groups.map((g) => [g.ownerId, formatInr(Math.round(g.totals.value))]),
@@ -86,13 +90,14 @@ export default async function InvestmentsPage({
           </>
         }
       />
-      <InvestKpis view={view} noPrice={noPrice} />
+      <InvestKpis view={view} noPrice={noPrice} stats={stats.all} />
       <Tabs
         base="/investments"
         current={tab}
         keep={who ? { p: who } : {}}
         tabs={[
           { key: 'funds', label: 'Funds' },
+          { key: 'breakdown', label: 'Breakdown' },
           { key: 'growth', label: 'Growth' },
           { key: 'update', label: 'Update funds' },
           { key: 'match', label: 'Match funds', badge: noPrice },
@@ -104,15 +109,33 @@ export default async function InvestmentsPage({
           basePath="/investments"
           current={who}
           totals={totals}
-          keep={{ tab }}
+          keep={{ tab, ...(tab === 'growth' ? { range } : {}) }}
         />
       )}
       {tab === 'funds' && (
         <ListingTools name="investments">
-          <FundsTab view={view} styles={styles} />
+          <FundsTab view={view} styles={styles} stats={stats.byOwner} />
         </ListingTools>
       )}
-      {tab === 'growth' && <GrowthTab view={view} pace={pace} who={who} styles={styles} />}
+      {tab === 'breakdown' && (
+        <BreakdownTab
+          view={view}
+          stats={stats.all}
+          byOwner={stats.byOwner}
+          who={who}
+          styles={styles}
+        />
+      )}
+      {tab === 'growth' && (
+        <GrowthTab
+          view={view}
+          growth={investGrowth(view)}
+          pace={pace}
+          who={who}
+          styles={styles}
+          base="/investments"
+        />
+      )}
       {tab === 'update' && (
         <>
           <p className="lead muted updatehelp">

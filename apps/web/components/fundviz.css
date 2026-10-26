@@ -1,0 +1,511 @@
+/* Fund graphs and statistics: palette tokens (light and dark) and the shapes of the charts. Text always uses the page's text colours;
+   colour marks carry identity. */
+:root {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-6: #008300;
+  --viz-7: #6250d6;
+  --viz-8: #e34948;
+  --viz-other: #8a93a6;
+  --viz-good: #0ca30c;
+  --viz-bad: #d03b3b;
+  --viz-line: #64748b;
+  --viz-surface: var(--card, #fff);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
+    --viz-5: #d55181;
+    --viz-6: #008300;
+    --viz-7: #9085e9;
+    --viz-8: #e66767;
+    --viz-other: #7b849a;
+    --viz-line: #94a0bd;
+  }
+}
+:root[data-theme='dark'] {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-6: #008300;
+  --viz-7: #9085e9;
+  --viz-8: #e66767;
+  --viz-other: #7b849a;
+  --viz-line: #94a0bd;
+}
+
+/* ---- range switch ---- */
+.rangeswitch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.rangeswitch .rangelabel {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+/* ---- statistics list ---- */
+dl.statgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+dl.statgrid > div {
+  min-width: 0;
+  padding: 8px 0 2px;
+  border-top: 1px solid var(--border);
+}
+dl.statgrid dt {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+dl.statgrid dd {
+  margin: 0;
+}
+dl.statgrid dd.v {
+  font-size: 1.15rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+dl.statgrid dd.n {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+dl.statgrid dd.gain,
+dl.statgrid dd.n.gain {
+  color: var(--ok-fg);
+}
+dl.statgrid dd.fail,
+dl.statgrid dd.n.fail {
+  color: var(--fail);
+}
+.estchip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.estchip.real {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+/* ---- line and area chart ---- */
+.plot {
+  margin: 0;
+  position: relative;
+}
+.plot svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+.plot svg:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.plot text.axis {
+  font-size: 11px;
+  fill: var(--muted);
+}
+.plot .gridline {
+  stroke: var(--border);
+  stroke-dasharray: 3 4;
+}
+.plot .zeroline {
+  stroke: var(--viz-line);
+  stroke-width: 1;
+}
+.plot .reflabel {
+  font-size: 11px;
+  fill: var(--fg);
+  paint-order: stroke;
+  stroke: var(--viz-surface);
+  stroke-width: 3px;
+}
+.plot-tip {
+  position: absolute;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+  min-width: 150px;
+  max-width: 240px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: 0 6px 18px rgb(15 23 42 / 0.16);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.plot-tip .tipdate {
+  font-weight: 650;
+  margin-bottom: 3px;
+}
+.plot-tip .tiprow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.plot-tip .tiprow b {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  padding-left: 10px;
+}
+.plot-tip .tipnote {
+  margin-top: 3px;
+  color: var(--muted);
+}
+.vizlegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+.vizlegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vizlegend .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+.vizlegend .sw.line {
+  height: 3px;
+  border-radius: 2px;
+}
+.vizlegend .sw.dash {
+  height: 0;
+  border-top: 3px dashed currentColor;
+  border-radius: 0;
+  background: none !important;
+}
+.vizlegend .sw.dot {
+  border-radius: 50%;
+}
+.vizlegend .sw.tri {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 11px solid currentColor;
+  background: none !important;
+  border-radius: 0;
+}
+.plotnote {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+details.viztable {
+  margin-top: 8px;
+  font-size: 0.82rem;
+}
+details.viztable > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+details.viztable table {
+  margin-top: 6px;
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 480px;
+}
+details.viztable th,
+details.viztable td {
+  padding: 3px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+details.viztable th:first-child,
+details.viztable td:first-child {
+  text-align: left;
+}
+.viz-empty {
+  padding: 22px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---- stacked bar ---- */
+.stackbar {
+  display: flex;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--soft);
+  gap: 2px;
+}
+.stackbar > span {
+  min-width: 3px;
+  height: 100%;
+}
+.stackbar > span:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.stackbar > span:last-child {
+  border-radius: 0 6px 6px 0;
+}
+ul.stackkey {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 0.86rem;
+}
+ul.stackkey li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto;
+  gap: 4px 10px;
+  align-items: center;
+}
+ul.stackkey .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+ul.stackkey .lab {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+ul.stackkey .amt {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+ul.stackkey .pc {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 3.4em;
+  color: var(--muted);
+}
+
+/* ---- gain by fund (bars either side of zero) ---- */
+ul.dvbars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+ul.dvbars li {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) minmax(0, 2fr) minmax(88px, auto);
+  gap: 4px 12px;
+  align-items: center;
+  font-size: 0.86rem;
+}
+ul.dvbars .lab {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+ul.dvbars .track {
+  position: relative;
+  height: 14px;
+  background: linear-gradient(var(--viz-line), var(--viz-line)) center / 1px 100% no-repeat;
+}
+ul.dvbars .track > span {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  min-width: 2px;
+}
+ul.dvbars .track > span.pos {
+  left: 50%;
+  background: var(--viz-good);
+  border-radius: 0 4px 4px 0;
+}
+ul.dvbars .track > span.neg {
+  right: 50%;
+  background: var(--viz-bad);
+  border-radius: 4px 0 0 4px;
+}
+ul.dvbars .val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  ul.dvbars li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  ul.dvbars .track {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+
+/* ---- monthly columns ---- */
+.cols {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 3px;
+  align-items: stretch;
+  height: 170px;
+  padding-top: 6px;
+}
+.cols .col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  outline-offset: 2px;
+}
+.cols .up,
+.cols .down {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.cols .up {
+  justify-content: flex-end;
+}
+.cols .up > span,
+.cols .down > span {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+}
+.cols .up > span:first-child {
+  border-radius: 3px 3px 0 0;
+}
+.cols .down > span:last-child {
+  border-radius: 0 0 3px 3px;
+}
+.cols .axisline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--viz-line);
+}
+.colslabels {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.colslabels span {
+  white-space: nowrap;
+  overflow: visible;
+  text-align: center;
+}
+.colsmax {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+/* ---- SIP calendar ---- */
+ol.sipstrip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 6px;
+}
+ol.sipstrip li {
+  display: grid;
+  gap: 1px;
+  justify-items: center;
+  padding: 5px 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-align: center;
+  background: var(--soft);
+}
+ol.sipstrip li .m {
+  color: var(--muted);
+}
+ol.sipstrip li .g {
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+ol.sipstrip li.paid {
+  background: color-mix(in srgb, var(--viz-good) 18%, var(--card));
+  border-color: color-mix(in srgb, var(--viz-good) 55%, var(--card));
+}
+ol.sipstrip li.missed {
+  background: color-mix(in srgb, var(--viz-bad) 16%, var(--card));
+  border-color: color-mix(in srgb, var(--viz-bad) 55%, var(--card));
+}
+ol.sipstrip li.lump {
+  background: color-mix(in srgb, var(--viz-1) 16%, var(--card));
+  border-color: color-mix(in srgb, var(--viz-1) 55%, var(--card));
+}
+ol.sipstrip li.pending {
+  background: var(--card);
+  border-style: dashed;
+}
+ol.sipstrip li.planned {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--viz-1) 22%, var(--card)) 0 4px,
+    var(--card) 4px 8px
+  );
+}
+ol.sipstrip li.idle {
+  background: transparent;
+  opacity: 0.6;
+}
+
+h3.subhead {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+.vizblock {
+  margin-bottom: 28px;
+}

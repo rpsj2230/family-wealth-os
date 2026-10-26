@@ -15,9 +15,18 @@ export interface Kpi {
 }
 
 /** The row of headline figures under a page title (the `.kpis` pattern of the dashboard and Tax pages). Six tiles at most. */
-export function KpiStrip({ items, label = 'Key figures' }: { items: Kpi[]; label?: string }) {
+export function KpiStrip({
+  items,
+  label = 'Key figures',
+  six = false,
+}: {
+  items: Kpi[];
+  label?: string;
+  /** six tiles in one row on wide screens */
+  six?: boolean;
+}) {
   return (
-    <section className="kpis" aria-label={label}>
+    <section className={`kpis ${six ? 'kpis-six' : ''}`} aria-label={label}>
       {items.slice(0, 6).map((k) => {
         const body = (
           <>

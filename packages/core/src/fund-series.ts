@@ -59,6 +59,8 @@ export function fundSeries(
   h: FundHistory,
   today: string,
   current?: { value: number; invested: number | null },
+  /** the dates to draw, oldest first, ending at today; month ends from the first record when left out */
+  dates?: string[],
 ): SeriesPoint[] {
   const txns = [...h.txns].sort((a, b) => a.date.localeCompare(b.date));
   const firsts = [
@@ -86,7 +88,7 @@ export function fundSeries(
     }
     held.push({ date: t.date, units, invested });
   }
-  for (const d of monthEnds(start, today)) {
+  for (const d of dates ? dates.filter((x) => x >= start) : monthEnds(start, today)) {
     const hold = lastOnOrBefore(held, d);
     const nav = lastOnOrBefore(h.navs, d, 12);
     if (hold && nav) {
