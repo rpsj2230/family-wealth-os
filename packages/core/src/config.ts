@@ -170,6 +170,16 @@ export interface AppConfig {
     plRows: number;
     compareFunds: number;
   };
+  /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
+  sheetSync: {
+    /** the time zone in which "this month" is decided (an IANA name such as Asia/Singapore) */
+    timeZone: string;
+    /** the first and last row of the register in a month tab (the plans block sits below it); the sync looks for the real end and uses this only when it cannot find it */
+    firstRow: number;
+    lastRow: number;
+    /** added to a month tab's name for the hidden safety copy made before its data is replaced */
+    backupSuffix: string;
+  };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -265,6 +275,12 @@ export const DEFAULT_CONFIG: AppConfig = {
     plRows: 24,
     compareFunds: 4,
   },
+  sheetSync: {
+    timeZone: 'Asia/Singapore',
+    firstRow: 3,
+    lastRow: 113,
+    backupSuffix: ' - before sync',
+  },
 };
 
 const num = (v: unknown, d: number, lo: number, hi: number) =>
@@ -285,6 +301,19 @@ const ints = (v: unknown, d: number[], lo: number, hi: number, max: number): num
     : [];
   return list.length > 0 ? list : d;
 };
+/** An IANA time zone name this runtime knows (Asia/Singapore), or the default. */
+const zone = (v: unknown, d: string): string => {
+  if (typeof v !== 'string' || v.length > 64) return d;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: v });
+    return v;
+  } catch {
+    return d;
+  }
+};
+/** The safety copy's suffix: short, plain characters only (a tab name cannot hold every character). */
+const tabSuffix = (v: unknown, d: string): string =>
+  typeof v === 'string' && /^[A-Za-z0-9 ._()-]{3,40}$/.test(v) ? v : d;
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
@@ -312,6 +341,7 @@ export function configFromJson(raw: unknown): AppConfig {
   const liq = obj(r.liquidity);
   const ref = obj(r.refunds);
   const fun = obj(r.funds);
+  const sheet = obj(r.sheetSync);
   const days = Array.isArray(dep.maturityAlertDays)
     ? [
         ...new Set(
@@ -469,6 +499,15 @@ export function configFromJson(raw: unknown): AppConfig {
       plRows: Math.round(num(fun.plRows, d.funds.plRows, 4, 120)),
       compareFunds: Math.round(num(fun.compareFunds, d.funds.compareFunds, 2, 8)),
     },
+    sheetSync: (() => {
+      const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));
+      return {
+        timeZone: zone(sheet.timeZone, d.sheetSync.timeZone),
+        firstRow: first,
+        lastRow: Math.max(first, Math.round(num(sheet.lastRow, d.sheetSync.lastRow, 1, 2000))),
+        backupSuffix: tabSuffix(sheet.backupSuffix, d.sheetSync.backupSuffix),
+      };
+    })(),
   };
 }
 

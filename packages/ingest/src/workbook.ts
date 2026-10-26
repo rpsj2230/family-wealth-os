@@ -12,6 +12,23 @@
  */
 import { withChangeRequest } from '@fwos/core';
 import ExcelJS from 'exceljs';
+import {
+  accountKindOf,
+  classifyRegisterRow,
+  DEFAULT_MINORS,
+  DEFAULT_OWNERS,
+  fdNumberIn,
+  foreignNoteIn,
+  isJoint,
+  isoDate as iso,
+  last4Of,
+  num,
+  parseGroup,
+  slug,
+  str,
+  type Group,
+  type Raw,
+} from './sheet-rows';
 
 // ----------------------------------------------------------------------------------------------
 // Types
@@ -197,8 +214,6 @@ export interface ImportOptions {
 // ----------------------------------------------------------------------------------------------
 // Cell helpers
 // ----------------------------------------------------------------------------------------------
-type Raw = string | number | Date | null;
-
 function cellValue(ws: ExcelJS.Worksheet, ref: string): Raw {
   const v = ws.getCell(ref).value as unknown;
   if (v === null || v === undefined) return null;
@@ -212,11 +227,6 @@ function cellValue(ws: ExcelJS.Worksheet, ref: string): Raw {
   }
   return null;
 }
-
-const str = (v: Raw): string =>
-  (v === null || v instanceof Date ? '' : String(v)).replace(/\s+/g, ' ').trim();
-const num = (v: Raw): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const iso = (d: Date): string => d.toISOString().slice(0, 10);
 
 /** Replace long digit runs (account/policy/FD numbers) with their last 4 digits. */
 export function maskIdentifiers(s: string): string {
@@ -253,88 +263,8 @@ function parseTextDate(s: string): string | null {
 }
 
 // ----------------------------------------------------------------------------------------------
-// Parsing
+// Parsing (the row grammar itself lives in sheet-rows.ts, shared with the Google Sheet sync)
 // ----------------------------------------------------------------------------------------------
-const DEFAULT_OWNERS = ['Rupash', 'Ragini', 'Advika', 'Viraj'];
-const DEFAULT_MINORS = ['Advika', 'Viraj'];
-
-interface Group {
-  raw: string;
-  institution: string | null;
-  owner: string | null; // legal owner (or PAN holder for SIP groups)
-  goalPerson: string | null;
-  holder: string | null; // someone else's name when the account is not ours
-  kind: 'bank' | 'sip' | 'person' | 'sg_bank' | 'others';
-}
-
-function parseGroup(raw: string, owners: string[]): Group {
-  const first = raw.split('\n')[0]!.replace(/\s+/g, ' ').trim();
-  const sip = /^SIP\s*-\s*([A-Za-z]+)(?:\s*\(([A-Za-z]+)\))?/i.exec(first);
-  if (sip) {
-    const who = sip[1]!;
-    const holder = sip[2] ?? who;
-    return { raw, institution: null, owner: holder, goalPerson: who, holder: null, kind: 'sip' };
-  }
-  if (/^others$/i.test(first))
-    return { raw, institution: null, owner: null, goalPerson: null, holder: null, kind: 'others' };
-  if (/^(UOB|DBS)$/i.test(first))
-    return {
-      raw,
-      institution: first.toUpperCase(),
-      owner: null,
-      goalPerson: null,
-      holder: null,
-      kind: 'sg_bank',
-    };
-  const atul = /^Atul\s+(.+)$/i.exec(first);
-  if (atul)
-    return {
-      raw,
-      institution: atul[1]!.trim(),
-      owner: null,
-      goalPerson: null,
-      holder: 'Atul',
-      kind: 'person',
-    };
-  const bank = /^(.+?)\s*-\s*([A-Za-z]+)$/.exec(first);
-  if (bank && owners.some((o) => o.toLowerCase() === bank[2]!.toLowerCase())) {
-    const owner = owners.find((o) => o.toLowerCase() === bank[2]!.toLowerCase())!;
-    return {
-      raw,
-      institution: bank[1]!.trim(),
-      owner,
-      goalPerson: null,
-      holder: null,
-      kind: 'bank',
-    };
-  }
-  // third-party counterparties (e.g. "Anup Pratap Singh", "Finvasia (Atul)")
-  return {
-    raw,
-    institution: null,
-    owner: null,
-    goalPerson: null,
-    holder: first.replace(/\s*\(.*\)$/, ''),
-    kind: 'person',
-  };
-}
-
-function accountKindOf(label: string): 'NRE' | 'NRO' | undefined {
-  if (/NRE/i.test(label)) return 'NRE';
-  if (/NRO/i.test(label)) return 'NRO';
-  return undefined;
-}
-const isJoint = (label: string) => /\bJO\b|JO-/i.test(label);
-function last4Of(label: string): string | undefined {
-  const m = /(\d{4})(?!.*\d{4})/.exec(label);
-  return m ? m[1] : undefined;
-}
-const slug = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-
 export async function planWorkbook(
   source: string | Buffer | Uint8Array,
   opts: ImportOptions,
@@ -445,8 +375,10 @@ export async function planWorkbook(
       });
     }
 
-    if (!B && F === null) continue;
-    if (!group) {
+    // which kind of line this is: the rules (R1 to R8) live in sheet-rows.ts and are shared with the Google Sheet sync
+    const cls = classifyRegisterRow({ b: B, e: E, f: F }, group);
+    if (cls.kind === 'blank') continue;
+    if (cls.kind === 'no_group' || !group) {
       ex(
         'row_without_group',
         'warning',
@@ -456,16 +388,14 @@ export async function planWorkbook(
       continue;
     }
 
-    const eStr = E instanceof Date ? '' : str(E);
-
     // R7: placeholder rows with no amount
-    if (F === null) {
+    if (cls.kind === 'placeholder' || F === null) {
       if (B) ex('empty_placeholder', 'info', cell('B'), `"${B}" has no amount and was skipped.`);
       continue;
     }
 
     // R1: FD
-    if (E instanceof Date) {
+    if (cls.kind === 'fd' && E instanceof Date) {
       const ownerName = group.owner ?? defaultOwner;
       const D_ = D instanceof Date ? D : null;
       const rate = num(Cc);
@@ -486,10 +416,12 @@ export async function planWorkbook(
       const instK = instKey(group.institution);
       const ownerK = ownerKey(ownerName);
       const matured = E.getTime() <= new Date(asOf + 'T00:00:00Z').getTime();
-      const fdRef = /FD\s*Number\s*:\s*([\d,\-\s]+)/i.exec(Nraw);
-      const firstRef = fdRef ? fdRef[1]!.split(',')[0]!.replace(/\s/g, '') : '';
-      const refDigits = firstRef.split('-')[0]!.replace(/\D/g, '');
-      const refLast4 = refDigits ? refDigits.slice(-4) : undefined;
+      const {
+        first: firstRef,
+        digits: refDigits,
+        last4: refLast4,
+        ref: fullRef,
+      } = fdNumberIn(Nraw);
       if (refDigits) {
         const dupKey = `${instK}|${ownerK}|${firstRef}`;
         if (fdRefs.has(dupKey))
@@ -529,9 +461,7 @@ export async function planWorkbook(
         bankMaturityAmount: G,
         compounding: 'quarterly',
         ...(refLast4 ? { refLast4 } : {}),
-        ...(refDigits.length >= 4 && /^[A-Za-z0-9-]{4,40}$/.test(firstRef)
-          ? { ref: firstRef }
-          : {}),
+        ...(fullRef ? { ref: fullRef } : {}),
         sourceRef: cell('B'),
       });
       fdPrincipal += F;
@@ -547,11 +477,11 @@ export async function planWorkbook(
     }
 
     // R2: Indian bank balances
-    if (/^Cash-NR[EO]$/i.test(eStr)) {
+    if (cls.kind === 'cash') {
       importedF += F;
-      const kind = eStr.slice(-3).toUpperCase() as 'NRE' | 'NRO';
+      const kind = cls.accountKind;
       const ownerName = group.owner;
-      const thirdPartyAcct = group.kind === 'person' && group.holder;
+      const thirdPartyAcct = cls.heldByOther && group.holder;
       const label = B || 'Cash';
       if (thirdPartyAcct) {
         const ownerK = ownerKey(defaultOwner);
@@ -647,10 +577,9 @@ export async function planWorkbook(
     }
 
     // R3: Singapore balances
-    if (/^Cash SG$/i.test(eStr)) {
+    if (cls.kind === 'cash_sg') {
       importedF += F;
-      const sgd = /Bal\s*:\s*\$\s*([\d,]+(?:\.\d+)?)/i.exec(Nraw);
-      const base = /\$\s*1\s*=\s*Rs\.?\s*([\d.]+)/i.exec(Nraw);
+      const { sgd, base } = foreignNoteIn(Nraw);
       const ownerK = ownerKey(group.owner ?? defaultOwner);
       if (!group.owner)
         ex(
@@ -673,9 +602,9 @@ export async function planWorkbook(
         ...rowNotes(N, M),
         sourceRef: cell('B'),
       });
-      if (sgd && base) {
-        const amount = Number(sgd[1]!.replace(/,/g, ''));
-        const rate = Number(base[1]);
+      if (sgd !== null && base !== null) {
+        const amount = sgd;
+        const rate = base;
         if (Math.abs(amount * rate - F) > 1)
           ex(
             'fx_mismatch',
@@ -706,13 +635,12 @@ export async function planWorkbook(
     }
 
     // R4: Mutual funds / ULIP
-    if (/^SIP/i.test(eStr)) {
+    if (cls.kind === 'fund') {
       importedF += F;
       const holder = group.owner ?? defaultOwner;
       const holderK = ownerKey(holder);
-      const stopped = /\(STOPPED\)/i.test(B);
-      const name = B.replace(/\(STOPPED\)/i, '').trim();
-      const isUlip = /wealth smart plus/i.test(name);
+      const { stopped, name, isUlip } = cls;
+      const eStr = str(E); // the goal tag
       const key = `${isUlip ? 'ulip' : 'mf'}:${r}`;
       const sip = /(\d+)\s*K\s*\/\s*Month/i.exec(N);
       const nav = /NAV\s*-?\s*([\d.]+)/i.exec(N);
@@ -786,7 +714,7 @@ export async function planWorkbook(
     }
 
     // R5: Loans given
-    if (/^Cash Loan$/i.test(eStr)) {
+    if (cls.kind === 'loan') {
       importedF += F;
       const ownerK = ownerKey(defaultOwner);
       const key = `loan:${r}`;
@@ -884,7 +812,7 @@ export async function planWorkbook(
     }
 
     // R6: Third-party-held / trading positions
-    if (/^(Shares|Options & Future)$/i.test(eStr)) {
+    if (cls.kind === 'third_party') {
       importedF += F;
       const ownerK = ownerKey(defaultOwner);
       const holder = group.holder ?? B;
@@ -927,7 +855,7 @@ export async function planWorkbook(
     }
 
     // R7: memo rows
-    if (/^Papa$/i.test(B)) {
+    if (cls.kind === 'memo') {
       ex(
         'memo_ignored',
         'info',
