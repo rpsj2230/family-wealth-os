@@ -1,138 +1,120 @@
-import { ListingTools } from '@/components/ListingTools';
-import { formatInr } from '@fwos/core';
+import Link from 'next/link';
+import type { AccountChoice, InboxEntry, InboxReading, SkipGroup } from '@fwos/core';
+import { PageHead } from '@/components/PageHead';
+import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
-import { applyReading, dismissMessage } from './actions';
+import { INBOX_TABS, InboxBoard, type InboxTab } from './Board';
 
 export const dynamic = 'force-dynamic';
 
-interface Reading {
-  bank: string;
-  last4: string | null;
-  amount: number;
-  currency: string;
-  asOf: string;
-  source: 'rule' | 'ai';
-}
+const FILTERS = ['all', 'notbalance', 'older', 'dismissed', 'problem'] as const;
 
-export default async function InboxPage() {
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; f?: string }>;
+}) {
+  const sp = await searchParams;
+  const tab: InboxTab = (INBOX_TABS as readonly string[]).includes(sp.tab ?? '')
+    ? (sp.tab as InboxTab)
+    : 'review';
+  const filter = ((FILTERS as readonly string[]).includes(sp.f ?? '') ? sp.f : 'all') as
+    SkipGroup | 'all';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [review, done, accounts, cfg] = await Promise.all([
+  const iso = new Date().toISOString().slice(0, 10);
+
+  const [msgs, assets, insts, owners, cfg, auto] = await Promise.all([
     supabase
       .from('inbox_messages')
-      .select('id, received_on, from_domain, subject, reason, reading, asset_id')
-      .eq('outcome', 'needs_review')
-      .is('resolved_at', null)
+      .select(
+        'id, message_id, received_on, from_domain, subject, outcome, reason, reading, asset_id, resolved_at',
+      )
       .order('created_at', { ascending: false })
-      .limit(50),
-    supabase
-      .from('inbox_messages')
-      .select('id, received_on, from_domain, subject, outcome, reason, reading')
-      .in('outcome', ['applied', 'error'])
-      .order('created_at', { ascending: false })
-      .limit(15),
+      .limit(300),
     supabase
       .from('assets')
-      .select('id, nickname, currency, identifier_last4')
+      .select('id, nickname, currency, identifier_last4, institution_id, owner_id, account_kind')
       .in('type', ['bank_account', 'third_party_held'])
       .order('nickname'),
-    supabase.from('integration_settings').select('ai_key_set').maybeSingle(),
+    supabase.from('institutions').select('id, name'),
+    supabase.from('owners').select('id, display_name'),
+    supabase.from('integration_settings').select('ai_key_set, inbox_label').maybeSingle(),
+    loadAutomation(supabase, iso),
   ]);
-  const fmt = (r: Reading) =>
-    `${r.currency === 'INR' ? formatInr(r.amount) : `${r.currency} ${r.amount.toLocaleString('en-IN')}`} on ${r.asOf}${r.last4 ? ` · account ending ${r.last4}` : ''} · ${r.source === 'ai' ? 'read by AI' : 'read by rule'}`;
+
+  // a message you applied is recognised by the balance it left behind
+  const resolvedIds = (msgs.data ?? [])
+    .filter((m) => m.outcome === 'needs_review' && m.resolved_at && m.reading)
+    .map((m) => m.message_id as string);
+  const recordedBy = new Set<string>();
+  if (resolvedIds.length > 0) {
+    const { data: obs } = await supabase
+      .from('observations')
+      .select('source_ref')
+      .eq('source', 'email')
+      .in(
+        'source_ref',
+        resolvedIds.map((x) => x.slice(0, 200)),
+      );
+    for (const o of obs ?? []) recordedBy.add(o.source_ref as string);
+  }
+
+  const bank = new Map((insts.data ?? []).map((i) => [i.id as string, i.name as string]));
+  const who = new Map((owners.data ?? []).map((o) => [o.id as string, o.display_name as string]));
+  const accounts: AccountChoice[] = (assets.data ?? []).map((a) => {
+    const b = bank.get(a.institution_id as string) ?? '';
+    const last4 = (a.identifier_last4 as string | null) ?? null;
+    return {
+      id: a.id as string,
+      currency: a.currency as string,
+      last4,
+      bank: b,
+      label: `${b ? `${b} · ` : ''}${a.nickname as string}${a.account_kind ? ` ${a.account_kind as string}` : ''}${last4 ? ` …${last4}` : ''} (${who.get(a.owner_id as string) ?? '?'})`,
+    };
+  });
+  const entries: InboxEntry[] = (msgs.data ?? []).map((m) => ({
+    id: m.id as string,
+    receivedOn: (m.received_on as string | null) ?? null,
+    fromDomain: (m.from_domain as string | null) ?? null,
+    subject: (m.subject as string | null) ?? null,
+    outcome: m.outcome as InboxEntry['outcome'],
+    reason: (m.reason as string | null) ?? null,
+    reading: (m.reading as InboxReading | null) ?? null,
+    assetId: (m.asset_id as string | null) ?? null,
+    resolvedAt: (m.resolved_at as string | null) ?? null,
+    recordedByYou: recordedBy.has((m.message_id as string).slice(0, 200)),
+  }));
+  const settings = cfg.data as { ai_key_set?: boolean; inbox_label?: string } | null;
+  const emailCard = auto.cards.find((c) => c.key === 'email');
 
   return (
     <>
-      <h1>Bank email inbox</h1>
-      <ListingTools
-        name="inbox"
-        listCols={[
-          { key: 'date', label: 'Date' },
-          { key: 'from', label: 'From' },
-          { key: 'outcome', label: 'Outcome' },
+      <PageHead
+        title="Bank emails"
+        subtitle="Forward bank alerts and statements to your Gmail label. Safe ones are recorded by themselves; anything uncertain waits here for you."
+        pills={[
+          auto.inboxWaiting > 0
+            ? { label: `${auto.inboxWaiting} to review`, tone: 'warn' }
+            : { label: 'Nothing to review', tone: 'ok' },
+          ...(emailCard ? [{ label: `Reader: ${emailCard.status}`, tone: emailCard.tone }] : []),
         ]}
-      >
-        <p className="muted">
-          Forward bank emails to the Gmail label you set up. Balance alerts from a bank&apos;s own
-          address are recorded automatically. Anything uncertain waits here for you.
-          {!(cfg.data as { ai_key_set?: boolean } | null)?.ai_key_set && (
-            <> Statements (PDF) need an AI key; add one in Settings.</>
-          )}
-        </p>
-
-        <section className="card">
-          <h2>Needs your decision ({(review.data ?? []).length})</h2>
-          {(review.data ?? []).length === 0 && <p className="muted">Nothing waiting.</p>}
-          {(review.data ?? []).map((m) => {
-            const r = m.reading as Reading | null;
-            return (
-              <div className="card" key={m.id as string}>
-                <h3>{(m.subject as string) || '(no subject)'}</h3>
-                <p className="muted small">
-                  From {m.from_domain as string} · {m.received_on as string} · {m.reason as string}
-                </p>
-                {r ? (
-                  <>
-                    <p>{fmt(r)}</p>
-                    <form action={applyReading} className="form row">
-                      <input type="hidden" name="id" value={m.id as string} />
-                      <select
-                        name="asset"
-                        defaultValue={(m.asset_id as string | null) ?? ''}
-                        required
-                        aria-label="Record this balance on"
-                      >
-                        <option value="" disabled>
-                          Choose the account
-                        </option>
-                        {(accounts.data ?? [])
-                          .filter((a) => a.currency === r.currency)
-                          .map((a) => (
-                            <option key={a.id as string} value={a.id as string}>
-                              {a.nickname as string}
-                              {a.identifier_last4 ? ` (…${a.identifier_last4 as string})` : ''}
-                            </option>
-                          ))}
-                      </select>
-                      <button className="btn">Record this balance</button>
-                    </form>
-                  </>
-                ) : (
-                  <p className="muted small">No balance could be read from this message.</p>
-                )}
-                <form action={dismissMessage}>
-                  <input type="hidden" name="id" value={m.id as string} />
-                  <button className="btn compact ghost">Dismiss</button>
-                </form>
-              </div>
-            );
-          })}
-        </section>
-
-        <section className="card">
-          <h2>Recently handled</h2>
-          {(done.data ?? []).length === 0 ? (
-            <p className="muted">Nothing yet.</p>
-          ) : (
-            <ul className="list small">
-              {(done.data ?? []).map((m) => (
-                <li
-                  key={m.id as string}
-                  data-item
-                  data-f-date={m.received_on as string}
-                  data-f-from={m.from_domain as string}
-                  data-f-outcome={m.outcome as string}
-                >
-                  {m.received_on as string} · {m.from_domain as string} ·{' '}
-                  {m.outcome === 'applied' && m.reading
-                    ? `recorded ${fmt(m.reading as Reading)}`
-                    : `error: ${(m.reason as string) ?? ''}`}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </ListingTools>
+        actions={
+          <Link className="btn" href="/monthly">
+            Monthly update
+          </Link>
+        }
+      />
+      <InboxBoard
+        base="/inbox"
+        tab={tab}
+        filter={filter}
+        entries={entries}
+        accounts={accounts}
+        automation={auto.cards}
+        label={settings?.inbox_label ?? 'FWOS/Inbox'}
+        aiKeySet={!!settings?.ai_key_set}
+      />
     </>
   );
 }

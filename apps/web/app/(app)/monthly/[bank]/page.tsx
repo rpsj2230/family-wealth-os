@@ -1,5 +1,8 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { buildBankBlocks, personStyles } from '@fwos/core';
+import { buildBankBlocks, personStyles, standings } from '@fwos/core';
+import { BankBadge } from '@/components/BankBadge';
+import { PageHead } from '@/components/PageHead';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
@@ -22,6 +25,7 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
         .limit(20),
     ],
   );
+  const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const names = Object.fromEntries(
     (inst.data ?? []).map((i) => [i.id as string, i.name as string]),
@@ -39,18 +43,29 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
   const fxHint: Record<string, number> = {};
   for (const r of fx.data ?? [])
     if (!((r.currency as string) in fxHint)) fxHint[r.currency as string] = Number(r.inr_per_unit);
+  const st = standings(blocks, iso)[0]!;
   return (
     <>
       <p className="small">
-        <a href="/monthly">← All banks</a>
+        <Link href="/monthly">← All banks</Link>
       </p>
-      <h1>{blocks[0]!.name}</h1>
+      <PageHead
+        title={blocks[0]!.name}
+        subtitle="Monthly update for this bank only."
+        pills={[
+          st.state === 'current'
+            ? { label: 'Up to date this month', tone: 'ok' }
+            : { label: `${st.waiting + st.depositsToConfirm} waiting`, tone: 'warn' },
+        ]}
+        actions={<BankBadge name={blocks[0]!.name} size={36} />}
+      />
       <UpdateGrid
         blocks={blocks}
         styles={styles}
-        today={today.toISOString().slice(0, 10)}
+        today={iso}
         fxHint={fxHint}
         institutions
+        summary={false}
       />
     </>
   );

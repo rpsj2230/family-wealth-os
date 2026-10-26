@@ -1,4 +1,4 @@
-import type { Freshness } from '@fwos/core';
+import type { Freshness, SourceTag } from '@fwos/core';
 
 export interface GridRow {
   id: string;
@@ -17,6 +17,8 @@ export interface GridRow {
   interestRate: number | null;
   tdsRate: number | null;
   status: string;
+  /** how the latest value arrived (email, you, statement, sheet) */
+  origin?: SourceTag;
   fd?: { principal: number; rate: number; maturityOn: string };
 }
 

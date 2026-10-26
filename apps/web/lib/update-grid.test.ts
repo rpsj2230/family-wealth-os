@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildGridChanges, type GridRowInfo } from './update-grid';
+import {
+  buildGridChanges,
+  carryForward,
+  changeHint,
+  spreadPaste,
+  type GridRowInfo,
+} from './update-grid';
 
 const cash: GridRowInfo = {
   id: 'c1',
@@ -96,5 +102,81 @@ describe('buildGridChanges', () => {
     expect(buildGridChanges([fd], { f1: { fdRate: '45' } }, T, T, {}).errors.f1).toContain(
       'between 0 and 30',
     );
+  });
+});
+
+describe('carryForward ("nothing changed")', () => {
+  const rows = [
+    { id: 'a', kind: 'cash' as const, status: 'active', recorded: 1000.5 },
+    { id: 'b', kind: 'cash' as const, status: 'active', recorded: null },
+    { id: 'c', kind: 'cash' as const, status: 'closed', recorded: 5 },
+    { id: 'd', kind: 'fd' as const, status: 'active', recorded: 7 },
+    { id: 'e', kind: 'held' as const, status: 'active', recorded: 20 },
+  ];
+  it('fills only lines that take a typed value and have an earlier balance', () => {
+    const r = carryForward(rows, {});
+    expect(r.filled).toBe(2);
+    expect(r.edits).toEqual({ a: { amount: '1000.5' }, e: { amount: '20' } });
+  });
+  it('keeps what was already typed and can be limited to one bank', () => {
+    const r = carryForward(rows, { a: { amount: '999' } }, new Set(['a', 'e']));
+    expect(r.edits.a!.amount).toBe('999');
+    expect(r.edits.e!.amount).toBe('20');
+    expect(r.filled).toBe(1);
+    expect(carryForward(rows, {}, new Set(['e'])).edits.a).toBeUndefined();
+  });
+  it('turns into changes dated by the chosen date', () => {
+    const r = carryForward(rows, {});
+    const info: GridRowInfo = { ...cash, id: 'a' };
+    const out = buildGridChanges([info], r.edits, '2026-10-20', '2026-10-26', {});
+    expect(out.changes).toEqual([{ assetId: 'a', amount: 1000.5, asOf: '2026-10-20' }]);
+  });
+});
+
+describe('spreadPaste (a column from Excel)', () => {
+  const boxes = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  it('drops one value per box from the box pasted into', () => {
+    expect(spreadPaste('10\n20\n', boxes, 'b', {})).toEqual({
+      b: { amount: '10' },
+      c: { amount: '20' },
+    });
+  });
+  it('uses the first column and skips a blank line in the middle', () => {
+    expect(spreadPaste('1,000\tx\n\n3', boxes, 'a', {})).toEqual({
+      a: { amount: '1,000' },
+      c: { amount: '3' },
+    });
+  });
+  it('leaves a single value to paste normally and ignores overflow', () => {
+    expect(spreadPaste('5', boxes, 'a', {})).toBeNull();
+    expect(spreadPaste('1\n2\n3\n4', boxes, 'c', {})).toEqual({ c: { amount: '1' } });
+    expect(spreadPaste('1\n2', boxes, 'zzz', {})).toBeNull();
+  });
+});
+
+describe('changeHint', () => {
+  it('says how far a typed balance is from the last one', () => {
+    expect(changeHint(10000, '10000')).toEqual({ text: 'Same as last', warn: false });
+    expect(changeHint(10000, '10,320')).toEqual({
+      text: '+\u20b9320 (3.2%) since last',
+      warn: false,
+    });
+    expect(changeHint(10000, '8000')).toEqual({
+      text: '\u2212\u20b92,000 (20%) since last',
+      warn: false,
+    });
+  });
+  it('flags a likely typing slip', () => {
+    expect(changeHint(10000, '1000000')?.warn).toBe(true);
+    expect(changeHint(10000, '500')?.warn).toBe(true);
+  });
+  it('stays quiet without a number or an earlier balance', () => {
+    expect(changeHint(null, '5')).toBeNull();
+    expect(changeHint(100, '')).toBeNull();
+    expect(changeHint(100, 'abc')).toBeNull();
+    expect(changeHint(0, '5')).toBeNull();
+  });
+  it('names a foreign currency', () => {
+    expect(changeHint(1000, '1100', 'SGD')?.text).toBe('+SGD 100 (10%) since last');
   });
 });

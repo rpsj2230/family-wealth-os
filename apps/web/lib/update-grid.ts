@@ -84,3 +84,104 @@ export function buildGridChanges(
   }
   return { changes, errors };
 }
+
+export interface CarryRow {
+  id: string;
+  kind: 'cash' | 'fd' | 'held';
+  status: string;
+  /** the last recorded balance, in the account's own currency */
+  recorded: number | null;
+}
+
+/**
+ * "Nothing changed": fills the new-balance box of each typed line with its last recorded balance, so saving dates it today.
+ * Lines that already have something typed, deposits (valued from their terms), closed lines and lines with no earlier
+ * balance are left alone.
+ */
+export function carryForward(
+  rows: CarryRow[],
+  edits: Record<string, GridEdit>,
+  only?: ReadonlySet<string>,
+): { edits: Record<string, GridEdit>; filled: number } {
+  const next = { ...edits };
+  let filled = 0;
+  for (const r of rows) {
+    if (only && !only.has(r.id)) continue;
+    if (r.kind === 'fd' || r.status === 'closed' || r.status === 'stopped') continue;
+    if (r.recorded === null) continue;
+    if ((next[r.id]?.amount ?? '').trim() !== '') continue;
+    next[r.id] = { ...next[r.id], amount: String(r.recorded) };
+    filled++;
+  }
+  return { edits: next, filled };
+}
+
+export interface PasteTarget {
+  id: string;
+}
+
+/**
+ * A column pasted from Excel or a bank app: one value per line, dropping into the boxes from the one pasted into.
+ * Blank lines at the end are ignored; a blank line in the middle skips that box. Only the first column is used.
+ * Returns null when it is a single value (which should paste normally).
+ */
+export function spreadPaste(
+  text: string,
+  boxes: PasteTarget[],
+  startId: string,
+  edits: Record<string, GridEdit>,
+): Record<string, GridEdit> | null {
+  const cells = text
+    .split(/\r?\n/)
+    .map((x) => x.split('\t')[0]!.trim())
+    .filter((x, i, a) => x !== '' || i < a.length - 1);
+  if (cells.length <= 1) return null;
+  const start = boxes.findIndex((b) => b.id === startId);
+  if (start < 0) return null;
+  const next = { ...edits };
+  cells.forEach((v, k) => {
+    const box = boxes[start + k];
+    if (box && v !== '') next[box.id] = { ...next[box.id], amount: v };
+  });
+  return next;
+}
+
+/** A typed balance this many times bigger or smaller than the last one is flagged as a likely typing slip (the bank-email reader uses the same range). */
+export const TYPO_RATIO = 10;
+
+export interface ChangeHint {
+  text: string;
+  warn: boolean;
+}
+
+const plain = (n: number, currency: string) =>
+  `${currency === 'INR' ? '\u20b9' : `${currency} `}${Math.round(Math.abs(n)).toLocaleString('en-IN')}`;
+
+/** What a typed balance means against the last one: "+\u20b91,200 (3.2%) since last", or a warning when it is very far off. */
+export function changeHint(
+  recorded: number | null,
+  typed: string | undefined,
+  currency = 'INR',
+): ChangeHint | null {
+  if (recorded === null || recorded <= 0 || typed === undefined || typed.trim() === '') return null;
+  const v = parseAmount(typed);
+  if (v === null || v < 0) return null;
+  if (v === recorded) return { text: 'Same as last', warn: false };
+  const ratio = v / recorded;
+  if (ratio >= TYPO_RATIO)
+    return {
+      text: `About ${Math.round(ratio)} times the last balance. Check the digits.`,
+      warn: true,
+    };
+  if (ratio <= 1 / TYPO_RATIO)
+    return {
+      text: `Less than a tenth of the last balance (${plain(recorded, currency)}). Check the digits.`,
+      warn: true,
+    };
+  const diff = v - recorded;
+  const pct = Math.abs(diff / recorded) * 100;
+  return {
+    text: `${diff < 0 ? '\u2212' : '+'}${plain(diff, currency)} (${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%) since last`,
+    warn: false,
+  };
+}
