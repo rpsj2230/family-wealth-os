@@ -51,9 +51,9 @@ export const MENU: MenuGroup[] = [
         icon: Landmark,
       },
       {
-        href: '/funds',
-        label: 'Mutual funds',
-        hint: 'Units, values and the match to each official fund.',
+        href: '/investments?tab=match',
+        label: 'Match funds',
+        hint: 'Link each fund to its official scheme so its value follows the live price.',
         icon: TrendingUp,
       },
       {

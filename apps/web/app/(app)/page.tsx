@@ -554,7 +554,7 @@ export default async function Dashboard({
           <div className="card span2">
             <div className="row" style={{ alignItems: 'baseline' }}>
               <h2 style={{ marginRight: 'auto' }}>Mutual funds</h2>
-              <Link href="/investments/update">Update funds</Link>
+              <Link href="/investments?tab=update">Update funds</Link>
               <Link href="/investments">All funds and goals</Link>
             </div>
             <InvestHeadline t={inv.household} big />

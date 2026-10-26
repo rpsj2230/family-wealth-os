@@ -48,7 +48,7 @@ export default async function MonthlyPage({
               Type the new value next to a line and press Save all. Leave a line empty to keep it as
               it is. Old values stay as history. You can paste a column from Excel into the first
               box. Mutual funds follow their published price by themselves; the units and purchases
-              are on <Link href="/investments/update">Update funds</Link>.
+              are on <Link href="/investments?tab=update">Update funds</Link>.
             </p>
             <MonthlyGrid rows={rows} today={today} />
           </>
