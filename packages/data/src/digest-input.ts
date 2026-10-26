@@ -4,7 +4,10 @@ import {
   buildPlan,
   earliestRetirementAge,
   holdingsFromAssets,
+  formatInr,
+  harvestPlanSummary,
   maturityAlerts,
+  planHarvest,
   overdueMaturities,
   receivableStatus,
   settingsFromJson,
@@ -15,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
 import { loadSettings } from './settings';
 import { loadRatesContext } from './rates';
+import { loadHarvestPositions } from './harvest';
 
 const STATUS_TEXT = {
   meets_plan: 'projected to meet the plan under your assumptions',
@@ -148,6 +152,64 @@ export async function buildDigestInput(
     }
   }
 
+  // tax: the harvest deadline and what is still to be claimed back
+  let taxIdeas: string[] = [];
+  try {
+    const st = await loadSettings(db, opts.householdId);
+    const hv = await loadHarvestPositions(db, {
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
+      today,
+    });
+    const plan = planHarvest(hv.positions, opts.date, {
+      rules: st.rules,
+      config: st.config.harvest,
+      ytdRealised: hv.ytdRealised,
+    });
+    taxIdeas = harvestPlanSummary(plan, opts.date, hv.ownerName);
+    const rf = await scoped(
+      'tds_refunds',
+      'owner_id, fy, kind, expected_refund, refund_received, status',
+    );
+    const open = (
+      (rf.data ?? []) as unknown as {
+        expected_refund: number;
+        refund_received: number | null;
+        status: string;
+      }[]
+    ).filter((r) => r.status !== 'received');
+    const sum = open.reduce((a, r) => a + Number(r.expected_refund), 0);
+    if (sum > 0)
+      taxIdeas.push(
+        `Tax refunds still to claim or receive: about ${formatInr(Math.round(sum))} (see Tax in the app).`,
+      );
+  } catch {
+    // tax lines are optional; the summary goes out without them
+  }
+
+  // on the first of the month: how the month went
+  let monthly: DigestInput['monthly'] = null;
+  if (opts.date.slice(8) === '01') {
+    const d = new Date(`${opts.date}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    const since = d.toISOString().slice(0, 10);
+    const old = (
+      await scoped('snapshots', 'taken_on, total, by_owner')
+        .lte('taken_on', since)
+        .order('taken_on', { ascending: false })
+        .limit(1)
+    ).data as unknown as
+      { taken_on: string; total: number; by_owner: Record<string, number> }[] | null;
+    if (old?.[0])
+      monthly = {
+        since: old[0].taken_on,
+        change: Math.round(portfolio.netWorth.total - Number(old[0].total)),
+        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
+          name: ownerName.get(id) ?? 'Unknown',
+          change: Math.round(v - Number(old[0]!.by_owner?.[id] ?? 0)),
+        })),
+      };
+  }
+
   let rateIdeas: string[] = [];
   try {
     const rc = await loadRatesContext(db, {
@@ -202,6 +264,8 @@ export async function buildDigestInput(
     retirement,
     reminders: { policyDays: cfg.reminders.policyDays, taskDays: cfg.reminders.taskDays },
     rateIdeas,
+    taxIdeas,
+    monthly,
     appUrl: opts.appUrl,
   };
 }

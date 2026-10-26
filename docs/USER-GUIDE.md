@@ -95,3 +95,10 @@ first, includes funds with a running SIP, and counts long-term gains you have al
 
 Settings → Emergency information: the read-only family login can open the handbook always, only after nobody from the household has signed
 in for a number of days, or only when you release it. Release or lock it again with one button. Members always have access.
+
+## Returns, capital gains and the summary
+
+- **Investments** shows the annual return (XIRR) per fund, per person and for the household from the imported fund statements, and a chart of money put in over time. Funds without a statement are not counted, and the page says how many are.
+- **Tax filing papers** lists every fund sale of the year, short and long term, with the estimated tax, and downloads the schedule 112A rows per person. Compare the column order with the portal's current template before uploading. Units bought before 1 February 2018 need the 31 January 2018 value per unit, which the file leaves blank. Each person's FD interest can be compared with the tax shown in Form 26AS.
+- **Lent, policies, property** also shows property, NPS, ULIP and foreign-currency balances with the exchange rate used.
+- The daily summary now also carries the tax-harvest deadline and amounts, refunds still to claim, and on the first of each month a month-in-review line per person.

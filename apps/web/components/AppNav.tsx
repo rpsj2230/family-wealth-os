@@ -54,7 +54,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: 'More',
     items: [
-      { href: '/others', label: 'Money lent, policies', icon: HandCoins },
+      { href: '/others', label: 'Lent, policies, property', icon: HandCoins },
       { href: '/inbox', label: 'Bank email inbox', icon: Inbox },
       { href: '/emergency', label: 'Family emergency guide', icon: ShieldAlert },
       { href: '/import', label: 'Import workbook', icon: Upload },

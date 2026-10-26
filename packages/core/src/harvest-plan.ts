@@ -288,3 +288,22 @@ export function harvestDueOn(
   const due = `${endYear}-${String(remind.month).padStart(2, '0')}-${String(remind.day).padStart(2, '0')}`;
   return due < today ? today : due;
 }
+
+/** One or two plain sentences for the daily summary: how long is left and what to sell, per person. */
+export function harvestPlanSummary(
+  plan: HarvestPlan,
+  today: string,
+  ownerName: Map<string, string>,
+): string[] {
+  if (plan.status !== 'ok') return [];
+  const left = Math.round(
+    (Date.parse(`${plan.deadline}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
+  );
+  const rupees = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+  return plan.plans
+    .filter((p) => p.picks.length > 0)
+    .map(
+      (p) =>
+        `Tax harvest for ${ownerName.get(p.ownerId) ?? 'a family member'}: ${left} days left in ${plan.fy}; sell about ${rupees(p.totalProceeds)} of funds (${rupees(p.totalGain)} tax-free gain) and buy back; about ${rupees(p.refundExpected)} withheld tax comes back when you file.`,
+    );
+}

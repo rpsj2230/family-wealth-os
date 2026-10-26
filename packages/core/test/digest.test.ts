@@ -190,3 +190,33 @@ describe('buildDigest', () => {
     expect(g.text).toContain('not a guarantee');
   });
 });
+
+describe('tax lines and the monthly review', () => {
+  it('lists tax ideas and shows how the month went on the first', () => {
+    const g = buildDigest(
+      base({
+        taxIdeas: [
+          'Tax harvest for Rupash: 100 days left.',
+          'Tax refunds still to claim: about ₹30,000.',
+        ],
+        monthly: {
+          since: '2026-09-30',
+          change: 125_000,
+          byPerson: [
+            { name: 'Rupash', change: 100_000 },
+            { name: 'Ragini', change: 25_000 },
+          ],
+        },
+      }),
+    );
+    expect(g.text).toContain('Tax harvest for Rupash: 100 days left.');
+    expect(g.text).toContain('Tax refunds still to claim');
+    expect(g.text).toContain('Month in review');
+    expect(g.text).toContain('Ragini');
+    expect(g.whatsapp.length).toBeGreaterThan(0);
+  });
+  it('says nothing extra when there is nothing to say', () => {
+    const g = buildDigest(base());
+    expect(g.text).not.toContain('Month in review');
+  });
+});

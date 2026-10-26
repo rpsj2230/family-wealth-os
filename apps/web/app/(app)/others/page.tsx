@@ -1,4 +1,6 @@
-import { formatInr, receivableStatus } from '@fwos/core';
+import { formatInr, personStyles, receivableStatus } from '@fwos/core';
+import { PersonBadge } from '@/components/Person';
+import { loadPortfolio } from '@/lib/portfolio-data';
 import { loadContext } from '@/lib/data';
 import { addLoan, recordRepayment, setExpectedDate, updatePolicy } from './actions';
 
@@ -7,21 +9,53 @@ export const dynamic = 'force-dynamic';
 export default async function OthersPage() {
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [recv, pays, pol, ins, owners] = await Promise.all([
-    supabase
-      .from('receivables')
-      .select('asset_id, counterparty, lent, lent_on, expected_on')
-      .order('counterparty'),
-    supabase.from('receivable_payments').select('asset_id, amount, paid_on').order('paid_on'),
-    supabase
-      .from('policies')
-      .select(
-        'id, kind, insurer, coverage_text, paid_by, renewal_on, expires_on, nominee_note, documents_note',
-      )
-      .order('kind'),
-    supabase.from('policy_insured').select('policy_id, owner_id'),
-    supabase.from('owners').select('id, display_name'),
-  ]);
+  const [{ assetRows, obsRows, portfolio, marketDates }, recv, pays, pol, ins, owners] =
+    await Promise.all([
+      loadPortfolio(supabase),
+      supabase
+        .from('receivables')
+        .select('asset_id, counterparty, lent, lent_on, expected_on')
+        .order('counterparty'),
+      supabase.from('receivable_payments').select('asset_id, amount, paid_on').order('paid_on'),
+      supabase
+        .from('policies')
+        .select(
+          'id, kind, insurer, coverage_text, paid_by, renewal_on, expires_on, nominee_note, documents_note',
+        )
+        .order('kind'),
+      supabase.from('policy_insured').select('policy_id, owner_id'),
+      supabase.from('owners').select('id, display_name'),
+    ]);
+  const styles = personStyles(
+    (owners.data ?? []).map((o) => ({ id: o.id as string, name: o.display_name as string })),
+  );
+  const OTHER_LABEL: Record<string, string> = {
+    property: 'Property',
+    nps: 'NPS',
+    ulip: 'ULIP and pension plans',
+    third_party_held: 'Held by someone else',
+    other: 'Other',
+  };
+  const value = new Map(
+    portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? null]),
+  );
+  const latest = new Map<
+    string,
+    { as_of: string; amount: number; currency: string; fx_rate: number | null }
+  >();
+  for (const o of obsRows)
+    if (!o.superseded_by) {
+      const cur = latest.get(o.asset_id);
+      if (!cur || o.as_of > cur.as_of)
+        latest.set(o.asset_id, {
+          as_of: o.as_of,
+          amount: o.amount,
+          currency: o.currency,
+          fx_rate: o.fx_rate,
+        });
+    }
+  const otherHoldings = assetRows.filter((a) => a.type in OTHER_LABEL && a.status === 'active');
+  const foreign = assetRows.filter((a) => a.currency !== 'INR' && a.status === 'active');
   const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
   const todayIso = today.toISOString().slice(0, 10);
   const who = new Map((owners.data ?? []).map((o) => [o.id as string, o.display_name as string]));
@@ -34,7 +68,99 @@ export default async function OthersPage() {
 
   return (
     <>
-      <h1>Money lent and policies</h1>
+      <h1>Lent, policies, property and foreign money</h1>
+
+      <section className="card" aria-labelledby="oth">
+        <h2 id="oth">Property, NPS, ULIP and other holdings</h2>
+        <p className="muted small">
+          Values come from your monthly update. Property and retirement accounts are counted in net
+          worth but not as money you can spend; the &ldquo;I need money&rdquo; page treats property
+          as a last resort.
+        </p>
+        {otherHoldings.length === 0 ? (
+          <p className="muted">Nothing recorded.</p>
+        ) : (
+          <table className="tbl lines responsive">
+            <thead>
+              <tr>
+                <th>Holding</th>
+                <th>Kind</th>
+                <th className="num">Value</th>
+                <th>As of</th>
+              </tr>
+            </thead>
+            <tbody>
+              {otherHoldings
+                .sort((a, b) => (value.get(b.id) ?? 0) - (value.get(a.id) ?? 0))
+                .map((a) => (
+                  <tr key={a.id}>
+                    <td data-label="Holding">
+                      <PersonBadge p={styles[a.owner_id]} size={16} /> {a.label ?? a.nickname}
+                      {a.notes ? <div className="muted small">{a.notes}</div> : null}
+                    </td>
+                    <td data-label="Kind">{OTHER_LABEL[a.type]}</td>
+                    <td className="num" data-label="Value">
+                      {value.get(a.id) === null || value.get(a.id) === undefined
+                        ? '–'
+                        : formatInr(value.get(a.id)!)}
+                    </td>
+                    <td data-label="As of">{latest.get(a.id)?.as_of ?? '–'}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="fx">
+        <h2 id="fx">Foreign-currency balances</h2>
+        {foreign.length === 0 ? (
+          <p className="muted">No foreign-currency accounts.</p>
+        ) : (
+          <>
+            <table className="tbl lines responsive">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th className="num">Balance</th>
+                  <th className="num">Rate used</th>
+                  <th className="num">In rupees today</th>
+                </tr>
+              </thead>
+              <tbody>
+                {foreign.map((a) => {
+                  const o = latest.get(a.id);
+                  const live = marketDates.fx[a.currency];
+                  return (
+                    <tr key={a.id}>
+                      <td data-label="Account">
+                        <PersonBadge p={styles[a.owner_id]} size={16} /> {a.label ?? a.nickname}
+                      </td>
+                      <td className="num" data-label="Balance">
+                        {o ? `${a.currency} ${o.amount.toLocaleString('en-IN')}` : '–'}
+                        {o ? <div className="muted small">as of {o.as_of}</div> : null}
+                      </td>
+                      <td className="num" data-label="Rate used">
+                        {live ? `₹${live.rate.toFixed(3)}` : '–'}
+                        {live ? <div className="muted small">{live.date}</div> : null}
+                      </td>
+                      <td className="num" data-label="In rupees today">
+                        {value.get(a.id) === null || value.get(a.id) === undefined
+                          ? '–'
+                          : formatInr(value.get(a.id)!)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="muted small">
+              The exchange rate is refreshed every day from a public source; a change in the rate
+              moves the rupee value but not the balance.
+            </p>
+          </>
+        )}
+      </section>
 
       <section className="card" aria-labelledby="rec">
         <h2 id="rec">Money lent to others</h2>

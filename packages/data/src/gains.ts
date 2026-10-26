@@ -1,0 +1,100 @@
+import { fyBounds, type RealisedRow } from '@fwos/core';
+import { fifoLots, type CasTxn } from '@fwos/ingest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+/** Every sale of fund units in a financial year, matched to the purchases it used (oldest first), from the fund statements. */
+export async function loadRealisedGains(
+  db: SupabaseClient,
+  fy: string,
+  householdId?: string,
+): Promise<{ rows: RealisedRow[]; ownerNames: Record<string, string>; funds: number }> {
+  const { start, end } = fyBounds(fy);
+  const sel = (table: string, cols: string) => {
+    const q = db.from(table).select(cols);
+    return householdId ? q.eq('household_id', householdId) : q;
+  };
+  const [tx, pos, assets, owners] = await Promise.all([
+    sel('mf_transactions', 'asset_id, txn_on, kind, amount, units, nav, balance_units, description')
+      .order('txn_on', { ascending: true })
+      .limit(50000),
+    sel('mf_positions', 'asset_id, fund_name, invested, isin'),
+    sel('assets', 'id, owner_id').eq('type', 'mutual_fund'),
+    sel('owners', 'id, display_name'),
+  ]);
+  const posOf = new Map(
+    (
+      (pos.data ?? []) as unknown as {
+        asset_id: string;
+        fund_name: string;
+        invested: number | null;
+        isin: string | null;
+      }[]
+    ).map((p) => [p.asset_id, p]),
+  );
+  const ownerOf = new Map(
+    ((assets.data ?? []) as unknown as { id: string; owner_id: string }[]).map((a) => [
+      a.id,
+      a.owner_id,
+    ]),
+  );
+  const byAsset = new Map<string, CasTxn[]>();
+  for (const t of (tx.data ?? []) as unknown as {
+    asset_id: string;
+    txn_on: string;
+    kind: CasTxn['kind'];
+    amount: number;
+    units: number;
+    nav: number | null;
+    balance_units: number | null;
+    description: string | null;
+  }[])
+    byAsset.set(t.asset_id, [
+      ...(byAsset.get(t.asset_id) ?? []),
+      {
+        date: t.txn_on,
+        kind: t.kind,
+        description: t.description ?? '',
+        amount: Number(t.amount),
+        units: Number(t.units),
+        nav: t.nav === null ? null : Number(t.nav),
+        balance: t.balance_units === null ? null : Number(t.balance_units),
+      },
+    ]);
+  const rows: RealisedRow[] = [];
+  for (const [assetId, txns] of byAsset) {
+    const owner = ownerOf.get(assetId);
+    const p = posOf.get(assetId);
+    if (!owner || !p) continue;
+    const first = txns[0]!;
+    const last = txns[txns.length - 1]!;
+    const res = fifoLots({
+      transactions: txns,
+      openingUnits: first.balance !== null ? Math.max(0, first.balance - first.units) : 0,
+      closingUnits: last.balance,
+      costValue: Number(p.invested ?? 0) || null,
+    });
+    for (const x of res.realised)
+      if (x.soldOn >= start && x.soldOn <= end)
+        rows.push({
+          ownerId: owner,
+          fund: p.fund_name,
+          isin: p.isin,
+          soldOn: x.soldOn,
+          // units from before the statement have no known date or cost
+          acquiredOn: x.acquiredOn === '1900-01-01' ? '1900-01-01' : x.acquiredOn,
+          units: x.units,
+          proceeds: x.proceeds,
+          cost: x.cost,
+        });
+  }
+  return {
+    rows,
+    funds: byAsset.size,
+    ownerNames: Object.fromEntries(
+      ((owners.data ?? []) as unknown as { id: string; display_name: string }[]).map((o) => [
+        o.id,
+        o.display_name,
+      ]),
+    ),
+  };
+}

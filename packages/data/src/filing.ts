@@ -19,10 +19,10 @@ export async function loadFdsForFiling(
     return householdId ? q.eq('household_id', householdId) : q;
   };
   const [assets, fds, inst, owners] = await Promise.all([
-    sel('assets', 'id, owner_id, institution_id, nickname, account_kind, type'),
+    sel('assets', 'id, owner_id, institution_id, nickname, account_kind, type, is_joint'),
     sel('fixed_deposits', 'asset_id, principal, rate, booked_on, maturity_on, compounding'),
     sel('institutions', 'id, name'),
-    sel('owners', 'id, display_name'),
+    sel('owners', 'id, display_name, plan_role'),
   ]);
   const bank = new Map(
     ((inst.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [i.id, i.name]),
@@ -30,25 +30,36 @@ export async function loadFdsForFiling(
   const asset = new Map(
     ((assets.data ?? []) as unknown as Record<string, unknown>[]).map((a) => [a.id as string, a]),
   );
+  // a joint deposit's interest is shared equally between its holders: the owner on record and the other adult
+  const adults = ((owners.data ?? []) as unknown as { id: string; plan_role: string | null }[])
+    .filter((o) => o.plan_role === 'primary' || o.plan_role === 'spouse')
+    .map((o) => o.id);
   const out: FdForFiling[] = [];
   for (const f of (fds.data ?? []) as unknown as Record<string, unknown>[]) {
     const a = asset.get(f.asset_id as string);
     if (!a) continue;
     const k = a.account_kind as string | null;
-    out.push({
-      id: f.asset_id as string,
-      ownerId: a.owner_id as string,
-      bank: a.institution_id
-        ? (bank.get(a.institution_id as string) ?? 'Unknown bank')
-        : 'Unknown bank',
-      nickname: a.nickname as string,
-      kind: k === 'NRE' || k === 'NRO' ? k : k === 'joint' ? 'joint' : 'unknown',
-      principal: Number(f.principal),
-      rate: Number(f.rate),
-      bookedOn: f.booked_on as string,
-      maturityOn: f.maturity_on as string,
-      compounding: f.compounding as FdForFiling['compounding'],
-    });
+    const holders = a.is_joint
+      ? [...new Set([a.owner_id as string, ...adults])]
+          .filter((id) => id === a.owner_id || adults.includes(id))
+          .slice(0, 2)
+      : [a.owner_id as string];
+    const share = holders.length > 1 ? holders.length : 1;
+    for (const holder of holders)
+      out.push({
+        id: share > 1 ? `${f.asset_id as string}:${holder}` : (f.asset_id as string),
+        ownerId: holder,
+        bank: a.institution_id
+          ? (bank.get(a.institution_id as string) ?? 'Unknown bank')
+          : 'Unknown bank',
+        nickname: a.nickname as string,
+        kind: k === 'NRE' || k === 'NRO' ? k : k === 'joint' ? 'joint' : 'unknown',
+        principal: Number(f.principal) / share,
+        rate: Number(f.rate),
+        bookedOn: f.booked_on as string,
+        maturityOn: f.maturity_on as string,
+        compounding: f.compounding as FdForFiling['compounding'],
+      });
   }
   return {
     fds: out,

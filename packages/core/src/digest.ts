@@ -32,6 +32,10 @@ export interface DigestInput {
   reminders?: { policyDays: number; taskDays: number };
   /** better interest rates found elsewhere, already worded; from the rate comparison */
   rateIdeas?: string[];
+  /** tax matters already worded: harvest deadline and amounts, refunds still to claim */
+  taxIdeas?: string[];
+  /** on the first day of a month: how wealth moved since the same day last month, in total and per person */
+  monthly?: { since: string; change: number; byPerson: { name: string; change: number }[] } | null;
 }
 
 export interface Digest {
@@ -69,6 +73,14 @@ export function buildDigest(i: DigestInput): Digest {
   } else {
     lines.push('This is the first report, so there is nothing to compare with yet.');
   }
+  if (i.monthly)
+    lines.push(
+      `Month in review (since ${niceDate(i.monthly.since)}): ${signed(i.monthly.change)}${
+        i.monthly.byPerson.length
+          ? `; ${i.monthly.byPerson.map((p) => `${p.name} ${signed(p.change)}`).join(' · ')}`
+          : ''
+      }. Mostly interest and market movement unless you added savings.`,
+    );
   const people = Object.entries(nw.byOwner)
     .sort((a, b) => b[1] - a[1])
     .map(([id, v]) => `${i.ownerNames[id] ?? 'Unknown'} ${formatInrCompact(v)}`);
@@ -123,6 +135,7 @@ export function buildDigest(i: DigestInput): Digest {
     );
   }
   for (const idea of (i.rateIdeas ?? []).slice(0, 2)) bullets.push(`Better rate: ${idea}`);
+  for (const t of (i.taxIdeas ?? []).slice(0, 3)) bullets.push(t);
   const policyReminders = (a.policyDates ?? [])
     .map((p) => ({ ...p, daysLeft: daysBetween(i.date, p.on) }))
     .filter((p) => p.daysLeft <= (i.reminders?.policyDays ?? DEFAULT_CONFIG.reminders.policyDays))

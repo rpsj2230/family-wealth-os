@@ -170,3 +170,4 @@ export * from './handbook';
 export * from './liquidity';
 export * from './filing';
 export * from './cas';
+export * from './gains';

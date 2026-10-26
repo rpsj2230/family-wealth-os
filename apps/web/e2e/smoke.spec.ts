@@ -22,6 +22,7 @@ test('every private page redirects to login', async ({ request }) => {
     '/tasks',
     '/emergency',
     '/raise',
+    '/tax/filing',
     '/more',
   ]) {
     const res = await request.get(path, { maxRedirects: 0 });
@@ -40,7 +41,7 @@ test('login explains when the database is not connected and disables sign-in', a
 });
 
 test('the filing and refund CSVs need a sign-in', async ({ request }) => {
-  for (const path of ['/tax/filing/csv', '/tax/refunds/csv']) {
+  for (const path of ['/tax/filing/csv', '/tax/refunds/csv', '/tax/filing/gains']) {
     const res = await request.get(path, { maxRedirects: 0 });
     expect([307, 308, 401]).toContain(res.status());
   }
