@@ -14,6 +14,7 @@ import {
   parseRatesResponse,
   planSync,
   rateDocsFor,
+  aiErrorHint,
   resolveWorkingModel,
   type AiProvider,
   type CorrectionReason,
@@ -176,7 +177,7 @@ async function main() {
         if (!res.ok) {
           const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
           throw new Error(
-            `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}`,
+            `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}${aiErrorHint(ai.ai_provider, res.status, body) ? ` — ${aiErrorHint(ai.ai_provider, res.status, body)}` : ''}`,
           );
         }
         const read = parseRatesResponse(ai.ai_provider, await res.json(), bankName);

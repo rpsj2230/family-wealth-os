@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   modelsRequest,
   pickModel,
+  aiErrorHint,
   rankModels,
   resolveModel,
   resolveWorkingModel,
@@ -128,5 +129,25 @@ describe('a listed model that cannot be called', () => {
         ? { ok: true, status: 200, json: async () => list }
         : { ok: false, status: 404, json: async () => ({}) };
     expect(await resolveWorkingModel(none, 'gemini', 'K')).toBeNull();
+  });
+});
+
+describe('aiErrorHint', () => {
+  it('explains a Gemini project without a free tier and says what to do', () => {
+    const h = aiErrorHint(
+      'gemini',
+      403,
+      'The Gemini API free tier is not available for this project',
+    );
+    expect(h).toContain('no free tier');
+    expect(h).toContain('Groq');
+  });
+  it('says what a refused key, a retired model and a used-up quota mean', () => {
+    expect(aiErrorHint('groq', 401, '')).toContain('refused');
+    expect(aiErrorHint('gemini', 404, 'no longer available to new users')).toContain(
+      'no longer offered',
+    );
+    expect(aiErrorHint('groq', 429, '')).toContain('quota');
+    expect(aiErrorHint('groq', 500, '')).toBeNull();
   });
 });

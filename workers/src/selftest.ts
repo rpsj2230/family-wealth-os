@@ -57,14 +57,15 @@ async function checkAi(): Promise<void> {
     s.ai_api_key,
   );
   if (!model) {
-    for (const p of await probeModels(
+    const probes = await probeModels(
       (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(30_000) }),
       s.ai_provider,
       s.ai_api_key,
-    ))
-      console.log(`INFO  ${p.model} answered ${p.status} ${p.note}`);
+    );
+    for (const p of probes) console.log(`INFO  ${p.model} answered ${p.status} ${p.note}`);
+    const first = probes.find((p) => p.status !== 404) ?? probes[0];
     bad(
-      'No model answered with this key (the provider listed models but none could be called). Check that the key is current, belongs to the chosen provider and has quota left.',
+      `No model answered with this key. ${first ? (aiErrorHint(s.ai_provider, first.status, first.note) ?? '') : ''}`.trim(),
     );
     return;
   }

@@ -186,3 +186,19 @@ export async function probeModels(
   }
   return out;
 }
+
+/** The reason an AI service refused, in plain words and with the way out; null when there is nothing more to add. */
+export function aiErrorHint(provider: AiProvider, status: number, body: string): string | null {
+  const b = body.toLowerCase();
+  if (status === 403 && /free tier|billing/.test(b))
+    return provider === 'gemini'
+      ? 'This Gemini key belongs to a Google project that has no free tier. Create a new key in Google AI Studio (aistudio.google.com, "Create API key" in a new project), or use a free Groq key (console.groq.com), and save it in Settings > Bank emails and AI.'
+      : 'This key has no free access. Create a new free key and save it in Settings > Bank emails and AI.';
+  if (status === 401 || status === 403)
+    return 'The key was refused. Check it is current and belongs to the provider chosen in Settings.';
+  if (status === 404 && /no longer available|not found/.test(b))
+    return 'That model is no longer offered to this key; the job tries the others by itself.';
+  if (status === 429)
+    return 'The free quota is used up for now; it resets by itself (usually within a minute or a day).';
+  return null;
+}

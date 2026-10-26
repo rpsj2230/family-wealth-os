@@ -9,6 +9,7 @@ import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
 import {
+  aiErrorHint,
   resolveWorkingModel,
   runInbox,
   type InboxIo,
@@ -264,7 +265,8 @@ async function main() {
       const res = await fetch(url, init);
       if (!res.ok) {
         const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-        throw new Error(`AI service answered ${res.status}: ${body}`);
+        const hint = ai ? aiErrorHint(ai.provider, res.status, body) : null;
+        throw new Error(`AI service answered ${res.status}: ${body}${hint ? ` — ${hint}` : ''}`);
       }
       return res.json();
     },
