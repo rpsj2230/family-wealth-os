@@ -20,6 +20,7 @@ import {
 import {
   addHolding,
   addLoan,
+  setLoanKind,
   addPolicy,
   recordHoldingValue,
   recordRepayment,
@@ -70,11 +71,13 @@ export default async function OthersPage({
   const policyDays = settings.config.reminders.policyDays;
 
   const ownerOf = new Map(assetRows.map((a) => [a.id, a.owner_id]));
+  const giftIds = new Set(assetRows.filter((a) => a.status === 'gifted').map((a) => a.id));
   const loans = loanLines(
     (recv.data ?? []).map((r) => ({
       assetId: r.asset_id as string,
       counterparty: r.counterparty as string,
       ownerId: ownerOf.get(r.asset_id as string) ?? null,
+      gift: giftIds.has(r.asset_id as string),
       lent: Number(r.lent),
       lentOn: (r.lent_on as string | null) ?? null,
       expectedOn: (r.expected_on as string | null) ?? null,
@@ -164,7 +167,7 @@ export default async function OthersPage({
             people={people}
             styles={styles}
             today={todayIso}
-            actions={{ addLoan, recordRepayment, setExpectedDate }}
+            actions={{ addLoan, recordRepayment, setExpectedDate, setLoanKind }}
           />
         </ListingTools>
       )}

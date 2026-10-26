@@ -97,6 +97,7 @@ export async function buildDigestInput(
       expected_on: string | null;
     }[]
   )
+    .filter((r) => status.get(r.asset_id) !== 'gifted')
     .map((r) => ({
       name: r.counterparty,
       s: receivableStatus(

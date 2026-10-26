@@ -65,6 +65,7 @@ export async function addLoan(_prev: Result | null, f: FormData): Promise<Result
   const lent = parseAmount(text(f, 'lent', 30));
   const lentOn = text(f, 'lent_on', 10);
   const expected = text(f, 'expected', 10);
+  const gift = text(f, 'kind', 10) === 'gift';
   if (!uuid.test(owner)) return { ok: false, message: 'Choose who lent the money.' };
   if (!who) return { ok: false, message: 'Enter the name of the person or firm it was lent to.' };
   if (lent === null) return { ok: false, message: 'Enter the amount lent, for example 2,00,000.' };
@@ -80,7 +81,9 @@ export async function addLoan(_prev: Result | null, f: FormData): Promise<Result
       household_id: householdId,
       type: 'receivable',
       owner_id: owner,
-      nickname: `Loan to ${who}`,
+      nickname: `${gift ? 'Gift to' : 'Loan to'} ${who}`,
+      // a gift is kept for the record but is not wealth: the status keeps it out of every total
+      status: gift ? 'gifted' : 'active',
     })
     .select('id')
     .single();
@@ -95,7 +98,7 @@ export async function addLoan(_prev: Result | null, f: FormData): Promise<Result
     counterparty: who,
     lent,
     lent_on: lentOn || null,
-    expected_on: expected || null,
+    expected_on: gift ? null : expected || null,
   });
   // do not leave an orphan asset behind if the second insert is refused
   if (e2) {
@@ -103,7 +106,36 @@ export async function addLoan(_prev: Result | null, f: FormData): Promise<Result
     return { ok: false, message: 'That could not be added; nothing was saved.' };
   }
   refresh();
-  return { ok: true, message: `Loan to ${who} added.` };
+  return {
+    ok: true,
+    message: gift
+      ? `Gift to ${who} recorded. It is not counted anywhere.`
+      : `Loan to ${who} added.`,
+  };
+}
+
+/** Turns a recorded loan into a gift (not counted, never chased) or back into a loan that counts again. */
+export async function setLoanKind(_prev: Result | null, f: FormData): Promise<Result> {
+  const asset = text(f, 'asset', 40);
+  const gift = text(f, 'kind', 10) === 'gift';
+  if (!uuid.test(asset)) return { ok: false, message: 'Choose the loan.' };
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const { data, error } = await supabase
+    .from('assets')
+    .update({ status: gift ? 'gifted' : 'active' })
+    .eq('id', asset)
+    .eq('household_id', householdId)
+    .eq('type', 'receivable')
+    .select('id');
+  if (error || !data?.length) return { ok: false, message: 'That could not be saved.' };
+  refresh();
+  return {
+    ok: true,
+    message: gift
+      ? 'Marked as a gift: it is no longer counted or chased.'
+      : 'Counted as a loan again.',
+  };
 }
 
 /** Quick update of the dates, nominee and documents of a policy. */

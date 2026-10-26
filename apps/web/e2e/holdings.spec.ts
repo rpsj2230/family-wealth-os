@@ -131,11 +131,13 @@ test.describe('Lent, policies, property (public sample)', () => {
     ).toBeVisible();
     await expect(page.getByRole('region', { name: /at a glance/ })).toContainText('Owed to you');
     await expect(page.getByText(/days? overdue/).first()).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Loans' }).getByRole('listitem')).toHaveCount(3);
-    await page.getByText('Add a loan').click();
+    await expect(page.getByRole('list', { name: 'Loans' }).getByRole('listitem')).toHaveCount(4);
+    // a gift is kept for the record and says it is not counted
+    await expect(page.getByText('gift · not counted')).toBeVisible();
+    await page.getByText('Add a loan or a gift').click();
     await page.getByLabel('Lent to').fill('Someone');
     await page.getByLabel('Amount (₹)').fill('1,00,000');
-    await page.getByRole('button', { name: 'Add loan' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'nothing is saved' })).toBeVisible();
     await noSideways(page);
   });

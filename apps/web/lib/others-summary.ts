@@ -16,12 +16,14 @@ export interface LoanInput {
   lentOn: string | null;
   expectedOn: string | null;
   repayments: { amount: number; on: string }[];
+  /** given away and not expected back: shown for the record, never counted or chased */
+  gift?: boolean;
 }
 
 export interface LoanLine extends LoanInput {
   repaid: number;
   outstanding: number;
-  status: 'outstanding' | 'overdue' | 'settled' | 'overpaid';
+  status: 'outstanding' | 'overdue' | 'settled' | 'overpaid' | 'gift';
   daysOverdue: number;
   /** days until the expected date (negative when it has passed); null when no date is set */
   daysToExpected: number | null;
@@ -47,14 +49,15 @@ export function loanLines(loans: LoanInput[], today: string): LoanLine[] {
       return {
         ...l,
         repaid: s.repaid,
-        outstanding: s.outstanding,
-        status: s.status,
-        daysOverdue: s.daysOverdue,
-        daysToExpected: l.expectedOn ? daysBetweenIso(today, l.expectedOn) : null,
+        outstanding: l.gift ? l.lent : s.outstanding,
+        status: l.gift ? 'gift' : s.status,
+        daysOverdue: l.gift ? 0 : s.daysOverdue,
+        daysToExpected: l.expectedOn && !l.gift ? daysBetweenIso(today, l.expectedOn) : null,
       } satisfies LoanLine;
     })
     .sort((a, b) => {
-      const open = (x: LoanLine) => (x.status === 'settled' || x.status === 'overpaid' ? 1 : 0);
+      const open = (x: LoanLine) =>
+        x.status === 'gift' ? 2 : x.status === 'settled' || x.status === 'overpaid' ? 1 : 0;
       return open(a) - open(b) || b.outstanding - a.outstanding;
     });
 }
@@ -69,6 +72,8 @@ export function loanTotals(lines: LoanLine[]) {
       .filter((l) => l.status === 'overdue')
       .reduce((s, l) => s + l.outstanding, 0),
     settledCount: lines.filter((l) => l.status === 'settled').length,
+    giftCount: lines.filter((l) => l.status === 'gift').length,
+    giftAmount: lines.filter((l) => l.status === 'gift').reduce((s, l) => s + l.lent, 0),
   };
 }
 

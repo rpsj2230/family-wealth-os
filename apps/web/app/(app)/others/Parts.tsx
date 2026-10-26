@@ -22,6 +22,7 @@ export interface OthersActions {
   addLoan: Act;
   recordRepayment: Act;
   setExpectedDate: Act;
+  setLoanKind: Act;
   addPolicy: Act;
   updatePolicy: Act;
   addHolding: Act;
@@ -120,17 +121,26 @@ export function LoansTab({
   people: Person[];
   styles: Record<string, PersonStyle>;
   today: string;
-  actions: Pick<OthersActions, 'addLoan' | 'recordRepayment' | 'setExpectedDate'>;
+  actions: Pick<OthersActions, 'addLoan' | 'recordRepayment' | 'setExpectedDate' | 'setLoanKind'>;
 }) {
   return (
     <>
       <p className="lead muted">
         The amount owed is always the amount lent minus the repayments you record. It is not counted
-        as cash.
+        as cash. Money you gave away and do not expect back can be recorded as a{' '}
+        <strong>gift</strong>: it is kept here for the record and never counted in your net worth,
+        totals or reminders.
       </p>
       <details className="card addbox" open={loans.length === 0}>
-        <summary>Add a loan</summary>
-        <ActionForm action={actions.addLoan} submit="Add loan" primary>
+        <summary>Add a loan or a gift</summary>
+        <ActionForm action={actions.addLoan} submit="Save" primary>
+          <label>
+            What is it
+            <select name="kind" defaultValue="loan">
+              <option value="loan">Loan (comes back, counted)</option>
+              <option value="gift">Gift (will not come back, not counted)</option>
+            </select>
+          </label>
           <label>
             Lent by
             <select name="owner" required defaultValue={people[0]?.id}>
@@ -178,7 +188,7 @@ export function LoansTab({
               data-f-expected={l.expectedOn ?? ''}
               data-f-status={l.status}
               className={`pickcard ${l.status === 'overdue' ? 'attention' : ''} ${
-                l.status === 'settled' ? 'settled' : ''
+                l.status === 'settled' || l.status === 'gift' ? 'settled' : ''
               }`}
             >
               <div className="cardhead">
@@ -190,11 +200,13 @@ export function LoansTab({
               <p>
                 <span className="figure">{rupee(l.outstanding)}</span>{' '}
                 <span className="muted small">
-                  {l.status === 'settled'
-                    ? 'settled'
-                    : l.status === 'overpaid'
-                      ? 'repaid in full and more'
-                      : 'still owed'}
+                  {l.status === 'gift'
+                    ? 'gift · not counted'
+                    : l.status === 'settled'
+                      ? 'settled'
+                      : l.status === 'overpaid'
+                        ? 'repaid in full and more'
+                        : 'still owed'}
                 </span>
               </p>
               {l.status === 'overdue' && (
@@ -203,26 +215,30 @@ export function LoansTab({
                 </p>
               )}
               <dl>
-                <dt>Lent</dt>
+                <dt>{l.status === 'gift' ? 'Given' : 'Lent'}</dt>
                 <dd>
                   {rupee(l.lent)}
                   {l.lentOn ? ` · ${niceDate(l.lentOn)}` : ''}
                 </dd>
-                <dt>Repaid</dt>
-                <dd>{rupee(l.repaid)}</dd>
-                <dt>Expected back</dt>
-                <dd>
-                  {l.expectedOn ? (
-                    <>
-                      {niceDate(l.expectedOn)}
-                      {l.status === 'outstanding' && l.daysToExpected !== null && (
-                        <span className="muted small"> · {daysPhrase(l.daysToExpected)}</span>
+                {l.status !== 'gift' && (
+                  <>
+                    <dt>Repaid</dt>
+                    <dd>{rupee(l.repaid)}</dd>
+                    <dt>Expected back</dt>
+                    <dd>
+                      {l.expectedOn ? (
+                        <>
+                          {niceDate(l.expectedOn)}
+                          {l.status === 'outstanding' && l.daysToExpected !== null && (
+                            <span className="muted small"> · {daysPhrase(l.daysToExpected)}</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="muted">no date set</span>
                       )}
-                    </>
-                  ) : (
-                    <span className="muted">no date set</span>
-                  )}
-                </dd>
+                    </dd>
+                  </>
+                )}
               </dl>
               {l.repayments.length > 0 && (
                 <details className="disclose">
@@ -236,27 +252,51 @@ export function LoansTab({
                   </ul>
                 </details>
               )}
-              <details className="disclose">
-                <summary>Record a repayment or change the date</summary>
-                <ActionForm action={actions.recordRepayment} submit="Record repayment">
+              {l.status === 'gift' ? (
+                <ActionForm
+                  action={actions.setLoanKind}
+                  submit="Count it as a loan again"
+                  keepAfterSave
+                >
                   <input type="hidden" name="asset" value={l.assetId} />
-                  <label>
-                    Amount received (₹)
-                    <input name="amount" inputMode="decimal" required />
-                  </label>
-                  <label>
-                    Date received
-                    <input name="on" type="date" max={today} defaultValue={today} required />
-                  </label>
+                  <input type="hidden" name="kind" value="loan" />
                 </ActionForm>
-                <ActionForm action={actions.setExpectedDate} submit="Save date" keepAfterSave>
-                  <input type="hidden" name="asset" value={l.assetId} />
-                  <label>
-                    Expected back by
-                    <input name="on" type="date" defaultValue={l.expectedOn ?? ''} />
-                  </label>
-                </ActionForm>
-              </details>
+              ) : (
+                <>
+                  <details className="disclose">
+                    <summary>Record a repayment or change the date</summary>
+                    <ActionForm action={actions.recordRepayment} submit="Record repayment">
+                      <input type="hidden" name="asset" value={l.assetId} />
+                      <label>
+                        Amount received (₹)
+                        <input name="amount" inputMode="decimal" required />
+                      </label>
+                      <label>
+                        Date received
+                        <input name="on" type="date" max={today} defaultValue={today} required />
+                      </label>
+                    </ActionForm>
+                    <ActionForm action={actions.setExpectedDate} submit="Save date" keepAfterSave>
+                      <input type="hidden" name="asset" value={l.assetId} />
+                      <label>
+                        Expected back by
+                        <input name="on" type="date" defaultValue={l.expectedOn ?? ''} />
+                      </label>
+                    </ActionForm>
+                  </details>
+                  <details className="disclose">
+                    <summary>This was a gift, not a loan</summary>
+                    <p className="muted small">
+                      It stays on this list for the record but is removed from your net worth and
+                      reminders.
+                    </p>
+                    <ActionForm action={actions.setLoanKind} submit="Mark as a gift" keepAfterSave>
+                      <input type="hidden" name="asset" value={l.assetId} />
+                      <input type="hidden" name="kind" value="gift" />
+                    </ActionForm>
+                  </details>
+                </>
+              )}
             </article>
           ))}
         </div>

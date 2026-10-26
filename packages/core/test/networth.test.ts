@@ -86,6 +86,24 @@ describe('aggregateNetWorth', () => {
     expect(r.excluded[0]!.amount).toBeGreaterThan(550_000);
   });
 
+  it('never counts money given away as a gift', () => {
+    const gift: ValuedAsset = {
+      assetId: 'gift',
+      ownerId: 'rupash',
+      type: 'receivable',
+      status: 'gifted',
+      name: 'Gift to a cousin',
+      estimate: cash('x', 'rupash', 250_000).estimate,
+    };
+    const r = aggregateNetWorth([cash('a', 'rupash', 1000), gift]);
+    expect(r.total).toBe(1000);
+    expect(r.excluded[0]).toMatchObject({
+      assetId: 'gift',
+      reason: 'status_not_counted',
+      amount: 250_000,
+    });
+  });
+
   it('reports missing valuations instead of treating them as zero', () => {
     const r = aggregateNetWorth([{ ...cash('x', 'rupash', 0), estimate: null }]);
     expect(r.total).toBe(0);

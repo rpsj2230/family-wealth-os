@@ -46,6 +46,29 @@ describe('loans', () => {
       overdueCount: 1,
       overdueAmount: 150_000,
       settledCount: 1,
+      giftCount: 0,
+      giftAmount: 0,
+    });
+  });
+  it('keeps a gift for the record but never counts or chases it', () => {
+    const withGift = loanLines(
+      [
+        loan('fresh', 500_000, [], '2027-01-01'),
+        { ...loan('gift', 300_000, [], '2025-01-01'), gift: true },
+      ],
+      '2026-10-26',
+    );
+    const gift = withGift.find((l) => l.assetId === 'gift')!;
+    expect(gift.status).toBe('gift'); // not overdue even though its date has passed
+    expect(gift.daysOverdue).toBe(0);
+    expect(gift.daysToExpected).toBeNull();
+    expect(withGift.map((l) => l.assetId)).toEqual(['fresh', 'gift']);
+    expect(loanTotals(withGift)).toMatchObject({
+      openCount: 1,
+      owed: 500_000,
+      overdueCount: 0,
+      giftCount: 1,
+      giftAmount: 300_000,
     });
   });
 });

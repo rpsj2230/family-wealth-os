@@ -35,6 +35,7 @@ const actions: OthersActions = {
   addLoan: sampleSave,
   recordRepayment: sampleSave,
   setExpectedDate: sampleSave,
+  setLoanKind: sampleSave,
   addPolicy: sampleSave,
   updatePolicy: sampleSave,
   addHolding: sampleSave,
@@ -43,6 +44,16 @@ const actions: OthersActions = {
 
 const LOANS = loanLines(
   [
+    {
+      assetId: 'l9',
+      counterparty: 'Sample Nephew (wedding gift)',
+      ownerId: 'p1',
+      gift: true,
+      lent: 100_000,
+      lentOn: '2025-02-10',
+      expectedOn: null,
+      repayments: [],
+    },
     {
       assetId: 'l1',
       counterparty: 'Sample Cousin',

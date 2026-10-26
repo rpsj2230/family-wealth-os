@@ -218,22 +218,25 @@ export default async function Dashboard({
   const paidBy = new Map<string, number>();
   for (const x of pays.data ?? [])
     paidBy.set(x.asset_id as string, (paidBy.get(x.asset_id as string) ?? 0) + Number(x.amount));
-  const receivables = (recv.data ?? []).map((r) => ({
-    id: r.asset_id as string,
-    name: r.counterparty as string,
-    s: receivableStatus(
-      {
-        id: r.asset_id as string,
-        lent: Number(r.lent),
-        repayments: paidBy.has(r.asset_id as string)
-          ? [{ amount: paidBy.get(r.asset_id as string)!, on: today }]
-          : [],
-        expectedOn: r.expected_on ? new Date((r.expected_on as string) + 'T00:00:00Z') : null,
-      },
-      today,
-    ),
-    expectedOn: (r.expected_on as string | null) ?? null,
-  }));
+  const gifted = new Set(assetRows.filter((a) => a.status === 'gifted').map((a) => a.id as string));
+  const receivables = (recv.data ?? [])
+    .filter((r) => !gifted.has(r.asset_id as string))
+    .map((r) => ({
+      id: r.asset_id as string,
+      name: r.counterparty as string,
+      s: receivableStatus(
+        {
+          id: r.asset_id as string,
+          lent: Number(r.lent),
+          repayments: paidBy.has(r.asset_id as string)
+            ? [{ amount: paidBy.get(r.asset_id as string)!, on: today }]
+            : [],
+          expectedOn: r.expected_on ? new Date((r.expected_on as string) + 'T00:00:00Z') : null,
+        },
+        today,
+      ),
+      expectedOn: (r.expected_on as string | null) ?? null,
+    }));
   const overdue = receivables.filter((x) => x.s.status === 'overdue');
   const events = upcomingEvents(
     [

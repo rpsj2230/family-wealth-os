@@ -33,7 +33,8 @@ export async function loadOtherRows(
       .select(
         'id, owner_id, type, status, nickname, currency, account_kind, expected_freshness_days, interest_rate, tds_rate',
       )
-      .not('type', 'in', '(bank_account,fixed_deposit,third_party_held)'),
+      .not('type', 'in', '(bank_account,fixed_deposit,third_party_held)')
+      .neq('status', 'gifted'),
     supabase
       .from('observations')
       .select(
