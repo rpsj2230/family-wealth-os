@@ -1,15 +1,11 @@
-import Link from 'next/link';
 import type { Handbook } from '@fwos/core';
 import { buildHandbookDoc } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadAccess } from '@/lib/data';
-import { PrintButton } from './PrintButton';
+import { HandbookView } from './HandbookView';
 import { refreshHandbook } from './actions';
 
 export const dynamic = 'force-dynamic';
-
-const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 
 export default async function EmergencyPage() {
   const { supabase, householdId, role } = await loadAccess();
@@ -60,84 +56,26 @@ export default async function EmergencyPage() {
         </p>
       </>
     );
-  const doc = row.content;
-
+  let accessNote: string | undefined;
+  if (isMember) {
+    const a = (
+      await supabase.from('emergency_access').select('mode, inactive_days, released').maybeSingle()
+    ).data as { mode: string; inactive_days: number; released: boolean } | null;
+    const mode = a?.mode ?? 'always';
+    accessNote =
+      mode === 'inactive'
+        ? `The read-only family login opens this after nobody from the household has signed in for ${a?.inactive_days ?? 30} days${a?.released ? ' (released by hand now)' : ''}.`
+        : mode === 'manual'
+          ? `The read-only family login opens this only when you release it. Now: ${a?.released ? 'released' : 'locked'}.`
+          : 'The read-only family login can always open this.';
+  }
   return (
-    <>
-      <div className="noprint row" style={{ alignItems: 'center' }}>
-        <h1 style={{ marginRight: 'auto' }}>{doc.title}</h1>
-        {isMember && (
-          <form action={refreshHandbook}>
-            <button className="btn compact">Update now</button>
-          </form>
-        )}
-        <PrintButton />
-      </div>
-      <p className="notice warn small">
-        {doc.disclaimer} Last updated {when(row.generated_at)}.
-      </p>
-      <nav className="chipbar small noprint" aria-label="Sections">
-        {doc.sections.map((s, i) => (
-          <a key={s.id} className="fchip" href={`#${s.id}`}>
-            {i + 1}. {s.title}
-          </a>
-        ))}
-      </nav>
-      {isMember && (
-        <p className="small noprint">
-          Missing contacts, locations or nominees? Add them in{' '}
-          <Link href="/settings#emergency">Settings &gt; Emergency information</Link>; the handbook
-          rewrites itself.
-        </p>
-      )}
-
-      {doc.sections.map((s, i) => (
-        <section className="card handbook" id={s.id} key={s.id}>
-          <h2>
-            {i + 1}. {s.title}
-          </h2>
-          {s.intro && <p className="muted">{s.intro}</p>}
-          {s.paragraphs?.map((p, k) => (
-            <p key={k}>{p}</p>
-          ))}
-          {s.steps && (
-            <ol className="steps">
-              {s.steps.map((t, k) => (
-                <li key={k}>
-                  <span className="box" aria-hidden />
-                  <span>{t}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-          {s.tables?.map((t, k) => (
-            <div key={k}>
-              {t.title && <h3>{t.title}</h3>}
-              <div className="xlwrap">
-                <table className="xl hb">
-                  <thead>
-                    <tr>
-                      {t.table.headers.map((h) => (
-                        <th key={h}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {t.table.rows.map((r, a) => (
-                      <tr key={a} className="xlrow">
-                        {r.map((c, b) => (
-                          <td key={b}>{c}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {t.table.note && <p className="muted small">{t.table.note}</p>}
-            </div>
-          ))}
-        </section>
-      ))}
-    </>
+    <HandbookView
+      doc={row.content}
+      generatedAt={row.generated_at}
+      refresh={isMember ? refreshHandbook : undefined}
+      settingsHref={isMember ? '/settings?tab=access' : undefined}
+      accessNote={accessNote}
+    />
   );
 }
