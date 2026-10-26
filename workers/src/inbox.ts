@@ -178,7 +178,11 @@ async function main() {
         await db.from('owner_pan').select('owner_id, pan').eq('household_id', hh),
         'saved PANs',
       ) as { owner_id: string; pan: string }[];
-      const candidates = pans.map((p) => ({ ownerId: p.owner_id, pan: p.pan }));
+      const candidates = pans.map((p) => ({
+        ownerId: p.owner_id,
+        passwords: [p.pan, p.pan.toLowerCase()],
+        panLast4: p.pan.slice(-4),
+      }));
       const results = [];
       for (const a of m.attachments)
         results.push(

@@ -175,8 +175,9 @@ export function CasForm({ owners }: { owners: { id: string; name: string }[] }) 
           </select>
         </label>
         <label>
-          PAN (the PDF password; used once to open the file, never saved)
-          <input name="pan" autoComplete="off" placeholder="ABCDE1234F" />
+          PDF password (the one you chose when you requested it, or your PAN; used once, never
+          saved)
+          <input name="password" type="password" autoComplete="off" required />
         </label>
       </div>
       <div className="row" style={{ alignItems: 'center' }}>

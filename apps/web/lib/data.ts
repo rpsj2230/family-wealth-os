@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from './supabase/server';
 
@@ -10,7 +11,7 @@ export interface Ctx {
 }
 
 /** Signed-in user and their household (null until a household exists). Redirects to /login otherwise. */
-export async function loadContext(): Promise<Ctx> {
+export const loadContext = cache(async function loadContext(): Promise<Ctx> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,10 +31,10 @@ export async function loadContext(): Promise<Ctx> {
     householdId: m?.household_id ?? null,
     role: m?.role ?? null,
   };
-}
+});
 
 /** The signed-in user's household and role for ANY role, including the read-only emergency viewer. */
-export async function loadAccess(): Promise<{
+export const loadAccess = cache(async function loadAccess(): Promise<{
   supabase: Ctx['supabase'];
   email: string;
   householdId: string | null;
@@ -56,4 +57,4 @@ export async function loadAccess(): Promise<{
     householdId: m?.household_id ?? null,
     role: m?.role ?? null,
   };
-}
+});

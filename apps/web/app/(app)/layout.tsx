@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { after } from 'next/server';
 import { signOut } from '../login/actions';
 import { loadAccess } from '@/lib/data';
 import { BottomNav, Sidebar } from '@/components/AppNav';
@@ -8,8 +9,13 @@ export const dynamic = 'force-dynamic';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await loadAccess();
   // lets the handbook know someone from the household is around (at most once an hour); a no-op for viewers
-  if (ctx.role !== 'emergency_viewer' && ctx.householdId)
-    await ctx.supabase.rpc('touch_member_activity', { p_household: ctx.householdId });
+  // after the page has been sent, so it never slows a page down
+  if (ctx.role !== 'emergency_viewer' && ctx.householdId) {
+    const { supabase, householdId } = ctx;
+    after(async () => {
+      await supabase.rpc('touch_member_activity', { p_household: householdId });
+    });
+  }
   if (ctx.role === 'emergency_viewer')
     return (
       <div className="viewer">

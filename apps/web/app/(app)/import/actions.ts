@@ -147,7 +147,7 @@ export interface CasState {
 }
 
 /**
- * A fund statement (CAS) uploaded by hand. The PAN typed here only opens the PDF: it is not saved and not logged.
+ * A fund statement (CAS) uploaded by hand. The password typed here only opens the PDF: it is not saved and not logged.
  * (Statements forwarded to the inbox are opened with the PAN saved in Settings, with nothing to type.)
  */
 export async function importCas(_p: CasState | null, f: FormData): Promise<CasState> {
@@ -155,9 +155,7 @@ export async function importCas(_p: CasState | null, f: FormData): Promise<CasSt
   if (!householdId) return { ok: false, message: 'Create your household first.' };
   const file = f.get('file');
   const owner = String(f.get('owner') ?? '');
-  const pan = String(f.get('pan') ?? '')
-    .trim()
-    .toUpperCase();
+  const typed = String(f.get('password') ?? '').trim();
   if (!(file instanceof File) || file.size === 0)
     return { ok: false, message: 'Choose the statement PDF first.' };
   if (!/\.pdf$/i.test(file.name))
@@ -165,8 +163,13 @@ export async function importCas(_p: CasState | null, f: FormData): Promise<CasSt
   if (file.size > MAX_BYTES) return { ok: false, message: 'That file is larger than 5 MB.' };
   if (!/^[0-9a-f-]{36}$/.test(owner))
     return { ok: false, message: 'Choose whose statement this is.' };
-  if (pan !== '' && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan))
-    return { ok: false, message: 'A PAN looks like ABCDE1234F.' };
+  if (typed.length > 60) return { ok: false, message: 'That password is too long.' };
+  const { data: o } = await supabase
+    .from('owners')
+    .select('id, pan_last4')
+    .eq('id', owner)
+    .maybeSingle();
+  if (!o) return { ok: false, message: 'Choose whose statement this is.' };
   const bytes = new Uint8Array(await file.arrayBuffer());
   const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 24);
   const today = new Date().toISOString().slice(0, 10);
@@ -175,7 +178,14 @@ export async function importCas(_p: CasState | null, f: FormData): Promise<CasSt
       supabase as unknown as SupabaseClient,
       householdId,
       bytes,
-      pan ? [{ ownerId: owner, pan }] : [],
+      [
+        {
+          ownerId: owner,
+          // as typed, then in capitals and in small letters (people differ on how they typed it when requesting)
+          passwords: [...new Set(typed ? [typed, typed.toUpperCase(), typed.toLowerCase()] : [])],
+          panLast4: (o.pan_last4 as string | null) ?? null,
+        },
+      ],
       { sourceRef: `upload:${hash}`, today },
     );
     revalidatePath('/', 'layout');

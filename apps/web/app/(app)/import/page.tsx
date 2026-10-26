@@ -22,8 +22,9 @@ export default async function ImportPage() {
         <h2>Fund statements (CAS)</h2>
         <p className="muted small">
           Forward the statement e-mail to your inbox label and it is imported by itself, opened with
-          the PAN saved in Settings. Or upload the PDF here. Either way every transaction is kept,
-          so tax-gain harvesting uses your real purchase dates and gains.
+          the PAN saved in Settings (so request the statement with your PAN as its password). Or
+          upload the PDF here and type its password. Either way every transaction is kept, so
+          tax-gain harvesting uses your real purchase dates and gains.
         </p>
         <CasForm owners={owners} />
       </section>

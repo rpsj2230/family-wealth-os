@@ -43,6 +43,8 @@ export async function loadPortfolioData(
     const q = supabase.from(table).select(cols);
     return opts.householdId ? q.eq('household_id', opts.householdId) : q;
   };
+  // settings are read in step with the first batch, not after it
+  const settingsP = loadSettings(supabase, opts.householdId);
   const [owners, assets, observations, fds, positions] = await Promise.all([
     sel('owners', 'id, display_name'),
     sel(
@@ -93,7 +95,7 @@ export async function loadPortfolioData(
   );
 
   // Public market data for what the household holds. Failure only means "no market movement shown".
-  const { config } = await loadSettings(supabase, opts.householdId);
+  const { config } = await settingsP;
   const market: PortfolioDefaults = {
     savingsRate: config.estimates.savingsRate,
     tdsRate: config.estimates.interestTdsRate,
@@ -110,6 +112,23 @@ export async function loadPortfolioData(
     const since = new Date(earliest + 'T00:00:00Z');
     since.setUTCDate(since.getUTCDate() - 10);
     const sinceIso = since.toISOString().slice(0, 10);
+    const currencies = [...new Set(assetRows.map((a) => a.currency).filter((c) => c !== 'INR'))];
+    const fx: Record<string, number> = {};
+    const fxP = Promise.all(
+      currencies.map(async (c) => {
+        const r = await supabase
+          .from('fx_rates')
+          .select('inr_per_unit, rate_date')
+          .eq('currency', c)
+          .order('rate_date', { ascending: false })
+          .limit(1);
+        const row = r.data?.[0];
+        if (row?.inr_per_unit) {
+          fx[c] = Number(row.inr_per_unit);
+          marketDates.fx[c] = { rate: Number(row.inr_per_unit), date: row.rate_date as string };
+        }
+      }),
+    );
     const navs = await Promise.all(
       codes.map(async (c) => {
         const r = await supabase
@@ -130,23 +149,7 @@ export async function loadPortfolioData(
       const d = series[series.length - 1]!.date;
       if (!marketDates.navLatest || d > marketDates.navLatest) marketDates.navLatest = d;
     }
-    const currencies = [...new Set(assetRows.map((a) => a.currency).filter((c) => c !== 'INR'))];
-    const fx: Record<string, number> = {};
-    await Promise.all(
-      currencies.map(async (c) => {
-        const r = await supabase
-          .from('fx_rates')
-          .select('inr_per_unit, rate_date')
-          .eq('currency', c)
-          .order('rate_date', { ascending: false })
-          .limit(1);
-        const row = r.data?.[0];
-        if (row?.inr_per_unit) {
-          fx[c] = Number(row.inr_per_unit);
-          marketDates.fx[c] = { rate: Number(row.inr_per_unit), date: row.rate_date as string };
-        }
-      }),
-    );
+    await fxP;
     market.fxToday = fx;
   } catch {
     // market data is optional

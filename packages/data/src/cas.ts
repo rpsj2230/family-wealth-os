@@ -214,14 +214,14 @@ export interface CasPdfResult {
 }
 
 /**
- * Opens a fund statement with each candidate PAN until one fits, checks the statement belongs to that person, and
- * imports it. Nothing about the PAN is logged or returned. The statement is logged in `cas_imports` (once per source).
+ * Opens a fund statement with each candidate's passwords (the PAN, or the password chosen when the statement was requested)
+ * until one fits, checks the statement belongs to that person, and imports it. No password or PAN is logged or returned. The statement is logged in `cas_imports` (once per source).
  */
 export async function importCasPdf(
   db: SupabaseClient,
   hh: string,
   pdf: Uint8Array,
-  candidates: { ownerId: string; pan: string }[],
+  candidates: { ownerId: string; passwords: string[]; panLast4: string | null }[],
   opts: { sourceRef: string; today: string; receivedOn?: string },
 ): Promise<CasPdfResult> {
   const done = async (res: CasPdfResult): Promise<CasPdfResult> => {
@@ -247,7 +247,7 @@ export async function importCasPdf(
   };
   let text: string | null = null;
   let owner: string | null = null;
-  let pan: string | null = null;
+  let panLast4: string | null = null;
   let lastError: unknown = null;
   // an unprotected statement opens without a password
   try {
@@ -256,15 +256,17 @@ export async function importCasPdf(
     lastError = e;
   }
   if (text === null)
-    for (const c of candidates) {
-      try {
-        text = await casPdfText(pdf, c.pan);
-        owner = c.ownerId;
-        pan = c.pan;
-        break;
-      } catch (e) {
-        lastError = e;
-        if (!isPasswordError(e)) break;
+    outer: for (const c of candidates) {
+      for (const pw of c.passwords) {
+        try {
+          text = await casPdfText(pdf, pw);
+          owner = c.ownerId;
+          panLast4 = c.panLast4;
+          break outer;
+        } catch (e) {
+          lastError = e;
+          if (!isPasswordError(e)) break outer;
+        }
       }
     }
   if (text === null)
@@ -273,15 +275,19 @@ export async function importCasPdf(
       ownerId: null,
       report: null,
       detail: isPasswordError(lastError)
-        ? 'The statement is password-protected and none of the saved PANs opened it.'
+        ? candidates.some((c) => c.passwords.length > 0)
+          ? 'The password did not open the statement. Use the password you chose when you requested it (CAMS and KFintech let you choose one; if you chose your PAN, type it in capital letters).'
+          : 'The statement is password-protected: type its password (the one you chose when requesting it, or your PAN).'
         : `The PDF could not be read (${(lastError as Error | null)?.message ?? 'unknown error'}).`,
     });
   const stmt = parseCas(text);
   if (owner === null) {
-    const hit = candidates.filter((c) => c.pan === stmt.pan);
+    const hit = candidates.filter(
+      (c) => c.panLast4 && stmt.pan && c.panLast4 === stmt.pan.slice(-4),
+    );
     if (hit.length === 1) {
       owner = hit[0]!.ownerId;
-      pan = hit[0]!.pan;
+      panLast4 = hit[0]!.panLast4;
     }
   }
   if (owner === null)
@@ -290,14 +296,15 @@ export async function importCasPdf(
       ownerId: null,
       report: null,
       detail:
-        'The statement opened without a password and its PAN does not match one saved in Settings.',
+        'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
     });
-  if (stmt.pan && pan && stmt.pan !== pan)
+  if (stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
     return done({
       outcome: 'failed',
       ownerId: owner,
       report: null,
-      detail: 'The PAN on the statement is not the one it was opened with.',
+      detail:
+        'This statement belongs to a different person than the one chosen (the PAN on it does not match).',
     });
   if (stmt.schemes.length === 0)
     return done({
