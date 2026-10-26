@@ -21,6 +21,7 @@ import {
   type KnownAccount,
 } from './bank-email';
 import { looksLikeCas } from './cas';
+import { looksLikeTaxFile } from './taxfiles';
 
 export interface InboxMessage {
   messageId: string;
@@ -61,6 +62,8 @@ export interface InboxIo {
   casImport?(
     m: InboxMessage,
   ): Promise<{ outcome: 'imported' | 'partial' | 'failed'; reason: string }>;
+  /** Imports a Form 26AS or AIS attached to the message; absent when this run cannot do it. */
+  taxImport?(m: InboxMessage): Promise<{ outcome: 'imported' | 'failed'; reason: string }>;
   /** Text of a PDF; throws if it is encrypted or unreadable. */
   pdfText(content: Uint8Array): Promise<string>;
 }
@@ -118,6 +121,17 @@ export async function runInbox(
 
       if (io.casImport && m.attachments.length > 0 && looksLikeCas(m)) {
         const res = await io.casImport(m);
+        await log({
+          outcome: res.outcome === 'imported' ? 'applied' : 'needs_review',
+          reason: res.reason.slice(0, 300) || null,
+          reading: null,
+          assetId: null,
+        });
+        continue;
+      }
+
+      if (io.taxImport && looksLikeTaxFile(m)) {
+        const res = await io.taxImport(m);
         await log({
           outcome: res.outcome === 'imported' ? 'applied' : 'needs_review',
           reason: res.reason.slice(0, 300) || null,

@@ -8,10 +8,12 @@ import {
   interestSchedule,
   summariseGains,
 } from '@fwos/core';
-import { loadRealisedGains, loadSettings } from '@fwos/data';
+import { loadRealisedGains, loadSettings, loadTaxStatements } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { loadFdsForFiling, parseRate } from '@/lib/filing';
+import { TaxFileForm } from './TaxFileForm';
+import { TaxFiles } from './TaxFiles';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +40,16 @@ export default async function FilingPage({
   const s = interestSchedule(fds, fy, today, tds);
   const owners = Object.entries(s.byOwner);
   const db = supabase as unknown as SupabaseClient;
-  const [gainsData, settings] = await Promise.all([loadRealisedGains(db, fy), loadSettings(db)]);
+  const [gainsData, settings, statements, refundRows] = await Promise.all([
+    loadRealisedGains(db, fy),
+    loadSettings(db),
+    loadTaxStatements(db, fy),
+    supabase
+      .from('tds_refunds')
+      .select('owner_id, kind, expected_tds, actual_tds')
+      .eq('fy', fy)
+      .eq('kind', 'harvest'),
+  ]);
   const rule = effectiveRules(fyBounds(fy).end, settings.rules)?.rules ?? null;
   const gains = summariseGains(
     classifyGains(gainsData.rows, rule?.equity.holdingMonthsLong ?? 12),
@@ -187,6 +198,41 @@ export default async function FilingPage({
             <li key={a}>{a}</li>
           ))}
         </ul>
+      </section>
+
+      <section className="card" id="taxfiles">
+        <h2>What the tax department holds (Form 26AS and AIS), FY {fy}</h2>
+        <p className="muted small">
+          Upload them and they are compared with your own records: tax already credited, interest
+          and fund sales reported by banks and fund houses. You can also e-mail the files to your
+          inbox label and they are read by themselves.
+        </p>
+        <TaxFileForm
+          owners={Object.entries(ownerNames).map(([id, name]) => ({ id, name }))}
+          fy={fy}
+        />
+        {[...new Set(statements.map((x) => x.ownerId))].map((ownerId) => {
+          const mine = s.byOwner[ownerId];
+          const cess = rule?.cess ?? 0.04;
+          const harvest = (refundRows.data ?? []).find((r) => r.owner_id === ownerId);
+          return (
+            <TaxFiles
+              key={ownerId}
+              name={ownerNames[ownerId] ?? 'Unknown'}
+              statements={statements.filter((x) => x.ownerId === ownerId)}
+              computed={{
+                fdInterestTaxable: mine?.taxableInterest ?? 0,
+                fdInterestNre: mine?.exemptNreInterest ?? 0,
+                interestTdsExpected:
+                  (mine?.taxableInterest ?? 0) * settings.config.rates.nroTaxRate * (1 + cess),
+                harvestTds: Number(harvest?.actual_tds ?? harvest?.expected_tds ?? 0),
+                fundSaleProceeds: gainsData.rows
+                  .filter((r) => r.ownerId === ownerId)
+                  .reduce((a, r) => a + r.proceeds, 0),
+              }}
+            />
+          );
+        })}
       </section>
 
       <section className="card" id="gains">

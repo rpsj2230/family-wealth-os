@@ -6,7 +6,7 @@ Everything below is optional or one-time. The app runs without them; each item m
 email; bank-email reader; market data; CAS (fund statement) importer; automatic harvest plan, refund tracker (harvest and NRO interest),
 rates page, "I need money" planner, family emergency handbook; repository private with a clean history.
 
-1. **Forward your fund statements (CAS) once.** Ask CAMS/KFintech (or MF Central) for a *detailed* statement, **from the first investment to today**,
+1. **Request your fund statements (CAS) once, with your PAN as the password.** Ask CAMS/KFintech (or MF Central) for a *detailed* statement, **from the first investment to today**,
    for you and for Ragini, and forward the e-mails to your `FWOS/Inbox` label. They are opened with the PAN saved in Settings and imported by
    themselves (or upload the PDF under Import). A full history is what lets harvesting use your real purchase dates.
 2. **Settings → People / Income / Tax refunds / When I need money / Emergency information**: fill in once, review the starting numbers.
@@ -15,8 +15,9 @@ rates page, "I need money" planner, family emergency handbook; repository privat
 5. **Delete the old branch `claude/phase1-docs`** on GitHub (Branches page): it still holds the early history and I cannot delete it from here.
 6. Optional: moving Supabase to Mumbai (needs a new project; say the word and I will script the move).
 
-Not built, because it needs files only the tax portal can give: reading Form 26AS and the Annual Information Statement. When you have them,
-forward them and I will add the reader.
+Form 26AS and the AIS: the reader is built (Tax filing papers; or e-mail the files to the inbox label). The department does not publish the
+file layouts, so it reads what every version has and falls back to the AI reader; the first real file will show whether anything needs
+adjusting. Fund statements: request them with **your PAN as the password** (the registrars let you choose it), see the User guide.
 
 ---
 *The sheet below is the original questionnaire from October; almost all of it has been answered and applied.*

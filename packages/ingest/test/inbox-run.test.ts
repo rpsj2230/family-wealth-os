@@ -211,3 +211,35 @@ describe('runInbox: fund statements', () => {
     expect(rows[0]!.outcome).not.toBe('applied');
   });
 });
+
+describe('runInbox: tax statements', () => {
+  const taxMsg = msg({
+    messageId: 'tax1',
+    from: 'Me <me@example.test>',
+    subject: 'Form 26AS 2025-26',
+    attachments: [{ filename: 'Form26AS.pdf', content: new Uint8Array([1]) }],
+  });
+  it('hands a 26AS or AIS to the importer', async () => {
+    const { io, rows } = fakeIo({
+      taxImport: async () => ({ outcome: 'imported', reason: 'Form 26AS for 2025-26 read' }),
+    });
+    const r = await runInbox([taxMsg], io, cfgNoAi);
+    expect(r.applied).toBe(1);
+    expect(rows[0]!.reason).toMatch(/26AS/);
+  });
+  it('sends one that could not be read to review', async () => {
+    const { io, rows } = fakeIo({
+      taxImport: async () => ({ outcome: 'failed', reason: 'wrong password' }),
+    });
+    await runInbox([taxMsg], io, cfgNoAi);
+    expect(rows[0]).toMatchObject({ outcome: 'needs_review', reason: 'wrong password' });
+  });
+  it('leaves ordinary mail alone', async () => {
+    let called = false;
+    const { io } = fakeIo({
+      taxImport: async () => ((called = true), { outcome: 'imported', reason: '' }),
+    });
+    await runInbox([msg()], io, cfgNoAi);
+    expect(called).toBe(false);
+  });
+});

@@ -9,7 +9,7 @@ import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
 import { runInbox, type InboxIo, type InboxMessage, type KnownAccount } from '@fwos/ingest';
-import { importCasPdf } from '@fwos/data';
+import { importCasPdf, importTaxFile } from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -204,6 +204,42 @@ async function main() {
         outcome: review.length > 0 ? 'partial' : 'imported',
         reason: `${n} funds updated, ${t} new transactions${review.length ? `; check: ${review.join(', ')}` : ''}`,
       };
+    },
+    async taxImport(m) {
+      const owners = must(
+        await db.from('owners').select('id, dob, pan_last4').eq('household_id', hh),
+        'people',
+      ) as { id: string; dob: string | null; pan_last4: string | null }[];
+      const pans = new Map(
+        (
+          must(
+            await db.from('owner_pan').select('owner_id, pan').eq('household_id', hh),
+            'saved PANs',
+          ) as { owner_id: string; pan: string }[]
+        ).map((p) => [p.owner_id, p.pan]),
+      );
+      let lastReason = 'no attachment could be read';
+      for (const a of m.attachments) {
+        for (const o of owners) {
+          const dob = o.dob
+            ? `${o.dob.slice(8, 10)}${o.dob.slice(5, 7)}${o.dob.slice(0, 4)}`
+            : null;
+          const pan = pans.get(o.id) ?? null;
+          const passwords = [
+            ...(dob ? [dob] : []),
+            ...(dob && pan ? [pan.toLowerCase() + dob, pan + dob] : []),
+          ];
+          const res = await importTaxFile(db, hh, { id: o.id, panLast4: o.pan_last4 }, a.content, {
+            passwords,
+            ai,
+            fetchJson: (url, init) => io.fetchJson(url, init),
+          });
+          if (res.ok) return { outcome: 'imported', reason: res.message };
+          lastReason = res.message;
+          if (!/does not match|password/i.test(res.message)) break;
+        }
+      }
+      return { outcome: 'failed', reason: lastReason };
     },
     async fetchJson(url, init) {
       const res = await fetch(url, init);
