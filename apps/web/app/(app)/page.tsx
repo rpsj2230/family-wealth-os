@@ -24,6 +24,8 @@ import { loadPortfolio } from '@/lib/portfolio-data';
 import { InvestHeadline, pct, rupees, tone } from '@/components/InvestHeadline';
 import { fundPace, loadInvestmentView } from '@/lib/investments';
 import { loadGoalSummaries } from '@/lib/goals-view';
+import { SetupChecklist } from '@/components/SetupChecklist';
+import { loadSetupStatus } from '@/lib/setup-status';
 import { buildDeposits } from '@/lib/deposits';
 import { BarList, Donut, Sparkline } from '@/components/charts';
 import { FundChart } from '@/components/FundChart';
@@ -123,7 +125,7 @@ export default async function Dashboard({
   const todayIso = today.toISOString().slice(0, 10);
   const styles = personStyles([...nameOf.entries()].map(([id, name]) => ({ id, name })));
   const nickname = new Map(assetRows.map((a) => [a.id, a.nickname]));
-  const [settings, insts, pols, openTasks, assetsFull, goalList] = await Promise.all([
+  const [settings, insts, pols, openTasks, assetsFull, goalList, setup] = await Promise.all([
     loadSettings(supabase as unknown as SupabaseClient),
     supabase.from('institutions').select('id, name'),
     supabase.from('policies').select('id, insurer, kind, renewal_on, expires_on'),
@@ -138,6 +140,7 @@ export default async function Dashboard({
         'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
       ),
     loadedP.then((l) => loadGoalSummaries(supabase, l)),
+    loadSetupStatus(supabase),
   ]);
   const bankNames = Object.fromEntries(
     (insts.data ?? []).map((i) => [i.id as string, i.name as string]),
@@ -385,6 +388,8 @@ export default async function Dashboard({
           <WhatsAppButton />
         </div>
       </div>
+
+      <SetupChecklist items={setup} compact max={4} title="Finish setting up" />
 
       <section className="kpis" aria-label="Key figures">
         <article className="kpi main">
