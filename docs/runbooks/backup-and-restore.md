@@ -66,3 +66,14 @@ The restore refuses to run if the target database already contains data, and it 
 ## How it is tested
 
 `scripts/backup/selftest.sh` (run in CI on every push) builds a sample database, dumps it, verifies the restore, encrypts, restores into an empty database and compares row counts, and checks that the tool refuses: running without a key, restoring into a non-empty database, and decrypting with the wrong key.
+
+## Restore drill
+
+`scripts/restore-drill.sh` proves the chain end to end with **invented data and a throwaway key** (nothing real, no secrets):
+it builds a database from the repo's migrations, fills it, dumps it as the nightly job does, encrypts it, restores it into an
+empty database with the real `restore.sh`, and compares **every public table** (row count and a checksum of its full content).
+It then damages and truncates a copy of the archive and checks that the restore refuses both and loads nothing.
+
+- Run it by hand: `PGUSER=… scripts/restore-drill.sh` against any Postgres you can create databases on (the same setup as `supabase/tests/run.sh`).
+- It also runs on the 5th of every month as the GitHub Action *Restore drill* (and on demand). A red run means a table no longer survives a backup and restore, usually after a migration added something the backup tooling does not handle.
+- It checks the tooling, not your actual backup file. **Your real backup can only be opened with your private key** (kept in your password manager and with Ragini); nobody else, including this app's developer, can open it. To test your own copy, restore it into an empty scratch database as described above and look at a few rows.
