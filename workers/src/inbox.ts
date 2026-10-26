@@ -287,7 +287,8 @@ async function main() {
   try {
     const lock = await client.getMailboxLock(label);
     try {
-      const since = new Date(Date.now() - 7 * 86_400_000);
+      // already handled messages are skipped, so a longer look-back is safe and catches mail labelled late
+      const since = new Date(Date.now() - Number(process.env.INBOX_DAYS || 35) * 86_400_000);
       const uids = (await client.search({ since })) || [];
       for await (const m of client.fetch(uids, { source: true, uid: true })) {
         if (!m.source) continue;

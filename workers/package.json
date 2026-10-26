@@ -9,6 +9,7 @@
     "market-data": "tsx src/market-data.ts",
     "digest": "tsx src/digest.ts",
     "inbox": "tsx src/inbox.ts",
+    "selftest": "tsx src/selftest.ts",
     "rates": "tsx src/rates.ts"
   },
   "dependencies": {
