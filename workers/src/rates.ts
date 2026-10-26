@@ -160,7 +160,14 @@ async function main() {
         const must = (r: { error: { message: string } | null }) => {
           if (r.error) throw new Error(r.error.message);
         };
-        const touch = { checked_on: today, source_url: src.url };
+        const host = (() => {
+          try {
+            return new URL(src.url as string).host;
+          } catch {
+            return 'bank page';
+          }
+        })();
+        const touch = { checked_on: today, source_url: src.url, source_note: `Read from ${host}` };
         if (plan.insert.length)
           must(
             await db.from('rate_offers').insert(

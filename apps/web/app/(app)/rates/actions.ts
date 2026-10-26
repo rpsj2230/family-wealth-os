@@ -87,7 +87,12 @@ async function setRate(
   reason: CorrectionReason | null,
   extra: Record<string, unknown> = {},
 ): Promise<boolean> {
-  const patch: Record<string, unknown> = { rate: newRate, checked_on: today(), ...extra };
+  const patch: Record<string, unknown> = {
+    rate: newRate,
+    checked_on: today(),
+    source_note: 'Edited by you',
+    ...extra,
+  };
   if (ex.source_kind === 'ai' && Math.abs(ex.rate - newRate) > 0.00005) {
     patch.source_kind = 'manual';
     patch.ai_rate = ex.rate;
@@ -193,6 +198,7 @@ export async function addRateOffer(_p: RateResult | null, f: FormData): Promise<
       conditions,
       source_kind: 'manual',
       source_url: null,
+      source_note: 'Typed in the form',
       checked_on: today(),
     });
     if (ins.error) return { ok: false, message: 'That could not be saved.' };
@@ -329,7 +335,7 @@ export async function importRateNotes(_p: RateResult | null, f: FormData): Promi
         },
         o.rate,
         'other',
-        { tenure_days: o.tenureDays },
+        { tenure_days: o.tenureDays, source_note: 'Pasted notes' },
       );
       if (!ok) return { ok: false, message: 'Some rates could not be saved.' };
       if (Math.abs(Number(ex.rate) - o.rate) > 0.00005) changed++;
@@ -348,6 +354,7 @@ export async function importRateNotes(_p: RateResult | null, f: FormData): Promi
         conditions: null,
         source_kind: 'manual',
         source_url: null,
+        source_note: 'Pasted notes',
         checked_on: today(),
       });
       if (ins.error) return { ok: false, message: 'Some rates could not be saved.' };

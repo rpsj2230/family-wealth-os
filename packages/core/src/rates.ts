@@ -30,6 +30,9 @@ export interface RateOffer {
   balanceTo?: number | null;
   /** a deposit quoted in days (800 days) keeps the exact figure; the tenure in months is its rounded value */
   tenureDays?: number | null;
+  /** where the rate came from, in words, and the page it was read from (rates read automatically) */
+  sourceNote?: string | null;
+  sourceUrl?: string | null;
 }
 
 export type RatePrefs = AppConfig['rates'];

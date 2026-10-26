@@ -31,7 +31,7 @@ export async function loadRatesContext(
     scoped('institutions', 'id, name'),
     scoped(
       'rate_offers',
-      'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days',
+      'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days, source_note, source_url',
     ).order('bank'),
     scoped('assets', 'id, joint_holder_id').not('joint_holder_id', 'is', null),
   ]);
@@ -98,6 +98,8 @@ export async function loadRatesContext(
         o.balance_from === null || o.balance_from === undefined ? null : Number(o.balance_from),
       balanceTo: o.balance_to === null || o.balance_to === undefined ? null : Number(o.balance_to),
       tenureDays: (o.tenure_days as number | null | undefined) ?? null,
+      sourceNote: (o.source_note as string | null | undefined) ?? null,
+      sourceUrl: (o.source_url as string | null | undefined) ?? null,
     }),
   );
   return {

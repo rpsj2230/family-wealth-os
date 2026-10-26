@@ -26,7 +26,13 @@ export const dynamic = 'force-dynamic';
 
 const pct = (r: number) => `${(r * 100).toFixed(2)}%`;
 const tenure = tenureText;
-const ageText = (d: number) => (d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`);
+const fmtShort = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 
 /** The notes the family keeps today; offered as the starting text of the paste box so one click loads them. */
 const NOTES_EXAMPLE = `JanaBank - Saving [2.5%-1Lk, 3.50% - 1Lk to 5Lk, 4.50% - 5Lk to 10 lk, 6.75% - 10lk to 50 lk, 7% - above 50 lk], NRE FD[8% -2 Yr]
@@ -140,7 +146,30 @@ export default async function RatesPage({
         bestSav,
         bestFd,
         newest,
-        sources: [...new Set(mine.map((o) => o.sourceKind))],
+        origins: (() => {
+          const m = new Map<
+            string,
+            { kind: 'manual' | 'ai'; note: string; url: string | null; on: string; count: number }
+          >();
+          for (const o of mine) {
+            const note =
+              o.sourceNote ?? (o.sourceKind === 'ai' ? 'Read from the bank page' : 'Typed by you');
+            const k = `${o.sourceKind}|${note}|${o.sourceUrl ?? ''}`;
+            const cur = m.get(k);
+            if (cur) {
+              cur.count++;
+              if (o.checkedOn > cur.on) cur.on = o.checkedOn;
+            } else
+              m.set(k, {
+                kind: o.sourceKind,
+                note,
+                url: o.sourceUrl ?? null,
+                on: o.checkedOn,
+                count: 1,
+              });
+          }
+          return [...m.values()].sort((a, b) => b.on.localeCompare(a.on));
+        })(),
         src: src
           ? {
               ran: (src.last_run_on as string | null) ?? null,
@@ -232,8 +261,7 @@ export default async function RatesPage({
                   <th>Savings by balance</th>
                   <th className="num">NRE FD, best</th>
                   <th>FD term</th>
-                  <th>Checked</th>
-                  <th>How</th>
+                  <th>Where the rates came from</th>
                 </tr>
               </thead>
               <tbody>
@@ -267,23 +295,38 @@ export default async function RatesPage({
                       </td>
                       <td className="num cur">{r.bestFd ? pct(r.bestFd.rate) : '–'}</td>
                       <td>{r.bestFd ? tenure(r.bestFd) : ''}</td>
-                      <td className={age !== null && age > prefs.staleDays ? 'warnText' : ''}>
-                        {age === null ? <span className="muted">never</span> : ageText(age)}
-                      </td>
                       <td className="small">
-                        {r.sources.includes('ai') && (
-                          <span className="srcchip auto">bank page</span>
-                        )}{' '}
-                        {r.sources.includes('manual') && (
-                          <span className="srcchip manual">typed</span>
-                        )}
+                        {r.origins.length === 0 && <span className="muted">no rates yet</span>}
+                        {r.origins.map((o) => (
+                          <div key={`${o.kind}${o.note}${o.url}`} className="origin">
+                            <span className={`srcchip ${o.kind === 'ai' ? 'auto' : 'manual'}`}>
+                              {o.kind === 'ai' ? 'Bank page' : 'You'}
+                            </span>{' '}
+                            {o.url ? (
+                              <a href={o.url} target="_blank" rel="noreferrer">
+                                {o.note}
+                              </a>
+                            ) : (
+                              o.note
+                            )}
+                            <span
+                              className={
+                                age !== null && age > prefs.staleDays ? 'warnText' : 'muted'
+                              }
+                            >
+                              {' '}
+                              · {fmtShort(o.on)} ({o.count} rate{o.count === 1 ? '' : 's'})
+                            </span>
+                          </div>
+                        ))}
                         {r.src ? (
                           <div className="muted">
-                            {r.src.result ? r.src.result : 'page added, not read yet'}
+                            Rate page: {r.src.result ? r.src.result : 'added, not read yet'}
                           </div>
                         ) : (
                           <div className="muted">
-                            <Link href="/settings#rates">add its rate page</Link>
+                            No rate page for this bank: <Link href="/settings#rates">add one</Link>{' '}
+                            to refresh automatically
                           </div>
                         )}
                       </td>

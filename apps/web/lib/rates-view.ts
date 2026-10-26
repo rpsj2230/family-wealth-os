@@ -6,7 +6,7 @@ export async function loadOffers(supabase: Ctx['supabase']): Promise<RateOffer[]
   const r = await supabase
     .from('rate_offers')
     .select(
-      'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days',
+      'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days, source_note, source_url',
     );
   return ((r.data ?? []) as unknown as Record<string, unknown>[]).map((o) => ({
     id: o.id as string,
@@ -22,6 +22,8 @@ export async function loadOffers(supabase: Ctx['supabase']): Promise<RateOffer[]
     balanceFrom: o.balance_from === null ? null : Number(o.balance_from),
     balanceTo: o.balance_to === null ? null : Number(o.balance_to),
     tenureDays: (o.tenure_days as number | null) ?? null,
+    sourceNote: (o.source_note as string | null) ?? null,
+    sourceUrl: (o.source_url as string | null) ?? null,
   }));
 }
 
