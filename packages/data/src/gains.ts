@@ -1,4 +1,5 @@
 import { fyBounds, type RealisedRow } from '@fwos/core';
+import { pageAll } from './paging';
 import { fifoLots, type CasTxn } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -14,9 +15,24 @@ export async function loadRealisedGains(
     return householdId ? q.eq('household_id', householdId) : q;
   };
   const [tx, pos, assets, owners] = await Promise.all([
-    sel('mf_transactions', 'asset_id, txn_on, kind, amount, units, nav, balance_units, description')
-      .order('txn_on', { ascending: true })
-      .limit(50000),
+    pageAll<{
+      asset_id: string;
+      txn_on: string;
+      kind: CasTxn['kind'];
+      amount: number;
+      units: number;
+      nav: number | null;
+      balance_units: number | null;
+      description: string | null;
+    }>((from, to) =>
+      sel(
+        'mf_transactions',
+        'asset_id, txn_on, kind, amount, units, nav, balance_units, description',
+      )
+        .order('txn_on', { ascending: true })
+        .order('id')
+        .range(from, to),
+    ),
     sel('mf_positions', 'asset_id, fund_name, invested, isin'),
     sel('assets', 'id, owner_id').eq('type', 'mutual_fund'),
     sel('owners', 'id, display_name'),
@@ -38,16 +54,7 @@ export async function loadRealisedGains(
     ]),
   );
   const byAsset = new Map<string, CasTxn[]>();
-  for (const t of (tx.data ?? []) as unknown as {
-    asset_id: string;
-    txn_on: string;
-    kind: CasTxn['kind'];
-    amount: number;
-    units: number;
-    nav: number | null;
-    balance_units: number | null;
-    description: string | null;
-  }[])
+  for (const t of tx)
     byAsset.set(t.asset_id, [
       ...(byAsset.get(t.asset_id) ?? []),
       {

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { formatInr, personStyles } from '@fwos/core';
-import { ContributionChart } from '@/components/ContributionChart';
+import { FundChart } from '@/components/FundChart';
+import { UpdatedCell } from '@/components/BankTable';
 import { GoalTag } from '@/components/GoalTag';
 import { ListingTools } from '@/components/ListingTools';
 import { PersonBadge, PersonFilter } from '@/components/Person';
@@ -46,7 +47,11 @@ export default async function InvestmentsPage({
       <section className="card hero invsummary" aria-label="All funds">
         <p className="muted small">{who ? styles[who]?.name : 'Whole household'}, mutual funds</p>
         <InvestHeadline t={view.household} big />
-        <ContributionChart points={view.series} />
+        <FundChart
+          history={view.series}
+          today={view.today}
+          caption="Value of all mutual funds against the money put in"
+        />
         {view.household.xirrEstimated && (
           <p className="muted small">
             XIRR marked (est.) uses each fund&apos;s start date and SIP until its fund statement is
@@ -88,6 +93,7 @@ export default async function InvestmentsPage({
                   <th className="num">Gain</th>
                   <th className="num">XIRR</th>
                   <th className="num">SIP</th>
+                  <th>Updated</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,6 +143,9 @@ export default async function InvestmentsPage({
                           ~
                         </span>
                       )}
+                    </td>
+                    <td className="upd" data-label="Updated">
+                      <UpdatedCell asOf={f.updatedOn} source={f.updatedSource} />
                     </td>
                     <td className="num" data-label="SIP">
                       {f.sipMonthly ? (

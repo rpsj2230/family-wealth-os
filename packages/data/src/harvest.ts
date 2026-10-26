@@ -8,6 +8,7 @@ import {
 import { fifoLots, type CasTxn } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
+import { pageAll } from './paging';
 
 /** Fund positions with today's value, for the harvest planner. Works with the user's client (RLS) or the service role. */
 export async function loadHarvestPositions(
@@ -41,13 +42,7 @@ export async function loadHarvestPositions(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
   // purchase history from imported fund statements
-  const tq = db
-    .from('mf_transactions')
-    .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description')
-    .order('txn_on', { ascending: true })
-    .limit(20000);
-  const txRows = ((await (opts.householdId ? tq.eq('household_id', opts.householdId) : tq)).data ??
-    []) as unknown as {
+  const txRows = await pageAll<{
     asset_id: string;
     txn_on: string;
     kind: CasTxn['kind'];
@@ -56,7 +51,14 @@ export async function loadHarvestPositions(
     nav: number | null;
     balance_units: number | null;
     description: string | null;
-  }[];
+  }>((from, to) => {
+    const tq = db
+      .from('mf_transactions')
+      .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description')
+      .order('txn_on', { ascending: true })
+      .order('id');
+    return (opts.householdId ? tq.eq('household_id', opts.householdId) : tq).range(from, to);
+  });
   const byAsset = new Map<string, CasTxn[]>();
   for (const t of txRows)
     byAsset.set(t.asset_id, [

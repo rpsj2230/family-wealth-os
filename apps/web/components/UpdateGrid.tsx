@@ -144,9 +144,13 @@ export function UpdateGrid({
               {b.needsYou > 0 ? (
                 <span className="pill warn">{b.needsYou} need you</span>
               ) : b.doneThisMonth ? (
-                <span className="pill ok">Updated this month</span>
+                <span className="pill ok">
+                  Updated {b.lastUpdated ? fmtDate(b.lastUpdated) : 'this month'}
+                </span>
               ) : (
-                <span className="pill">Not updated this month</span>
+                <span className="pill warn">
+                  {b.lastUpdated ? `Last updated ${fmtDate(b.lastUpdated)}` : 'Not updated yet'}
+                </span>
               )}
             </summary>
             <div className="xlwrap">

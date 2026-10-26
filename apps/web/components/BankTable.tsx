@@ -27,6 +27,28 @@ export const cleanNote = (n: string | null) =>
     .replace(/FD\s*Number\s*:\s*[^\s,]*(?:\s*,\s*[^\s,]*)*/i, '')
     .replace(/^[\s,;:-]+|[\s,;:-]+$/g, '');
 
+/** When a value was last set and by what: the email reader, you, a bank statement, a fund statement, the imported sheet or a calculation. */
+export function UpdatedCell({
+  asOf,
+  source,
+}: {
+  asOf: string | null;
+  source: { label: string; kind: 'auto' | 'manual' | 'calc' | 'import' | 'none' };
+}) {
+  const word =
+    source.kind === 'calc'
+      ? 'Calculated'
+      : source.kind === 'none'
+        ? 'No value yet'
+        : (source.label.split(',')[0] ?? source.label);
+  return (
+    <div className="updcell" title={source.label}>
+      <div className="upddate">{asOf ? fmtDate(asOf) : source.kind === 'calc' ? 'daily' : '–'}</div>
+      <span className={`srcchip ${source.kind}`}>{word}</span>
+    </div>
+  );
+}
+
 function Money({ v }: { v: number | null }) {
   return <>{v === null ? '–' : formatInr(Math.round(v))}</>;
 }
@@ -98,6 +120,9 @@ function Row({ r, soonDays }: { r: BankRow; soonDays: number }) {
         ) : (
           <Money v={r.current} />
         )}
+      </td>
+      <td className="upd">
+        <UpdatedCell asOf={r.asOf} source={r.source} />
       </td>
       <td className="notes">
         {fd?.refLast4 && <span className="chip tiny">FD no. …{fd.refLast4}</span>} {note}
@@ -172,9 +197,13 @@ export function BankTable({
                   {b.needsYou} need{b.needsYou === 1 ? 's' : ''} you
                 </span>
               ) : b.doneThisMonth ? (
-                <span className="pill ok">Updated this month</span>
+                <span className="pill ok">
+                  Updated {b.lastUpdated ? fmtDate(b.lastUpdated) : 'this month'}
+                </span>
               ) : (
-                <span className="pill">Not updated this month</span>
+                <span className="pill warn">
+                  {b.lastUpdated ? `Last updated ${fmtDate(b.lastUpdated)}` : 'Not updated yet'}
+                </span>
               )}
               <Link className="btn compact" href={`${updateBase}/${slugify(b.name)}`}>
                 Update
@@ -215,8 +244,10 @@ export function BankTable({
                   <col style={{ width: '12%' }} />
                   <col style={{ width: '11%' }} />
                   <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -227,6 +258,7 @@ export function BankTable({
                     <th className="num">Invested / balance</th>
                     <th className="num">At maturity</th>
                     <th className="num">Current value</th>
+                    <th>Updated</th>
                     <th>Notes</th>
                   </tr>
                 </thead>
@@ -236,7 +268,7 @@ export function BankTable({
                     style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
                   >
                     <tr className="secthead">
-                      <th colSpan={8}>
+                      <th colSpan={9}>
                         <PersonBadge p={styles[sct.ownerId]} name size={18} />
                         <Tot t={sct.totals} />
                       </th>

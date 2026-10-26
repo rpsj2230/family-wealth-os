@@ -1,11 +1,15 @@
 import {
-  contributionSeries,
+  combineSeries,
+  fundSeries,
   moveAmount,
+  sourceTag,
+  type SourceTag,
   returnsFor,
   type FundForReturns,
   type FundTxn,
+  type SeriesPoint,
 } from '@fwos/core';
-import type { LoadedPortfolio } from '@fwos/data';
+import { pageAll, type LoadedPortfolio } from '@fwos/data';
 import { loadPortfolio } from './portfolio-data';
 import type { Ctx } from './data';
 
@@ -28,6 +32,14 @@ export interface FundRow {
   dayFrom: string | null;
   dayTo: string | null;
   goalIds: string[];
+  units: number | null;
+  nav: number | null;
+  navDate: string | null;
+  /** month by month: what the fund was worth and what had been put in */
+  history: SeriesPoint[];
+  /** when the value was last set, and by what */
+  updatedOn: string | null;
+  updatedSource: SourceTag;
 }
 
 export interface Totals {
@@ -49,14 +61,15 @@ export interface OwnerGroup {
   panLast4: string | null;
   funds: FundRow[];
   totals: Totals;
+  series: SeriesPoint[];
 }
 
 export interface InvestmentView {
   today: string;
   groups: OwnerGroup[];
   household: Totals;
-  /** money put in over time, cumulative by month */
-  series: { month: string; cumulative: number }[];
+  /** all funds together, month by month */
+  series: SeriesPoint[];
   goals: { id: string; name: string }[];
 }
 
@@ -89,15 +102,47 @@ export async function loadInvestmentView(
   onlyOwner?: string | null,
 ): Promise<InvestmentView> {
   const l = loaded ?? (await loadPortfolio(supabase));
-  const [pos, tx, goals, allocs, owners] = await Promise.all([
+  const codes = [...new Set(l.assetRows.map((a) => a.amfi_code).filter((c): c is string => !!c))];
+  const [pos, tx, obsAll, snaps, navAll, goals, allocs, owners] = await Promise.all([
     supabase
       .from('mf_positions')
       .select('asset_id, fund_name, invested, started_on, sip_monthly, sip_stopped'),
-    supabase
-      .from('mf_transactions')
-      .select('asset_id, txn_on, units, amount')
-      .order('txn_on')
-      .limit(20000),
+    pageAll<{ asset_id: string; txn_on: string; units: number; amount: number }>((from, to) =>
+      supabase
+        .from('mf_transactions')
+        .select('asset_id, txn_on, units, amount')
+        .order('txn_on')
+        .order('id')
+        .range(from, to),
+    ),
+    pageAll<{ asset_id: string; as_of: string; amount: number }>((from, to) =>
+      supabase
+        .from('observations')
+        .select('asset_id, as_of, amount')
+        .is('superseded_by', null)
+        .in('kind', ['valuation', 'balance'])
+        .order('as_of')
+        .order('id')
+        .range(from, to),
+    ),
+    pageAll<{ asset_id: string; as_of: string; value: number; invested: number | null }>(
+      (from, to) =>
+        supabase
+          .from('mf_snapshots')
+          .select('asset_id, as_of, value, invested')
+          .order('as_of')
+          .range(from, to),
+    ),
+    codes.length === 0
+      ? Promise.resolve([] as { amfi_code: string; nav_date: string; nav: number }[])
+      : pageAll<{ amfi_code: string; nav_date: string; nav: number }>((from, to) =>
+          supabase
+            .from('mf_navs')
+            .select('amfi_code, nav_date, nav')
+            .in('amfi_code', codes)
+            .order('nav_date')
+            .range(from, to),
+        ),
     supabase.from('goals').select('id, name').order('name'),
     supabase.from('goal_allocations').select('goal_id, asset_id'),
     supabase.from('owners').select('id, display_name, pan_last4').order('created_at'),
@@ -108,12 +153,7 @@ export async function loadInvestmentView(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
   const txBy = new Map<string, FundTxn[]>();
-  for (const t of (tx.data ?? []) as unknown as {
-    asset_id: string;
-    txn_on: string;
-    units: number;
-    amount: number;
-  }[])
+  for (const t of tx)
     txBy.set(t.asset_id, [
       ...(txBy.get(t.asset_id) ?? []),
       { date: t.txn_on, units: Number(t.units), amount: Number(t.amount) },
@@ -122,6 +162,37 @@ export async function loadInvestmentView(
   for (const a of (allocs.data ?? []) as unknown as { goal_id: string; asset_id: string }[])
     goalsBy.set(a.asset_id, [...(goalsBy.get(a.asset_id) ?? []), a.goal_id]);
 
+  // the latest recorded value of each fund: its date and who or what recorded it
+  const lastObs = new Map<string, { as_of: string; source: string }>();
+  for (const o of l.obsRows)
+    if (!o.superseded_by) {
+      const cur = lastObs.get(o.asset_id);
+      if (!cur || o.as_of > cur.as_of)
+        lastObs.set(o.asset_id, { as_of: o.as_of, source: o.source });
+    }
+  const obsBy = new Map<string, { date: string; value: number }[]>();
+  for (const o of obsAll)
+    obsBy.set(o.asset_id, [
+      ...(obsBy.get(o.asset_id) ?? []),
+      { date: o.as_of, value: Number(o.amount) },
+    ]);
+  const snapBy = new Map<string, { date: string; value: number; invested: number | null }[]>();
+  for (const x of snaps)
+    snapBy.set(x.asset_id, [
+      ...(snapBy.get(x.asset_id) ?? []),
+      {
+        date: x.as_of,
+        value: Number(x.value),
+        invested: x.invested === null ? null : Number(x.invested),
+      },
+    ]);
+  const navBy = new Map<string, { date: string; nav: number }[]>();
+  for (const n of navAll)
+    navBy.set(n.amfi_code, [
+      ...(navBy.get(n.amfi_code) ?? []),
+      { date: n.nav_date, nav: Number(n.nav) },
+    ]);
+  const codeOf = new Map(l.assetRows.map((a) => [a.id, a.amfi_code ?? null]));
   const forRet = new Map<string, FundForReturns>();
   const rows: FundRow[] = [];
   for (const p of (pos.data ?? []) as unknown as {
@@ -169,6 +240,26 @@ export async function loadInvestmentView(
       dayFrom: move?.from ?? null,
       dayTo: move?.to ?? null,
       goalIds: goalsBy.get(p.asset_id) ?? [],
+      units: l.fundInfo[p.asset_id]?.units ?? null,
+      nav: l.fundInfo[p.asset_id]?.nav ?? null,
+      navDate: l.fundInfo[p.asset_id]?.navDate ?? null,
+      history: fundSeries(
+        {
+          txns: txBy.get(p.asset_id) ?? [],
+          navs: navBy.get(codeOf.get(p.asset_id) ?? '') ?? [],
+          observations: obsBy.get(p.asset_id) ?? [],
+          snapshots: snapBy.get(p.asset_id) ?? [],
+          plan: { invested, startedOn: p.started_on },
+        },
+        today,
+        { value: v, invested },
+      ),
+      updatedOn: lastObs.get(p.asset_id)?.as_of ?? null,
+      updatedSource: sourceTag(
+        lastObs.get(p.asset_id)?.source ?? null,
+        lastObs.get(p.asset_id)?.as_of ?? null,
+        false,
+      ),
     });
   }
   const groups: OwnerGroup[] = (
@@ -185,6 +276,7 @@ export async function loadInvestmentView(
         name: o.display_name,
         panLast4: o.pan_last4,
         funds,
+        series: combineSeries(funds.map((f) => f.history)),
         totals: totalsOf(
           funds,
           funds.map((f) => forRet.get(f.assetId)!),
@@ -201,7 +293,7 @@ export async function loadInvestmentView(
       rows.map((f) => forRet.get(f.assetId)!),
       today,
     ),
-    series: contributionSeries(rows.map((f) => forRet.get(f.assetId)!)),
+    series: combineSeries(rows.map((f) => f.history)),
     goals: ((goals.data ?? []) as unknown as { id: string; name: string }[]).map((g) => ({
       id: g.id,
       name: g.name,

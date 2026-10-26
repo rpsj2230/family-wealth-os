@@ -23,6 +23,11 @@ export interface LoadedPortfolio {
   ownerName: Map<string, string>;
   portfolio: Portfolio;
   marketDates: { navLatest: string | null; fx: Record<string, { rate: number; date: string }> };
+  /** units held (when known) and the latest price, by fund */
+  fundInfo: Record<
+    string,
+    { units: number | null; unitsAsOf: string | null; nav: number | null; navDate: string | null }
+  >;
   /** how each fund's price moved between its last two prices, by asset */
   fundDay: Record<string, { pct: number; from: string; to: string }>;
 }
@@ -31,6 +36,8 @@ export const todayDate = () => new Date(new Date().toISOString().slice(0, 10) + 
 
 /** `householdId` is required for service-role clients (which bypass Row Level Security) and harmless for user clients. */
 interface PositionRow {
+  units: number | null;
+  units_as_of: string | null;
   asset_id: string;
   amfi_code: string | null;
   sip_monthly: number | null;
@@ -62,7 +69,10 @@ export async function loadPortfolioData(
       'fixed_deposits',
       'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4',
     ),
-    sel('mf_positions', 'asset_id, amfi_code, sip_monthly, sip_stopped, started_on'),
+    sel(
+      'mf_positions',
+      'asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of',
+    ),
   ]);
   const today = opts.today ?? todayDate();
   const code = new Map(
@@ -107,6 +117,7 @@ export async function loadPortfolioData(
   };
   const marketDates: LoadedPortfolio['marketDates'] = { navLatest: null, fx: {} };
   const fundDay: LoadedPortfolio['fundDay'] = {};
+  const fundInfo: LoadedPortfolio['fundInfo'] = {};
   try {
     const codes = [...new Set(assetRows.map((a) => a.amfi_code).filter((c): c is string => !!c))];
     const earliest = obsRows.reduce<string>(
@@ -158,6 +169,18 @@ export async function loadPortfolioData(
     for (const a of assetRows) {
       const move = a.amfi_code && market.navs ? lastNavMove(market.navs[a.amfi_code] ?? []) : null;
       if (move) fundDay[a.id] = move;
+      const series = a.amfi_code && market.navs ? (market.navs[a.amfi_code] ?? []) : [];
+      const latest = series[series.length - 1];
+      const pos = ((positions.data ?? []) as unknown as PositionRow[]).find(
+        (x) => x.asset_id === a.id,
+      );
+      if (pos)
+        fundInfo[a.id] = {
+          units: pos.units === null ? null : Number(pos.units),
+          unitsAsOf: pos.units_as_of,
+          nav: latest?.nav ?? null,
+          navDate: latest?.date ?? null,
+        };
     }
   } catch {
     // market data is optional
@@ -171,6 +194,7 @@ export async function loadPortfolioData(
     portfolio: buildPortfolio(assetRows, obsRows, fdRows, today, market),
     marketDates,
     fundDay,
+    fundInfo,
   };
 }
 export * from './digest-input';
@@ -184,3 +208,5 @@ export * from './filing';
 export * from './cas';
 export * from './gains';
 export * from './taxfiles';
+export * from './fund-snapshots';
+export * from './paging';

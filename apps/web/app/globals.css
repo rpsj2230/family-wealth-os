@@ -1770,3 +1770,230 @@ details.bankdet > summary.xlhead button {
 .xl a.kind:hover {
   text-decoration: underline;
 }
+
+/* ---- who updated a value, and when ---- */
+.xl td.upd {
+  white-space: nowrap;
+}
+.updcell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.upddate {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.srcchip {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.55;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+}
+.srcchip.auto {
+  background: color-mix(in srgb, #16a34a 15%, transparent);
+  color: #166534;
+}
+.srcchip.manual {
+  background: color-mix(in srgb, #2563eb 14%, transparent);
+  color: #1e40af;
+}
+.srcchip.calc {
+  background: color-mix(in srgb, #7c3aed 13%, transparent);
+  color: #5b21b6;
+}
+.srcchip.import {
+  background: color-mix(in srgb, #64748b 16%, transparent);
+  color: #334155;
+}
+.srcchip.none {
+  background: color-mix(in srgb, #dc2626 14%, transparent);
+  color: #991b1b;
+}
+.pill.warn {
+  background: color-mix(in srgb, #d97706 14%, transparent);
+  color: #92400e;
+}
+
+/* ---- who updated a value, and when ---- */
+.xl td.upd {
+  white-space: nowrap;
+}
+.updcell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.upddate {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.srcchip {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.55;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+}
+.srcchip.auto {
+  background: color-mix(in srgb, #16a34a 15%, transparent);
+  color: #166534;
+}
+.srcchip.manual {
+  background: color-mix(in srgb, #2563eb 14%, transparent);
+  color: #1e40af;
+}
+.srcchip.calc {
+  background: color-mix(in srgb, #7c3aed 13%, transparent);
+  color: #5b21b6;
+}
+.srcchip.import {
+  background: color-mix(in srgb, #64748b 16%, transparent);
+  color: #334155;
+}
+.srcchip.none {
+  background: color-mix(in srgb, #dc2626 14%, transparent);
+  color: #991b1b;
+}
+.pill.warn {
+  background: color-mix(in srgb, #d97706 14%, transparent);
+  color: #92400e;
+}
+
+/* ---- bank cards: no stray space around the heading, room under the buttons, headings that wrap ---- */
+details.bankdet {
+  margin: 0;
+}
+.accordionbar {
+  margin: 4px 0 12px;
+}
+.xl thead th {
+  white-space: normal;
+  line-height: 1.2;
+  vertical-align: bottom;
+}
+
+/* ---- charts ---- */
+.donut {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0;
+}
+.donut svg text.donut-top {
+  font-size: 1.05rem;
+  font-weight: 700;
+  fill: var(--text, #111);
+  dominant-baseline: middle;
+}
+.donut svg text.donut-sub {
+  font-size: 0.7rem;
+  fill: var(--muted, #6b7280);
+}
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 0.85rem;
+}
+.legend li {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.legend a {
+  color: inherit;
+}
+.legend-amt {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.legend.inline {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  margin-top: 4px;
+}
+.legend.inline > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.trend {
+  margin: 0;
+}
+.trend-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.trend-read {
+  margin-left: auto;
+  color: var(--muted);
+}
+.trend svg text.axis {
+  font-size: 11px;
+  fill: var(--muted, #6b7280);
+}
+.trend-empty {
+  padding: 24px 0;
+}
+.barlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 11px;
+}
+.barhead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.86rem;
+}
+.barval {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.bartrack {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  margin-top: 4px;
+}
+.barfill {
+  height: 100%;
+  border-radius: 999px;
+}
+.barmark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: var(--text, #111);
+  opacity: 0.55;
+}

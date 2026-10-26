@@ -10,6 +10,7 @@ import {
   buildDigestInput,
   buildHandbookDoc,
   ensureHarvestTasks,
+  recordFundSnapshots,
   ensureInterestRefundRecords,
   ensureRefundRecords,
   planInterestRefunds,
@@ -145,6 +146,13 @@ const store: DigestStore = {
       if (r + ir > 0) console.log(`Updated ${r + ir} expected tax-refund record(s).`);
     } catch (e) {
       console.warn(`Tax-harvest reminders skipped: ${(e as Error).message}`);
+    }
+    // today's units, price and value for every fund: the history behind each fund's graph
+    try {
+      const n = await recordFundSnapshots(db, householdId);
+      if (n > 0) console.log(`Recorded ${n} fund snapshot(s).`);
+    } catch (e) {
+      console.warn(`Fund snapshots skipped: ${(e as Error).message}`);
     }
     // keep the family handbook current for the read-only emergency viewer
     try {

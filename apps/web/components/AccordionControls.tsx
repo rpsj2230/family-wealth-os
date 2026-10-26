@@ -7,7 +7,11 @@ export function AccordionControls({ label = 'banks' }: { label?: string }) {
       .querySelectorAll<HTMLDetailsElement>('details.bankdet')
       .forEach((d) => (d.open = open));
   return (
-    <div className="row noprint" role="group" aria-label={`Open or close all ${label}`}>
+    <div
+      className="row noprint accordionbar"
+      role="group"
+      aria-label={`Open or close all ${label}`}
+    >
       <button type="button" className="btn compact" onClick={() => set(true)}>
         Expand all
       </button>
