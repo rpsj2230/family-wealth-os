@@ -1,0 +1,160 @@
+/* Correct tags and details: a dense, scrollable grid. Only the grid scrolls sideways, never the page. */
+.aeg {
+  min-width: 0;
+  max-width: 100%;
+}
+.aeg-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+.aeg-tools .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line, #e5e7eb);
+  margin: 0 4px;
+}
+.aeg-tools select {
+  max-width: 180px;
+}
+.aeg-bank {
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.aeg-bank > header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--soft, #f3f4f8);
+}
+.aeg-bank > header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.aeg-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+table.aeg-table {
+  border-collapse: collapse;
+  min-width: 1380px;
+  width: 100%;
+  font-size: 0.82rem;
+}
+.aeg-table th,
+.aeg-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.aeg-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #6b7280);
+  background: var(--soft, #f3f4f8);
+}
+.aeg-table input,
+.aeg-table select {
+  font-size: 0.82rem;
+  padding: 3px 6px;
+  min-height: 28px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.aeg-table .c-sel {
+  width: 28px;
+}
+.aeg-table .c-mark {
+  width: 14px;
+  padding: 0;
+}
+.aeg-table .c-person {
+  width: 120px;
+}
+.aeg-table .c-label {
+  width: 210px;
+}
+.aeg-table .c-type {
+  width: 170px;
+}
+.aeg-table .c-joint {
+  width: 44px;
+  text-align: center;
+}
+.aeg-table .c-d4 {
+  width: 76px;
+}
+.aeg-table .c-rate {
+  width: 74px;
+}
+.aeg-table .c-date {
+  width: 134px;
+}
+.aeg-table .c-amt {
+  width: 118px;
+}
+.aeg-table .c-notes {
+  width: 230px;
+}
+.aeg-table .c-status {
+  width: 150px;
+}
+.aeg-table td.na {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgb(120 130 150 / 0.08) 6px 12px
+  );
+}
+.aeg-table tr.aeg-changed td {
+  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+}
+.aeg-table tr.aeg-changed td.c-mark {
+  background: var(--accent, #4f46e5);
+}
+.aeg-table tr.aeg-proposed td {
+  background: color-mix(in srgb, #e69f00 16%, transparent);
+}
+.aeg-table tr.aeg-proposed td.c-mark {
+  background: #e69f00;
+}
+.aeg-table tr.aeg-bad input,
+.aeg-table tr.aeg-bad select {
+  outline: 2px solid #c0392b;
+}
+.aeg-problem {
+  color: #b42318;
+  font-size: 0.75rem;
+  padding: 2px 8px 6px;
+}
+.aeg-savebar {
+  margin-top: 6px;
+}
+.aeg-err {
+  color: #b42318;
+}
+@media (max-width: 640px) {
+  .aeg-tools {
+    position: static;
+  }
+}
+
+/* let the grid's own container scroll instead of widening the page */
+.shell > div:has(.aeg),
+.content:has(.aeg),
+.viewer .content:has(.aeg) {
+  min-width: 0;
+  max-width: 100%;
+}
