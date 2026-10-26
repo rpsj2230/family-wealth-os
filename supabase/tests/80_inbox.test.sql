@@ -30,7 +30,14 @@ select t.assert((select count(*) from public.inbox_messages) = 1, 'members read 
 update public.inbox_messages set resolved_at = now();
 select t.assert((select resolved_at is not null from public.inbox_messages), 'members can mark a message resolved');
 select t.assert(t.throws($q$update public.inbox_messages set outcome = 'applied'$q$), 'but cannot change what happened');
+-- the Settings page tests the connection: members get the key for that, once, in server code; outsiders get nothing
+select public.save_integrations((select h from ictx), 'groq', 'gsk_test_key_12345', 'FWOS/Inbox');
+select t.assert((select count(*) = 1 from public.ai_credentials_for_test((select h from ictx))), 'a member can fetch the key to test it');
+select public.record_ai_test((select h from ictx), true, 'Read a test alert');
+select t.assert((select ai_test_ok and ai_tested_at is not null and ai_test_note = 'Read a test alert' from public.integration_settings), 'the test result is kept');
 select t.as_user('00000000-0000-0000-0000-0000000000b8');
+select t.assert(t.throws($q$select * from public.ai_credentials_for_test((select h from ictx))$q$), 'outsiders cannot fetch the key');
+select t.assert(t.throws($q$select public.record_ai_test((select h from ictx), true, 'x')$q$), 'outsiders cannot record a test');
 select t.assert(t.throws($q$select public.save_integrations((select h from ictx), 'groq', 'abcdefghij', 'x')$q$), 'outsiders cannot save settings for this household');
 select t.assert((select count(*) from public.inbox_messages) = 0 and (select count(*) from public.integration_settings) = 0, 'outsiders see nothing');
 select t.as_root();

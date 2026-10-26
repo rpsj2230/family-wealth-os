@@ -8,9 +8,9 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
-import { prepareAi } from './ai';
 import {
   aiErrorHint,
+  prepareAi,
   runInbox,
   type InboxIo,
   type InboxMessage,

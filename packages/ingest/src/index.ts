@@ -10,6 +10,8 @@ export * from './cas-import';
 export * from './cas-pdf';
 export * from './txn-csv';
 export * from './rate-docs';
+export * from './ai-runtime';
+export * from './ai-test';
 export * from './taxfiles';
 export * from './rates-sync';
 export * from './telegram';

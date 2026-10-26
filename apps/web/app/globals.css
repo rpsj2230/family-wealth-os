@@ -2524,3 +2524,35 @@ details.bankdet {
     display: none !important;
   }
 }
+
+/* Settings > Connections: which AI is connected and the test button */
+.aiconn {
+  margin: 14px 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary, #4f46e5) 4%, transparent);
+}
+.aiconn .row {
+  justify-content: space-between;
+}
+.aiconn .ok {
+  color: var(--ok, #15803d);
+}
+.aiconn .fail {
+  color: var(--bad, #b91c1c);
+}
+.aiconn .notice,
+.aiconn ul {
+  margin: 10px 0 0;
+}
+
+/* the rate and where it came from, on one line */
+.ratecell {
+  white-space: nowrap;
+}
+.ratetag {
+  margin-left: 5px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}

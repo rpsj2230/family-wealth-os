@@ -9,8 +9,7 @@
  */
 import { ImapFlow } from 'imapflow';
 import { createClient } from '@supabase/supabase-js';
-import { aiErrorHint, buildAiRequest, parseAiResponse, probeModels } from '@fwos/ingest';
-import { prepareAi } from './ai';
+import { testAiConnection } from '@fwos/ingest';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -51,52 +50,20 @@ async function checkAi(): Promise<void> {
     bad('No AI key is saved. Add a free Groq or Gemini key in Settings > Bank emails and AI.');
     return;
   }
-  ok(`An AI key is saved (${s.ai_provider}).`);
-  const rt = await prepareAi(s.ai_provider, s.ai_api_key);
-  if (s.ai_provider === 'openrouter') {
-    if (rt.models.length === 0) {
-      bad(
-        'OpenRouter did not list any free model for this key. Check the key at openrouter.ai/keys; free models need no credit.',
-      );
-      return;
-    }
-    ok(
-      `OpenRouter lists ${rt.models.length} free models; they are tried in this order: ${rt.models.slice(0, 5).join(', ')}`,
-    );
-  } else if (!rt.model) {
-    const probes = await probeModels(
-      (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(30_000) }),
-      s.ai_provider,
-      s.ai_api_key,
-    );
-    for (const p of probes) console.log(`INFO  ${p.model} answered ${p.status} ${p.note}`);
-    const first = probes.find((p) => p.status !== 404) ?? probes[0];
-    bad(
-      `No model answered with this key. ${first ? (aiErrorHint(s.ai_provider, first.status, first.note) ?? '') : ''}`.trim(),
-    );
-    return;
-  } else ok(`The key works; model chosen: ${rt.model}`);
-  const alert = `Dear Customer, your Sample Bank account XXXXXX4321 has been credited with INR 25,000.00 on ${today}. Available balance in your account is INR 1,23,456.78 as on ${today}.`;
-  const req = buildAiRequest(s.ai_provider, s.ai_api_key, alert, rt.model ?? undefined);
-  const res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
-  if (!res.ok) {
-    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 400);
-    bad(
-      `The AI service answered ${res.status} to a reading request: ${body} ${aiErrorHint(s.ai_provider, res.status, body) ?? ''}`.trim(),
-    );
-    return;
-  }
-  const readings = parseAiResponse(s.ai_provider, await res.json(), { today });
-  const r = readings[0];
-  if (!r) bad('The AI answered but no balance could be understood from its reply.');
-  else if (Math.abs(r.amount - 123456.78) < 0.01 && r.last4 === '4321')
-    ok(
-      `A made-up alert was read correctly: balance ${r.amount} on ${r.asOf}, account ending ${r.last4}.`,
-    );
-  else
-    bad(
-      `The AI read the made-up alert wrongly (balance ${r.amount}, account ending ${r.last4}); it expected 1,23,456.78 and 4321.`,
-    );
+  const r = await testAiConnection({ provider: s.ai_provider, key: s.ai_api_key, today });
+  for (const st of r.steps) (st.ok ? ok : bad)(st.text);
+  // the Settings page shows when the connection was last tested and how it went
+  await db
+    .from('integration_settings')
+    .update({
+      ai_tested_at: new Date().toISOString(),
+      ai_test_ok: r.ok,
+      ai_test_note: (r.ok
+        ? `Read a test alert with ${r.model ?? s.ai_provider}`
+        : (r.steps.find((x) => !x.ok)?.text ?? 'Failed')
+      ).slice(0, 300),
+    })
+    .eq('household_id', id ?? '');
 }
 
 let label = 'FWOS/Inbox';

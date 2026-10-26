@@ -256,15 +256,23 @@ export function aiErrorHint(provider: AiProvider, status: number, body: string):
   return null;
 }
 
-type Answer = { ok: boolean; status: number; json(): Promise<unknown>; text(): Promise<string> };
+export type Answer = {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+  /** the model that gave this answer (OpenRouter fallback) */
+  model?: string;
+};
 type RawFetch = (
   u: string,
   init?: Record<string, unknown>,
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
-const answer = (ok: boolean, status: number, text: string): Answer => ({
+const answer = (ok: boolean, status: number, text: string, model?: string): Answer => ({
   ok,
   status,
+  ...(model ? { model } : {}),
   text: async () => text,
   json: async () => JSON.parse(text) as unknown,
 });
@@ -308,7 +316,7 @@ export function withModelFallback(
       try {
         const r = await f(u, { ...init, body: JSON.stringify({ ...body, model }) });
         const t = await r.text();
-        if (r.ok && usableAnswer(t)) return answer(true, r.status, t);
+        if (r.ok && usableAnswer(t)) return answer(true, r.status, t, model);
         notes.push(`${model}: ${r.ok ? 'no JSON answer' : r.status}`);
         last = answer(false, r.ok ? 502 : r.status, t);
       } catch (e) {

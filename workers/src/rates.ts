@@ -5,7 +5,6 @@
  * records why, so nothing silently disappears.
  */
 import { createClient } from '@supabase/supabase-js';
-import { prepareAi, type AiRuntime } from './ai';
 import { sameBank } from '@fwos/core';
 import {
   buildRatesRequest,
@@ -16,6 +15,8 @@ import {
   planSync,
   rateDocsFor,
   aiErrorHint,
+  prepareAi,
+  type AiRuntime,
   type AiProvider,
   type CorrectionReason,
   type StoredOffer,

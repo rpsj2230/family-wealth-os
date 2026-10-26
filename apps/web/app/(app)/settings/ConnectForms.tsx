@@ -1,6 +1,13 @@
 'use client';
 
-import { addRateSource, saveDigestSettings, saveIntegrations } from './actions';
+import { useState, useTransition } from 'react';
+import {
+  addRateSource,
+  saveDigestSettings,
+  saveIntegrations,
+  testAi,
+  type AiTestState,
+} from './actions';
 import { Field, SaveRow, Tick, useForm } from './fields';
 
 export function DigestForm({
@@ -105,5 +112,77 @@ export function RateSourceForm() {
       </div>
       <SaveRow label="Add page" pending={pending} res={res} />
     </form>
+  );
+}
+
+const PROVIDER_NAME = {
+  openrouter: 'OpenRouter (free models, tried one after another)',
+  groq: 'Groq',
+  gemini: 'Google Gemini',
+} as const;
+
+export interface AiStatus {
+  provider: 'groq' | 'gemini' | 'openrouter' | null;
+  keySet: boolean;
+  testedAt: string | null;
+  testOk: boolean | null;
+  testNote: string | null;
+}
+
+/** Which AI is connected, when it was last tested and how it went, and a button that tests it now. */
+export function AiConnection({ status, demo = false }: { status: AiStatus; demo?: boolean }) {
+  const [state, setState] = useState<AiTestState | null>(null);
+  const [pending, start] = useTransition();
+  if (!status.keySet || !status.provider)
+    return (
+      <p className="notice warn small" role="status">
+        <strong>No AI connected.</strong> Choose a service below, paste a key and press Save; then
+        come back here to test it.
+      </p>
+    );
+  const last = status.testedAt
+    ? `${new Date(status.testedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}: ${status.testOk ? 'working' : 'not working'}${status.testNote ? ` (${status.testNote})` : ''}`
+    : 'not tested yet';
+  return (
+    <div className="aiconn" aria-live="polite">
+      <div className="row" style={{ alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div>
+            <strong>Connected: {PROVIDER_NAME[status.provider]}</strong>
+          </div>
+          <div className={`small ${status.testedAt ? (status.testOk ? 'ok' : 'fail') : 'muted'}`}>
+            Last test {last}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn"
+          disabled={pending || demo}
+          title={demo ? 'The public sample cannot test a key' : undefined}
+          onClick={() => start(async () => setState(await testAi()))}
+        >
+          {pending ? 'Testing… (up to a minute)' : 'Test the AI connection'}
+        </button>
+      </div>
+      {state && !pending && (
+        <>
+          <p
+            className={`notice ${state.ok ? 'ok' : 'warn'} small`}
+            role={state.ok ? 'status' : 'alert'}
+          >
+            {state.ok
+              ? 'All good: the AI is connected and reads bank alerts correctly.'
+              : 'Not working yet. See below.'}
+          </p>
+          <ul className="list small">
+            {state.steps.map((x, i) => (
+              <li key={i} className={x.ok ? 'pass' : 'fail'}>
+                <strong>{x.ok ? 'OK' : 'Problem'}</strong> — {x.text}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }

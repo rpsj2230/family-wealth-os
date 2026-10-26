@@ -8,6 +8,7 @@ import {
   parseContactLines,
   profileFromJson,
 } from '@fwos/core';
+import { testAiConnection, type AiProvider } from '@fwos/ingest';
 import { loadContext } from '@/lib/data';
 import { CONFIG_GROUPS, mergeGroup, parseGroup, withConfirmed } from '@/lib/settings-fields';
 
@@ -83,6 +84,51 @@ export async function saveIntegrations(_p: FormResult | null, f: FormData): Prom
         ? 'Saved. The key is stored on the server and will not be shown again.'
         : 'Saved.',
   };
+}
+
+export interface AiTestState {
+  ran: boolean;
+  ok: boolean;
+  steps: { ok: boolean; text: string }[];
+  ms: number;
+}
+
+/**
+ * Tests the saved AI key: the provider answers and a made-up bank alert is read back correctly. The key is fetched through a
+ * member-only function, used once on the server and never returned; only the outcome goes to the page.
+ */
+export async function testAi(): Promise<AiTestState> {
+  const { supabase, householdId } = await loadContext();
+  const fail = (text: string): AiTestState => ({
+    ran: true,
+    ok: false,
+    steps: [{ ok: false, text }],
+    ms: 0,
+  });
+  if (!householdId) return fail('Create your household first.');
+  const { data, error } = await supabase.rpc('ai_credentials_for_test', {
+    p_household: householdId,
+  });
+  const row = (data as { provider: AiProvider; api_key: string }[] | null)?.[0];
+  if (error) return fail('The saved key could not be read for the test.');
+  if (!row) return fail('No AI key is saved. Choose a service, paste a key and press Save first.');
+  const r = await testAiConnection({
+    provider: row.provider,
+    key: row.api_key,
+    today: new Date().toISOString().slice(0, 10),
+    // the page waits for this: keep it well inside the time the host allows
+    limits: { listMs: 12_000, callMs: 15_000, tries: 3 },
+  });
+  await supabase.rpc('record_ai_test', {
+    p_household: householdId,
+    p_ok: r.ok,
+    p_note: (r.ok
+      ? `Read a test alert with ${r.model ?? row.provider}`
+      : (r.steps.find((x) => !x.ok)?.text ?? 'Failed')
+    ).slice(0, 300),
+  });
+  revalidatePath('/settings');
+  return { ran: true, ok: r.ok, steps: r.steps, ms: r.ms };
 }
 
 const uuid = /^[0-9a-f-]{36}$/;

@@ -203,7 +203,15 @@ export default async function DemoSettings({
           )}
           {tab === 'connections' && (
             <ConnectionsSection
-              ai={{ provider: 'groq', keySet: true, label: 'FWOS/Inbox' }}
+              ai={{
+                provider: 'openrouter',
+                keySet: true,
+                label: 'FWOS/Inbox',
+                testedAt: '2026-10-25T09:30:00Z',
+                testOk: true,
+                testNote: 'Read a test alert with meta-llama/llama-3.3-70b-instruct:free',
+              }}
+              demo
               sources={[
                 {
                   id: 'r1',

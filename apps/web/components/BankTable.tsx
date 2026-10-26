@@ -93,16 +93,20 @@ function Row({
         {r.kind === 'cash' && <div className="sub">{r.source.label}</div>}
         {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
       </td>
-      <td className="mid">
+      <td className="mid ratecell">
         {fd ? (
           pctText(fd.rate)
         ) : cashRate ? (
           <span title={cashRate.note}>
             {cashRate.tag === 'assumed' ? '~' : ''}
             {pctText(cashRate.rate)}
-            <div className="small muted">
+            <span className="ratetag">
               {cashRate.tag === 'own' ? 'set' : cashRate.tag === 'market' ? 'bank rate' : 'assumed'}
-            </div>
+            </span>
+          </span>
+        ) : r.kind === 'held' ? (
+          <span title="Money held by another person earns no interest">
+            –<span className="ratetag">no interest</span>
           </span>
         ) : (
           ''

@@ -11,7 +11,7 @@ import {
 import { tabHref } from '@/lib/settings-tabs';
 import { WhatsAppButton } from '../share/WhatsAppButton';
 import { AccessForm, EmergencyForm } from './AccessForms';
-import { DigestForm, IntegrationsForm, RateSourceForm } from './ConnectForms';
+import { AiConnection, DigestForm, IntegrationsForm, RateSourceForm } from './ConnectForms';
 import {
   CashflowForm,
   CashflowRow,
@@ -419,9 +419,18 @@ export interface RateSourceRow {
 export function ConnectionsSection({
   ai,
   sources,
+  demo = false,
 }: {
-  ai: { provider: 'groq' | 'gemini' | 'openrouter' | null; keySet: boolean; label: string };
+  ai: {
+    provider: 'groq' | 'gemini' | 'openrouter' | null;
+    keySet: boolean;
+    label: string;
+    testedAt?: string | null;
+    testOk?: boolean | null;
+    testNote?: string | null;
+  };
   sources: RateSourceRow[];
+  demo?: boolean;
 }) {
   return (
     <>
@@ -443,6 +452,16 @@ export function ConnectionsSection({
           numbers are removed before any text is sent. See what the reader did in the{' '}
           <Link href="/inbox">bank e-mail inbox</Link>.
         </p>
+        <AiConnection
+          demo={demo}
+          status={{
+            provider: ai.provider,
+            keySet: ai.keySet,
+            testedAt: ai.testedAt ?? null,
+            testOk: ai.testOk ?? null,
+            testNote: ai.testNote ?? null,
+          }}
+        />
         <ol className="stepper small">
           <li>
             In Gmail, create a label (for example FWOS/Inbox) and a filter that applies it to bank

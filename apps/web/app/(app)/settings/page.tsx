@@ -25,6 +25,8 @@ import {
 } from './sections';
 
 export const dynamic = 'force-dynamic';
+// the AI connection test waits for the AI service
+export const maxDuration = 60;
 
 export default async function SettingsPage({
   searchParams,
@@ -189,13 +191,19 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
 
 async function ConnectionsTab({ db }: { db: SupabaseClient }) {
   const [integ, sources] = await Promise.all([
-    db.from('integration_settings').select('ai_provider, ai_key_set, inbox_label').maybeSingle(),
+    db
+      .from('integration_settings')
+      .select('ai_provider, ai_key_set, inbox_label, ai_tested_at, ai_test_ok, ai_test_note')
+      .maybeSingle(),
     db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
   ]);
   const i = integ.data as {
     ai_provider: 'groq' | 'gemini' | 'openrouter' | null;
     ai_key_set: boolean;
     inbox_label: string;
+    ai_tested_at: string | null;
+    ai_test_ok: boolean | null;
+    ai_test_note: string | null;
   } | null;
   const rows: RateSourceRow[] = (sources.data ?? []).map((r) => ({
     id: r.id as string,
@@ -210,6 +218,9 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
         provider: i?.ai_provider ?? null,
         keySet: !!i?.ai_key_set,
         label: i?.inbox_label ?? 'FWOS/Inbox',
+        testedAt: i?.ai_tested_at ?? null,
+        testOk: i?.ai_test_ok ?? null,
+        testNote: i?.ai_test_note ?? null,
       }}
       sources={rows}
     />
