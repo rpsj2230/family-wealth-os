@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {
-  agoText,
+  rateAgoText,
   bankSummary,
   formatInr,
   moveText,
@@ -105,7 +105,7 @@ export function BankView({
             ? [{ label: 'no rate on file', tone: 'warn' as const }]
             : [
                 {
-                  label: `checked ${agoText(age)}`,
+                  label: `checked ${rateAgoText(age)}`,
                   tone: age > staleDays ? ('warn' as const) : ('ok' as const),
                 },
               ]),

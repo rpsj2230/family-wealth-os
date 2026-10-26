@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
   BOARD_SORTS,
-  agoText,
+  rateAgoText,
   formatInr,
   moveText,
   niceDay,
@@ -93,7 +93,7 @@ function CheckedPill({ card, staleDays }: { card: BankCard; staleDays: number })
       title={`Newest check ${card.checkedOn ? niceDay(card.checkedOn) : ''}. Older than ${staleDays} days counts as stale.`}
     >
       {card.stale ? 'stale: ' : 'checked '}
-      {agoText(card.ageDays)}
+      {rateAgoText(card.ageDays)}
     </span>
   );
 }

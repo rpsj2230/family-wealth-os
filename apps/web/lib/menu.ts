@@ -12,6 +12,7 @@ import {
   ListChecks,
   Palmtree,
   Percent,
+  PiggyBank,
   Banknote,
   Receipt,
   Scale,
@@ -91,9 +92,15 @@ export const MENU: MenuGroup[] = [
         icon: Banknote,
       },
       {
+        href: '/new-money',
+        label: 'New money',
+        hint: 'Where a sum should go, spread to stay inside the insurance limit.',
+        icon: PiggyBank,
+      },
+      {
         href: '/rates',
-        label: 'Rates and new money',
-        hint: 'Best deposit rates after tax and where idle money could go.',
+        label: 'Rates',
+        hint: 'Savings and deposit rates by bank, where they came from, and how they moved.',
         icon: Percent,
       },
       {

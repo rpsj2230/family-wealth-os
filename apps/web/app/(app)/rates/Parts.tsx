@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {
-  agoText,
+  rateAgoText,
   eventLine,
   niceDay,
   ratePct,
@@ -49,7 +49,7 @@ export function rowModel(o: BoardOffer, today: string, staleDays: number): RateR
     sourceKind: o.sourceKind,
     note: w.note,
     url: w.url,
-    checked: `checked ${agoText(age)} (${niceDay(o.checkedOn)})`,
+    checked: `checked ${rateAgoText(age)} (${niceDay(o.checkedOn)})`,
     stale: age > staleDays,
     conditions: o.conditions,
     readPct: o.aiRate !== null && o.aiRate !== undefined ? +(o.aiRate * 100).toFixed(2) : null,

@@ -68,7 +68,7 @@ export const niceDay = (iso: string): string =>
   });
 
 /** "today", "yesterday", "5 days ago" */
-export const agoText = (days: number): string =>
+export const rateAgoText = (days: number): string =>
   days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
 
 /** What one rate row is about: "NRE deposit, 2 yr" or "Savings, above ₹5 L". */
