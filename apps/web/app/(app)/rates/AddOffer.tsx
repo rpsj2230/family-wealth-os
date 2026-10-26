@@ -1,71 +1,119 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useId, useState } from 'react';
 import { addRateOffer } from './actions';
+import './rates.css';
 
-export function AddOffer({ banks }: { banks: string[] }) {
+/**
+ * Add or correct one rate. Only the fields that apply are shown: a deposit has a term, a savings rate has a balance slab.
+ * Saving a rate that already exists changes it in place. `bank` fixes the bank (on a bank's own page).
+ */
+export function AddOffer({ banks, bank }: { banks: string[]; bank?: string }) {
   const [res, act, pending] = useActionState(addRateOffer, null);
+  const [product, setProduct] = useState<'fd' | 'savings'>('fd');
+  const id = useId();
   return (
-    <form action={act} className="form row addform" aria-busy={pending}>
-      <input name="bank" list="bank-names" placeholder="Bank" aria-label="Bank" required />
-      <datalist id="bank-names">
-        {banks.map((b) => (
-          <option key={b} value={b} />
-        ))}
-      </datalist>
-      <select name="product" aria-label="Product" defaultValue="fd">
-        <option value="fd">Fixed deposit</option>
-        <option value="savings">Savings</option>
-      </select>
-      <select name="kind" aria-label="Account type" defaultValue="NRE">
-        <option value="NRE">NRE</option>
-        <option value="NRO">NRO</option>
-        <option value="resident">Resident</option>
-        <option value="any">Any</option>
-      </select>
-      <input
-        name="from"
-        inputMode="numeric"
-        placeholder="From months"
-        aria-label="Shortest tenure in months"
-        style={{ maxWidth: 110 }}
-      />
-      <input
-        name="to"
-        inputMode="numeric"
-        placeholder="To months"
-        aria-label="Longest tenure in months"
-        style={{ maxWidth: 110 }}
-      />
-      <input
-        name="rate"
-        inputMode="decimal"
-        placeholder="Rate %"
-        aria-label="Rate in percent"
-        required
-        style={{ maxWidth: 90 }}
-      />
-      <input
-        name="balfrom"
-        placeholder="Savings: above (e.g. 1 lakh)"
-        aria-label="Savings slab starts above this balance"
-        style={{ maxWidth: 150 }}
-      />
-      <input
-        name="balto"
-        placeholder="up to (e.g. 5 lakh)"
-        aria-label="Savings slab ends at this balance"
-        style={{ maxWidth: 130 }}
-      />
-      <input name="conditions" placeholder="Conditions (optional)" aria-label="Conditions" />
-      <button className="btn compact primary" disabled={pending}>
-        Save rate
-      </button>
-      {res && (
-        <span className={res.ok ? 'ok small' : 'fail small'} role={res.ok ? 'status' : 'alert'}>
-          {res.message}
+    <form action={act} className="rt-add" aria-busy={pending}>
+      <div className="rt-fields">
+        {bank ? (
+          <input type="hidden" name="bank" value={bank} />
+        ) : (
+          <label>
+            Bank
+            <input name="bank" list={`${id}-banks`} placeholder="Bank name" required />
+            <datalist id={`${id}-banks`}>
+              {banks.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+          </label>
+        )}
+        <div role="group" aria-label="What kind of rate" className="rt-type">
+          <span className="small muted" style={{ display: 'block', marginBottom: 4 }}>
+            Type
+          </span>
+          <div className="rt-seg">
+            <label>
+              <input
+                type="radio"
+                name="product"
+                value="fd"
+                checked={product === 'fd'}
+                onChange={() => setProduct('fd')}
+              />
+              <span>Fixed deposit</span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="product"
+                value="savings"
+                checked={product === 'savings'}
+                onChange={() => setProduct('savings')}
+              />
+              <span>Savings</span>
+            </label>
+          </div>
+        </div>
+        <label>
+          Account
+          <select name="kind" defaultValue="NRE">
+            <option value="NRE">NRE</option>
+            <option value="NRO">NRO</option>
+            <option value="resident">Resident</option>
+            <option value="any">Any</option>
+          </select>
+        </label>
+        <label>
+          Rate (% a year)
+          <input name="rate" inputMode="decimal" placeholder="7.25" required />
+        </label>
+        {product === 'fd' ? (
+          <>
+            <label>
+              Term
+              <input name="term" inputMode="numeric" placeholder="2" required />
+            </label>
+            <label>
+              Term in
+              <select name="unit" defaultValue="years">
+                <option value="years">years</option>
+                <option value="months">months</option>
+                <option value="days">days</option>
+              </select>
+            </label>
+          </>
+        ) : (
+          <>
+            <label>
+              Balance above
+              <input name="balfrom" placeholder="blank, or 1 lakh" />
+            </label>
+            <label>
+              Up to
+              <input name="balto" placeholder="blank, or 5 lakh" />
+            </label>
+          </>
+        )}
+        <label>
+          Conditions (optional)
+          <input name="conditions" placeholder="for example: new money only" />
+        </label>
+      </div>
+      <div className="row" style={{ alignItems: 'center' }}>
+        <button className="btn primary" disabled={pending}>
+          {pending ? 'Saving…' : 'Save rate'}
+        </button>
+        <span className="muted small">
+          A rate you type is never overwritten by the refresh; if the bank page later disagrees, you
+          are shown the difference.
         </span>
-      )}
+        {res && (
+          <span className={res.ok ? 'ok small' : 'fail small'} role={res.ok ? 'status' : 'alert'}>
+            {res.message}
+          </span>
+        )}
+      </div>
     </form>
   );
 }

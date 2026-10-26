@@ -1,0 +1,168 @@
+/* Goals: one progress card per goal. */
+.gl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.gl-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.gl-card.short {
+  border-color: color-mix(in srgb, #d97706 55%, var(--border));
+}
+.gl-head {
+  display: flex;
+  gap: 8px 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.gl-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gl-head .gl-when {
+  margin-left: auto;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gl-bar {
+  position: relative;
+  height: 14px;
+  border-radius: 8px;
+  background: var(--border);
+  overflow: hidden;
+}
+.gl-bar .proj {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.gl-bar .now {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--primary);
+}
+.gl-bar.ok .proj {
+  background: color-mix(in srgb, #16a34a 40%, transparent);
+}
+.gl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+}
+.gl-legend b {
+  color: var(--fg);
+}
+.gl-headline {
+  margin: 0;
+  font-weight: 600;
+}
+.gl-headline.short {
+  color: var(--warn-fg);
+}
+.gl-headline.ok {
+  color: var(--ok-fg);
+}
+.gl-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+.gl-facts dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.gl-facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.gl-funds {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.gl-funds li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--soft);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.gl-funds form {
+  margin: 0;
+}
+.gl-funds .nm {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gl-sub {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+.gl-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.gl-edit label {
+  display: grid;
+  gap: 4px;
+}
+.gl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.gl-free {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 14px;
+  padding: 12px 0;
+  align-items: center;
+}
+.gl-free + .gl-free {
+  border-top: 1px solid var(--border);
+}
+.gl-free form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+}
+.gl-free form.gl-earmark input[name='percent'][inputmode] {
+  width: 5rem;
+}
+@media (max-width: 560px) {
+  .gl-free {
+    grid-template-columns: 1fr;
+  }
+}

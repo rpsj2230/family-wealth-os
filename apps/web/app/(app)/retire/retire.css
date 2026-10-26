@@ -1,0 +1,15 @@
+/* Can I retire now? The verdict stays on top; the tabs below hold the inputs and the comparisons. */
+.hero .kpis .kpi {
+  background: var(--card);
+  color: var(--fg);
+}
+.hero .kpis .kpi .muted,
+.hero .kpis .kpi-label {
+  color: var(--muted);
+}
+.hero .kpi-value.fail {
+  color: var(--fail);
+}
+.hero .kpi-value {
+  overflow-wrap: anywhere;
+}

@@ -36,3 +36,6 @@ export * from './loss-harvest';
 export * from './data-in';
 export * from './inbox-view';
 export * from './automation';
+export * from './rate-view';
+export * from './tasks-view';
+export * from './goal-card';

@@ -9,7 +9,12 @@ export const metadata: Metadata = {
 };
 
 /** Public sample with invented numbers so the page can be seen (and tested) without any private data. */
-export default function DemoRetire() {
+export default async function DemoRetire({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
   return (
     <main className="content">
       <p>
@@ -18,6 +23,8 @@ export default function DemoRetire() {
       <h1>Can I retire now? (sample)</h1>
       <RetireClient
         sample
+        tab={tab}
+        base="/demo/retire"
         initial={{
           ...DEFAULT_SETTINGS,
           primaryDob: '1990-01-01',

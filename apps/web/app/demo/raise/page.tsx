@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DEFAULT_CONFIG, answerHard, answerRaise, buildSources } from '@fwos/core';
 import { HardResult, RaiseResult } from '@/components/RaiseResult';
+import { PageHead } from '@/components/PageHead';
+import { RaiseForm } from '@/app/(app)/raise/RaiseForm';
 import { demoRaiseSources } from '@/lib/demo-fixture';
 
 export const metadata: Metadata = {
@@ -42,19 +44,30 @@ export default async function DemoRaise({
       <p>
         <Link href="/login">← Sign in</Link>
       </p>
-      <h1>I need money (sample)</h1>
+      <PageHead
+        title="I need money (sample)"
+        subtitle="Type an amount to see which accounts it can come from, by when, and what each way costs."
+        pills={[{ label: hard ? 'hard need: any cost' : 'soft need: lowest cost', tone: 'info' }]}
+      />
       <p className="notice warn" role="note">
         Invented household. Try another amount:{' '}
         {[200_000, 15_000_000, 30_000_000].map((a) => (
-          <Link key={a} href={`/demo/raise?amount=${a}`} style={{ marginRight: 10 }}>
+          <Link
+            key={a}
+            href={`/demo/raise?amount=${a}${hard ? '&urgency=hard' : ''}`}
+            style={{ marginRight: 10 }}
+          >
             ₹{a.toLocaleString('en-IN')}
           </Link>
         ))}
       </p>
-      <p className="small">
-        <Link href={`/demo/raise?amount=${need}`}>Soft need (lowest cost)</Link> ·{' '}
-        <Link href={`/demo/raise?amount=${need}&urgency=hard`}>Hard need (any cost)</Link>
-      </p>
+      <RaiseForm
+        action="/demo/raise"
+        people={d.people}
+        cfg={cfg}
+        settingsHref="/login"
+        values={{ amount: String(need), who: '', hard, by: '', mode: cfg.mode, order: cfg.order }}
+      />
       {hardAns ? (
         <HardResult ans={hardAns} today={d.today} styles={d.styles} />
       ) : (

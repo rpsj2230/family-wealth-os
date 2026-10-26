@@ -22,6 +22,11 @@ test('every private page redirects to login', async ({ request }) => {
     '/tasks',
     '/emergency',
     '/raise',
+    '/rates',
+    '/rates/some-bank',
+    '/new-money',
+    '/goals',
+    '/tasks/00000000-0000-4000-8000-000000000000',
     '/tax/filing',
     '/more',
   ]) {
@@ -157,14 +162,24 @@ test('sample "I need money": amounts, dates and costs by deadline, nothing scrol
   await expect(page.getByRole('heading', { name: /I need money/, level: 1 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'By when' })).toBeVisible();
   await expect(page.getByText('Cheapest, no deadline').first()).toBeVisible();
-  await expect(page.getByText('Fastest').first()).toBeVisible();
+  await expect(page.getByText('The fastest way')).toBeVisible();
   // a small amount is covered by cash in the bank today at no cost
   await expect(page.getByText(/Nothing is lost on this plan/).first()).toBeVisible();
 
   await page.goto('/demo/raise?amount=30000000');
   // a large sum needs funds, deposits that are broken early, and says what it costs
-  await expect(page.getByText(/Mutual funds/).first()).toBeVisible();
-  await expect(page.getByText(/withheld at source/).first()).toBeVisible();
+  await expect(
+    page
+      .locator('.rz-rung')
+      .getByText(/Mutual funds/)
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByText(/withheld at source/)
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
