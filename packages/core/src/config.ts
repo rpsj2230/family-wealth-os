@@ -9,7 +9,7 @@ export { effectiveRules, fyBoundsOf, type EffectiveRules } from './tax';
 
 export interface AppConfig {
   deposits: {
-    /** deposit insurance cover per depositor per bank (DICGC); change it when the limit changes */
+    /** deposit insurance cover per ownership name per bank (DICGC): each name as written, and joint names in each order, is insured separately; change it when the limit changes */
     insuranceLimit: number;
     /** days before maturity at which an alert escalates, smallest first */
     maturityAlertDays: number[];

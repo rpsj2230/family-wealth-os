@@ -1,5 +1,6 @@
 import { ListingTools } from '@/components/ListingTools';
-import { formatInr, formatInrCompact } from '@fwos/core';
+import Link from 'next/link';
+import { capacityLabel, formatInr, formatInrCompact, partnerMissing } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
@@ -22,7 +23,9 @@ export default async function DepositsPage() {
     loadPortfolio(supabase),
     supabase
       .from('assets')
-      .select('id, owner_id, institution_id, type, status, nickname, account_kind, is_joint'),
+      .select(
+        'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
+      ),
     supabase.from('institutions').select('id, name'),
     loadSettings(supabase as unknown as SupabaseClient),
   ]);
@@ -35,6 +38,7 @@ export default async function DepositsPage() {
     nickname: a.nickname as string,
     accountKind: (a.account_kind as string | null) ?? null,
     isJoint: !!a.is_joint,
+    jointHolderId: (a.joint_holder_id as string | null) ?? null,
   }));
   const bankName = new Map((banks.data ?? []).map((b) => [b.id as string, b.name as string]));
   const v = buildDeposits(
@@ -223,33 +227,59 @@ export default async function DepositsPage() {
               ))}
             </tbody>
           </table>
-          <details>
-            <summary>Breakdown by person and account type</summary>
-            <table className="tbl responsive">
-              <tbody>
-                {v.cover.rows.map((r) => {
-                  const [kind, owner] = r.capacityKey.split(':');
-                  return (
-                    <tr key={r.bankId + r.capacityKey}>
-                      <td data-label="Bank / capacity">
-                        {v.cover.bankNames[r.bankId]} · {v.cover.ownerNames[owner ?? ''] ?? '—'} ·{' '}
-                        {kind === 'joint' ? 'joint accounts' : 'own name'}
-                      </td>
-                      <td className="num" data-label="Total">
-                        {formatInr(r.total)}
-                      </td>
-                      <td className="num" data-label="Insured">
-                        {formatInr(r.insured)}
-                      </td>
-                      <td className={`num ${r.uninsured > 0 ? 'fail' : ''}`} data-label="Above">
-                        {formatInr(r.uninsured)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </details>
+          <h3>Cover by ownership name</h3>
+          <p className="muted small">
+            Each name as written is insured separately at each bank, up to{' '}
+            {formatInr(v.cover.limit)}.
+          </p>
+          <table className="tbl responsive">
+            <thead>
+              <tr>
+                <th>Bank</th>
+                <th>Name on the account</th>
+                <th className="num">Total incl. interest</th>
+                <th className="num">Insured</th>
+                <th className="num">Above the limit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...v.cover.rows]
+                .sort(
+                  (a, b) =>
+                    (v.cover.bankNames[a.bankId] ?? '').localeCompare(
+                      v.cover.bankNames[b.bankId] ?? '',
+                    ) || a.capacityKey.localeCompare(b.capacityKey),
+                )
+                .map((r) => (
+                  <tr key={r.bankId + r.capacityKey}>
+                    <td data-label="Bank">{v.cover.bankNames[r.bankId]}</td>
+                    <td data-label="Name on the account">
+                      {capacityLabel(r.capacityKey, v.cover.ownerNames)}
+                      {partnerMissing(r.capacityKey) && (
+                        <>
+                          {' '}
+                          <Link className="small" href="/accounts/edit">
+                            set the second name
+                          </Link>
+                        </>
+                      )}
+                    </td>
+                    <td className="num" data-label="Total incl. interest">
+                      {formatInr(r.total)}
+                    </td>
+                    <td className="num" data-label="Insured">
+                      {formatInr(r.insured)}
+                    </td>
+                    <td
+                      className={`num ${r.uninsured > 0 ? 'fail' : ''}`}
+                      data-label="Above the limit"
+                    >
+                      {formatInr(r.uninsured)}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
           <ul className="list small muted">
             {v.cover.assumptions.map((a) => (
               <li key={a}>{a}</li>

@@ -11,10 +11,16 @@ export const dynamic = 'force-dynamic';
 export default async function EditAccountsPage() {
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst] = await Promise.all([
-    loadPortfolio(supabase),
-    supabase.from('institutions').select('id, name').order('name'),
-  ]);
+  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, jh] = await Promise.all(
+    [
+      loadPortfolio(supabase),
+      supabase.from('institutions').select('id, name').order('name'),
+      supabase.from('assets').select('id, joint_holder_id').not('joint_holder_id', 'is', null),
+    ],
+  );
+  const jointHolders = Object.fromEntries(
+    (jh.data ?? []).map((j) => [j.id as string, j.joint_holder_id as string]),
+  );
   const owners = [...ownerName.entries()].map(([id, name]) => ({ id, name }));
   const styles = personStyles(owners);
   const institutions = (inst.data ?? []).map((i) => ({
@@ -42,7 +48,7 @@ export default async function EditAccountsPage() {
         <Link href="/accounts">← Back to Accounts</Link>
       </p>
       <AccountEditGrid
-        banks={gridBanks(blocks, assetRows, fdRows)}
+        banks={gridBanks(blocks, assetRows, fdRows, jointHolders)}
         owners={owners}
         institutions={institutions}
         styles={styles}

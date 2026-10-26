@@ -60,3 +60,27 @@ export function dicgcPosition(deposits: DepositForCover[], limit: number) {
     byBank,
   };
 }
+
+/**
+ * The ownership name an account is held in, as written. Cover is counted per bank and per name: "single:A" for one holder,
+ * "joint:A+B" for joint holders in that order (A & B and B & A are different names, each insured separately), and "joint:A+?"
+ * when the account is joint but the second holder is not recorded yet.
+ */
+export function capacityKeyFor(a: {
+  ownerId: string;
+  isJoint: boolean;
+  jointHolderId?: string | null;
+}): string {
+  if (!a.isJoint) return `single:${a.ownerId}`;
+  return `joint:${a.ownerId}+${a.jointHolderId ?? '?'}`;
+}
+
+/** "Rupash", "Rupash & Ragini", "Rupash & (partner not set)". */
+export function capacityLabel(key: string, names: Record<string, string>): string {
+  const [kind, who = ''] = key.split(':');
+  const name = (id: string) => (id === '?' ? '(partner not set)' : (names[id] ?? '—'));
+  return kind === 'joint' ? who.split('+').map(name).join(' & ') : name(who);
+}
+
+/** True for a joint capacity whose second holder is not recorded. */
+export const partnerMissing = (key: string) => key.startsWith('joint:') && key.endsWith('+?');

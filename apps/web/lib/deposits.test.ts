@@ -101,12 +101,13 @@ describe('buildDeposits', () => {
     expect(single.depositIds.sort()).toEqual(['a', 'b']);
     expect(single.insured).toBe(500_000);
     expect(single.uninsured).toBeGreaterThan(1_000_000); // 15 L principal + interest - 5 L
-    expect(esaf.find((r) => r.capacityKey === 'joint:r')!.insured).toBe(500_000);
+    expect(esaf.find((r) => r.capacityKey === 'joint:r+?')!.insured).toBe(500_000);
   });
 
   it('counts only active deposits and states its assumptions', () => {
     expect(view.cover.rows.some((r) => r.depositIds.includes('m'))).toBe(false);
-    expect(view.cover.assumptions.join(' ')).toMatch(/joint/i);
+    expect(view.cover.assumptions.join(' ')).toMatch(/ownership name/i);
+    expect(view.cover.assumptions.join(' ')).toMatch(/no second name/i);
   });
 
   it('builds a maturity calendar of active FDs by month, excluding matured-unconfirmed ones', () => {
@@ -145,5 +146,53 @@ describe('buildDeposits', () => {
     expect(
       v.cover.rows.find((r) => r.bankId === 'yes' && r.capacityKey === 'single:r')!.total,
     ).toBeGreaterThan(1_200_000);
+  });
+
+  it('insures each ownership name separately, and the order of joint names matters', () => {
+    const mk = (
+      id: string,
+      owner: string,
+      joint: boolean,
+      holder: string | null,
+    ): DepositAsset => ({
+      id,
+      ownerId: owner,
+      institutionId: 'esaf',
+      type: 'bank_account',
+      status: 'active',
+      nickname: id,
+      accountKind: null,
+      isJoint: joint,
+      jointHolderId: holder,
+    });
+    const assets = [
+      mk('1', 'r', false, null),
+      mk('2', 'g', false, null),
+      mk('3', 'r', true, 'g'),
+      mk('4', 'g', true, 'r'),
+    ];
+    const valued = assets.map((a) => ({
+      assetId: a.id,
+      ownerId: a.ownerId,
+      type: 'bank_account' as const,
+      status: 'active',
+      name: a.id,
+      estimate: { estimatedAmount: 800_000 } as ValuedAsset['estimate'],
+    }));
+    const v = buildDeposits(
+      assets,
+      valued,
+      [],
+      new Map([['esaf', 'Esaf']]),
+      new Map([
+        ['r', 'Rupash'],
+        ['g', 'Ragini'],
+      ]),
+      new Date('2026-10-26T00:00:00Z'),
+      500_000,
+    );
+    expect(v.cover.rows).toHaveLength(4);
+    expect(v.cover.insured).toBe(2_000_000);
+    expect(v.cover.uninsured).toBe(1_200_000);
   });
 });

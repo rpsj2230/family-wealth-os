@@ -3,13 +3,14 @@
  *
  * Rules that matter:
  *  - Rates are compared AFTER tax: NRE interest is not taxed in India, NRO interest is (the tax rate is a setting).
- *  - Deposit insurance covers a limited amount per person, per bank, per capacity (single or joint). New money is spread so
+ *  - Deposit insurance covers a limited amount per bank and per ownership name as written (a single name, or joint names in a given order). New money is spread so
  *    each bank stays inside the limit, counting what is already there including interest.
  *  - A running deposit is never suggested to be broken early (penalties differ by bank and are not known here); moves are
  *    suggested at maturity.
  *  - Every figure says how old the rate is.
  */
 import type { AppConfig } from './config';
+import { capacityKeyFor } from './dicgc';
 
 export type RateKind = 'NRE' | 'NRO' | 'resident' | 'any';
 
@@ -91,6 +92,8 @@ export interface RateHolding {
   product: 'savings' | 'fd';
   kind: 'NRE' | 'NRO' | null;
   joint: boolean;
+  /** the second name on a joint account (the owner is the first); null when not joint or not recorded */
+  jointHolderId?: string | null;
   /** today's value in INR, including interest */
   current: number;
   /** the rate it earns: the deposit's rate, or the account's own or assumed savings rate */
@@ -99,14 +102,15 @@ export interface RateHolding {
   needsConfirmation: boolean;
 }
 
-const capacityKey = (ownerId: string, joint: boolean) => `${joint ? 'joint' : 'single'}:${ownerId}`;
+const capacityKey = (ownerId: string, joint: boolean, jointHolderId?: string | null) =>
+  capacityKeyFor({ ownerId, isJoint: joint, jointHolderId: jointHolderId ?? null });
 
 /** Money already at each bank for one person and capacity. */
 export function exposureByBank(holdings: RateHolding[]): Map<string, number> {
   const m = new Map<string, number>();
   for (const h of holdings) {
     if (h.needsConfirmation) continue;
-    const k = `${bankKey(h.bank)}|${capacityKey(h.ownerId, h.joint)}`;
+    const k = `${bankKey(h.bank)}|${capacityKey(h.ownerId, h.joint, h.jointHolderId)}`;
     m.set(k, (m.get(k) ?? 0) + h.current);
   }
   return m;
@@ -174,7 +178,8 @@ export function compareHoldings(
       if (sameBank(o.bank, h.bank)) continue;
       const gap = o.net - mine;
       if (gap < prefs.minRateGap) break; // ranked best first: nothing further down will be better
-      const used = exposure.get(`${bankKey(o.bank)}|${capacityKey(h.ownerId, h.joint)}`) ?? 0;
+      const used =
+        exposure.get(`${bankKey(o.bank)}|${capacityKey(h.ownerId, h.joint, h.jointHolderId)}`) ?? 0;
       const room = Math.max(0, limit - used);
       const amount = Math.min(moveable, room);
       if (amount <= 0) continue; // that bank is already at the insurance limit for this person
@@ -247,6 +252,8 @@ export function placeNewMoney(args: {
   kind: 'NRE' | 'NRO';
   ownerId: string;
   joint: boolean;
+  /** the second name when the new money goes into a joint account */
+  jointHolderId?: string | null;
   tenureMonths: number;
   keepLiquid: number;
   holdings: RateHolding[];
@@ -262,7 +269,10 @@ export function placeNewMoney(args: {
   const room = (bank: string) =>
     Math.max(
       0,
-      limit - (exposure.get(`${bankKey(bank)}|${capacityKey(args.ownerId, args.joint)}`) ?? 0),
+      limit -
+        (exposure.get(
+          `${bankKey(bank)}|${capacityKey(args.ownerId, args.joint, args.jointHolderId)}`,
+        ) ?? 0),
     );
   const placements: Placement[] = [];
   let left = Math.max(0, amount);
@@ -279,7 +289,10 @@ export function placeNewMoney(args: {
       const r = room(o.bank);
       const take = Math.min(todo, r);
       if (take < 1) continue;
-      exposure.set(`${bankKey(o.bank)}|${capacityKey(args.ownerId, args.joint)}`, limit - r + take);
+      exposure.set(
+        `${bankKey(o.bank)}|${capacityKey(args.ownerId, args.joint, args.jointHolderId)}`,
+        limit - r + take,
+      );
       todo -= take;
       left -= take;
       placements.push({

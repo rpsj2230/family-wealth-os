@@ -23,6 +23,8 @@ export interface EditRow {
   label: string;
   accountKind: string;
   isJoint: boolean;
+  /** the second name on a joint account (the person above is the first); empty when not joint or not recorded */
+  jointHolderId: string;
   last4: string;
   linkedLast4: string;
   notes: string;
@@ -46,6 +48,7 @@ const FIELDS: Field[] = [
   'label',
   'accountKind',
   'isJoint',
+  'jointHolderId',
   'last4',
   'linkedLast4',
   'notes',
@@ -79,6 +82,9 @@ export function diffRow(now: EditRow, was: EditRow): Record<string, unknown> | n
       case 'accountKind':
         out.accountKind = v === '' ? null : v;
         break;
+      case 'jointHolderId':
+        out.jointHolderId = v === '' ? null : v;
+        break;
       default:
         out[f] =
           typeof v === 'string' && v.trim() === '' ? null : typeof v === 'string' ? v.trim() : v;
@@ -91,6 +97,8 @@ export function diffRow(now: EditRow, was: EditRow): Record<string, unknown> | n
 export function rowProblems(r: EditRow): string[] {
   const out: string[] = [];
   const d4 = /^[A-Za-z0-9-]{1,4}$/;
+  if (r.isJoint && r.jointHolderId && r.jointHolderId === r.ownerId)
+    out.push('the second name must be a different person from the first');
   if (r.last4 && !d4.test(r.last4)) out.push('last four digits: 1 to 4 letters or digits');
   if (r.linkedLast4 && !d4.test(r.linkedLast4))
     out.push('linked account digits: 1 to 4 letters or digits');
@@ -156,6 +164,7 @@ export function gridBanks(
   blocks: BankBlock[],
   assets: AssetRow[],
   fds: FdRow[],
+  jointHolders: Record<string, string> = {},
 ): { key: string; name: string; rows: (EditRow & { code: string })[] }[] {
   const asset = new Map(assets.map((a) => [a.id, a]));
   const fd = new Map(fds.map((f) => [f.asset_id, f]));
@@ -183,6 +192,7 @@ export function gridBanks(
             label: a.label ?? '',
             accountKind: kind,
             isJoint: !!a.is_joint,
+            jointHolderId: a.is_joint ? (jointHolders[a.id] ?? '') : '',
             last4: a.identifier_last4 ?? '',
             linkedLast4: a.linked_last4 ?? '',
             notes: a.notes ?? '',
@@ -202,4 +212,13 @@ export function gridBanks(
         ];
       }),
   }));
+}
+
+/**
+ * Swaps the first and second name of a joint account (Rupash & Ragini becomes Ragini & Rupash). The order of names matters for
+ * deposit insurance, and the person on record is always the first name.
+ */
+export function swapNames(r: EditRow): Partial<EditRow> | null {
+  if (!r.isJoint || !r.jointHolderId) return null;
+  return { ownerId: r.jointHolderId, jointHolderId: r.ownerId };
 }

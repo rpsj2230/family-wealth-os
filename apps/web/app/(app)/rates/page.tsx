@@ -65,6 +65,8 @@ export default async function RatesPage({
           kind,
           ownerId: who,
           joint: sp.joint === 'on',
+          jointHolderId:
+            sp.joint === 'on' && sp.with && styles[sp.with] && sp.with !== who ? sp.with : null,
           tenureMonths: Number(sp.tenure) > 0 ? Number(sp.tenure) : prefs.defaultTenureMonths,
           keepLiquid: Number(String(sp.liquid ?? '').replace(/[₹,\s]/g, '')) || 0,
           holdings: rc.holdings,
@@ -212,7 +214,18 @@ export default async function RatesPage({
               </label>
               <label className="check">
                 <input type="checkbox" name="joint" defaultChecked={sp.joint === 'on'} /> In a joint
-                account (its own insurance allowance)
+                account (each name, in its order, has its own insurance allowance)
+              </label>
+              <label>
+                Joint with (second name)
+                <select name="with" defaultValue={sp.with ?? ''}>
+                  <option value="">Not recorded</option>
+                  {(owners.data ?? []).map((o) => (
+                    <option key={o.id as string} value={o.id as string}>
+                      {o.display_name as string}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
             <div>

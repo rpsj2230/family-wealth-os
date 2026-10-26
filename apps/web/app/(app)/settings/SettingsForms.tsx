@@ -212,8 +212,12 @@ export function ConfigForm({ v }: { v: ConfigValues }) {
       <h3>Deposits</h3>
       <div className="formgrid g3">
         <label>
-          Deposit insurance limit per person per bank (₹)
+          Deposit insurance limit per ownership name per bank (₹)
           <input name="limit" inputMode="numeric" defaultValue={v.limit} />
+          <span className="muted small">
+            Each name as written is insured separately: Rupash, Ragini, Rupash &amp; Ragini and
+            Ragini &amp; Rupash are four different names.
+          </span>
         </label>
         <label>
           Maturity alert steps (days before)

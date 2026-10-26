@@ -1,8 +1,10 @@
 import {
+  capacityKeyFor,
   dicgcPosition,
   daysBetween,
   fdValueOn,
   maturityVariance,
+  partnerMissing,
   type CoverRow,
   type FdRow,
   type ValuedAsset,
@@ -17,6 +19,8 @@ export interface DepositAsset {
   nickname: string;
   accountKind: string | null;
   isJoint?: boolean;
+  /** the second name on a joint account; the owner is the first */
+  jointHolderId?: string | null;
 }
 
 export interface FdLine {
@@ -49,8 +53,8 @@ export interface DepositsView {
 
 /**
  * FD register, maturity calendar and DICGC position.
- * Cover applies per bank, per depositor, per capacity, on balance PLUS accrued interest. Joint accounts form their own capacity;
- * until the joint holders are confirmed we assume one joint capacity per owner at each bank and say so.
+ * Cover applies per bank and per ownership name as written (single, or joint names in a given order), on balance PLUS accrued
+ * interest. Until the second name of a joint account is recorded it is grouped under its first name and the page says so.
  */
 export function buildDeposits(
   assets: DepositAsset[],
@@ -121,20 +125,26 @@ export function buildDeposits(
       return {
         id: a.id,
         bankId: a.institutionId!,
-        capacityKey:
-          a.accountKind === 'joint' || a.isJoint ? `joint:${a.ownerId}` : `single:${a.ownerId}`,
+        capacityKey: capacityKeyFor({
+          ownerId: a.ownerId,
+          isJoint: a.accountKind === 'joint' || !!a.isJoint,
+          jointHolderId: a.jointHolderId ?? null,
+        }),
         amountIncludingInterest: Math.max(0, v),
       };
     });
   const pos = dicgcPosition(deposits, limit);
   const assumptions: string[] = [];
-  if (deposits.some((d) => d.capacityKey.startsWith('joint:'))) {
+  assumptions.push(
+    'Cover is counted per bank and per ownership name as written. Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately; the order of the names matters. Set the second name of each joint account under Correct tags and details.',
+  );
+  if (deposits.some((d) => partnerMissing(d.capacityKey))) {
     assumptions.push(
-      'Joint accounts are treated as one joint capacity per owner at each bank. Confirm who the joint holders are (and in what order) for an exact figure.',
+      'Some joint accounts have no second name recorded yet, so they are grouped by their first name until you set it.',
     );
   }
   assumptions.push(
-    `Cover limit used: ₹${limit.toLocaleString('en-IN')} per depositor, per bank, per capacity (a rule that can change).`,
+    `Cover limit used: ₹${limit.toLocaleString('en-IN')} per ownership name, per bank (a rule that can change).`,
   );
   assumptions.push(
     'Cover counts the deposit plus accrued interest. Overseas (S$) accounts are not covered by this scheme and are not included.',

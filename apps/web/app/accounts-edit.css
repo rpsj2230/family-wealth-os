@@ -90,8 +90,20 @@ table.aeg-table {
   width: 170px;
 }
 .aeg-table .c-joint {
-  width: 44px;
+  width: 150px;
   text-align: center;
+}
+.aeg-table .aeg-with {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+}
+.aeg-table .aeg-with select {
+  width: 100%;
+  font-size: 0.72rem;
+}
+.aeg-table .aeg-with button {
+  font-size: 0.7rem;
 }
 .aeg-table .c-d4 {
   width: 76px;

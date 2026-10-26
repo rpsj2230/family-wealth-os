@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diffRow, rowProblems, suggestKinds, type EditRow } from './account-edit';
+import { diffRow, rowProblems, suggestKinds, swapNames, type EditRow } from './account-edit';
 
 const row = (o: Partial<EditRow> & { id: string }): EditRow => ({
   bankKey: 'b1',
@@ -9,6 +9,7 @@ const row = (o: Partial<EditRow> & { id: string }): EditRow => ({
   label: '',
   accountKind: '',
   isJoint: false,
+  jointHolderId: '',
   last4: '',
   linkedLast4: '',
   notes: '',
@@ -111,5 +112,25 @@ describe('suggestKinds', () => {
     ];
     expect(suggestKinds(rows)).toEqual({});
     expect(suggestKinds([row({ id: 'f2', kind: 'fd', accountKind: 'NRO' })])).toEqual({});
+  });
+});
+
+describe('joint holders', () => {
+  it('sends the second name only when it changes, and clears it when the account stops being joint', () => {
+    const was = row({ id: 'a', ownerId: 'r', isJoint: true, jointHolderId: '' });
+    expect(diffRow({ ...was, jointHolderId: 'g' }, was)).toEqual({ id: 'a', jointHolderId: 'g' });
+    const joint = { ...was, jointHolderId: 'g' };
+    expect(diffRow({ ...joint, isJoint: false, jointHolderId: '' }, joint)).toEqual({
+      id: 'a',
+      isJoint: false,
+      jointHolderId: null,
+    });
+  });
+  it('swaps the first and second name, and refuses the same person twice', () => {
+    const r = row({ id: 'a', ownerId: 'r', isJoint: true, jointHolderId: 'g' });
+    expect(swapNames(r)).toEqual({ ownerId: 'g', jointHolderId: 'r' });
+    expect(swapNames(row({ id: 'b', ownerId: 'r', isJoint: true }))).toBeNull();
+    expect(swapNames(row({ id: 'c', ownerId: 'r' }))).toBeNull();
+    expect(rowProblems({ ...r, jointHolderId: 'r' }).join(' ')).toMatch(/different person/);
   });
 });

@@ -18,7 +18,7 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 
 ## Fixed deposits
 
-**Deposits** lists every deposit with its bank, owner, rate, maturity date and the amount at maturity. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows each person's exposure per bank against the ₹5 lakh deposit insurance limit.
+**Deposits** lists every deposit with its bank, owner, rate, maturity date and the amount at maturity. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account under **Correct tags and details** (Joint with; Swap names reverses the order); until then a joint account is grouped under its first name.
 
 ## Mutual funds and goals
 

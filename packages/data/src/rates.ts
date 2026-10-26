@@ -22,7 +22,7 @@ export async function loadRatesContext(
     const q = db.from(table).select(cols);
     return opts.householdId ? q.eq('household_id', opts.householdId) : q;
   };
-  const [l, st, inst, offerRows] = await Promise.all([
+  const [l, st, inst, offerRows, jointRows] = await Promise.all([
     loadPortfolioData(db, {
       ...(opts.householdId ? { householdId: opts.householdId } : {}),
       ...(opts.today ? { today: opts.today } : {}),
@@ -33,7 +33,14 @@ export async function loadRatesContext(
       'rate_offers',
       'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on',
     ).order('bank'),
+    scoped('assets', 'id, joint_holder_id').not('joint_holder_id', 'is', null),
   ]);
+  const jointHolder = new Map(
+    ((jointRows.data ?? []) as unknown as { id: string; joint_holder_id: string }[]).map((j) => [
+      j.id,
+      j.joint_holder_id,
+    ]),
+  );
   const names = Object.fromEntries(
     ((inst.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [i.id, i.name]),
   );
@@ -66,6 +73,7 @@ export async function loadRatesContext(
           product: r.kind === 'fd' ? 'fd' : 'savings',
           kind: r.accountKind,
           joint: r.joint,
+          jointHolderId: r.joint ? (jointHolder.get(r.assetId) ?? null) : null,
           current: r.current ?? 0,
           rate: r.fd ? r.fd.rate : (ownRate.get(r.assetId) ?? st.config.estimates.savingsRate),
           maturityOn: r.fd?.maturityOn ?? null,

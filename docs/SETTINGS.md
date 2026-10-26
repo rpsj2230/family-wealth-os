@@ -7,7 +7,7 @@ Nothing personal and no tunable number is written into the code. Everything belo
 | Date of birth, PAN (write-only; last four shown), tax residency, guardian, minor, primary/spouse role | People | Retirement ages, tax per person, fund-statement password (full PAN is read only by the importer) |
 | Salary, other income, spending: any currency, monthly or yearly | Income and spending | Monthly saving shown in Settings; available to planning |
 | Retirement age, planning end age, spending, return and inflation assumptions, scenarios, one-off costs | Can I retire now? (assumptions panel) | Retirement verdict |
-| Deposit insurance limit; maturity alert steps; "maturing soon" days | Limits and reminders | Accounts, Deposits, Home, daily summary |
+| Deposit insurance limit (per ownership name, per bank); maturity alert steps; "maturing soon" days | Limits and reminders | Accounts, Deposits, Home, daily summary |
 | Reminder windows for policies and tasks; harvest reminder date | Limits and reminders | Daily summary, tasks |
 | Out-of-date days for balances; assumed savings rate; assumed tax on interest; include SIP instalments | Limits and reminders | Current value estimates |
 | Harvest: smallest sale, extra holding months, leave out SIP funds, non-resident withholding | Limits and reminders | Automatic tax-gain plan |

@@ -8,6 +8,7 @@ import {
   diffRow,
   rowProblems,
   suggestKinds,
+  swapNames,
   type EditRow,
 } from '@/lib/account-edit';
 import '@/app/accounts-edit.css';
@@ -346,9 +347,45 @@ export function AccountEditGrid({
                             <input
                               type="checkbox"
                               checked={r.isJoint}
-                              onChange={(e) => set(r.id, { isJoint: e.target.checked })}
+                              onChange={(e) =>
+                                set(r.id, {
+                                  isJoint: e.target.checked,
+                                  ...(e.target.checked ? {} : { jointHolderId: '' }),
+                                })
+                              }
                               aria-label={`Joint, ${r0.code}`}
                             />
+                            {r.isJoint && (
+                              <div className="aeg-with">
+                                <select
+                                  value={r.jointHolderId}
+                                  onChange={(e) => set(r.id, { jointHolderId: e.target.value })}
+                                  aria-label={`Joint with, ${r0.code}`}
+                                >
+                                  <option value="">second name not set</option>
+                                  {owners
+                                    .filter((o) => o.id !== r.ownerId)
+                                    .map((o) => (
+                                      <option key={o.id} value={o.id}>
+                                        {o.name}
+                                      </option>
+                                    ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  className="btn compact ghost"
+                                  disabled={!r.jointHolderId}
+                                  onClick={() => {
+                                    const p = swapNames(r);
+                                    if (p) set(r.id, p);
+                                  }}
+                                  aria-label={`Swap names, ${r0.code}`}
+                                  title="Swap the first and second name (Rupash & Ragini becomes Ragini & Rupash)"
+                                >
+                                  Swap names
+                                </button>
+                              </div>
+                            )}
                           </td>
                           {col(r, 'last4', 'Last four digits', 'c-d4', {
                             disabled: fd,

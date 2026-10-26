@@ -209,4 +209,46 @@ describe('placeNewMoney', () => {
     ]);
     expect([...e.values()]).toEqual([150]);
   });
+
+  it('counts money only in the same ownership name, and joint names in their own order', () => {
+    const at = { bank: 'Beta' };
+    const own = hold({ assetId: 'own', ownerId: 'r', current: 400_000, ...at });
+    const rg = hold({
+      assetId: 'rg',
+      ownerId: 'r',
+      joint: true,
+      jointHolderId: 'g',
+      current: 300_000,
+      ...at,
+    });
+    const gr = hold({
+      assetId: 'gr',
+      ownerId: 'g',
+      joint: true,
+      jointHolderId: 'r',
+      current: 200_000,
+      ...at,
+    });
+    const e = exposureByBank([own, rg, gr]);
+    expect([...e.values()].sort((a, b) => a - b)).toEqual([200_000, 300_000, 400_000]);
+    // in Rupash's own name only the 4 lakh he holds in his own name counts at Beta: 1 lakh of room there
+    const mine = placeNewMoney({ ...base, amount: 400_000, holdings: [own, rg, gr] });
+    expect(mine.placements.map((p) => [p.bank, p.amount])).toEqual([
+      ['Beta', 100_000],
+      ['Gamma', 300_000],
+    ]);
+    // a joint account in the order Ragini & Rupash has 3 lakh of room at Beta, whatever sits in Rupash & Ragini
+    const joint = placeNewMoney({
+      ...base,
+      amount: 400_000,
+      ownerId: 'g',
+      joint: true,
+      jointHolderId: 'r',
+      holdings: [own, rg, gr],
+    });
+    expect(joint.placements.map((p) => [p.bank, p.amount])).toEqual([
+      ['Beta', 300_000],
+      ['Gamma', 100_000],
+    ]);
+  });
 });
