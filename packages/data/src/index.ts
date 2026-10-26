@@ -258,6 +258,7 @@ export async function loadPortfolioData(
 export * from './digest-input';
 export * from './harvest';
 export * from './sip-estimates';
+export * from './rate-sync';
 
 export * from './settings';
 export * from './rates';

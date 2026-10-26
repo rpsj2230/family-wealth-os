@@ -54,12 +54,24 @@ describe('settings fields', () => {
     expect(parseNumber('abc')).toBeNull();
     const r = parseGroup(
       group('estimates'),
-      form({ freshness: '40', savingsRate: '3.5', tdsRate: '0', includeSip: 'on' }),
+      form({
+        freshness: '40',
+        sipStopped: '60',
+        savingsRate: '3.5',
+        tdsRate: '0',
+        includeSip: 'on',
+      }),
     );
     expect(r).toEqual({
       ok: true,
       raw: {
-        estimates: { freshnessDays: 40, savingsRate: 0.035, interestTdsRate: 0, includeSip: true },
+        estimates: {
+          freshnessDays: 40,
+          sipStoppedAfterDays: 60,
+          savingsRate: 0.035,
+          interestTdsRate: 0,
+          includeSip: true,
+        },
       },
     });
   });

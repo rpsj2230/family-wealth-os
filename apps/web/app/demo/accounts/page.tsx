@@ -4,6 +4,7 @@ import { bankOverview, DEFAULT_CONFIG, filterBlocksByOwner, formatInrCompact } f
 import { BankOverviewPanel } from '@/app/(app)/accounts/BankOverview';
 import { ForeignCard, ManageCards } from '@/app/(app)/accounts/Parts';
 import { BankTable } from '@/components/BankTable';
+import { GrandTotal } from '@/components/GrandTotal';
 import { AddButton, QuickEditProvider } from '@/components/QuickEdit';
 import { DemoShell } from '@/components/DemoShell';
 import { ListingTools } from '@/components/ListingTools';
@@ -125,6 +126,13 @@ export default async function DemoAccounts({
             />
             <ListingTools name="accounts">
               <BankTable blocks={shown} styles={styles} updateBase="/demo/bank" />
+              <GrandTotal
+                invested={overview.invested}
+                maturity={overview.maturity}
+                current={overview.current}
+                lines={overview.accounts + overview.deposits}
+                scope={who ? (styles[who]?.name ?? null) : null}
+              />
             </ListingTools>
             <ForeignCard lines={FOREIGN} styles={styles} />
           </>

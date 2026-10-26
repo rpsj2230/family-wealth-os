@@ -95,11 +95,15 @@ export async function checkRateSource(args: {
   let thirdParty = false;
   if (!fromBank)
     for (const d of docs.reference) thirdParty = (await add(d.url, d.label, 15_000)) || thirdParty;
-  if (parts.length === 0)
+  if (parts.length === 0) {
+    const blocked = steps.some((x) => /answered (401|403|406|429|503)\b/.test(x.text));
     return done(
       false,
-      'Cannot sync: the page cannot be read. Paste the rates on the Rates page, or save another address for this bank.',
+      blocked
+        ? 'Cannot sync by itself: this bank’s site does not let a program open its page (it refuses automated visits). That is not worked around. Use “Paste the page instead” below: open the page in your own browser, copy all the text and paste it.'
+        : 'Cannot sync: the page cannot be read. Use “Paste the page instead” below, paste the rates on the Rates page, or save another address for this bank.',
     );
+  }
   if (thirdParty)
     steps.push({
       ok: true,

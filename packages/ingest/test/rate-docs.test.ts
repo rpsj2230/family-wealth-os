@@ -9,10 +9,18 @@ describe('rateDocsFor', () => {
     expect(rateDocsFor('Yes Bank').official).toEqual([]);
   });
   it('knows nothing about other banks, so their saved page is all that is read', () => {
-    expect(rateDocsFor('HDFC Bank')).toEqual({ official: [], reference: [] });
+    expect(rateDocsFor('Some Other Bank')).toEqual({ official: [], reference: [] });
+  });
+  it('lists public comparison pages, labelled third party, for banks that refuse automated visits', () => {
+    for (const b of ['ESAF Bank', 'HDFC Bank', 'IDFC First Bank', 'IndusInd Bank', 'RBL Bank']) {
+      const d = rateDocsFor(b);
+      expect(d.official).toEqual([]);
+      expect(d.reference.length).toBeGreaterThan(0);
+      for (const x of d.reference) expect(x.label).toContain('third party');
+    }
   });
   it('only lists openly published https documents', () => {
-    for (const b of ['AU Bank', 'Equitas', 'Yes Bank'])
+    for (const b of ['AU Bank', 'Equitas', 'Yes Bank', 'ESAF Bank', 'HDFC Bank', 'RBL Bank'])
       for (const d of [...rateDocsFor(b).official, ...rateDocsFor(b).reference])
         expect(d.url.startsWith('https://')).toBe(true);
   });

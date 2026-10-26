@@ -145,6 +145,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'days',
       },
       {
+        name: 'sipStopped',
+        label: 'A SIP is shown as stopped when no instalment has come for',
+        hint: 'Read from a fund statement: when the last instalment on it is older than this at the date the statement ends, the SIP is marked stopped, dated from that last instalment. Monthly SIPs: a little over a month, 45 by default.',
+        kind: 'int',
+        path: ['estimates', 'sipStoppedAfterDays'],
+        unit: 'days',
+      },
+      {
         name: 'savingsRate',
         label: 'Savings interest assumed when no rate is known',
         hint: 'Estimating today’s balance of a savings account uses, in this order: the rate set on the account, then the Rates list for its bank (NRE or NRO, and the slab its balance falls in), then this figure.',

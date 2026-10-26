@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { aiJson, buildAiChat } from '../src/bank-email';
 import {
   modelsRequest,
   pickModel,
@@ -266,5 +267,62 @@ describe('withModelFallback remembers what it learned', () => {
     asked.length = 0;
     await call('https://x.test', { body });
     expect(asked).toEqual(['good']);
+  });
+});
+
+describe('Anthropic provider', () => {
+  it('asks the Messages API for Claude Haiku with no sampling setting and JSON asked for in words', () => {
+    const r = buildAiChat('anthropic', 'sk-ant-test', 'Read it.', 'some text');
+    expect(r.url).toBe('https://api.anthropic.com/v1/messages');
+    expect(r.init.headers['x-api-key']).toBe('sk-ant-test');
+    expect(r.init.headers['anthropic-version']).toBe('2023-06-01');
+    const b = JSON.parse(r.init.body) as Record<string, unknown>;
+    expect(b.model).toBe('claude-haiku-5-5');
+    expect(b).not.toHaveProperty('temperature');
+    expect(b.max_tokens).toBeGreaterThan(1000);
+    expect(String(b.system)).toContain('JSON');
+    expect(b.messages).toEqual([{ role: 'user', content: 'some text' }]);
+  });
+  it('reads the text blocks of the answer and ignores thinking blocks', () => {
+    const answer = {
+      content: [
+        { type: 'thinking', thinking: '' },
+        {
+          type: 'text',
+          text: '{"readings":[{"bank":"HDFC","last4":"1234","amount":1000,"currency":"INR","asOf":"2026-10-01"}]}',
+        },
+      ],
+    };
+    expect(aiJson('anthropic', answer)).toEqual({
+      readings: [
+        { bank: 'HDFC', last4: '1234', amount: 1000, currency: 'INR', asOf: '2026-10-01' },
+      ],
+    });
+  });
+  it('lists models with the key and prefers Haiku 5.5, then the next tiers', () => {
+    const req = modelsRequest('anthropic', 'k');
+    expect(req.url).toContain('/v1/models');
+    expect(req.init.headers['x-api-key']).toBe('k');
+    const list = {
+      data: [
+        { id: 'claude-opus-5-5' },
+        { id: 'claude-sonnet-5-5' },
+        { id: 'claude-haiku-4-5' },
+        { id: 'claude-haiku-5-5' },
+      ],
+    };
+    expect(rankModels('anthropic', list)).toEqual([
+      'claude-haiku-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-4-5',
+      'claude-opus-5-5',
+    ]);
+  });
+  it('explains an invalid key and an empty balance in plain words', () => {
+    expect(aiErrorHint('anthropic', 401, '')).toContain('console.anthropic.com');
+    expect(
+      aiErrorHint('anthropic', 400, 'Your credit balance is too low to access the API'),
+    ).toContain('credit');
+    expect(aiErrorHint('anthropic', 529, '')).toContain('busy');
   });
 });

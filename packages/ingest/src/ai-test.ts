@@ -22,6 +22,7 @@ export interface AiTestResult {
 }
 
 export const PROVIDER_NAME: Record<AiProvider, string> = {
+  anthropic: 'Anthropic (Claude Haiku)',
   openrouter: 'OpenRouter (free models)',
   groq: 'Groq',
   gemini: 'Google Gemini',

@@ -169,7 +169,11 @@ export function redactForAi(s: string): string {
     .replace(/\b(?:\d[ -]?){12,}\d\b/g, '[number]');
 }
 
-export type AiProvider = 'groq' | 'gemini' | 'openrouter';
+export type AiProvider = 'anthropic' | 'groq' | 'gemini' | 'openrouter';
+
+/** The Claude model used for readings: the cheapest current one is plenty for reading a page or an alert (Anthropic Messages API). */
+export const ANTHROPIC_MODEL = 'claude-haiku-5-5';
+export const ANTHROPIC_VERSION = '2023-06-01';
 
 const PROMPT = `You read bank emails and statements. Return ONLY JSON of the form
 {"readings":[{"bank":"<bank name>","last4":"<last 4 digits of the account or null>","amount":<closing or available balance as a number>,"currency":"INR|SGD|USD","asOf":"YYYY-MM-DD"}]}.
@@ -198,6 +202,27 @@ export function buildAiChat(
   body: string,
   model?: string,
 ): AiHttp {
+  if (provider === 'anthropic')
+    return {
+      url: 'https://api.anthropic.com/v1/messages',
+      init: {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': ANTHROPIC_VERSION,
+        },
+        // no temperature (current Claude models fix it); low effort keeps the reading quick and cheap; JSON is asked for in words and
+        // checked on arrival, like the other providers. max_tokens leaves room for the answer and any brief thinking.
+        body: JSON.stringify({
+          model: model ?? ANTHROPIC_MODEL,
+          max_tokens: 8000,
+          output_config: { effort: 'low' },
+          system: `${system}\nReply with one JSON object only: no commentary, no code fence.`,
+          messages: [{ role: 'user', content: body }],
+        }),
+      },
+    };
   if (provider === 'openrouter')
     return {
       url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -258,7 +283,10 @@ export function buildAiChat(
 export function aiJson(provider: AiProvider, json: unknown): unknown {
   const j = json as Record<string, unknown>;
   let content: string;
-  if (provider !== 'gemini') {
+  if (provider === 'anthropic') {
+    const blocks = j?.content as { type?: string; text?: string }[] | undefined;
+    content = (blocks ?? []).map((b) => (b.type === 'text' ? (b.text ?? '') : '')).join('');
+  } else if (provider !== 'gemini') {
     const choices = j?.choices as { message?: { content?: string } }[] | undefined;
     content = choices?.[0]?.message?.content ?? '';
   } else {

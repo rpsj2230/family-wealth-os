@@ -101,6 +101,33 @@ function liveTotals(t: TableModel) {
   });
 }
 
+/**
+ * A grand total outside the tables, marked `data-grand`: its `data-gt="inv|mat|cur"` elements add up the lines that are showing
+ * (rows carrying `data-inv`, `data-mat`, `data-cur`), so it follows the search and the column filters. `data-gt="n"` counts the lines.
+ */
+function grandTotals(el: HTMLElement) {
+  const box = el.querySelector<HTMLElement>('[data-grand]');
+  if (!box) return;
+  const sum = { inv: 0, mat: 0, cur: 0 };
+  let n = 0;
+  el.querySelectorAll<HTMLTableRowElement>('tr[data-cur]').forEach((r) => {
+    if (r.hidden || r.closest('[hidden]')) return;
+    n += 1;
+    sum.inv += Number(r.dataset.inv ?? 0);
+    sum.mat += Number(r.dataset.mat ?? 0);
+    sum.cur += Number(r.dataset.cur ?? 0);
+  });
+  box.querySelectorAll<HTMLElement>('[data-gt]').forEach((c) => {
+    const k = c.dataset.gt as 'inv' | 'mat' | 'cur' | 'n';
+    c.textContent = k === 'n' ? String(n) : n ? formatInr(Math.round(sum[k])) : '–';
+  });
+  const f = box.querySelector<HTMLElement>('[data-gt-filtered]');
+  if (f) f.hidden = !isFiltering(el);
+}
+
+/** True when a search or column filter is narrowing the lists (the toolbar marks it). */
+const isFiltering = (el: HTMLElement) => el.dataset.filtering === '1';
+
 const titleOf = (el: Element) => {
   const s = el.closest('section, details, .card');
   const h = s?.querySelector('h1, h2, h3, summary');
@@ -203,6 +230,9 @@ export function ListingTools({
         th.setAttribute('tabindex', '0');
       });
     }
+
+    el.dataset.filtering = q !== '' || active.length > 0 ? '1' : '0';
+    grandTotals(el);
 
     // list items
     el.querySelectorAll<HTMLElement>('[data-item]').forEach((item) => {

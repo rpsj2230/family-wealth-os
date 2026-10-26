@@ -247,6 +247,7 @@ export function BankOverviewPanel({
           label="Savings and cash"
           value={formatInrCompact(o.parts.cash.current)}
           sub={`${plural(o.parts.cash.count, 'account')} · ${formatInrCompact(o.parts.cash.invested)} last recorded`}
+          href={to('/cash')}
         />
         <Stat
           label="Interest still to earn"

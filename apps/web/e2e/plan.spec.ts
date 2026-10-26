@@ -164,7 +164,7 @@ test.describe('New money (public sample)', () => {
 
   test('reads an amount typed in words and keeps it when you change tab', async ({ page }) => {
     await page.goto('/demo/new-money');
-    await page.getByLabel(/Amount/).fill('25 lakh');
+    await page.getByLabel(/How much/).fill('25 lakh');
     await page.getByRole('button', { name: 'Show the best ways' }).click();
     await expect(page.getByText(/Recommended for/)).toBeVisible();
     await page.getByRole('link', { name: /Earning more elsewhere/ }).click();

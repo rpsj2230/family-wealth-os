@@ -32,6 +32,12 @@ Open **Import**, press **Choose a file** and pick whatever you have: your Excel 
 
 Each kind keeps its own page (open its card) with the last result and anything that needs a look.
 
+## Cash, and the total on Accounts
+
+**Cash** (the *Savings and cash* tile on Accounts opens it) is to savings what Deposits is to fixed deposits: the cash available today, what the balances are estimated to earn (a year, a month, a day), which bank holds how much with each bank's share and average rate, the balances that are out of date, the largest balance, the split by person and by NRE and NRO, and a register of every savings account with its rate, last recorded balance, value today and interest a year. The person filter narrows all of it. Interest is an estimate: balance times rate, less the tax at source set in Settings.
+
+At the bottom of **Accounts** a **Total** shows invested or balance, what everything pays at maturity, and today's value, for the lines counted. It follows the person you choose and the search or column filters: type a bank name and the total becomes that bank's. It uses the same rule as the overview at the top, so the two always agree.
+
 ## Fixed deposits
 
 **Deposits** has three tabs: Deposits (every deposit with its bank, owner, rate, maturity date and the amount at maturity), Maturities (what to confirm, what matures soon, a calendar) and Insurance cover. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account by pressing **Edit** on it, then **More details** (Joint account, Second name; the swap button reverses the order); until then a joint account is grouped under its first name.
@@ -120,9 +126,15 @@ first, includes funds with a running SIP, and counts long-term gains you have al
 
 ### SIP changes, estimated instalments and funds missing from a statement
 
+- **How "Stopped" is decided.** A SIP is shown as stopped in three ways: you mark it stopped (or set its amount to zero) when updating the fund; the imported workbook has "(STOPPED)" in the fund's name; or a fund statement shows it: the last instalment on the statement is more than a number of days before the statement ends. That number is in Settings → Estimated balances ("A SIP is shown as stopped when no instalment has come for"), 45 days by default. The stop is dated from the day after that last instalment. A fund with no statement and no mark shows as running, with no latest instalment, because nothing says otherwise.
+
 - **Changing a SIP.** When you raise, lower, stop or restart a SIP (Investments, update a fund), the change is written down with the date it takes effect (today unless you set a date). The instalments already made keep the amount that was in force on their day, so a new amount never rewrites the past. A stopped SIP adds no instalments after its stop date.
 - **Assumed instalments are saved as estimates.** For a fund with counted units and a running SIP, the instalments assumed since the units were last counted (each at the price of its day) are kept in the transaction list, worded "Estimated SIP instalment, not yet on a statement", so lots, returns and graphs agree with the value shown. They are never shown as paid on the SIP calendar. As soon as a statement or an entry covers a date, the estimates up to it are removed and the real lines take their place; the daily job keeps the rest up to date.
 - **A fund missing from a complete fund statement is treated as sold.** When a full fund statement (PDF) for a person is imported, any fund of theirs that is not on it is closed, its units set to zero, its SIP stopped and its value set to zero on the statement date. The import report lists each one ("assumed sold") so you can correct a mistake. This is not done for a file of some transactions (CSV), when a fund on the statement could not be matched, or for a fund started or updated after the statement ended.
+
+### Which AI reads the pages and e-mails
+
+Settings → Bank e-mails and AI offers **Anthropic (Claude Haiku)**, OpenRouter, Groq and Google Gemini. Claude Haiku is the most reliable: it answers every time and costs a fraction of a cent for a rate page, so a few dollars of credit lasts years at this volume. Create a key at console.anthropic.com, add a little credit, paste the key and press **Test**. The free providers cost nothing but some of their models are slow or restricted; the reader remembers which model worked and asks it first.
 
 ## Who can open the handbook, and when
 
@@ -185,6 +197,8 @@ Every option stays inside the deposit-insurance limit at each bank for the chose
 ## Tasks
 
 **Tasks** are grouped as overdue, due in the next 7 days, later and no date. Tick the circle when a task is done; _Not needed_ drops it. Each task links to the account, bank or page it concerns. Finished and dropped tasks are on the second tab, with a way back.
+
+**Banks that refuse automated visits.** Some banks (ESAF, HDFC, Equitas, Yes Bank, AU, IDFC First, IndusInd, RBL) answer a program with "Access Denied" or "request rejected", and a real browser run by a program is refused the same way. That is not worked around. Three things are done instead: the bank's own PDF rate sheets are read where they exist (AU); a labelled public comparison page is read when the bank's own page cannot be (marked third party, with its date, and it never removes a rate already on file); and each bank row in Settings → Bank rate pages has **Paste the page instead**: open the page in your own browser, press Ctrl+A then Ctrl+C, and paste. The AI reads the rates from the text and saves them like a refresh.
 
 **Check sync (Settings → Bank rate pages).** Every listed bank has a **Check sync** button. It reads the saved page (and the bank's own published sheets), asks your AI to find the rates in it, and tells you step by step whether the weekly refresh will work: the page read, the number of characters, and how many fixed-deposit and savings rates were found. Nothing is saved. The check runs from the app's server, while the weekly refresh runs from GitHub, so a page can behave differently in the two places; if the check passes and the weekly run still fails, say so and the page is looked at again.
 

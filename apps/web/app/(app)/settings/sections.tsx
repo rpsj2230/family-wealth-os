@@ -15,6 +15,7 @@ import {
   AiConnection,
   DigestForm,
   IntegrationsForm,
+  PastePageBox,
   RateCheckButton,
   RateSourceForm,
 } from './ConnectForms';
@@ -428,7 +429,7 @@ export function ConnectionsSection({
   demo = false,
 }: {
   ai: {
-    provider: 'groq' | 'gemini' | 'openrouter' | null;
+    provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
     keySet: boolean;
     label: string;
     testedAt?: string | null;
@@ -453,9 +454,10 @@ export function ConnectionsSection({
         </div>
         <p className="muted small">
           Balance alerts from a bank’s own address are read by fixed rules and need no key. To read
-          PDF statements and unfamiliar e-mails, add a free key from OpenRouter (recommended: it
-          tries several free models one after another), Groq or Google AI Studio (Gemini). Account
-          numbers are removed before any text is sent. See what the reader did in the{' '}
+          PDF statements and unfamiliar e-mails and the bank rate pages, add an Anthropic key
+          (Claude Haiku: the most reliable; pay per use, a few dollars of credit lasts years at this
+          volume) or a free key from OpenRouter, Groq or Google AI Studio (Gemini). Account numbers
+          are removed before any text is sent. See what the reader did in the{' '}
           <Link href="/inbox">bank e-mail inbox</Link>.
         </p>
         <AiConnection
@@ -525,6 +527,7 @@ export function ConnectionsSection({
                   </td>
                   <td data-label="Check">
                     <RateCheckButton id={r.id} bank={r.bank} />
+                    <PastePageBox id={r.id} bank={r.bank} />
                   </td>
                   <td>
                     <form action={deleteRateSource}>

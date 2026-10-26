@@ -146,6 +146,34 @@ function counted(r: BankRow): boolean {
   return r.status !== 'closed' && r.status !== 'stopped';
 }
 
+/**
+ * What one line adds to the totals: invested (deposit principal, or the last balance recorded), what it pays at maturity (savings: today's
+ * value) and today's value. `counted` is false for a line that is out of the totals (closed, stopped, or a deposit past its date waiting to
+ * be confirmed). The page totals and the overview use this one function, so they always agree.
+ */
+export function bankRowFigures(r: BankRow): {
+  counted: boolean;
+  invested: number;
+  maturity: number;
+  current: number;
+} {
+  const current = r.current ?? 0;
+  if (r.kind === 'fd' && r.fd)
+    return {
+      counted: counted(r),
+      invested: r.fd.principal,
+      maturity: r.fd.maturityAmount,
+      current,
+    };
+  // a foreign balance is in another currency: take it at today's rupee value, with no gain or loss
+  return {
+    counted: counted(r),
+    invested: r.currency === 'INR' ? (r.recorded ?? current) : current,
+    maturity: current,
+    current,
+  };
+}
+
 export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOverview {
   const yesterday = new Date(opts.today.getTime() - 86_400_000);
   const parts = { cash: emptyPart(), fd: emptyPart(), others: emptyPart() };
@@ -179,18 +207,8 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
         if (r.kind !== 'fd' && r.stale && r.status !== 'closed' && r.status !== 'stopped') stale++;
         if (!counted(r)) continue;
         if (r.kind !== 'fd' && r.asOf) dates.push(r.asOf);
-        const current = r.current ?? 0;
+        const { current, invested, maturity } = bankRowFigures(r);
         const isFd = r.kind === 'fd' && !!r.fd;
-        let invested: number;
-        let maturity: number;
-        if (isFd) {
-          invested = r.fd!.principal;
-          maturity = r.fd!.maturityAmount;
-        } else {
-          // a foreign balance is in another currency: take it at today's rupee value, with no gain or loss
-          invested = r.currency === 'INR' ? (r.recorded ?? current) : current;
-          maturity = current;
-        }
         const bucket = isFd ? parts.fd : r.kind === 'held' || !isBank ? parts.others : parts.cash;
         bucket.count++;
         bucket.invested += invested;

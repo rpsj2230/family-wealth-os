@@ -139,6 +139,23 @@ describe('runCasImport', () => {
     const p = saved.find((x) => x.assetId === 'f1')!.position;
     expect(p.sipMonthly).toBe(10000);
     expect(p.sipStopped).toBe(true); // last instalment was March 2026
+    expect(p.sipLastOn).toBe('2026-03-05');
+  });
+  it('takes the number of days after which a SIP counts as stopped from the setting', async () => {
+    const f: CasFund = {
+      assetId: 'f1',
+      name: 'Sample Flexi Cap Fund',
+      amfiCode: null,
+      isin: 'INF000A01AB1',
+      folioLast4: null,
+    };
+    // statement ends 25 Oct 2026; the last instalment was 5 Mar 2026, 234 days earlier
+    const a = fakeIo([f]);
+    await runCasImport('owner', stmt, a.io, { today: '2026-10-26', sipStoppedAfterDays: 300 });
+    expect(a.saved.find((x) => x.assetId === 'f1')!.position.sipStopped).toBe(false);
+    const b = fakeIo([f]);
+    await runCasImport('owner', stmt, b.io, { today: '2026-10-26', sipStoppedAfterDays: 200 });
+    expect(b.saved.find((x) => x.assetId === 'f1')!.position.sipStopped).toBe(true);
   });
   it('leaves an ambiguous scheme for review and carries on', async () => {
     const dup = (id: string): CasFund => ({

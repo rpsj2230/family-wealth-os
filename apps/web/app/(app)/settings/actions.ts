@@ -8,7 +8,17 @@ import {
   parseContactLines,
   profileFromJson,
 } from '@fwos/core';
-import { checkRateSource, testAiConnection, type AiProvider, type RateCheck } from '@fwos/ingest';
+import {
+  buildRatesRequest,
+  checkRateSource,
+  parseRatesResponse,
+  prepareAi,
+  testAiConnection,
+  type AiProvider,
+  type RateCheck,
+} from '@fwos/ingest';
+import { saveRatesRead } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { CONFIG_GROUPS, mergeGroup, parseGroup, withConfirmed } from '@/lib/settings-fields';
 
@@ -68,7 +78,12 @@ export async function saveIntegrations(_p: FormResult | null, f: FormData): Prom
   const { error } = await supabase.rpc('save_integrations', {
     p_household: householdId,
     p_provider:
-      provider === 'groq' || provider === 'gemini' || provider === 'openrouter' ? provider : null,
+      provider === 'anthropic' ||
+      provider === 'groq' ||
+      provider === 'gemini' ||
+      provider === 'openrouter'
+        ? provider
+        : null,
     p_key: key === '' ? null : key,
     p_label: label,
     p_clear: clear,
@@ -163,6 +178,98 @@ export async function checkRatePage(sourceId: string): Promise<RateCheck> {
     limits: { listMs: 8_000, callMs: 30_000, tries: 2 },
     pageMs: 12_000,
   });
+}
+
+export interface PasteResult {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * Reads rates from text you copied from the bank's page in your own browser (open the page, select all, copy, paste here). For banks
+ * that do not let a program open their page. The AI finds the rates in the text and they are stored like a refreshed page; a rate you
+ * typed yourself is never overwritten.
+ */
+export async function readPastedRatePage(sourceId: string, text: string): Promise<PasteResult> {
+  const fail = (message: string): PasteResult => ({ ok: false, message });
+  if (!/^[0-9a-f-]{36}$/.test(sourceId)) return fail('Unknown page.');
+  const pasted = text.replace(/\s+/g, ' ').trim();
+  if (pasted.length < 200)
+    return fail(
+      'Paste the whole page: open it in your browser, press Ctrl+A (Cmd+A on a Mac), then Ctrl+C, and paste here. What was pasted is too short to hold a rate table.',
+    );
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return fail('Create your household first.');
+  const src = await supabase
+    .from('rate_sources')
+    .select('id, bank, url')
+    .eq('id', sourceId)
+    .maybeSingle();
+  const row = src.data as { id: string; bank: string; url: string } | null;
+  if (!row) return fail('This page is no longer in the list.');
+  const { data } = await supabase.rpc('ai_credentials_for_test', { p_household: householdId });
+  const cred = (data as { provider: AiProvider; api_key: string }[] | null)?.[0];
+  if (!cred) return fail('No AI key is saved. Add one under Bank emails and AI first.');
+  const today = new Date().toISOString().slice(0, 10);
+  const note = async (result: string) => {
+    await supabase
+      .from('rate_sources')
+      .update({ last_run_on: today, last_result: result.slice(0, 300) })
+      .eq('id', row.id);
+    revalidatePath('/settings');
+    revalidatePath('/rates');
+  };
+  try {
+    const rt = await prepareAi(cred.provider, cred.api_key, {
+      listMs: 8_000,
+      callMs: 30_000,
+      tries: 2,
+    });
+    const hints = await supabase
+      .from('rate_hints')
+      .select('hint')
+      .eq('active', true)
+      .eq('bank', row.bank)
+      .limit(20);
+    const req = buildRatesRequest(
+      cred.provider,
+      cred.api_key,
+      row.bank,
+      `### ${row.bank}: text pasted by the account holder from the bank's page\n${pasted.slice(0, 60_000)}`,
+      rt.model || undefined,
+      ((hints.data ?? []) as { hint: string }[]).map((h) => h.hint),
+    );
+    const res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
+    if (!res.ok) {
+      const msg = `The AI service answered ${res.status}. Try again in a minute.`;
+      await note(`pasted page not read: ${msg}`);
+      return fail(msg);
+    }
+    const read = parseRatesResponse(cred.provider, await res.json(), row.bank);
+    if (read.length === 0) {
+      const msg =
+        'No rates could be found in the pasted text. Check it is the page with the rate table.';
+      await note(`pasted page not read: ${msg}`);
+      return fail(msg);
+    }
+    const summary = await saveRatesRead({
+      db: supabase as unknown as SupabaseClient,
+      household: householdId,
+      bank: row.bank,
+      read,
+      heldNames: [],
+      today,
+      thirdParty: false,
+      sourceUrl: row.url,
+      sourceNote: `Pasted by you from the bank's page on ${today}`,
+    });
+    await note(`pasted by you: ${summary}`);
+    return { ok: true, message: `Saved: ${summary}.` };
+  } catch (e) {
+    const msg = `Could not read the pasted page (${(e as Error).message}).`;
+    await note(`pasted page not read: ${msg}`);
+    return fail(msg);
+  }
 }
 
 const uuid = /^[0-9a-f-]{36}$/;

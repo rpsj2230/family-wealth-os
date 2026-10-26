@@ -2604,3 +2604,25 @@ details.bankdet {
   margin: 6px 0 0;
   padding-left: 1.1rem;
 }
+
+/* Settings > Bank rate pages: paste the page text for a bank that does not let a program open its page */
+.pastepage {
+  margin-top: 8px;
+  max-width: 34rem;
+  font-size: 0.85rem;
+}
+.pastepage summary {
+  cursor: pointer;
+  color: var(--accent, #4f46e5);
+}
+.pastepage textarea {
+  width: 100%;
+  margin: 6px 0;
+  font: inherit;
+}
+.pastepage .ok {
+  color: var(--ok, #166534);
+}
+.pastepage .bad {
+  color: var(--fail, #b42318);
+}

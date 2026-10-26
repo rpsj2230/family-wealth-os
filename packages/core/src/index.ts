@@ -47,3 +47,4 @@ export * from './fund-stats';
 export * from './reports';
 export * from './deposit-views';
 export * from './placement-options';
+export * from './cash-view';

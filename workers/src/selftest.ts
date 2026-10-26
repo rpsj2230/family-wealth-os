@@ -40,14 +40,16 @@ async function checkAi(): Promise<void> {
     .eq('household_id', id ?? '')
     .maybeSingle();
   const s = cfg.data as {
-    ai_provider: 'groq' | 'gemini' | 'openrouter' | null;
+    ai_provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
     ai_api_key: string | null;
     inbox_label: string | null;
   } | null;
   label = s?.inbox_label ?? 'FWOS/Inbox';
   householdId = id ?? null;
   if (!s?.ai_provider || !s.ai_api_key) {
-    bad('No AI key is saved. Add a free Groq or Gemini key in Settings > Bank emails and AI.');
+    bad(
+      'No AI key is saved. Add an Anthropic, OpenRouter, Groq or Gemini key in Settings > Bank emails and AI.',
+    );
     return;
   }
   const r = await testAiConnection({ provider: s.ai_provider, key: s.ai_api_key, today });

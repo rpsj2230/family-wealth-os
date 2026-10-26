@@ -13,6 +13,7 @@ import {
   type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadSettings } from './settings';
 import { syncSipEstimates } from './sip-estimates';
 
 const must = <T>(r: { data: T | null; error: { message: string } | null }, what: string): T => {
@@ -238,6 +239,12 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         upd.sip_monthly = position.sipMonthly;
         upd.sip_stopped = position.sipStopped ?? false;
       }
+      const stoppedFrom =
+        position.sipStopped && position.sipLastOn
+          ? new Date(Date.parse(`${position.sipLastOn}T00:00:00Z`) + 86_400_000)
+              .toISOString()
+              .slice(0, 10)
+          : null;
       must(
         await db
           .from('mf_positions')
@@ -247,6 +254,18 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
           .select('asset_id'),
         'update position',
       );
+      // a SIP the statement shows as stopped stopped after its last instalment, not on the day the statement was read
+      if (stoppedFrom)
+        must(
+          await db
+            .from('mf_sip_changes')
+            .upsert(
+              { household_id: hh, asset_id: assetId, effective_on: stoppedFrom, monthly: 0 },
+              { onConflict: 'asset_id,effective_on' },
+            )
+            .select('id'),
+          'date the stop',
+        );
       if (position.units !== null && position.casAsOf) {
         // the units held on that date; a later hand-entered count is never replaced by an older statement
         const cur = must(
@@ -437,6 +456,7 @@ export async function importCasPdf(
   const report = await runCasImport(owner, stmt, casIo(db, hh), {
     today: opts.today,
     complete: true,
+    sipStoppedAfterDays: (await loadSettings(db, hh)).config.estimates.sipStoppedAfterDays,
   });
   await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   const partial = report.needsReview.length > 0;
@@ -535,7 +555,10 @@ export async function importFundCsv(
       return res;
     },
   };
-  const report = await runCasImport(ownerId, statement, io, { today: opts.today });
+  const report = await runCasImport(ownerId, statement, io, {
+    today: opts.today,
+    sipStoppedAfterDays: (await loadSettings(db, hh)).config.estimates.sipStoppedAfterDays,
+  });
   for (const name of report.needsReview)
     funds.push({
       name,

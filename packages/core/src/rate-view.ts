@@ -254,7 +254,7 @@ export function sourceStatus(
       health: 'bad',
       headline: 'Not read: no AI key is saved.',
       fix: {
-        text: 'Add a free OpenRouter, Groq or Gemini key, then run the refresh again.',
+        text: 'Add an Anthropic, OpenRouter, Groq or Gemini key, then run the refresh again.',
         href: '/settings#email',
         hrefLabel: 'Add the key in Settings',
       },

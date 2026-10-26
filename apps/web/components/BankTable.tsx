@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   DEFAULT_CONFIG,
+  bankRowFigures,
   bankStyle,
   formatInr,
   type BankBlock,
@@ -66,8 +67,17 @@ function Row({
 }) {
   const fd = r.fd;
   const note = cleanNote(r.notes);
+  // what this line adds to the page total, read by the live total at the bottom (same rule as the overview)
+  const fig = bankRowFigures(r);
+  const totals = fig.counted
+    ? {
+        'data-inv': String(Math.round(fig.invested * 100) / 100),
+        'data-mat': String(Math.round(fig.maturity * 100) / 100),
+        'data-cur': String(Math.round(fig.current * 100) / 100),
+      }
+    : {};
   return (
-    <tr className={`xlrow ${r.status !== 'active' ? 'dim' : ''}`}>
+    <tr className={`xlrow ${r.status !== 'active' ? 'dim' : ''}`} {...totals}>
       <td className="code">
         <div className="codeline">
           <Link

@@ -1,0 +1,52 @@
+/* The total under a list of bank tables */
+.grandtotal {
+  position: sticky;
+  bottom: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  z-index: 2;
+  box-shadow: 0 -4px 16px rgba(20, 24, 60, 0.08);
+}
+.gt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gt-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.gt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.gt-grid dt {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gt-grid dd {
+  margin: 2px 0 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.gt-grid .gt-main {
+  font-size: 1.3rem;
+}
+@media (max-width: 560px) {
+  .gt-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .grandtotal {
+    position: static;
+  }
+}

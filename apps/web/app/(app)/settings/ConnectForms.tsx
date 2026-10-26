@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import {
   addRateSource,
   checkRatePage,
+  readPastedRatePage,
   saveDigestSettings,
   saveIntegrations,
   testAi,
@@ -53,7 +54,7 @@ export function IntegrationsForm({
   keySet,
   label,
 }: {
-  provider: 'groq' | 'gemini' | 'openrouter' | null;
+  provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
   keySet: boolean;
   label: string;
 }) {
@@ -61,8 +62,14 @@ export function IntegrationsForm({
   return (
     <form action={act} className="form" aria-busy={pending}>
       <div className="formgrid g3">
-        <Field label="AI service" hint="Both have a free tier that is enough for this household.">
-          <select name="provider" defaultValue={provider ?? 'openrouter'}>
+        <Field
+          label="AI service"
+          hint="Claude Haiku is the most reliable and costs well under a rupee a month here; the others are free but some of their models are slow or restricted."
+        >
+          <select name="provider" defaultValue={provider ?? 'anthropic'}>
+            <option value="anthropic">
+              Anthropic Claude Haiku (pay per use, a fraction of a cent a reading)
+            </option>
             <option value="openrouter">OpenRouter (free models, tried one after another)</option>
             <option value="groq">Groq</option>
             <option value="gemini">Google Gemini</option>
@@ -118,13 +125,14 @@ export function RateSourceForm() {
 }
 
 const PROVIDER_NAME = {
+  anthropic: 'Anthropic (Claude Haiku)',
   openrouter: 'OpenRouter (free models, tried one after another)',
   groq: 'Groq',
   gemini: 'Google Gemini',
 } as const;
 
 export interface AiStatus {
-  provider: 'groq' | 'gemini' | 'openrouter' | null;
+  provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
   keySet: boolean;
   testedAt: string | null;
   testOk: boolean | null;
@@ -228,5 +236,50 @@ export function RateCheckButton({ id, bank }: { id: string; bank: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * For a bank whose page a program cannot open: open it in your own browser, copy all the text, paste it here. The rates are read from the
+ * text and saved like a refresh. Nothing is sent from the bank's site by this program.
+ */
+export function PastePageBox({ id, bank }: { id: string; bank: string }) {
+  const [text, setText] = useState('');
+  const [res, setRes] = useState<{ ok: boolean; message: string } | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <details className="pastepage">
+      <summary>Paste the page instead</summary>
+      <p className="small muted">
+        Open {bank}&apos;s rate page in your own browser, press Ctrl+A (Cmd+A on a Mac), Ctrl+C, and
+        paste below. The rates are read from the text and saved; a rate you typed is never
+        overwritten.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={5}
+        aria-label={`Text copied from the ${bank} rate page`}
+        placeholder="Paste the whole page here"
+      />
+      <button
+        type="button"
+        className="btn compact"
+        disabled={pending || text.trim().length === 0}
+        onClick={() =>
+          start(async () => {
+            setRes(null);
+            const r = await readPastedRatePage(id, text);
+            setRes(r);
+            if (r.ok) setText('');
+          })
+        }
+      >
+        {pending ? 'Reading…' : 'Read the rates'}
+      </button>
+      <div role="status" aria-live="polite">
+        {res && <p className={`small ${res.ok ? 'ok' : 'bad'}`}>{res.message}</p>}
+      </div>
+    </details>
   );
 }

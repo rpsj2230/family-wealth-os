@@ -3,7 +3,7 @@
  * which models the key can use and picks the best available one, falling back to a built-in name only when the list cannot be read.
  * Pure: the worker supplies `fetch`.
  */
-import { buildAiChat, parseJsonLoosely, type AiProvider } from './bank-email';
+import { ANTHROPIC_VERSION, buildAiChat, parseJsonLoosely, type AiProvider } from './bank-email';
 
 export interface ModelsHttp {
   url: string;
@@ -11,6 +11,14 @@ export interface ModelsHttp {
 }
 
 export function modelsRequest(provider: AiProvider, apiKey: string): ModelsHttp {
+  if (provider === 'anthropic')
+    return {
+      url: 'https://api.anthropic.com/v1/models?limit=100',
+      init: {
+        method: 'GET',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION },
+      },
+    };
   if (provider === 'openrouter')
     return {
       url: 'https://openrouter.ai/api/v1/models',
@@ -29,6 +37,15 @@ export function modelsRequest(provider: AiProvider, apiKey: string): ModelsHttp 
 
 /** Best first. A name matches the first pattern it fits. */
 const PREFER: Record<AiProvider, RegExp[]> = {
+  // the cheapest current model first (reading a page or an alert needs no more), then the next tiers
+  anthropic: [
+    /^claude-haiku-5-5$/,
+    /^claude-haiku-5/,
+    /^claude-sonnet-5-5$/,
+    /^claude-haiku-4-5$/,
+    /^claude-sonnet-5/,
+    /^claude-/,
+  ],
   // free models only (see modelNames); larger, instruction-tuned and current ones first, reasoning models last
   openrouter: [
     /llama-3\.3-70b/,
@@ -95,6 +112,10 @@ function openRouterFree(listJson: unknown): string[] {
 }
 
 function modelNames(provider: AiProvider, listJson: unknown): string[] {
+  if (provider === 'anthropic')
+    return ((listJson as { data?: { id?: string }[] } | null)?.data ?? []).map((m) =>
+      String(m.id ?? ''),
+    );
   if (provider === 'openrouter') return openRouterFree(listJson);
   if (provider === 'groq') {
     const d = (listJson as { data?: { id?: string; active?: boolean }[] } | null)?.data;
@@ -239,6 +260,12 @@ export async function probeModels(
 /** The reason an AI service refused, in plain words and with the way out; null when there is nothing more to add. */
 export function aiErrorHint(provider: AiProvider, status: number, body: string): string | null {
   const b = body.toLowerCase();
+  if (provider === 'anthropic' && (status === 401 || status === 403))
+    return 'Anthropic refused the key. Create a key at console.anthropic.com (API keys) and save it in Settings > Bank emails and AI.';
+  if (provider === 'anthropic' && /credit balance/.test(b))
+    return 'The Anthropic account has no credit left. Add a few dollars of credit at console.anthropic.com (Billing); reading a rate page costs a fraction of a cent.';
+  if (provider === 'anthropic' && (status === 429 || status === 529))
+    return 'Anthropic is busy or the rate limit was reached for a moment. Try again in a minute.';
   // every model failed for its own reason (restricted, busy, slow): that says nothing about the key itself
   if (provider === 'openrouter' && b.includes('every free model tried failed'))
     return 'The free models tried were restricted, busy or too slow. The key itself is fine if another page was read. Try again later, or add a small credit on openrouter.ai, or use a free Groq key.';

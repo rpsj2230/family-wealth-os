@@ -70,6 +70,84 @@ const TABLE: { bank: string; docs: RateDocs }[] = [
       ],
     },
   },
+  {
+    bank: 'ESAF Small Finance Bank',
+    docs: {
+      official: [],
+      reference: [
+        {
+          url: 'https://www.bankbazaar.com/fixed-deposit/esaf-small-finance-bank-fixed-deposit-rate.html',
+          label: 'BankBazaar page on ESAF fixed deposit rates (third party)',
+        },
+        {
+          url: 'https://www.policybazaar.com/financial-planning/fixed-deposit/esaf-small-finance-bank-fd-rates/',
+          label: 'Policybazaar page on ESAF fixed deposit rates (third party)',
+        },
+      ],
+    },
+  },
+  {
+    bank: 'HDFC Bank',
+    docs: {
+      official: [],
+      reference: [
+        {
+          url: 'https://www.bankbazaar.com/fixed-deposit/hdfc-nri-fd-rates.html',
+          label: 'BankBazaar page on HDFC Bank NRI fixed deposit rates (third party)',
+        },
+      ],
+    },
+  },
+  {
+    bank: 'IDFC First Bank',
+    docs: {
+      official: [],
+      reference: [
+        {
+          url: 'https://www.bankbazaar.com/fixed-deposit/idfc-nri-fd-rates.html',
+          label:
+            'BankBazaar page on IDFC FIRST Bank NRI fixed deposit rates (third party; may be older)',
+        },
+        {
+          url: 'https://www.policybazaar.com/financial-planning/fixed-deposit/idfc-bank-fd-rates/',
+          label:
+            'Policybazaar page on IDFC FIRST Bank fixed deposit rates, domestic, NRO and NRE (third party)',
+        },
+      ],
+    },
+  },
+  {
+    bank: 'IndusInd Bank',
+    docs: {
+      official: [],
+      reference: [
+        {
+          url: 'https://www.bankbazaar.com/fixed-deposit/indusind-bank-nri-fd-rates.html',
+          label: 'BankBazaar page on IndusInd Bank NRI fixed deposit rates (third party)',
+        },
+        {
+          url: 'https://www.policybazaar.com/financial-planning/fixed-deposit/indusind-bank-fd-rates/',
+          label: 'Policybazaar page on IndusInd Bank fixed deposit rates (third party)',
+        },
+      ],
+    },
+  },
+  {
+    bank: 'RBL Bank',
+    docs: {
+      official: [],
+      reference: [
+        {
+          url: 'https://www.bankbazaar.com/fixed-deposit/rbl-bank-nri-fd-rates.html',
+          label: 'BankBazaar page on RBL Bank NRI fixed deposit rates (third party)',
+        },
+        {
+          url: 'https://www.policybazaar.com/financial-planning/fixed-deposit/rbl-bank-fd-rates/',
+          label: 'Policybazaar page on RBL Bank fixed deposit rates (third party)',
+        },
+      ],
+    },
+  },
 ];
 
 export function rateDocsFor(bank: string): RateDocs {

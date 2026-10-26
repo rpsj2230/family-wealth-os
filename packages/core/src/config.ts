@@ -32,6 +32,8 @@ export interface AppConfig {
     interestTdsRate: number;
     /** add instalments of active SIPs since the last recorded value to a fund's estimate */
     includeSip: boolean;
+    /** a fund statement shows a SIP as stopped when its last instalment is more than this many days before the statement ends */
+    sipStoppedAfterDays: number;
   };
   rates: {
     /** an offer not checked within this many days is shown as old */
@@ -149,7 +151,13 @@ export interface AppConfig {
 export const DEFAULT_CONFIG: AppConfig = {
   deposits: { insuranceLimit: 500_000, maturityAlertDays: [7, 15, 30, 60, 90] },
   reminders: { policyDays: 45, taskDays: 7, maturitySoonDays: 30, harvestMonth: 3, harvestDay: 15 },
-  estimates: { freshnessDays: 35, savingsRate: 0.03, interestTdsRate: 0, includeSip: true },
+  estimates: {
+    freshnessDays: 35,
+    savingsRate: 0.03,
+    interestTdsRate: 0,
+    includeSip: true,
+    sipStoppedAfterDays: 45,
+  },
   rates: {
     staleDays: 30,
     minRateGap: 0.0025,
@@ -277,6 +285,9 @@ export function configFromJson(raw: unknown): AppConfig {
       savingsRate: num(est.savingsRate, d.estimates.savingsRate, 0, 0.5),
       interestTdsRate: num(est.interestTdsRate, d.estimates.interestTdsRate, 0, 0.5),
       includeSip: bool(est.includeSip, d.estimates.includeSip),
+      sipStoppedAfterDays: Math.round(
+        num(est.sipStoppedAfterDays, d.estimates.sipStoppedAfterDays, 20, 400),
+      ),
     },
     rates: {
       staleDays: Math.round(num(rat.staleDays, d.rates.staleDays, 1, 365)),

@@ -12,6 +12,7 @@
  * it can be put right. This is skipped when any scheme on the statement could not be matched (the missing fund might be that
  * one), and for a fund started after the statement ended or updated after it.
  */
+import { DEFAULT_CONFIG } from '@fwos/core';
 import { coreTokens } from './amfi';
 import { fifoLots, type CasScheme, type CasStatement, type CasTxn } from './cas';
 
@@ -37,6 +38,8 @@ export interface CasSave {
     startedOn: string | null;
     sipMonthly: number | null;
     sipStopped: boolean | null;
+    /** the date of the last instalment on the statement, when a SIP was read */
+    sipLastOn?: string | null;
     folioLast4: string;
     isin: string | null;
     amfiCode: string | null;
@@ -108,7 +111,11 @@ export function matchScheme(scheme: CasScheme, amfi: string | null, funds: CasFu
   return { status: 'one', fund: scored[0]!.f };
 }
 
-function sip(txns: CasTxn[], end: string): { monthly: number; stopped: boolean } | null {
+function sip(
+  txns: CasTxn[],
+  end: string,
+  stoppedAfterDays: number,
+): { monthly: number; stopped: boolean; lastOn: string } | null {
   const s = txns
     .filter((t) => t.kind === 'sip' && t.amount > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -119,7 +126,7 @@ function sip(txns: CasTxn[], end: string): { monthly: number; stopped: boolean }
   const monthly = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]![0];
   const last = s[s.length - 1]!.date;
   const gap = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${last}T00:00:00Z`)) / 86_400_000;
-  return { monthly, stopped: gap > 45 };
+  return { monthly, stopped: gap > stoppedAfterDays, lastOn: last };
 }
 
 export async function runCasImport(
@@ -130,6 +137,8 @@ export async function runCasImport(
     today: string;
     /** the statement lists everything the person holds, so a fund missing from it has been sold */
     complete?: boolean;
+    /** a SIP is stopped when its last instalment is more than this many days before the statement ends (Settings: estimates.sipStoppedAfterDays) */
+    sipStoppedAfterDays?: number;
   },
 ): Promise<CasReport> {
   const r: CasReport = {
@@ -198,7 +207,13 @@ export async function runCasImport(
           .filter((t) => t.units > 0)
           .map((t) => t.date)
           .sort()[0] ?? firstBuy;
-      const sp = held ? sip(s.transactions, end) : null;
+      const sp = held
+        ? sip(
+            s.transactions,
+            end,
+            cfg.sipStoppedAfterDays ?? DEFAULT_CONFIG.estimates.sipStoppedAfterDays,
+          )
+        : null;
       const asOf = s.navDate ?? stmt.periodTo;
       const amount =
         s.marketValue ??
@@ -213,6 +228,7 @@ export async function runCasImport(
           startedOn: lots.priorUnits > 0 ? null : started,
           sipMonthly: sp?.monthly ?? null,
           sipStopped: sp ? sp.stopped : null,
+          sipLastOn: sp ? sp.lastOn : null,
           folioLast4: s.folioLast4,
           isin: s.isin,
           amfiCode: amfi,

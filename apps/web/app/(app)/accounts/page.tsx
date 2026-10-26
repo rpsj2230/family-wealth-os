@@ -8,6 +8,7 @@ import {
   personStyles,
 } from '@fwos/core';
 import { BankTable } from '@/components/BankTable';
+import { GrandTotal } from '@/components/GrandTotal';
 import { AddButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
 import { ListingTools } from '@/components/ListingTools';
@@ -211,6 +212,13 @@ export default async function AccountsPage({
           notes={notes}
           saveNote={saveBankNote}
           cashRates={cashRates}
+        />
+        <GrandTotal
+          invested={overview.invested}
+          maturity={overview.maturity}
+          current={overview.current}
+          lines={overview.accounts + overview.deposits}
+          scope={who ? styles[who]!.name : null}
         />
       </ListingTools>
       <ForeignCard lines={foreign} styles={styles} />

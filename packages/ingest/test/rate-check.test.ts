@@ -18,7 +18,8 @@ describe('checkRateSource', () => {
       ai: null,
     });
     expect(r.ok).toBe(false);
-    expect(r.verdict).toMatch(/Cannot sync: the page cannot be read/);
+    expect(r.verdict).toMatch(/does not let a program open its page/);
+    expect(r.verdict).toContain('Paste the page instead');
     expect(r.steps[0]!.text).toContain('answered 503');
   });
 

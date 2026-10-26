@@ -65,7 +65,7 @@ async function main() {
       .maybeSingle(),
     'settings',
   ) as {
-    ai_provider: 'groq' | 'gemini' | 'openrouter' | null;
+    ai_provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
     ai_api_key: string | null;
     inbox_label: string;
   } | null;
