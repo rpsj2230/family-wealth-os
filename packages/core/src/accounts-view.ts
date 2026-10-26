@@ -3,7 +3,7 @@
  * deposits side by side, every line tagged with whose it is, how current it is and where the figure came from.
  * Pure functions; the pages only draw what this returns.
  */
-import { fdValueOn } from './fd';
+import { fdValueOn, type Compounding } from './fd';
 import type { AssetRow, FdRow, ObservationRow, Portfolio } from './portfolio';
 import { latestObservations } from './portfolio';
 
@@ -123,6 +123,9 @@ export function sourceTag(source: string | null, asOf: string | null, isFd: bool
 
 export type AccountKind = 'NRE' | 'NRO';
 
+/** The key of the block that holds everything with no bank: money held by others and accounts without a bank. */
+export const OTHER_HOLDINGS_KEY = '__none';
+
 /** One row of the sheet: a savings account, a fixed deposit, or money held by someone else. */
 export interface BankRow {
   assetId: string;
@@ -155,6 +158,8 @@ export interface BankRow {
     maturityOn: string;
     daysLeft: number;
     maturityAmount: number;
+    /** how interest is added to the deposit: needed to work out what it earns in a day */
+    compounding: Compounding;
     maturityAmountFromBank: boolean;
     refLast4: string | null;
     /** code of the savings account it is linked to, found by the last four digits */
@@ -255,7 +260,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
   const fdBy = new Map(i.fds.map((f) => [f.asset_id, f]));
   const valued = new Map(i.portfolio.valued.map((v) => [v.assetId, v]));
   const monthStart = `${i.today.toISOString().slice(0, 7)}-01`;
-  const NONE = '__none';
+  const NONE = OTHER_HOLDINGS_KEY;
   let seq = 0;
 
   const rowsByBank = new Map<string, BankRow[]>();
@@ -320,6 +325,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         maturityOn: fd.maturity_on,
         daysLeft,
         maturityAmount,
+        compounding: fd.compounding,
         maturityAmountFromBank: fd.bank_maturity_amount !== null,
         refLast4: fd.fd_ref_last4 ?? null,
         linkedTo: null,

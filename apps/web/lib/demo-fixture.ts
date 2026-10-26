@@ -104,6 +104,18 @@ export function demoModel() {
       }
     });
   });
+  // money kept for a relative: it is not in any bank, so it sits under "Other holdings"
+  assets.push(
+    base({
+      id: 'held-1',
+      owner_id: 'p1',
+      type: 'third_party_held',
+      nickname: 'Kept for a relative',
+      holder_name: 'Sample Relative',
+      account_kind: null,
+    }),
+  );
+  obs('held-1', 450_000, '2026-10-18');
   const portfolio = buildPortfolio(assets, observations, fds, DEMO_TODAY);
   const blocks = buildBankBlocks({
     assets,

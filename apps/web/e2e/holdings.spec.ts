@@ -36,7 +36,7 @@ test.describe('Accounts (public sample)', () => {
   }) => {
     await page.goto('/demo/accounts');
     await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
-    const kpis = page.getByRole('region', { name: 'Accounts at a glance' });
+    const kpis = page.getByRole('region', { name: 'Money in banks' });
     await expect(kpis).toContainText('In banks today');
     await expect(kpis).toContainText('Fixed deposits today');
     await expect(kpis).toContainText('Updated in');

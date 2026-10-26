@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { filterBlocksByOwner, formatInrCompact } from '@fwos/core';
-import { AccountsKpis, ForeignCard, ManageCards } from '@/app/(app)/accounts/Parts';
+import { bankOverview, DEFAULT_CONFIG, filterBlocksByOwner, formatInrCompact } from '@fwos/core';
+import { BankOverviewPanel } from '@/app/(app)/accounts/BankOverview';
+import { ForeignCard, ManageCards } from '@/app/(app)/accounts/Parts';
 import { BankTable } from '@/components/BankTable';
 import { AddButton, QuickEditProvider } from '@/components/QuickEdit';
 import { DemoShell } from '@/components/DemoShell';
@@ -9,8 +10,8 @@ import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
-import { summariseBlocks, type ForeignLine } from '@/lib/accounts-summary';
-import { demoModel } from '@/lib/demo-fixture';
+import type { ForeignLine } from '@/lib/accounts-summary';
+import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
 import { quickModel } from '@/lib/quick-edit';
 
 export const metadata: Metadata = {
@@ -42,7 +43,13 @@ export default async function DemoAccounts({
   const { blocks, styles, portfolio, assets, fds, people, institutionNames } = demoModel();
   const who = p && styles[p] ? p : null;
   const shown = who ? filterBlocksByOwner(blocks, who) : blocks;
-  const summary = summariseBlocks(shown);
+  const overview = bankOverview(shown, {
+    today: DEMO_TODAY,
+    soonDays: DEFAULT_CONFIG.reminders.maturitySoonDays,
+    defaultSavingsRate: DEFAULT_CONFIG.estimates.savingsRate,
+    tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
+    insuranceLimit: DEFAULT_CONFIG.deposits.insuranceLimit,
+  });
   const totals = Object.fromEntries(
     Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
   );
@@ -62,11 +69,11 @@ export default async function DemoAccounts({
           title="Accounts"
           subtitle="Every bank in your sheet's order, with each person's savings and deposits. Press Edit on a line to change it."
           pills={[
-            summary.needsYou > 0
-              ? { label: `${summary.needsYou} need you`, tone: 'warn' }
+            overview.needsYou > 0
+              ? { label: `${overview.needsYou} need you`, tone: 'warn' }
               : { label: 'Nothing waiting', tone: 'ok' },
             {
-              label: `${summary.banksDone} of ${summary.banks} banks updated in October`,
+              label: `${overview.banksDone} of ${overview.banks} banks updated in October`,
               tone: 'info',
             },
           ]}
@@ -82,7 +89,13 @@ export default async function DemoAccounts({
             </>
           }
         />
-        <AccountsKpis s={summary} month="October" />
+        <BankOverviewPanel
+          o={overview}
+          styles={styles}
+          month="October"
+          scope={who ? styles[who]!.name : null}
+          sample
+        />
         <Tabs
           base="/demo/accounts"
           current={tab}

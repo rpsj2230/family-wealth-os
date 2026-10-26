@@ -16,6 +16,7 @@ export * from './digest';
 export * from './planning';
 export * from './tax-filing';
 export * from './accounts-view';
+export * from './bank-overview';
 export * from './harvest-plan';
 export * from './config';
 export * from './rates';

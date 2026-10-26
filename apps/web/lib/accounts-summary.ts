@@ -1,35 +1,4 @@
-import type { AssetRow, BankBlock, ObservationRow } from '@fwos/core';
-
-export interface AccountsSummary {
-  banks: number;
-  total: number;
-  savings: number;
-  fdInvested: number;
-  fdMaturity: number;
-  fdToday: number;
-  /** banks whose balances are all dated this month and need nothing from you */
-  banksDone: number;
-  /** things only the person can settle: stale balances and unconfirmed matured deposits */
-  needsYou: number;
-  /** the oldest "last updated" date among the banks, or null when none has one */
-  oldestUpdate: string | null;
-}
-
-/** The few figures at the top of the Accounts page. */
-export function summariseBlocks(blocks: BankBlock[]): AccountsSummary {
-  const dates = blocks.map((b) => b.lastUpdated).filter((d): d is string => !!d);
-  return {
-    banks: blocks.length,
-    total: blocks.reduce((s, b) => s + b.totals.current, 0),
-    savings: blocks.reduce((s, b) => s + b.totals.cash, 0),
-    fdInvested: blocks.reduce((s, b) => s + b.totals.fdInvested, 0),
-    fdMaturity: blocks.reduce((s, b) => s + b.totals.fdMaturity, 0),
-    fdToday: blocks.reduce((s, b) => s + b.totals.fdCurrent, 0),
-    banksDone: blocks.filter((b) => b.doneThisMonth).length,
-    needsYou: blocks.reduce((s, b) => s + b.needsYou, 0),
-    oldestUpdate: dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : null,
-  };
-}
+import type { AssetRow, ObservationRow } from '@fwos/core';
 
 /** The latest recorded value of each asset (an earlier value replaced by a correction is ignored). */
 export function latestObservations(obs: ObservationRow[]) {
