@@ -143,8 +143,20 @@ export async function addRateOffer(_p: RateResult | null, f: FormData): Promise<
   const product = String(f.get('product') ?? '');
   const kind = String(f.get('kind') ?? 'any');
   const pct = num(f.get('rate'));
-  const from = num(f.get('from')) ?? 0;
-  const to = num(f.get('to')) ?? from;
+  // a term typed as "2" with a unit (months, years or days) takes the place of the older from/to months pair
+  const termN = num(f.get('term'));
+  const unit = String(f.get('unit') ?? 'months');
+  const days = termN !== null && unit === 'days' && Number.isInteger(termN) ? termN : null;
+  const termMonths =
+    termN === null
+      ? null
+      : unit === 'years'
+        ? Math.round(termN * 12)
+        : unit === 'days'
+          ? Math.max(1, Math.round(termN / 30.4375))
+          : Math.round(termN);
+  const from = termMonths ?? num(f.get('from')) ?? 0;
+  const to = termMonths ?? num(f.get('to')) ?? from;
   if (
     !bank ||
     !['savings', 'fd'].includes(product) ||
@@ -182,7 +194,10 @@ export async function addRateOffer(_p: RateResult | null, f: FormData): Promise<
       .trim()
       .slice(0, 200) || null;
   if (ex) {
-    const ok = await setRate(supabase, ex, rate, 'other', { conditions });
+    const ok = await setRate(supabase, ex, rate, 'other', {
+      conditions,
+      ...(days ? { tenure_days: days } : {}),
+    });
     if (!ok) return { ok: false, message: 'That could not be saved.' };
   } else {
     const ins = await supabase.from('rate_offers').insert({
@@ -192,6 +207,7 @@ export async function addRateOffer(_p: RateResult | null, f: FormData): Promise<
       account_kind: kind,
       tenure_from_months: tf,
       tenure_to_months: tt,
+      tenure_days: product === 'fd' ? days : null,
       balance_from: bf,
       balance_to: bt,
       rate,
@@ -281,6 +297,31 @@ export async function toggleHint(f: FormData): Promise<void> {
     .update({ active: !(r.data as { active: boolean }).active })
     .eq('id', id);
   refresh();
+}
+
+/** A rule you write yourself for the reader, for example "Use the table headed Regular, not Senior Citizens". */
+export async function addHint(_p: RateResult | null, f: FormData): Promise<RateResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const bank = String(f.get('bank') ?? '')
+    .trim()
+    .slice(0, 80);
+  const hint = String(f.get('hint') ?? '')
+    .trim()
+    .slice(0, 400);
+  if (!bank) return { ok: false, message: 'Choose the bank this rule is for.' };
+  if (hint.length < 8)
+    return {
+      ok: false,
+      message:
+        'Write the rule as a sentence, for example “Read the Regular column, not Senior Citizens”.',
+    };
+  const r = await supabase
+    .from('rate_hints')
+    .insert({ household_id: householdId, bank, cause: 'Written by you', hint });
+  if (r.error) return { ok: false, message: 'That could not be saved.' };
+  refresh();
+  return { ok: true, message: 'Saved. The next refresh follows it.' };
 }
 
 /**

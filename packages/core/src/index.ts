@@ -33,3 +33,6 @@ export * from './notes-tidy';
 export * from './fund-class';
 export * from './harvest-lots';
 export * from './loss-harvest';
+export * from './rate-view';
+export * from './tasks-view';
+export * from './goal-card';

@@ -46,7 +46,14 @@ export interface BankSummary {
   /** corrections the reader keeps getting wrong */
   misread: number;
   /** the latest change to the best rates, if the log has one */
-  lastMove: { product: 'savings' | 'fd'; from: number; to: number; at: string } | null;
+  lastMove: {
+    product: 'savings' | 'fd';
+    from: number;
+    to: number;
+    at: string;
+    /** the log line it came from, to say which rate moved */
+    event: RateEventRow;
+  } | null;
 }
 
 export function bankSummary(
@@ -86,7 +93,7 @@ export function bankSummary(
     differs: mine.filter((o) => o.pageRate !== null && o.pageRate !== undefined).length,
     misread: mine.filter((o) => (o.misreadCount ?? 0) > 0).length,
     lastMove: move
-      ? { product: move.product, from: move.oldRate!, to: move.newRate!, at: move.at }
+      ? { product: move.product, from: move.oldRate!, to: move.newRate!, at: move.at, event: move }
       : null,
   };
 }
