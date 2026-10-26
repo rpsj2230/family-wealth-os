@@ -95,6 +95,26 @@ describe('settings fields', () => {
     expect(days.ok).toBe(false);
   });
 
+  it('the Home numbers live in the reminders card and save into their own section', () => {
+    const base = { policyDays: '45', taskDays: '7', harvestMonth: '3', harvestDay: '15' };
+    const ok = parseGroup(
+      group('reminders'),
+      form({ ...base, changeDays: '14', upcomingDays: '90', bankShareWatch: '25' }),
+    );
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.raw.home).toEqual({ changeDays: 14, upcomingDays: 90, bankShareWatch: 0.25 });
+      expect(configFromJson(mergeGroup({}, ok.raw)).home.bankShareWatch).toBe(0.25);
+    }
+    const bad = parseGroup(
+      group('reminders'),
+      form({ ...base, changeDays: '2', upcomingDays: '90', bankShareWatch: '25' }),
+    );
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.message).toContain('this many days ago');
+    expect(groupValues(group('reminders'), DEFAULT_CONFIG).bankShareWatch).toBe('40');
+  });
+
   it('saving one group leaves the others and the liquidity choices as they were', () => {
     const prior = {
       liquidity: { mode: 'fastest' },

@@ -61,6 +61,11 @@ const LIQUIDITY: Record<AssetType, Liquidity | null> = {
 /** Statuses whose value is still part of wealth. Matured-but-unconfirmed FDs are excluded until confirmed. */
 const COUNTED_STATUS = new Set(['active', 'stopped']);
 
+/** Whether a holding is part of net worth today: a kind that is wealth, in a counted status, with a value. */
+export function isCounted(a: ValuedAsset): boolean {
+  return LIQUIDITY[a.type] !== null && COUNTED_STATUS.has(a.status) && a.estimate !== null;
+}
+
 /**
  * Net worth from each asset's current-value estimate.
  *  - every asset appears once (duplicate ids are a programming error and throw)
