@@ -13,7 +13,6 @@ import { loadRealisedGains, loadSettings, loadTaxStatements } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { loadFdsForFiling, parseRate } from '@/lib/filing';
-import { TaxFileForm } from './TaxFileForm';
 import { TaxFiles } from './TaxFiles';
 
 export const dynamic = 'force-dynamic';
@@ -213,10 +212,14 @@ export default async function FilingPage({
             and fund sales reported by banks and fund houses. You can also e-mail the files to your
             inbox label and they are read by themselves.
           </p>
-          <TaxFileForm
-            owners={Object.entries(ownerNames).map(([id, name]) => ({ id, name }))}
-            fy={fy}
-          />
+          <p className="small">
+            <Link className="btn compact" href="/import?tab=tax">
+              Upload a tax statement
+            </Link>{' '}
+            <span className="muted">
+              Uploads now live on the Import page, with the password rules.
+            </span>
+          </p>
           {[...new Set(statements.map((x) => x.ownerId))].map((ownerId) => {
             const mine = s.byOwner[ownerId];
             const cess = rule?.cess ?? 0.04;

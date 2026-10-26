@@ -49,8 +49,8 @@ export const GROUPS: { title: string; items: Item[] }[] = [
     title: 'Keep it current',
     items: [
       { href: '/monthly', label: 'Monthly update', icon: CalendarCheck },
-      { href: '/inbox', label: 'Bank email inbox', icon: Inbox },
-      { href: '/import', label: 'Import statements', icon: Upload },
+      { href: '/inbox', label: 'Bank emails', icon: Inbox },
+      { href: '/import', label: 'Import', icon: Upload },
     ],
   },
   {
