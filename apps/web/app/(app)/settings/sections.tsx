@@ -11,7 +11,13 @@ import {
 import { tabHref } from '@/lib/settings-tabs';
 import { WhatsAppButton } from '../share/WhatsAppButton';
 import { AccessForm, EmergencyForm } from './AccessForms';
-import { AiConnection, DigestForm, IntegrationsForm, RateSourceForm } from './ConnectForms';
+import {
+  AiConnection,
+  DigestForm,
+  IntegrationsForm,
+  RateCheckButton,
+  RateSourceForm,
+} from './ConnectForms';
 import {
   CashflowForm,
   CashflowRow,
@@ -497,6 +503,7 @@ export function ConnectionsSection({
               <tr>
                 <th>Bank and page</th>
                 <th>Last read</th>
+                <th>Check</th>
                 <th>
                   <span className="sr-only">Remove</span>
                 </th>
@@ -515,6 +522,9 @@ export function ConnectionsSection({
                     {r.lastRunOn
                       ? `${niceDate(r.lastRunOn)}${r.lastResult ? `: ${r.lastResult}` : ''}`
                       : 'Not read yet'}
+                  </td>
+                  <td data-label="Check">
+                    <RateCheckButton id={r.id} bank={r.bank} />
                   </td>
                   <td>
                     <form action={deleteRateSource}>

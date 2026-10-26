@@ -7,6 +7,7 @@ import {
   estimateFundByUnits,
   estimateFundUnitsWithSip,
   estimateFundWithSip,
+  sipAmountOn,
   sipDates,
   estimateSavings,
   sumEstimates,
@@ -288,5 +289,57 @@ describe('estimateFundUnitsWithSip', () => {
     });
     expect(e.estimatedAmount).toBe(130_000);
     expect(e.basis).toBe('calculated');
+  });
+});
+
+describe('a SIP whose amount changed', () => {
+  const d = (s: string) => new Date(`${s}T00:00:00Z`);
+  const base = {
+    units: 1000,
+    unitsAsOf: d('2026-07-01'),
+    anchorAmount: 120_000,
+    anchorAsOf: d('2026-07-01'),
+    navToday: 130,
+    navOn: () => 130,
+    today: d('2026-10-20'),
+  };
+  const plan = {
+    monthly: 5000,
+    startedOn: '2025-01-15',
+    stopped: false,
+    changes: [{ from: '2026-09-01', monthly: 8000 }],
+  };
+  it('values each instalment at the amount in force on its date', () => {
+    expect(sipAmountOn(plan, '2026-08-15')).toBe(5000);
+    expect(sipAmountOn(plan, '2026-09-01')).toBe(8000);
+    expect(sipAmountOn(plan, '2026-10-15')).toBe(8000);
+    // Jul 15 and Aug 15 at 5,000, Sep 15 and Oct 15 at 8,000
+    const e = estimateFundUnitsWithSip({ ...base, sip: plan });
+    expect(e.estimatedAmount).toBeCloseTo(130_000 + 26_000, 6);
+    expect(e.components.find((c) => c.kind === 'contribution')!.note).toContain(
+      'totalling ₹26,000',
+    );
+  });
+  it('keeps the instalments made before the SIP was stopped, and adds none after', () => {
+    const stopped = { ...plan, changes: [{ from: '2026-08-20', monthly: 0 }] };
+    const e = estimateFundUnitsWithSip({ ...base, sip: stopped });
+    // Jul 15 and Aug 15 only
+    expect(e.estimatedAmount).toBeCloseTo(130_000 + 10_000, 6);
+  });
+  it('restarts after a stop at the new amount', () => {
+    const again = {
+      ...plan,
+      changes: [
+        { from: '2026-08-01', monthly: 0 },
+        { from: '2026-10-01', monthly: 3000 },
+      ],
+    };
+    const e = estimateFundUnitsWithSip({ ...base, sip: again });
+    // Jul 15 at 5,000, none in Aug and Sep, Oct 15 at 3,000
+    expect(e.estimatedAmount).toBeCloseTo(130_000 + 8_000, 6);
+  });
+  it('is unchanged when there is no history', () => {
+    const e = estimateFundUnitsWithSip({ ...base, sip: { ...plan, changes: [] } });
+    expect(e.estimatedAmount).toBeCloseTo(130_000 + 20_000, 6);
   });
 });

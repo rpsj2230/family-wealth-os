@@ -34,7 +34,11 @@ Closing Unit Balance: 0.000 NAV on 25-Oct-2026: INR 120.00 Total Cost Value: 0.0
 function fakeIo(funds: CasFund[], amfi: Record<string, string> = {}) {
   const saved: CasSave[] = [];
   const created: string[] = [];
+  const sold: { assetId: string; asOf: string }[] = [];
   const io: CasIo = {
+    async markSold(a) {
+      sold.push(a);
+    },
     async funds() {
       return funds;
     },
@@ -50,7 +54,7 @@ function fakeIo(funds: CasFund[], amfi: Record<string, string> = {}) {
       return { added: a.transactions.length };
     },
   };
-  return { io, saved, created };
+  return { io, saved, created, sold };
 }
 
 describe('matchScheme', () => {
@@ -161,5 +165,61 @@ describe('runCasImport', () => {
     const r = await runCasImport('owner', stmt, bad, { today: '2026-10-26' });
     expect(r.needsReview).toContain('Sample Flexi Cap Fund - Direct Plan - Growth');
     expect(r.created).toBe(1);
+  });
+});
+
+describe('a fund missing from a complete statement', () => {
+  const stmt = parseCas(TEXT);
+  const listed = {
+    assetId: 'f1',
+    name: 'Sample Flexi Cap Fund',
+    amfiCode: null,
+    isin: 'INF000A01AB1',
+    folioLast4: null,
+  };
+  const missing = (o: Partial<CasFund> = {}): CasFund => ({
+    assetId: 'gone',
+    name: 'Fund Not On The Statement',
+    amfiCode: null,
+    isin: 'INF999Z99ZZ9',
+    folioLast4: null,
+    status: 'active',
+    ...o,
+  });
+
+  it('is treated as sold, and the report says so', async () => {
+    const { io, sold } = fakeIo([listed, missing()]);
+    const r = await runCasImport('owner', stmt, io, { today: '2026-10-26', complete: true });
+    expect(sold).toEqual([{ assetId: 'gone', asOf: '2026-10-25' }]);
+    expect(r.assumedSold).toEqual(['Fund Not On The Statement']);
+    expect(r.lines.join('\n')).toContain('assumed sold: Fund Not On The Statement');
+  });
+  it('is left alone when the statement is not a complete one', async () => {
+    const { io, sold } = fakeIo([listed, missing()]);
+    const r = await runCasImport('owner', stmt, io, { today: '2026-10-26' });
+    expect(sold).toEqual([]);
+    expect(r.assumedSold).toEqual([]);
+  });
+  it('is left alone when it was started or counted after the statement ended', async () => {
+    const { io, sold } = fakeIo([
+      listed,
+      missing({ assetId: 'new', startedOn: '2026-11-02' }),
+      missing({ assetId: 'newer', unitsAsOf: '2026-11-01' }),
+    ]);
+    await runCasImport('owner', stmt, io, { today: '2026-11-05', complete: true });
+    expect(sold).toEqual([]);
+  });
+  it('is left alone when it is already closed', async () => {
+    const { io, sold } = fakeIo([listed, missing({ status: 'closed' })]);
+    await runCasImport('owner', stmt, io, { today: '2026-10-26', complete: true });
+    expect(sold).toEqual([]);
+  });
+  it('is not closed when some fund on the statement could not be matched', async () => {
+    const twin = { ...listed, assetId: 'f2' };
+    const { io, sold } = fakeIo([listed, twin, missing()]);
+    const r = await runCasImport('owner', stmt, io, { today: '2026-10-26', complete: true });
+    expect(r.needsReview.length).toBeGreaterThan(0);
+    expect(sold).toEqual([]);
+    expect(r.lines.join('\n')).toContain('were not closed');
   });
 });

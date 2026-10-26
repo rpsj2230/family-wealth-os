@@ -6,6 +6,11 @@
  * Safety rules: a statement only changes funds of the person it belongs to; a scheme is matched by ISIN or AMFI code, or
  * by folio and name together, and an ambiguous match is left for review instead of guessed; lots are only trusted when they
  * add up to the statement's closing balance, otherwise the statement's own cost value is used.
+ *
+ * A fund the person holds that is missing from a COMPLETE statement (a full-portfolio fund statement, not a file of some
+ * transactions) is treated as sold: the fund is closed, its units are zero and its SIP is stopped. It is listed in the report so
+ * it can be put right. This is skipped when any scheme on the statement could not be matched (the missing fund might be that
+ * one), and for a fund started after the statement ended or updated after it.
  */
 import { coreTokens } from './amfi';
 import { fifoLots, type CasScheme, type CasStatement, type CasTxn } from './cas';
@@ -16,6 +21,11 @@ export interface CasFund {
   amfiCode: string | null;
   isin: string | null;
   folioLast4: string | null;
+  /** asset status ('active', 'closed', …); a fund with no status is taken as active */
+  status?: string;
+  /** when the fund's units were last counted, and when it started (YYYY-MM-DD) */
+  unitsAsOf?: string | null;
+  startedOn?: string | null;
 }
 
 export interface CasSave {
@@ -52,6 +62,8 @@ export interface CasIo {
     closed: boolean;
   }): Promise<string>;
   save(args: CasSave): Promise<{ added: number }>;
+  /** closes a fund that is missing from a complete statement: zero units, SIP stopped, value zero on that date */
+  markSold?(args: { assetId: string; asOf: string }): Promise<void>;
 }
 
 export interface CasReport {
@@ -60,6 +72,8 @@ export interface CasReport {
   skipped: number;
   transactionsAdded: number;
   needsReview: string[];
+  /** funds closed because a complete statement did not list them */
+  assumedSold: string[];
   lines: string[];
 }
 
@@ -112,7 +126,11 @@ export async function runCasImport(
   ownerId: string,
   stmt: CasStatement,
   io: CasIo,
-  cfg: { today: string },
+  cfg: {
+    today: string;
+    /** the statement lists everything the person holds, so a fund missing from it has been sold */
+    complete?: boolean;
+  },
 ): Promise<CasReport> {
   const r: CasReport = {
     matched: 0,
@@ -120,8 +138,10 @@ export async function runCasImport(
     skipped: 0,
     transactionsAdded: 0,
     needsReview: [],
+    assumedSold: [],
     lines: [],
   };
+  const touched = new Set<string>();
   const end = stmt.periodTo ?? cfg.today;
   const fyStart = `${Number(end.slice(5, 7)) >= 4 ? end.slice(0, 4) : String(Number(end.slice(0, 4)) - 1)}-04-01`;
   let funds = await io.funds(ownerId);
@@ -140,6 +160,7 @@ export async function runCasImport(
       }
       if (m.status === 'one') {
         assetId = m.fund.assetId;
+        touched.add(assetId);
         r.matched++;
       } else if (held || soldThisYear) {
         assetId = await io.createFund({
@@ -150,6 +171,7 @@ export async function runCasImport(
           folioLast4: s.folioLast4,
           closed: !held,
         });
+        touched.add(assetId);
         funds = [
           ...funds,
           { assetId, name: s.name, amfiCode: amfi, isin: s.isin, folioLast4: s.folioLast4 },
@@ -213,6 +235,29 @@ export async function runCasImport(
     } catch (e) {
       r.needsReview.push(s.name);
       r.lines.push(`error: ${s.name}: ${(e as Error).message}`);
+    }
+  }
+  const asOf = stmt.periodTo;
+  if (cfg.complete && io.markSold && asOf && stmt.schemes.length > 0) {
+    if (r.needsReview.length > 0) {
+      r.lines.push(
+        'Funds missing from the statement were not closed: some funds on it could not be matched, and a missing one might be among them.',
+      );
+    } else {
+      for (const f of funds) {
+        if (touched.has(f.assetId) || (f.status ?? 'active') !== 'active') continue;
+        // started after the statement ended, or updated after it: the statement could not know about it
+        if (f.startedOn && f.startedOn > asOf) continue;
+        if (f.unitsAsOf && f.unitsAsOf > asOf) continue;
+        try {
+          await io.markSold({ assetId: f.assetId, asOf });
+          r.assumedSold.push(f.name);
+          r.lines.push(`assumed sold: ${f.name} (not on the statement dated ${asOf})`);
+        } catch (e) {
+          r.needsReview.push(f.name);
+          r.lines.push(`error: ${f.name}: ${(e as Error).message}`);
+        }
+      }
     }
   }
   return r;

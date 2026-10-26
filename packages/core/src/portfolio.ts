@@ -50,7 +50,12 @@ export interface AssetRow {
   units?: number | null;
   units_as_of?: string | null;
   /** active SIP for this fund, if any (from the fund register) */
-  sip?: { monthly: number; startedOn: string; stopped: boolean } | null;
+  sip?: {
+    monthly: number;
+    startedOn: string;
+    stopped: boolean;
+    changes?: { from: string; monthly: number }[];
+  } | null;
 }
 
 export interface ObservationRow {

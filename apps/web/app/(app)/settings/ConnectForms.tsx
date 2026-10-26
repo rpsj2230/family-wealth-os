@@ -3,11 +3,13 @@
 import { useState, useTransition } from 'react';
 import {
   addRateSource,
+  checkRatePage,
   saveDigestSettings,
   saveIntegrations,
   testAi,
   type AiTestState,
 } from './actions';
+import type { RateCheck } from '@fwos/ingest';
 import { Field, SaveRow, Tick, useForm } from './fields';
 
 export function DigestForm({
@@ -183,6 +185,48 @@ export function AiConnection({ status, demo = false }: { status: AiStatus; demo?
           </ul>
         </>
       )}
+    </div>
+  );
+}
+
+/** Tests one bank's rate page now (page read, AI reading) and shows each step; nothing is saved. */
+export function RateCheckButton({ id, bank }: { id: string; bank: string }) {
+  const [res, setRes] = useState<RateCheck | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div className="ratecheck">
+      <button
+        type="button"
+        className="btn compact"
+        disabled={pending}
+        aria-label={`Check whether ${bank} can be synced`}
+        onClick={() =>
+          start(async () => {
+            setRes(null);
+            setRes(await checkRatePage(id));
+          })
+        }
+      >
+        {pending ? 'Checking…' : 'Check sync'}
+      </button>
+      <div role="status" aria-live="polite">
+        {res && (
+          <details open className="ratecheck-out">
+            <summary className={res.ok ? 'ok' : 'bad'}>
+              <span aria-hidden="true">{res.ok ? '✓ ' : '✗ '}</span>
+              {res.verdict}
+            </summary>
+            <ul className="small muted">
+              {res.steps.map((s, i) => (
+                <li key={i}>
+                  <span aria-hidden="true">{s.ok ? '✓ ' : '✗ '}</span>
+                  {s.text}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
     </div>
   );
 }

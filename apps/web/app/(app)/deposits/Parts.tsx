@@ -1,15 +1,8 @@
 import { Fragment } from 'react';
 import Link from 'next/link';
-import {
-  capacityLabel,
-  formatInr,
-  formatInrCompact,
-  partnerMissing,
-  type PersonStyle,
-} from '@fwos/core';
+import { capacityLabel, formatInr, partnerMissing, type PersonStyle } from '@fwos/core';
 import './deposits.css';
 import { BankBadge } from '@/components/BankBadge';
-import { KpiStrip } from '@/components/KpiStrip';
 import { PersonBadge } from '@/components/Person';
 import { daysPhrase, niceDate } from '@/lib/dates';
 import type { DepositsView, FdLine } from '@/lib/deposits';
@@ -63,55 +56,6 @@ export const liveLinks: DepositLinks = {
   editOne: (f) => `/accounts?edit=${f.id}`,
   sample: false,
 };
-
-export function DepositKpis({
-  s,
-  v,
-  windowDays,
-}: {
-  s: DepositSummary;
-  v: DepositsView;
-  windowDays: number;
-}) {
-  return (
-    <KpiStrip
-      label="Deposits at a glance"
-      items={[
-        {
-          label: 'Fixed deposits today',
-          value: formatInrCompact(s.runningValue),
-          sub: `${s.runningCount} running · ${formatInrCompact(s.runningPrincipal)} put in${s.averageRate === null ? '' : ` · ${(s.averageRate * 100).toFixed(2)}% on average`}`,
-          main: true,
-        },
-        {
-          label: `Matures in ${windowDays} days`,
-          value: s.soon.length,
-          sub:
-            s.soon.length > 0
-              ? `${formatInrCompact(s.soonTotal)} coming back${s.next ? ` · next ${niceDate(s.next.maturityOn)}` : ''}`
-              : s.next
-                ? `next: ${niceDate(s.next.maturityOn)}, ${s.next.bank}`
-                : 'no running deposit',
-          href: '/deposits?tab=maturities',
-        },
-        {
-          label: 'To confirm',
-          value: s.confirm.length,
-          sub: s.confirm.length > 0 ? 'matured, say where the money went' : 'nothing waiting',
-          tone: s.confirm.length > 0 ? 'warn' : undefined,
-          href: '/deposits?tab=maturities',
-        },
-        {
-          label: 'Above insurance limit',
-          value: formatInrCompact(v.cover.uninsured),
-          sub: `${formatInr(v.cover.limit)} insured per bank and name`,
-          tone: v.cover.uninsured > 0 ? 'fail' : undefined,
-          href: '/deposits?tab=cover',
-        },
-      ]}
-    />
-  );
-}
 
 /** Every deposit, one row each, linking to the deposit's own page. */
 export function RegisterTab({

@@ -8,7 +8,7 @@ import {
   parseContactLines,
   profileFromJson,
 } from '@fwos/core';
-import { testAiConnection, type AiProvider } from '@fwos/ingest';
+import { checkRateSource, testAiConnection, type AiProvider, type RateCheck } from '@fwos/ingest';
 import { loadContext } from '@/lib/data';
 import { CONFIG_GROUPS, mergeGroup, parseGroup, withConfirmed } from '@/lib/settings-fields';
 
@@ -129,6 +129,40 @@ export async function testAi(): Promise<AiTestState> {
   });
   revalidatePath('/settings');
   return { ran: true, ok: r.ok, steps: r.steps, ms: r.ms };
+}
+
+/**
+ * Can this bank's rate page be synced? Reads the page and asks the saved AI to find the rates, then says what happened. Nothing is saved.
+ * The key is fetched through the same member-only function as the AI test and never leaves the server.
+ */
+export async function checkRatePage(sourceId: string): Promise<RateCheck> {
+  const fail = (text: string): RateCheck => ({
+    ok: false,
+    verdict: text,
+    steps: [{ ok: false, text }],
+    found: 0,
+    ms: 0,
+  });
+  if (!/^[0-9a-f-]{36}$/.test(sourceId)) return fail('Unknown page.');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return fail('Create your household first.');
+  const src = await supabase
+    .from('rate_sources')
+    .select('bank, url')
+    .eq('id', sourceId)
+    .maybeSingle();
+  const row = src.data as { bank: string; url: string } | null;
+  if (!row) return fail('This page is no longer in the list.');
+  const { data } = await supabase.rpc('ai_credentials_for_test', { p_household: householdId });
+  const cred = (data as { provider: AiProvider; api_key: string }[] | null)?.[0] ?? null;
+  return checkRateSource({
+    bank: row.bank,
+    url: row.url,
+    ai: cred ? { provider: cred.provider, key: cred.api_key } : null,
+    // the page waits for this: the host allows 60 seconds in all
+    limits: { listMs: 8_000, callMs: 30_000, tries: 2 },
+    pageMs: 12_000,
+  });
 }
 
 const uuid = /^[0-9a-f-]{36}$/;

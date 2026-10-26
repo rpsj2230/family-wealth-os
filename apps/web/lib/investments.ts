@@ -15,6 +15,7 @@ import {
   type StatLot,
   type StatRealised,
   type StatTxn,
+  isEstimatedTxn,
   paceFromSeries,
   projectCorpus,
   projectionPath,
@@ -404,7 +405,8 @@ export async function loadInvestmentView(
       category: fundCategory(p.fund_name, scheme?.category ?? null),
       amc: amcLabel(scheme?.amc ?? null),
       taxClass: fundTaxClass(p.fund_name, scheme?.category ?? null).class,
-      hasStatement: cas.length > 0,
+      // lines assumed from the SIP plan are not a statement
+      hasStatement: cas.some((c) => !isEstimatedTxn(c)),
       txns: cas.map((c) => ({
         date: c.date,
         kind: c.kind,
@@ -412,6 +414,7 @@ export async function loadInvestmentView(
         amount: c.amount,
         nav: c.nav,
         balance: c.balance,
+        description: c.description,
       })),
       lots,
       lotsBasis,

@@ -175,7 +175,57 @@ export interface SipPlan {
   /** first instalment date (YYYY-MM-DD); its day of month is the debit day */
   startedOn: string;
   stopped: boolean;
+  /**
+   * Dated changes of the SIP amount, oldest first: from `from` (inclusive) each instalment is `monthly`; 0 means the SIP is stopped
+   * from that date. Instalments before the first change use `monthly`. With changes on file they decide everything, so raising,
+   * lowering or stopping a SIP never rewrites the instalments already made.
+   */
+  changes?: { from: string; monthly: number }[];
 }
+
+/** The instalment due on `date`: the amount of the latest change on or before it, or the plan's own amount before any change. */
+export function sipAmountOn(plan: SipPlan, date: string): number {
+  let amount = plan.monthly;
+  for (const c of plan.changes ?? []) {
+    if (c.from <= date) amount = c.monthly;
+    else break;
+  }
+  return amount;
+}
+
+/** Whether the plan can add instalments: with a change history it does, otherwise only a running SIP with an amount. */
+function sipRuns(plan: SipPlan | null): plan is SipPlan {
+  if (!plan) return false;
+  if (plan.changes && plan.changes.length > 0) return true;
+  return !plan.stopped && plan.monthly > 0;
+}
+
+/** The instalments between two dates with the amount in force on each, dropping those after the SIP was stopped. */
+export function sipInstalments(
+  plan: SipPlan,
+  after: Date,
+  until: Date,
+): { date: string; amount: number }[] {
+  return sipDates(plan.startedOn, after, until)
+    .map((date) => ({ date, amount: sipAmountOn(plan, date) }))
+    .filter((x) => x.amount > 0);
+}
+
+/** "3 SIP instalments of ₹5,000" for one amount, "3 SIP instalments totalling ₹14,000" when the amount changed. */
+function sipNote(items: { amount: number }[], since: string): string {
+  const total = items.reduce((a, x) => a + x.amount, 0);
+  const same = items.every((x) => x.amount === items[0]!.amount);
+  const n = items.length;
+  const what = same
+    ? `of ₹${items[0]!.amount.toLocaleString('en-IN')}`
+    : `totalling ₹${total.toLocaleString('en-IN')}`;
+  return `${n} SIP instalment${n === 1 ? '' : 's'} ${what} since ${since}`;
+}
+
+/** The wording of a ledger line that is an assumed SIP instalment and not yet on a statement (its source is 'estimate'). */
+export const ESTIMATED_TXN_NOTE = 'Estimated SIP instalment, not yet on a statement';
+export const isEstimatedTxn = (t: { description?: string | null }): boolean =>
+  t.description === ESTIMATED_TXN_NOTE;
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -216,24 +266,23 @@ export function estimateFundWithSip(args: {
   today: Date;
 }): CurrentValueEstimate {
   const base = estimateFundByNavRatio(args);
-  if (base.basis !== 'estimated' || !args.sip || args.sip.stopped || !(args.sip.monthly > 0))
-    return base;
-  const dates = sipDates(args.sip.startedOn, args.anchorAsOf, args.today);
+  if (base.basis !== 'estimated' || !sipRuns(args.sip)) return base;
+  const dates = sipInstalments(args.sip, args.anchorAsOf, args.today);
   if (dates.length === 0) return base;
   const navToday = args.navToday as number;
   let invested = 0;
   let worth = 0;
   for (const d of dates) {
-    const n = args.navOn(d);
-    invested += args.sip.monthly;
-    worth += n && n > 0 ? (args.sip.monthly * navToday) / n : args.sip.monthly;
+    const n = args.navOn(d.date);
+    invested += d.amount;
+    worth += n && n > 0 ? (d.amount * navToday) / n : d.amount;
   }
   const components: EstimateComponent[] = [
     ...base.components,
     {
       kind: 'contribution',
       amount: invested,
-      note: `${dates.length} SIP instalment${dates.length === 1 ? '' : 's'} of ₹${args.sip.monthly.toLocaleString('en-IN')} since the last recorded value`,
+      note: sipNote(dates, 'the last recorded value'),
     },
     { kind: 'market', amount: worth - invested, note: 'NAV change on those instalments' },
   ];
@@ -273,22 +322,22 @@ export function estimateFundUnitsWithSip(args: {
     },
   ];
   let assumed = false;
-  if (args.sip && !args.sip.stopped && args.sip.monthly > 0) {
-    const dates = sipDates(args.sip.startedOn, args.unitsAsOf, args.today);
+  if (sipRuns(args.sip)) {
+    const dates = sipInstalments(args.sip, args.unitsAsOf, args.today);
     if (dates.length > 0) {
       assumed = true;
       let invested = 0;
       let worth = 0;
       for (const d of dates) {
-        const n = args.navOn(d);
-        invested += args.sip.monthly;
-        worth += n && n > 0 ? (args.sip.monthly * args.navToday) / n : args.sip.monthly;
+        const n = args.navOn(d.date);
+        invested += d.amount;
+        worth += n && n > 0 ? (d.amount * args.navToday) / n : d.amount;
       }
       components.push(
         {
           kind: 'contribution',
           amount: invested,
-          note: `${dates.length} SIP instalment${dates.length === 1 ? '' : 's'} of ₹${args.sip.monthly.toLocaleString('en-IN')} since the units were counted`,
+          note: sipNote(dates, 'the units were counted'),
         },
         { kind: 'market', amount: worth - invested, note: 'NAV change on those instalments' },
       );

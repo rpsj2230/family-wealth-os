@@ -1,0 +1,75 @@
+/* Deposits overview: the bank ranking and the maturity ladder. Colours come from the .bv tokens set in bankoverview.css. */
+.dv-pair {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .dv-pair {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 28px;
+  }
+}
+.dv-pair > * {
+  min-width: 0;
+}
+.dv-headrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.dv-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 3.5rem;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+.dv-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.dv-amt {
+  font-variant-numeric: tabular-nums;
+}
+.dv-pct {
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.dv-bar {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--bv-flat-bg);
+  overflow: hidden;
+}
+.dv-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--bv-fd);
+}
+.dv-bar.alt span {
+  background: var(--bv-cash);
+}
+.dv-sub {
+  margin-top: 3px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

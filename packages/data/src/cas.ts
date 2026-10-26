@@ -13,6 +13,7 @@ import {
   type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { syncSipEstimates } from './sip-estimates';
 
 const must = <T>(r: { data: T | null; error: { message: string } | null }, what: string): T => {
   if (r.error) throw new Error(`${what}: ${r.error.message}`);
@@ -49,17 +50,17 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       const assets = must(
         await db
           .from('assets')
-          .select('id, nickname')
+          .select('id, nickname, status')
           .eq('household_id', hh)
           .eq('owner_id', ownerId)
           .eq('type', 'mutual_fund'),
         'funds',
-      ) as { id: string; nickname: string }[];
+      ) as { id: string; nickname: string; status: string }[];
       if (assets.length === 0) return [];
       const pos = must(
         await db
           .from('mf_positions')
-          .select('asset_id, fund_name, amfi_code, isin, folio_last4')
+          .select('asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on')
           .eq('household_id', hh)
           .in(
             'asset_id',
@@ -72,6 +73,8 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         amfi_code: string | null;
         isin: string | null;
         folio_last4: string | null;
+        units_as_of: string | null;
+        started_on: string | null;
       }[];
       const byAsset = new Map(pos.map((p) => [p.asset_id, p]));
       return assets.map((a) => {
@@ -82,8 +85,82 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
           amfiCode: p?.amfi_code ?? null,
           isin: p?.isin ?? null,
           folioLast4: p?.folio_last4 ?? null,
+          status: a.status,
+          unitsAsOf: p?.units_as_of ?? null,
+          startedOn: p?.started_on ?? null,
         };
       });
+    },
+    async markSold({ assetId, asOf }) {
+      // closed, no units, SIP stopped from the statement date, a zero value on that date; the estimated SIP lines go with it
+      must(
+        await db
+          .from('assets')
+          .update({ status: 'closed' })
+          .eq('id', assetId)
+          .eq('household_id', hh)
+          .select('id'),
+        'close fund',
+      );
+      must(
+        await db
+          .from('mf_positions')
+          .update({ units: 0, units_as_of: asOf, sip_stopped: true })
+          .eq('asset_id', assetId)
+          .eq('household_id', hh)
+          .select('asset_id'),
+        'zero units',
+      );
+      must(
+        await db
+          .from('mf_sip_changes')
+          .upsert(
+            { household_id: hh, asset_id: assetId, effective_on: asOf, monthly: 0 },
+            { onConflict: 'asset_id,effective_on' },
+          )
+          .select('id'),
+        'stop SIP',
+      );
+      must(
+        await db
+          .from('mf_transactions')
+          .delete()
+          .eq('asset_id', assetId)
+          .eq('source', 'estimate')
+          .select('id'),
+        'drop estimates',
+      );
+      const latest = must(
+        await db
+          .from('observations')
+          .select('as_of')
+          .eq('asset_id', assetId)
+          .is('superseded_by', null)
+          .order('as_of', { ascending: false })
+          .limit(1),
+        'latest value',
+      ) as { as_of: string }[];
+      if (!latest[0] || asOf > latest[0].as_of)
+        must(
+          await db
+            .from('observations')
+            .insert({
+              household_id: hh,
+              asset_id: assetId,
+              kind: 'balance',
+              amount: 0,
+              currency: 'INR',
+              fx_rate: null,
+              as_of: asOf,
+              received_at: new Date().toISOString(),
+              source: 'statement',
+              source_ref: `cas-sold:${asOf}`,
+              confidence: 'verified',
+              note: `Not on the fund statement dated ${asOf}, so treated as sold`,
+            })
+            .select('id'),
+          'record value',
+        );
     },
     async isinToAmfi(isin) {
       const r = must(
@@ -356,7 +433,12 @@ export async function importCasPdf(
       report: null,
       detail: stmt.warnings.join(' ') || 'Nothing recognised.',
     });
-  const report = await runCasImport(owner, stmt, casIo(db, hh), { today: opts.today });
+  // a fund statement for the whole PAN lists everything held: a fund missing from it has been sold
+  const report = await runCasImport(owner, stmt, casIo(db, hh), {
+    today: opts.today,
+    complete: true,
+  });
+  await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   const partial = report.needsReview.length > 0;
   return done({
     outcome: partial ? 'partial' : 'imported',

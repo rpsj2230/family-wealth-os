@@ -2578,3 +2578,29 @@ details.bankdet {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* Settings > Bank rate pages: the per-bank "Check sync" result */
+.ratecheck {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 0;
+}
+.ratecheck-out {
+  max-width: 34rem;
+  font-size: 0.82rem;
+}
+.ratecheck-out summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.ratecheck-out summary.ok {
+  color: var(--ok, #166534);
+}
+.ratecheck-out summary.bad {
+  color: var(--fail, #b42318);
+}
+.ratecheck-out ul {
+  margin: 6px 0 0;
+  padding-left: 1.1rem;
+}

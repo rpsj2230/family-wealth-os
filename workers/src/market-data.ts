@@ -4,6 +4,7 @@
  * Runs in GitHub Actions with the project URL and the service-role key (a GitHub secret; it never reaches the browser).
  */
 import { createClient } from '@supabase/supabase-js';
+import { syncSipEstimates } from '@fwos/data';
 import { parseNavHint, refreshMarketData, type MarketIo, type MarketStore } from '@fwos/ingest';
 
 const url = process.env.SUPABASE_URL;
@@ -100,3 +101,13 @@ const today = new Date().toISOString().slice(0, 10);
 const report = await refreshMarketData(store, io, today);
 console.log(JSON.stringify(report, null, 2));
 if (report.warnings.length) console.log(`::warning::${report.warnings.length} warnings (see log)`);
+
+// instalments assumed from each SIP since the units were counted are kept in the ledger as estimates, and follow the new prices
+try {
+  const sip = await syncSipEstimates(db, { today: new Date(`${today}T00:00:00Z`) });
+  console.log(
+    `SIP estimates: ${sip.added} added, ${sip.removed} removed across ${sip.funds} funds`,
+  );
+} catch (e) {
+  console.log(`::warning::SIP estimates could not be updated: ${(e as Error).message}`);
+}

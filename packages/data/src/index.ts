@@ -57,8 +57,8 @@ export async function loadPortfolioData(
   };
   // settings are read in step with the first batch, not after it
   const settingsP = loadSettings(supabase, opts.householdId);
-  const [owners, assets, observations, fds, positions, institutions, offerRows] = await Promise.all(
-    [
+  const [owners, assets, observations, fds, positions, institutions, offerRows, sipChangeRows] =
+    await Promise.all([
       sel('owners', 'id, display_name'),
       sel(
         'assets',
@@ -81,8 +81,8 @@ export async function loadPortfolioData(
         'rate_offers',
         'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to',
       ).eq('product', 'savings'),
-    ],
-  );
+      sel('mf_sip_changes', 'asset_id, effective_on, monthly').order('effective_on'),
+    ]);
   const today = opts.today ?? todayDate();
   const code = new Map(
     ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [
@@ -96,6 +96,17 @@ export async function loadPortfolioData(
       { units: p.units === null ? null : Number(p.units), asOf: p.units_as_of },
     ]),
   );
+  // dated changes of each SIP's amount (0 = stopped from that date), so changing the amount never rewrites past instalments
+  const sipChanges = new Map<string, { from: string; monthly: number }[]>();
+  for (const c of (sipChangeRows.data ?? []) as unknown as {
+    asset_id: string;
+    effective_on: string;
+    monthly: number;
+  }[])
+    sipChanges.set(c.asset_id, [
+      ...(sipChanges.get(c.asset_id) ?? []),
+      { from: c.effective_on, monthly: Number(c.monthly) },
+    ]);
   const sip = new Map(
     ((positions.data ?? []) as unknown as PositionRow[])
       .filter((p) => p.sip_monthly && p.started_on)
@@ -105,6 +116,7 @@ export async function loadPortfolioData(
           monthly: Number(p.sip_monthly),
           startedOn: p.started_on as string,
           stopped: p.sip_stopped,
+          ...(sipChanges.has(p.asset_id) ? { changes: sipChanges.get(p.asset_id)! } : {}),
         },
       ]),
   );
@@ -245,6 +257,7 @@ export async function loadPortfolioData(
 }
 export * from './digest-input';
 export * from './harvest';
+export * from './sip-estimates';
 
 export * from './settings';
 export * from './rates';

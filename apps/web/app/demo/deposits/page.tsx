@@ -1,9 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { DEFAULT_CONFIG } from '@fwos/core';
+import {
+  bankOverview,
+  DEFAULT_CONFIG,
+  depositsByBank,
+  filterBlocksByOwner,
+  fixedDepositBlocks,
+  maturityLadder,
+} from '@fwos/core';
+import { DepositOverviewPanel } from '@/app/(app)/deposits/Overview';
 import {
   CoverTab,
-  DepositKpis,
   MaturitiesTab,
   RegisterTab,
   type DepositLinks,
@@ -69,6 +76,14 @@ export default async function DemoDeposits({
   const shown = tab === 'cover' || !who ? v.fds : v.fds.filter((f) => f.ownerId === who);
   const s = summariseDeposits(shown, windowDays);
   const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
+  const blocks = fixedDepositBlocks(m.blocks);
+  const scoped = who && tab !== 'cover' ? filterBlocksByOwner(blocks, who) : blocks;
+  const overview = bankOverview(scoped, {
+    today: DEMO_TODAY,
+    soonDays: DEFAULT_CONFIG.reminders.maturitySoonDays,
+    defaultSavingsRate: DEFAULT_CONFIG.estimates.savingsRate,
+    tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
+  });
   return (
     <DemoShell>
       <PageHead
@@ -93,7 +108,16 @@ export default async function DemoDeposits({
           </>
         }
       />
-      <DepositKpis s={s} v={v} windowDays={windowDays} />
+      <DepositOverviewPanel
+        o={overview}
+        banks={depositsByBank(scoped, DEMO_TODAY.toISOString().slice(0, 10))}
+        ladder={maturityLadder(scoped)}
+        cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks }}
+        toConfirm={s.confirm.length}
+        styles={m.styles}
+        scope={who ? (m.styles[who]?.name ?? null) : null}
+        sample
+      />
       <Tabs
         base="/demo/deposits"
         current={tab}

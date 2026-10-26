@@ -11,11 +11,11 @@ import './bankoverview.css';
 import { PersonBadge } from '@/components/Person';
 import { niceDate } from '@/lib/dates';
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const whole = (n: number) => formatInr(Math.round(n));
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+export const whole = (n: number) => formatInr(Math.round(n));
 
 /** A coloured, signed figure: an arrow and a word as well as the colour, so a loss never reads as a gain by colour alone. */
-function Delta({
+export function Delta({
   label,
   amount,
   pct,
@@ -51,7 +51,7 @@ function Delta({
   );
 }
 
-function Stat({
+export function Stat({
   label,
   value,
   sub,
@@ -82,7 +82,7 @@ function Stat({
 }
 
 /** A bar cut into shares, with a text label on every cut (the pattern and the legend say it too, never colour alone). */
-function SplitBar({
+export function SplitBar({
   caption,
   parts,
 }: {

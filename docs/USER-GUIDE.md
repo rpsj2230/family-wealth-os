@@ -36,6 +36,8 @@ Each kind keeps its own page (open its card) with the last result and anything t
 
 **Deposits** has three tabs: Deposits (every deposit with its bank, owner, rate, maturity date and the amount at maturity), Maturities (what to confirm, what matures soon, a calendar) and Insurance cover. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account by pressing **Edit** on it, then **More details** (Joint account, Second name; the swap button reverses the order); until then a joint account is grouped under its first name.
 
+**The overview at the top of Deposits** shows what the fixed deposits are worth today (current value), what you put in (invested) and what they pay at maturity, the profit so far in rupees and per cent, and an estimate of what they earned today (the difference between each deposit's value today and yesterday on its own rate). Below it: **which bank holds how much** (a ranked list with each bank's share, deposits, average rate and next maturity; the link beside it groups the list below by bank), **what matures year by year**, and the smaller figures: interest still to earn, next maturity, deposits maturing within the reminder window, deposits to confirm, the share held at the largest bank and the amount above the insured limit. The split by person and by NRE/NRO sits at the bottom. The person filter narrows the whole overview; the insured limit is always for the whole household.
+
 ## Mutual funds and goals
 
 - **Investments** has five tabs. **Funds** lists every fund per person with its kind, fund house, units, average cost, share of the total, gain, XIRR and SIP. **Breakdown** is the statistics page (below). **Growth** is the graphs (below). **Update funds** is the monthly entry of units and prices. **Match funds** matches each fund in your sheet to the official scheme list once; you confirm the match. (The old Funds address still works and opens this tab.) The person chips narrow Funds, Breakdown and Growth to one person; each person keeps one colour on every graph.
@@ -107,6 +109,12 @@ adds funds it does not know, stores every transaction and updates invested amoun
 the PDF under **Import** (type the PAN once to open it; it is not saved). From then on harvesting works from real purchase lots, oldest units
 first, includes funds with a running SIP, and counts long-term gains you have already realised this year.
 
+### SIP changes, estimated instalments and funds missing from a statement
+
+- **Changing a SIP.** When you raise, lower, stop or restart a SIP (Investments, update a fund), the change is written down with the date it takes effect (today unless you set a date). The instalments already made keep the amount that was in force on their day, so a new amount never rewrites the past. A stopped SIP adds no instalments after its stop date.
+- **Assumed instalments are saved as estimates.** For a fund with counted units and a running SIP, the instalments assumed since the units were last counted (each at the price of its day) are kept in the transaction list, worded "Estimated SIP instalment, not yet on a statement", so lots, returns and graphs agree with the value shown. They are never shown as paid on the SIP calendar. As soon as a statement or an entry covers a date, the estimates up to it are removed and the real lines take their place; the daily job keeps the rest up to date.
+- **A fund missing from a complete fund statement is treated as sold.** When a full fund statement (PDF) for a person is imported, any fund of theirs that is not on it is closed, its units set to zero, its SIP stopped and its value set to zero on the statement date. The import report lists each one ("assumed sold") so you can correct a mistake. This is not done for a file of some transactions (CSV), when a fund on the statement could not be matched, or for a fund started or updated after the statement ended.
+
 ## Who can open the handbook, and when
 
 Settings → Emergency information: the read-only family login can open the handbook always, only after nobody from the household has signed
@@ -160,6 +168,8 @@ Open a bank to change its rates in place: edit the figure and press Save. If you
 ## Tasks
 
 **Tasks** are grouped as overdue, due in the next 7 days, later and no date. Tick the circle when a task is done; _Not needed_ drops it. Each task links to the account, bank or page it concerns. Finished and dropped tasks are on the second tab, with a way back.
+
+**Check sync (Settings → Bank rate pages).** Every listed bank has a **Check sync** button. It reads the saved page (and the bank's own published sheets), asks your AI to find the rates in it, and tells you step by step whether the weekly refresh will work: the page read, the number of characters, and how many fixed-deposit and savings rates were found. Nothing is saved. The check runs from the app's server, while the weekly refresh runs from GitHub, so a page can behave differently in the two places; if the check passes and the weekly run still fails, say so and the page is looked at again.
 
 ## Rates from banks that block automatic reading
 

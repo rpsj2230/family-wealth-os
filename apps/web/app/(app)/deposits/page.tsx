@@ -1,5 +1,13 @@
 import Link from 'next/link';
-import { personStyles } from '@fwos/core';
+import {
+  bankOverview,
+  buildBankBlocks,
+  depositsByBank,
+  filterBlocksByOwner,
+  fixedDepositBlocks,
+  maturityLadder,
+  personStyles,
+} from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ListingTools } from '@/components/ListingTools';
@@ -12,7 +20,8 @@ import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { saveForeignBanks } from './actions';
-import { CoverTab, DepositKpis, MaturitiesTab, RegisterTab, liveLinks } from './Parts';
+import { DepositOverviewPanel } from './Overview';
+import { CoverTab, MaturitiesTab, RegisterTab, liveLinks } from './Parts';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,16 +38,17 @@ export default async function DepositsPage({
     : 'deposits';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, fdRows, portfolio, ownerName }, assets, banks, settings] = await Promise.all([
-    loadPortfolio(supabase),
-    supabase
-      .from('assets')
-      .select(
-        'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
-      ),
-    supabase.from('institutions').select('id, name, deposit_insured'),
-    loadSettings(supabase as unknown as SupabaseClient),
-  ]);
+  const [{ today, assetRows, obsRows, fdRows, portfolio, ownerName }, assets, banks, settings] =
+    await Promise.all([
+      loadPortfolio(supabase),
+      supabase
+        .from('assets')
+        .select(
+          'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
+        ),
+      supabase.from('institutions').select('id, name, deposit_insured'),
+      loadSettings(supabase as unknown as SupabaseClient),
+    ]);
   const depositAssets: DepositAsset[] = (assets.data ?? []).map((a) => ({
     id: a.id as string,
     ownerId: a.owner_id as string,
@@ -70,6 +80,24 @@ export default async function DepositsPage({
   // the person filter narrows the lists and the figures; insurance cover is always the whole household
   const shown = tab === 'cover' || !who ? v.fds : v.fds.filter((f) => f.ownerId === who);
   const s = summariseDeposits(shown, windowDays);
+  const blocks = fixedDepositBlocks(
+    buildBankBlocks({
+      assets: assetRows,
+      observations: obsRows,
+      fds: fdRows,
+      portfolio,
+      institutionNames: Object.fromEntries(bankName),
+      today,
+    }),
+  );
+  const scoped = who && tab !== 'cover' ? filterBlocksByOwner(blocks, who) : blocks;
+  const overview = bankOverview(scoped, {
+    today,
+    soonDays: settings.config.reminders.maturitySoonDays,
+    defaultSavingsRate: settings.config.estimates.savingsRate,
+    tdsRate: settings.config.estimates.interestTdsRate,
+  });
+  const todayIso = today.toISOString().slice(0, 10);
   const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
 
   return (
@@ -96,7 +124,15 @@ export default async function DepositsPage({
           </>
         }
       />
-      <DepositKpis s={s} v={v} windowDays={windowDays} />
+      <DepositOverviewPanel
+        o={overview}
+        banks={depositsByBank(scoped, todayIso)}
+        ladder={maturityLadder(scoped)}
+        cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks }}
+        toConfirm={s.confirm.length}
+        styles={styles}
+        scope={who ? (styles[who]?.name ?? null) : null}
+      />
       <Tabs
         base="/deposits"
         current={tab}

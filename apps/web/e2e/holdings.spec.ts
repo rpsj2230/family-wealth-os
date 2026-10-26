@@ -70,7 +70,7 @@ test.describe('Deposits (public sample)', () => {
   test('three tabs: the register, the maturities and the insurance cover', async ({ page }) => {
     await page.goto('/demo/deposits');
     await expect(page.getByRole('heading', { name: 'Deposits', level: 1 })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Deposits at a glance' })).toContainText(
+    await expect(page.getByRole('region', { name: 'Fixed deposits overview' })).toContainText(
       'Fixed deposits today',
     );
     await expect(page.getByRole('heading', { name: 'All fixed deposits' })).toBeVisible();

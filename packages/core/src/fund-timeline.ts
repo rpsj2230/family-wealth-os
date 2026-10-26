@@ -4,6 +4,7 @@
  * dots, and units over time. Pure: the caller supplies what is stored. Nothing here invents a number: where the data to work
  * something out is missing, the result says so (null, or a `basis` that names what it rests on).
  */
+import { isEstimatedTxn } from './estimate';
 import { addDaysIso, addMonthsIso } from './harvest-lots';
 import { monthEnds, type SeriesPoint } from './fund-series';
 import { xirr } from './xirr';
@@ -202,6 +203,8 @@ export interface StatTxn {
   nav?: number | null;
   /** units held after this transaction, when the statement gives it */
   balance?: number | null;
+  /** the line's wording; marks an instalment assumed from the SIP plan (see isEstimatedTxn) */
+  description?: string | null;
 }
 
 export interface MonthContribution {
@@ -283,8 +286,9 @@ const monthsBetween = (from: string, to: string) => {
 };
 
 export function sipSummary(i: SipInput): SipSummary {
+  // an instalment assumed from the plan is not one seen on a statement
   const sips = i.txns
-    .filter((x) => x.kind === 'sip' && x.units > 0 && x.amount !== 0)
+    .filter((x) => x.kind === 'sip' && x.units > 0 && x.amount !== 0 && !isEstimatedTxn(x))
     .sort((a, b) => a.date.localeCompare(b.date));
   const hasPlan = !!(i.sipMonthly && i.sipMonthly > 0);
   const active = hasPlan && !i.sipStopped;
@@ -349,7 +353,7 @@ export function sipCalendar(i: SipInput, months: number): SipCalendar {
   const at = new Map(cells.map((c) => [c.month, c]));
   for (const x of i.txns) {
     const c = at.get(x.date.slice(0, 7));
-    if (!c || x.units <= 0 || x.amount === 0) continue;
+    if (!c || x.units <= 0 || x.amount === 0 || isEstimatedTxn(x)) continue;
     if (x.kind === 'sip') {
       c.state = 'paid';
       c.amount += Math.abs(x.amount);

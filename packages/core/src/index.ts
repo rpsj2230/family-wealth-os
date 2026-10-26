@@ -44,3 +44,4 @@ export * from './fund-category';
 export * from './fund-timeline';
 export * from './fund-stats';
 export * from './reports';
+export * from './deposit-views';

@@ -8,12 +8,11 @@ import { createClient } from '@supabase/supabase-js';
 import { sameBank } from '@fwos/core';
 import {
   buildRatesRequest,
-  casPdfText,
-  htmlToText,
-  isPdf,
   parseRatesResponse,
   planSync,
   rateDocsFor,
+  readRateDoc,
+  hostOf,
   aiErrorHint,
   prepareAi,
   type AiRuntime,
@@ -36,34 +35,11 @@ const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'),
 const today = new Date().toISOString().slice(0, 10);
 
 let runtime: AiRuntime | null = null;
+const startedAt = Date.now();
+/** the workflow is stopped after 15 minutes; stop starting new pages after 11 */
+const BUDGET_MS = 11 * 60_000;
 
-const AGENT = 'family-wealth-os/1.0 (personal use)';
-const hostOf = (u: string) => {
-  try {
-    return new URL(u).host;
-  } catch {
-    return 'bank page';
-  }
-};
-
-/** One openly published page or PDF as text. A page that answers with an error or has no readable text is reported, not worked around. */
-async function readDoc(url: string, max = 30_000): Promise<string> {
-  const r = await fetch(url, {
-    headers: { 'user-agent': AGENT },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!r.ok) throw new Error(`answered ${r.status}`);
-  if (isPdf(r.headers.get('content-type'), url)) {
-    const text = (await casPdfText(new Uint8Array(await r.arrayBuffer()))).trim();
-    if (text.length < 200) throw new Error('the PDF had almost no readable text');
-    return text.slice(0, max);
-  }
-  const text = htmlToText(await r.text(), max);
-  if (text.length < 200)
-    throw new Error('the page had almost no readable text (it may need a browser to load)');
-  return text;
-}
+const readDoc = (url: string, max?: number) => readRateDoc(url, max);
 
 async function main() {
   const hh = await db.from('households').select('id');
@@ -113,6 +89,18 @@ async function main() {
       ),
     ];
     for (const src of sources.data) {
+      // the job has a fixed time allowance: a page not reached in time keeps its previous rates and is tried at the next run
+      if (Date.now() - startedAt > BUDGET_MS) {
+        await db
+          .from('rate_sources')
+          .update({
+            last_run_on: today,
+            last_result: 'Not reached this run (time ran out). It is tried again at the next run.',
+          })
+          .eq('id', src.id);
+        console.log(`${src.bank}: not reached, time ran out`);
+        continue;
+      }
       const note = async (result: string) => {
         await db
           .from('rate_sources')
@@ -160,7 +148,7 @@ async function main() {
           .filter((h) => sameBank(h.bank, bankName))
           .map((h) => h.hint);
         // providers retire models without notice, so the model is checked first; OpenRouter's free models fall back one to the next
-        runtime ??= await prepareAi(ai.ai_provider, ai.ai_api_key);
+        runtime ??= await prepareAi(ai.ai_provider, ai.ai_api_key, { callMs: 30_000, tries: 3 });
         const model = runtime.model;
         const req = buildRatesRequest(
           ai.ai_provider,
