@@ -1,6 +1,7 @@
-import Link from 'next/link';
 import { loadContext } from '@/lib/data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
+import { PageHead } from '@/components/PageHead';
+import { ManageCrumbs } from '../Parts';
 import { applyTidyNotes } from '../actions';
 
 export const dynamic = 'force-dynamic';
@@ -12,16 +13,11 @@ export default async function TidyNotesPage() {
   const nothing = plan.assets.length === 0;
   return (
     <>
-      <nav className="crumbs" aria-label="Breadcrumb">
-        <Link href="/accounts">Accounts</Link> <span aria-hidden>›</span> <span>Tidy notes</span>
-      </nav>
-      <h1>Move bank-level notes up to the bank</h1>
-      <p className="muted">
-        Facts about the whole bank (minimum balance, lounge cards, no debit card) belong on the
-        bank, once, not repeated on every account. Things about one account (an address change, KYC,
-        a maturity instruction) stay where they are. Nothing is changed until you press the button
-        below.
-      </p>
+      <ManageCrumbs current="Tidy bank notes" />
+      <PageHead
+        title="Tidy bank notes"
+        subtitle="Facts about a whole bank (minimum balance, lounge cards, no debit card) belong on the bank, once. Things about one account (an address change, KYC, a maturity instruction) stay where they are. Nothing changes until you press the button."
+      />
       {nothing ? (
         <p className="notice ok" role="status">
           Nothing to move: no account note holds a bank-level fact that is not already on its bank.

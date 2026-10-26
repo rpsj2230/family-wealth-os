@@ -7,11 +7,14 @@ import { addFundTransaction } from '@/app/(app)/investments/update/actions';
 export function FundTransactionForm({
   funds,
   today,
+  save = addFundTransaction,
 }: {
   funds: { id: string; name: string; owner: string }[];
   today: string;
+  /** the public sample passes a stand-in that saves nothing */
+  save?: typeof addFundTransaction;
 }) {
-  const [state, action, pending] = useActionState(addFundTransaction, null);
+  const [state, action, pending] = useActionState(save, null);
   return (
     <form action={action} className="card txnform">
       <h2>Add a transaction</h2>

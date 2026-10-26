@@ -20,7 +20,16 @@ export interface FundInput {
 const n = (v: string) => (v.trim() === '' ? null : Number(v.replace(/[,\s₹]/g, '')));
 
 /** One row per fund; value is worked out from units × price as you type, and can be overridden. Nothing is saved until you press Save. */
-export function FundUpdateGrid({ funds, today }: { funds: FundInput[]; today: string }) {
+export function FundUpdateGrid({
+  funds,
+  today,
+  save = saveFundUpdate,
+}: {
+  funds: FundInput[];
+  today: string;
+  /** the public sample passes a stand-in that saves nothing */
+  save?: typeof saveFundUpdate;
+}) {
   const [asOf, setAsOf] = useState(today);
   const [rows, setRows] = useState(() =>
     funds.map((f) => ({
@@ -55,7 +64,7 @@ export function FundUpdateGrid({ funds, today }: { funds: FundInput[]; today: st
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const res = await saveFundUpdate(
+          const res = await save(
             asOf,
             funds.map((f, i) => ({
               assetId: f.assetId,

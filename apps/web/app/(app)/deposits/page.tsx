@@ -1,22 +1,30 @@
-import { ListingTools } from '@/components/ListingTools';
 import Link from 'next/link';
-import { capacityLabel, formatInr, formatInrCompact, partnerMissing } from '@fwos/core';
+import { personStyles } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ListingTools } from '@/components/ListingTools';
+import { PageHead } from '@/components/PageHead';
+import { PersonFilter } from '@/components/Person';
+import { Tabs } from '@/components/Tabs';
 import { loadContext } from '@/lib/data';
 import { buildDeposits, type DepositAsset } from '@/lib/deposits';
+import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { CoverTab, DepositKpis, MaturitiesTab, RegisterTab, liveLinks } from './Parts';
 
 export const dynamic = 'force-dynamic';
 
-const KIND: Record<string, string> = {
-  NRE: 'NRE',
-  NRO: 'NRO',
-  joint: 'Joint',
-  unknown: 'Type not stated',
-};
+const TABS = ['deposits', 'maturities', 'cover'] as const;
 
-export default async function DepositsPage() {
+export default async function DepositsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; p?: string }>;
+}) {
+  const sp = await searchParams;
+  const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
+    ? (sp.tab as (typeof TABS)[number])
+    : 'deposits';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
   const [{ today, fdRows, portfolio, ownerName }, assets, banks, settings] = await Promise.all([
@@ -50,242 +58,69 @@ export default async function DepositsPage() {
     today,
     settings.config.deposits.insuranceLimit,
   );
-  const needsConfirm = v.fds.filter(
-    (f) => f.status === 'matured_unconfirmed' || (f.status === 'active' && f.daysLeft < 0),
-  );
-  const soon = v.fds.filter(
-    (f) =>
-      f.status === 'active' &&
-      f.daysLeft >= 0 &&
-      f.daysLeft <= Math.max(...settings.config.deposits.maturityAlertDays),
-  );
-  const activeTotal = v.fds
-    .filter((f) => f.status === 'active')
-    .reduce((s, f) => s + f.accruedToday, 0);
-
-  const byBank = Object.entries(v.cover.byBank)
-    .map(([id, b]) => ({ id, name: v.cover.bankNames[id] ?? 'Unknown', ...b }))
-    .sort((a, b) => b.uninsured - a.uninsured);
+  const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
+  const who = sp.p && styles[sp.p] ? sp.p : null;
+  const windowDays = Math.max(...settings.config.deposits.maturityAlertDays);
+  // the person filter narrows the lists and the figures; insurance cover is always the whole household
+  const shown = tab === 'cover' || !who ? v.fds : v.fds.filter((f) => f.ownerId === who);
+  const s = summariseDeposits(shown, windowDays);
+  const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
 
   return (
     <>
-      <h1>Deposits and maturities</h1>
-      <ListingTools name="deposits">
-        <section className="card hero">
-          <p className="muted small">Active fixed deposits, valued today with accrued interest</p>
-          <p className="big">{formatInrCompact(activeTotal)}</p>
-          <p className="small">
-            {formatInr(activeTotal)} across {v.fds.filter((f) => f.status === 'active').length}{' '}
-            deposits
-          </p>
-        </section>
-
-        {needsConfirm.length > 0 && (
-          <section className="card" aria-labelledby="conf">
-            <h2 id="conf">Confirm what happened</h2>
-            <ul className="list">
-              {needsConfirm.map((f) => (
-                <li key={f.id}>
-                  <strong>{f.bank}</strong> · {f.owner} · {f.nickname} matured on {f.maturityOn}.
-                  Renewed, paid out or still waiting? Set its status in{' '}
-                  <a href="/monthly">Monthly update</a>. It is not counted in net worth until you
-                  do.
-                </li>
-              ))}
-            </ul>
-          </section>
+      <PageHead
+        title="Deposits"
+        subtitle="Every fixed deposit, when it matures and what comes back, and how much of your money the deposit insurance covers."
+        pills={[
+          s.confirm.length > 0
+            ? { label: `${s.confirm.length} to confirm`, tone: 'warn' }
+            : { label: 'Nothing to confirm', tone: 'ok' },
+          ...(v.cover.uninsured > 0
+            ? [{ label: 'money above the insured limit', tone: 'warn' as const }]
+            : []),
+        ]}
+        actions={
+          <>
+            <Link className="btn primary" href="/monthly">
+              Update deposits
+            </Link>
+            <Link className="btn" href="/accounts">
+              Accounts
+            </Link>
+          </>
+        }
+      />
+      <DepositKpis s={s} v={v} windowDays={windowDays} />
+      <Tabs
+        base="/deposits"
+        current={tab}
+        keep={who ? { p: who } : {}}
+        tabs={[
+          { key: 'deposits', label: 'Deposits', badge: s.runningCount },
+          { key: 'maturities', label: 'Maturities', badge: s.confirm.length },
+          { key: 'cover', label: 'Insurance cover', badge: overBanks },
+        ]}
+      />
+      {tab !== 'cover' && (
+        <PersonFilter
+          people={Object.values(styles)}
+          basePath="/deposits"
+          current={who}
+          keep={{ tab }}
+        />
+      )}
+      <ListingTools name={`deposits-${tab}`}>
+        {tab === 'deposits' && <RegisterTab fds={shown} styles={styles} links={liveLinks} />}
+        {tab === 'maturities' && (
+          <MaturitiesTab
+            s={s}
+            months={groupByMonth(shown)}
+            windowDays={windowDays}
+            links={liveLinks}
+            styles={styles}
+          />
         )}
-
-        <section className="card" aria-labelledby="soon">
-          <h2 id="soon">Maturing in the next 90 days</h2>
-          {soon.length === 0 ? (
-            <p className="muted">Nothing matures in the next 90 days.</p>
-          ) : (
-            <ul className="list">
-              {soon.map((f) => (
-                <li key={f.id}>
-                  <strong>{f.maturityOn}</strong> ({f.daysLeft} days) — {f.bank}, {f.owner}:{' '}
-                  {formatInr(f.bankMaturity ?? f.accruedToday)}{' '}
-                  {f.bankMaturity === null ? '(estimated)' : '(bank figure)'}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="muted small">
-            When an FD matures, the money moves from this list to your bank balance. It is not new
-            wealth. Renewals are never assumed at the old rate.
-          </p>
-        </section>
-
-        <section className="card" aria-labelledby="cal">
-          <h2 id="cal">Maturity calendar</h2>
-          <table className="tbl">
-            <tbody>
-              {v.byMonth.map((m) => (
-                <tr key={m.month}>
-                  <th scope="row">
-                    {new Date(m.month + '-01T00:00:00Z').toLocaleDateString('en-IN', {
-                      month: 'short',
-                      year: 'numeric',
-                      timeZone: 'UTC',
-                    })}
-                    <span className="muted small">
-                      {' '}
-                      · {m.items.length} FD{m.items.length === 1 ? '' : 's'}
-                    </span>
-                  </th>
-                  <td className="num">{formatInr(m.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="card" aria-labelledby="reg">
-          <h2 id="reg">All fixed deposits</h2>
-          <table className="tbl responsive">
-            <thead>
-              <tr>
-                <th>Deposit</th>
-                <th className="num">Principal</th>
-                <th className="num">Value today</th>
-                <th>Rate</th>
-                <th>Matures</th>
-                <th className="num">Bank maturity amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {v.fds.map((f) => (
-                <tr key={f.id} className={f.status !== 'active' ? 'dim' : ''}>
-                  <td data-label="Deposit">
-                    <strong>{f.bank}</strong> · {f.owner}
-                    <br />
-                    <span className="muted small">
-                      {KIND[f.kind] ?? f.kind} · from {f.bookedOn}
-                      {f.status !== 'active' ? ` · ${f.status.replace('_', ' ')}` : ''}
-                    </span>
-                  </td>
-                  <td className="num" data-label="Principal">
-                    {formatInr(f.principal)}
-                  </td>
-                  <td className="num" data-label="Value today">
-                    {formatInr(f.accruedToday)}
-                  </td>
-                  <td data-label="Rate">{(f.rate * 100).toFixed(2)}%</td>
-                  <td data-label="Matures">
-                    {f.maturityOn}
-                    <br />
-                    <span className="muted small">
-                      {f.daysLeft >= 0 ? `${f.daysLeft} days left` : `${-f.daysLeft} days ago`}
-                    </span>
-                  </td>
-                  <td className="num" data-label="Bank maturity amount">
-                    {f.bankMaturity === null ? '—' : formatInr(f.bankMaturity)}
-                    {f.varianceVsBankPct !== null && Math.abs(f.varianceVsBankPct) > 0.05 && (
-                      <span className="fail small">
-                        {' '}
-                        check: differs {f.varianceVsBankPct.toFixed(2)}%
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="card" aria-labelledby="cover">
-          <h2 id="cover">Deposit insurance (DICGC) position</h2>
-          <p>
-            Insured today: <strong>{formatInr(v.cover.insured)}</strong> · Above the cover limit:{' '}
-            <strong className={v.cover.uninsured > 0 ? 'fail' : ''}>
-              {formatInr(v.cover.uninsured)}
-            </strong>
-          </p>
-          <table className="tbl responsive">
-            <thead>
-              <tr>
-                <th>Bank</th>
-                <th className="num">Deposits incl. interest</th>
-                <th className="num">Above the limit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byBank.map((b) => (
-                <tr key={b.id}>
-                  <td data-label="Bank">{b.name}</td>
-                  <td className="num" data-label="Deposits incl. interest">
-                    {formatInr(b.total)}
-                  </td>
-                  <td
-                    className={`num ${b.uninsured > 0 ? 'fail' : ''}`}
-                    data-label="Above the limit"
-                  >
-                    {formatInr(b.uninsured)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <h3>Cover by ownership name</h3>
-          <p className="muted small">
-            Each name as written is insured separately at each bank, up to{' '}
-            {formatInr(v.cover.limit)}.
-          </p>
-          <table className="tbl responsive">
-            <thead>
-              <tr>
-                <th>Bank</th>
-                <th>Name on the account</th>
-                <th className="num">Total incl. interest</th>
-                <th className="num">Insured</th>
-                <th className="num">Above the limit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...v.cover.rows]
-                .sort(
-                  (a, b) =>
-                    (v.cover.bankNames[a.bankId] ?? '').localeCompare(
-                      v.cover.bankNames[b.bankId] ?? '',
-                    ) || a.capacityKey.localeCompare(b.capacityKey),
-                )
-                .map((r) => (
-                  <tr key={r.bankId + r.capacityKey}>
-                    <td data-label="Bank">{v.cover.bankNames[r.bankId]}</td>
-                    <td data-label="Name on the account">
-                      {capacityLabel(r.capacityKey, v.cover.ownerNames)}
-                      {partnerMissing(r.capacityKey) && (
-                        <>
-                          {' '}
-                          <Link className="small" href="/accounts/edit">
-                            set the second name
-                          </Link>
-                        </>
-                      )}
-                    </td>
-                    <td className="num" data-label="Total incl. interest">
-                      {formatInr(r.total)}
-                    </td>
-                    <td className="num" data-label="Insured">
-                      {formatInr(r.insured)}
-                    </td>
-                    <td
-                      className={`num ${r.uninsured > 0 ? 'fail' : ''}`}
-                      data-label="Above the limit"
-                    >
-                      {formatInr(r.uninsured)}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <ul className="list small muted">
-            {v.cover.assumptions.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-        </section>
+        {tab === 'cover' && <CoverTab v={v} links={liveLinks} />}
       </ListingTools>
     </>
   );

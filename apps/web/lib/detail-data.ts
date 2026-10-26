@@ -691,6 +691,22 @@ export async function loadPolicyDetail(id: string) {
   return {
     title: `${pol.insurer ?? 'Policy'}${pol.coverage_text ? ` · ${pol.coverage_text}` : ''}`,
     facts,
+    /** the stored values, for the edit form */
+    edit: {
+      id,
+      kind: pol.kind ?? 'other',
+      insurer: pol.insurer ?? '',
+      coverage: pol.coverage_text ?? '',
+      ref: pol.policy_ref_last4 ?? '',
+      paidBy: pol.paid_by ?? '',
+      renewalOn: pol.renewal_on ?? '',
+      expiresOn: pol.expires_on ?? '',
+      nominee: pol.nominee_note ?? '',
+      documents: pol.documents_note ?? '',
+      notes: pol.notes ?? '',
+      insuredIds: ((ins.data ?? []) as unknown as { owner_id: string }[]).map((x) => x.owner_id),
+      people: ownerList,
+    },
     activity: buildActivity({
       audit: audit.filter((r) => r.table_name === 'policies' && r.row_id === id),
       viewerId: userId,

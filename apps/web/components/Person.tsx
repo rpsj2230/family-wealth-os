@@ -32,16 +32,25 @@ export function PersonFilter({
   basePath,
   current,
   totals,
+  keep,
 }: {
   people: PersonStyle[];
   basePath: string;
   current: string | null;
   totals?: Record<string, string>;
+  /** other query values to carry along, such as the open tab */
+  keep?: Record<string, string>;
 }) {
+  const href = (id: string | null) => {
+    const q = new URLSearchParams(keep);
+    if (id) q.set('p', id);
+    const text = q.toString();
+    return text ? `${basePath}?${text}` : basePath;
+  };
   return (
     <nav className="chipbar" aria-label="Show whose">
       <Link
-        href={basePath}
+        href={href(null)}
         className={`fchip ${current === null ? 'on' : ''}`}
         aria-current={current === null ? 'true' : undefined}
       >
@@ -50,7 +59,7 @@ export function PersonFilter({
       {people.map((p) => (
         <Link
           key={p.id}
-          href={`${basePath}?p=${p.id}`}
+          href={href(p.id)}
           className={`fchip ${current === p.id ? 'on' : ''}`}
           aria-current={current === p.id ? 'true' : undefined}
         >

@@ -40,6 +40,8 @@ export interface FundRow {
   units: number | null;
   nav: number | null;
   navDate: string | null;
+  /** the official scheme this fund is matched to; null until the person confirms it */
+  amfiCode: string | null;
   /** month by month: what the fund was worth and what had been put in */
   history: SeriesPoint[];
   /** when the value was last set, and by what */
@@ -262,6 +264,7 @@ export async function loadInvestmentView(
       units: l.fundInfo[p.asset_id]?.units ?? null,
       nav: l.fundInfo[p.asset_id]?.nav ?? null,
       navDate: l.fundInfo[p.asset_id]?.navDate ?? null,
+      amfiCode: codeOf.get(p.asset_id) ?? null,
       history: fundSeries(
         {
           txns: txBy.get(p.asset_id) ?? [],

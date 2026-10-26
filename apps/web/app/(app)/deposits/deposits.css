@@ -1,0 +1,20 @@
+/* Deposits: the maturity calendar by month. */
+.calmonth {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.calmonth > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.calmonth .calsum {
+  margin-left: auto;
+  font-weight: 600;
+}
+.calmonth ul {
+  margin: 8px 0 0;
+}
