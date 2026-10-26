@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import { signOut } from '../login/actions';
 import { loadAccess } from '@/lib/data';
 import { BottomNav, Sidebar } from '@/components/AppNav';
+import { CommandPalette } from '@/components/CommandPalette';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <img className="logo sm" src="/brand/rp-logo.png" alt="RP" />
             <span>Family Wealth OS</span>
           </Link>
+          <CommandPalette />
         </header>
         <main className="content">{children}</main>
       </div>

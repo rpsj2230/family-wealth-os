@@ -14,50 +14,67 @@ import {
   LogOut,
   Palmtree,
   Percent,
+  PiggyBank,
   Banknote,
   Receipt,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   Target,
   TrendingUp,
   Upload,
   type LucideIcon,
 } from 'lucide-react';
 
-interface Item {
+export interface Item {
   href: string;
   label: string;
   icon: LucideIcon;
 }
-const GROUPS: { title: string; items: Item[] }[] = [
+export const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: 'Overview',
+    items: [{ href: '/', label: 'Home', icon: LayoutDashboard }],
+  },
+  {
+    title: 'What we hold',
     items: [
-      { href: '/', label: 'Home', icon: LayoutDashboard },
       { href: '/accounts', label: 'Accounts', icon: Landmark },
+      { href: '/deposits', label: 'Deposits and insurance', icon: ShieldCheck },
       { href: '/investments', label: 'Investments', icon: TrendingUp },
-      { href: '/raise', label: 'I need money', icon: Banknote },
-      { href: '/rates', label: 'Rates and new money', icon: Percent },
+      { href: '/others', label: 'Lent, policies, property', icon: HandCoins },
+    ],
+  },
+  {
+    title: 'Keep it current',
+    items: [
       { href: '/monthly', label: 'Monthly update', icon: CalendarCheck },
+      { href: '/inbox', label: 'Bank email inbox', icon: Inbox },
+      { href: '/import', label: 'Import statements', icon: Upload },
+    ],
+  },
+  {
+    title: 'Decide',
+    items: [
+      { href: '/raise', label: 'I need money', icon: Banknote },
+      { href: '/new-money', label: 'New money', icon: PiggyBank },
+      { href: '/rates', label: 'Rates', icon: Percent },
+      { href: '/retire', label: 'Can I retire now?', icon: Palmtree },
     ],
   },
   {
     title: 'Plan and tax',
     items: [
-      { href: '/retire', label: 'Can I retire now?', icon: Palmtree },
       { href: '/goals', label: 'Goals', icon: Target },
       { href: '/tasks', label: 'Plan and tasks', icon: ListChecks },
-      { href: '/tax', label: 'Tax (automatic)', icon: Receipt },
+      { href: '/tax', label: 'Tax', icon: Receipt },
       { href: '/tax/filing', label: 'Filing papers', icon: FileText },
     ],
   },
   {
-    title: 'More',
+    title: 'Safety and setup',
     items: [
-      { href: '/others', label: 'Lent, policies, property', icon: HandCoins },
-      { href: '/inbox', label: 'Bank email inbox', icon: Inbox },
       { href: '/emergency', label: 'Family emergency guide', icon: ShieldAlert },
-      { href: '/import', label: 'Import workbook', icon: Upload },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],
   },
