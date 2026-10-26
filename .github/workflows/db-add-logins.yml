@@ -1,0 +1,33 @@
+name: Add logins and switch on the daily summary
+# Manual, safe to repeat: adds every existing login that is not yet in the household as a full member.
+# Only runs when there is exactly one household, so it can never mix up two families.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add members
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          declare n int; h uuid;
+          begin
+            select count(*), min(id::text)::uuid into n, h from public.households;
+            if n <> 1 then raise exception 'expected exactly one household, found %', n; end if;
+            insert into public.household_members (household_id, user_id, role)
+              select h, u.id, 'member' from auth.users u
+              where not exists (select 1 from public.household_members m where m.user_id = u.id);
+          end $$;
+          insert into public.digest_settings (household_id, enabled)
+            select id, true from public.households h
+            where not exists (select 1 from public.digest_settings d where d.household_id = h.id);
+          select u.email, m.role from public.household_members m join auth.users u on u.id = m.user_id order by u.email;
+          SQL

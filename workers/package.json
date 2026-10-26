@@ -1,0 +1,31 @@
+{
+  "name": "@fwos/workers",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"worker logic is tested in @fwos/ingest\"",
+    "market-data": "tsx src/market-data.ts",
+    "digest": "tsx src/digest.ts",
+    "inbox": "tsx src/inbox.ts",
+    "rates": "tsx src/rates.ts"
+  },
+  "dependencies": {
+    "@fwos/core": "workspace:*",
+    "@fwos/data": "workspace:*",
+    "@fwos/ingest": "workspace:*",
+    "@supabase/supabase-js": "^2.45.0",
+    "imapflow": "^2.9.1",
+    "mailparser": "^3.12.4",
+    "nodemailer": "^10.2.1",
+    "unpdf": "^1.9.1"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  }
+}

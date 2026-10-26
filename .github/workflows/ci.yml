@@ -1,0 +1,70 @@
+name: CI
+on:
+  push:
+    branches-ignore: [backups]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: scripts/check-private-data.sh
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm audit --prod --audit-level=high
+      - run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  database:
+    name: database (migrations + row level security tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./supabase/tests/run.sh
+      - name: backup and restore self-test
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq age
+          scripts/backup/selftest.sh
+
+  e2e:
+    name: browser tests (phone, tablet, desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @fwos/web e2e
+        env:
+          CI: '1'
+          NEXT_TELEMETRY_DISABLED: '1'

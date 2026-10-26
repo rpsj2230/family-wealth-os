@@ -1,0 +1,86 @@
+name: Daily database backup
+# Every night (02:30 Singapore) the whole database is exported, test-restored, encrypted with YOUR public key
+# and committed to the `backups` branch of this repository. Only you hold the private key.
+on:
+  schedule:
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      # a public key is not secret: it lives in the repository (scripts/backup/PUBLIC_KEY); a repository variable can override it
+      BACKUP_AGE_PUBLIC_KEY: ${{ vars.BACKUP_AGE_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Choose the encryption key
+        run: |
+          if [ -z "$BACKUP_AGE_PUBLIC_KEY" ]; then echo "BACKUP_AGE_PUBLIC_KEY=$(tr -d '[:space:]' < scripts/backup/PUBLIC_KEY)" >> "$GITHUB_ENV"; fi
+      - name: Check required settings
+        run: |
+          missing=""
+          for v in SUPABASE_DB_PASSWORD; do
+            if [ -z "${!v}" ]; then missing="$missing secret:$v"; fi
+          done
+          if [ -n "$missing" ]; then echo "::error::Missing:$missing (see docs/runbooks/backup-and-restore.md)"; exit 1; fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      - name: Export database
+        run: |
+          url="$(scripts/db-url.sh)"
+          mkdir -p dump
+          supabase db dump --db-url "$url" -f dump/schema.sql
+          supabase db dump --db-url "$url" --data-only --use-copy --schema public -f dump/data.sql
+          supabase db dump --db-url "$url" --data-only --use-copy --schema auth -f dump/auth_data.sql \
+            || { echo "::warning::login accounts (auth schema) could not be exported; data is still backed up"; rm -f dump/auth_data.sql; }
+      - name: Test-restore the export and build CSV copies
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: scripts/backup/verify.sh dump
+      - name: Encrypt
+        run: AGE_RECIPIENT="$BACKUP_AGE_PUBLIC_KEY" scripts/backup/package.sh dump out
+      - name: Publish to the backups branch
+        run: |
+          set -euo pipefail
+          git config user.name "fwos-backup-bot"
+          git config user.email "fwos-backup-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin backups >/dev/null 2>&1; then
+            git fetch --depth=1 origin backups
+            git worktree add ../bk -B backups origin/backups
+          else
+            git worktree add --orphan -b backups ../bk
+          fi
+          f="$(ls out/fwos-backup-*.tar.gz.age)"; name="$(basename "$f")"
+          ym="${name:11:4}/${name:15:2}"
+          mkdir -p "../bk/archive/$ym" ../bk/latest
+          cp "$f" "../bk/archive/$ym/$name"
+          cp "$f" ../bk/latest/fwos-latest.tar.gz.age
+          cp scripts/backup/restore.sh ../bk/restore.sh
+          cp scripts/backup/BRANCH_README.md ../bk/README.md
+          scripts/backup/prune.sh ../bk/archive 60 12
+          scripts/backup/index.sh ../bk
+          cd ../bk
+          git add -A
+          git commit -q -m "Backup $name"
+          git push origin backups
+          echo "Published $name"

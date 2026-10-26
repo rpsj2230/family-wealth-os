@@ -1,0 +1,29 @@
+name: Database check (read-only)
+# Manual: prints row counts and basic state of the live database. Changes nothing; shows no secrets or balances.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Counts
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=0 <<'SQL'
+          select 'households' as what, count(*) from public.households
+          union all select 'household_members', count(*) from public.household_members
+          union all select 'auth users', count(*) from auth.users
+          union all select 'owners', count(*) from public.owners
+          union all select 'assets', count(*) from public.assets;
+          select email, created_at::date as created, last_sign_in_at::date as last_login from auth.users;
+          select m.role, m.household_id is not null as has_household, u.email from public.household_members m join auth.users u on u.id = m.user_id;
+          select proname, prosecdef as security_definer from pg_proc where proname in ('create_household','is_member','is_admin') and pronamespace = 'public'::regnamespace;
+          select grantee, privilege_type from information_schema.routine_privileges where routine_name = 'create_household' and routine_schema = 'public';
+          select polname, polcmd from pg_policy where polrelid = 'public.household_members'::regclass;
+          SQL

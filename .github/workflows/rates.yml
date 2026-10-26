@@ -1,0 +1,35 @@
+name: Refresh interest rates
+# Every Monday: reads the bank rate pages listed in Settings (Bank rate pages) with your AI key and refreshes the stored offers.
+on:
+  schedule:
+    - cron: '40 21 * * 0'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rates
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required secrets
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "::notice::Rate refresh is waiting for the SUPABASE_SERVICE_ROLE_KEY secret"; exit 0; fi
+          echo ready=1 >> "$GITHUB_ENV"
+      - if: env.ready == '1'
+        uses: pnpm/action-setup@v4
+      - if: env.ready == '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: env.ready == '1'
+        run: pnpm install --frozen-lockfile
+      - if: env.ready == '1'
+        run: pnpm --filter @fwos/workers rates

@@ -1,0 +1,40 @@
+name: Apply database migrations
+# Runs when migration files change on main, or manually from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/**', '.github/workflows/db-migrate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: db-migrate
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      # the project reference is public (it is the first part of the project URL), so it is not a secret
+      SUPABASE_PROJECT_REF: imrrsvpqdazjojeescwl
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in SUPABASE_DB_PASSWORD; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then echo "::error::Missing GitHub secrets:$missing (see docs/runbooks/setup-vercel-supabase.md Part D)"; exit 1; fi
+          echo "The database password secret is present."
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # No access token is needed: only the database password (see scripts/db-url.sh).
+      - name: Apply migrations
+        run: |
+          url="$(scripts/db-url.sh)"
+          supabase migration list --db-url "$url" || true
+          supabase db push --db-url "$url"
+          supabase migration list --db-url "$url"

@@ -1,0 +1,5 @@
+# Minimal Supabase CLI config. Remote project settings are managed in the Supabase dashboard.
+project_id = "family-wealth-os"
+
+[db]
+major_version = 17

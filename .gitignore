@@ -1,0 +1,19 @@
+# Never commit personal financial data
+.local/
+*.xlsx
+*.xls
+*.csv
+*.pdf
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+coverage/
+supabase/.temp/
+supabase/.branches/
+test-results/
+playwright-report/

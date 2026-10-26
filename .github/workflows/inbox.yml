@@ -1,0 +1,42 @@
+name: Read bank emails
+# Every 3 hours: reads the Gmail label with your forwarded bank emails, records balances it can verify and queues the
+# rest for your review in the app (Inbox). Needs IMAP switched on in Gmail and the same app password as the daily summary.
+on:
+  schedule:
+    - cron: '20 */3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: inbox
+  cancel-in-progress: false
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in SUPABASE_SERVICE_ROLE_KEY SMTP_USER SMTP_APP_PASSWORD; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then echo "::notice::Bank-email reading is waiting for GitHub secrets:$missing (docs/NEEDS-FROM-YOU.md A8)"; exit 0; fi
+          echo ready=1 >> "$GITHUB_ENV"
+      - if: env.ready == '1'
+        uses: pnpm/action-setup@v4
+      - if: env.ready == '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: env.ready == '1'
+        run: pnpm install --frozen-lockfile
+      - if: env.ready == '1'
+        run: pnpm --filter @fwos/workers inbox

@@ -1,0 +1,37 @@
+name: Daily summary email
+# 08:30 Singapore time every day. Only households that switched it on in the app (Settings) receive anything.
+on:
+  schedule:
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: digest
+  cancel-in-progress: false
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+      APP_URL: https://family-wealth-os-nine.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in SUPABASE_SERVICE_ROLE_KEY SMTP_USER SMTP_APP_PASSWORD; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then echo "::error::Missing GitHub secrets:$missing (docs/NEEDS-FROM-YOU.md A8)"; exit 1; fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers digest

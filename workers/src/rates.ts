@@ -1,0 +1,127 @@
+/* eslint-disable no-console */
+/**
+ * Weekly: reads each rate page listed in Settings with your AI key and refreshes the stored offers.
+ * Offers you typed yourself are never overwritten. A page that cannot be read leaves the previous offers in place and
+ * records why, so nothing silently disappears.
+ */
+import { createClient } from '@supabase/supabase-js';
+import { buildRatesRequest, htmlToText, parseRatesResponse, type AiProvider } from '@fwos/ingest';
+
+const need = (n: string) => {
+  const v = process.env[n];
+  if (!v) {
+    console.error(`${n} is required`);
+    process.exit(2);
+  }
+  return v;
+};
+const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), {
+  auth: { persistSession: false },
+});
+const today = new Date().toISOString().slice(0, 10);
+
+async function main() {
+  const hh = await db.from('households').select('id');
+  if (hh.error) throw new Error(hh.error.message);
+  let failed = 0;
+  for (const h of hh.data ?? []) {
+    const household = h.id as string;
+    const cfg = await db
+      .from('integration_settings')
+      .select('ai_provider, ai_api_key')
+      .eq('household_id', household)
+      .maybeSingle();
+    const ai = cfg.data as { ai_provider: AiProvider | null; ai_api_key: string | null } | null;
+    const sources = await db
+      .from('rate_sources')
+      .select('id, bank, url')
+      .eq('household_id', household)
+      .eq('enabled', true);
+    if (!sources.data?.length) {
+      console.log('No rate pages are listed in Settings; nothing to refresh.');
+      continue;
+    }
+    if (!ai?.ai_provider || !ai.ai_api_key) {
+      console.log('Rate pages are listed but no AI key is saved in Settings; skipping.');
+      continue;
+    }
+    for (const src of sources.data) {
+      const note = async (result: string) => {
+        await db
+          .from('rate_sources')
+          .update({ last_run_on: today, last_result: result.slice(0, 300) })
+          .eq('id', src.id);
+        console.log(`${src.bank}: ${result}`);
+      };
+      try {
+        const page = await fetch(src.url as string, {
+          headers: { 'user-agent': 'family-wealth-os/1.0 (personal use)' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!page.ok) throw new Error(`page answered ${page.status}`);
+        const text = htmlToText(await page.text());
+        if (text.length < 200)
+          throw new Error('the page had almost no readable text (it may need a browser to load)');
+        const req = buildRatesRequest(ai.ai_provider, ai.ai_api_key, src.bank as string, text);
+        const res = await fetch(req.url, { ...req.init, signal: AbortSignal.timeout(60_000) });
+        if (!res.ok) throw new Error(`AI service answered ${res.status}`);
+        const offers = parseRatesResponse(ai.ai_provider, await res.json(), src.bank as string);
+        if (offers.length === 0) throw new Error('no rates could be read from the page');
+        const existing = await db
+          .from('rate_offers')
+          .select(
+            'product, account_kind, tenure_from_months, tenure_to_months, source_kind, source_url',
+          )
+          .eq('household_id', household)
+          .eq('bank', src.bank as string);
+        const manual = new Set(
+          (existing.data ?? [])
+            .filter((e) => e.source_kind === 'manual')
+            .map(
+              (e) => `${e.product}|${e.account_kind}|${e.tenure_from_months}|${e.tenure_to_months}`,
+            ),
+        );
+        await db
+          .from('rate_offers')
+          .delete()
+          .eq('household_id', household)
+          .eq('bank', src.bank as string)
+          .eq('source_kind', 'ai')
+          .eq('source_url', src.url as string);
+        const rows = offers
+          .filter(
+            (o) =>
+              !manual.has(
+                `${o.product}|${o.accountKind}|${o.tenureFromMonths}|${o.tenureToMonths}`,
+              ),
+          )
+          .map((o) => ({
+            household_id: household,
+            bank: o.bank,
+            product: o.product,
+            account_kind: o.accountKind,
+            tenure_from_months: o.tenureFromMonths,
+            tenure_to_months: o.tenureToMonths,
+            rate: o.rate,
+            conditions: o.conditions,
+            source_url: src.url,
+            source_kind: 'ai',
+            checked_on: today,
+          }));
+        const ins = await db.from('rate_offers').insert(rows);
+        if (ins.error) throw new Error(ins.error.message);
+        await note(`read ${rows.length} rates`);
+      } catch (e) {
+        failed++;
+        await note(`could not refresh: ${(e as Error).message}`);
+      }
+    }
+  }
+  if (failed > 0) process.exitCode = 0; // a page that cannot be read is reported in Settings, not as a failed job
+}
+
+main().catch((e) => {
+  console.error('Rates job failed:', (e as Error).message);
+  process.exit(1);
+});

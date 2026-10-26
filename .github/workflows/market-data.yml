@@ -1,0 +1,33 @@
+name: Refresh market data
+# Every day after AMFI publishes the day's NAVs (about midnight India time): scheme list, NAVs for the funds you hold, FX rates.
+on:
+  schedule:
+    - cron: '40 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: market-data
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Public values (also shipped to browsers).
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the secret exists
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::GitHub secret SUPABASE_SERVICE_ROLE_KEY is missing (docs/NEEDS-FROM-YOU.md item A6)"; exit 1
+          fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers market-data
