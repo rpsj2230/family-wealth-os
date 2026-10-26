@@ -102,3 +102,7 @@ in for a number of days, or only when you release it. Release or lock it again w
 - **Tax filing papers** lists every fund sale of the year, short and long term, with the estimated tax, and downloads the schedule 112A rows per person. Compare the column order with the portal's current template before uploading. Units bought before 1 February 2018 need the 31 January 2018 value per unit, which the file leaves blank. Each person's FD interest can be compared with the tax shown in Form 26AS.
 - **Lent, policies, property** also shows property, NPS, ULIP and foreign-currency balances with the exchange rate used.
 - The daily summary now also carries the tax-harvest deadline and amounts, refunds still to claim, and on the first of each month a month-in-review line per person.
+
+## Changing the order
+
+Accounts → **Change the order** lists your banks and, inside each, its rows. Drag a bank or a row, or use the arrow buttons (they work from the keyboard), then press **Save this order**. Accounts and the monthly update follow the new order from then on. Uploading your workbook again with "Apply the sheet layout" sets the order back to the sheet's.

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   buildBankBlocks,
   filterBlocksByOwner,
@@ -66,7 +67,7 @@ export default async function AccountsPage({
       <p className="muted small">
         Banks in your sheet&apos;s order. Current value of a deposit is worked out from its rate and
         start date, and equals the full amount on the maturity date. Today&apos;s wealth uses these
-        current values.
+        current values. <Link href="/accounts/reorder">Change the order</Link>
       </p>
       <PersonFilter
         people={Object.values(styles)}

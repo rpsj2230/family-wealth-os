@@ -1397,3 +1397,45 @@ fieldset.urgency legend {
 .banknote details {
   margin-left: auto;
 }
+
+/* ---- change the order ---- */
+.reorder-banks,
+.reorder-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: grid;
+  gap: 8px;
+}
+.reorder-bank {
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--card, #fff);
+}
+.reorder-head,
+.reorder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.reorder-rows {
+  margin: 8px 0 0;
+  gap: 6px;
+}
+.reorder-row {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--soft, #f3f4f6);
+}
+.reorder-buttons {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+}
+.grip {
+  cursor: grab;
+  color: var(--muted, #6b7280);
+  user-select: none;
+}
