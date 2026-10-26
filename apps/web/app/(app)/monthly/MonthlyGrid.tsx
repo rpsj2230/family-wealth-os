@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useRef, useState, useTransition } from 'react';
 import { formatInr } from '@fwos/core';
 import { FD_STATUSES, buildChanges, type GridRow, type RowEdit } from '@/lib/monthly';
+import { UpdatedCell } from '@/components/BankTable';
 import { saveMonthly, type SaveResult } from './actions';
 
 const FRESH_LABEL: Record<string, string> = {
@@ -102,7 +103,7 @@ export function MonthlyGrid({ rows, today }: { rows: GridRow[]; today: string })
         <thead>
           <tr>
             <th>Account</th>
-            <th>Last recorded</th>
+            <th>Last value</th>
             <th className="num">Estimated today</th>
             <th>New value</th>
             <th>As of</th>
@@ -146,7 +147,11 @@ export function MonthlyGrid({ rows, today }: { rows: GridRow[]; today: string })
                       ? money({ ...r, currency: 'INR' }, r.fd.principal) + ' principal'
                       : money(r, r.latestAmount)}
                     <br />
-                    <span className="muted small">{r.latestAsOf ?? ''}</span>{' '}
+                    {r.origin ? (
+                      <UpdatedCell asOf={r.latestAsOf} source={r.origin} />
+                    ) : (
+                      <span className="muted small">{r.latestAsOf ?? ''}</span>
+                    )}{' '}
                     <span className={`fresh ${r.freshness}`}>{FRESH_LABEL[r.freshness]}</span>
                   </td>
                   <td className="num" data-label="Estimated today">

@@ -26,7 +26,7 @@ export function ImportForm({ today }: { today: string }) {
   const allOk = (shown.reconciliation ?? []).every((r) => r.ok);
 
   return (
-    <form className="card form" aria-busy={previewing || committing}>
+    <form className="form" aria-busy={previewing || committing}>
       <label>
         Workbook (.xlsx)
         <input name="file" type="file" accept=".xlsx" required />
@@ -124,13 +124,7 @@ export function ImportForm({ today }: { today: string }) {
 export function SyncLayoutForm({ today }: { today: string }) {
   const [state, action, pending] = useActionState(syncLayout, idle);
   return (
-    <form className="card form" action={action} aria-busy={pending}>
-      <h2>Sync the layout from your sheet</h2>
-      <p className="muted small">
-        Applies your sheet&apos;s order, labels (NRE, NRO, joint), links between each FD and its
-        savings account, FD numbers (last 4 digits) and notes to the records already here. It never
-        changes a balance or an FD amount, so it is safe to run whenever you reorder the sheet.
-      </p>
+    <form className="form" action={action} aria-busy={pending}>
       <label>
         Workbook (.xlsx)
         <input name="file" type="file" accept=".xlsx" required />
@@ -158,7 +152,7 @@ export function SyncLayoutForm({ today }: { today: string }) {
 export function CasForm({ owners }: { owners: { id: string; name: string }[] }) {
   const [res, act, pending] = useActionState<CasState | null, FormData>(importCas, null);
   return (
-    <form action={act} className="card form" aria-busy={pending}>
+    <form action={act} className="form" aria-busy={pending}>
       <label>
         Fund statement (CAS, PDF) from CAMS, KFintech, MF Central or CDSL
         <input name="file" type="file" accept=".pdf" required />

@@ -9,12 +9,21 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 - An asset with no value is listed but never counted as zero. Insurance cover and matured deposits you have not confirmed are never counted in net worth.
 - Money you have lent is shown as owed, not as cash.
 
-## Monthly routine (about 10 minutes)
+## Monthly routine (about 5 minutes)
 
-1. Open **Monthly update**. Every account is on one screen.
-2. Type the new balance and the date for each account that has changed (a pasted column from your bank app works too).
-3. Press **Save all**. The dashboard and the history chart update.
-4. Check **Tasks** for anything the app has raised, such as a deposit that has matured.
+1. Open **Monthly update**. The top box says which banks are up to date for the month, which are waiting for a value, and how each latest balance arrived (email, you, a statement, the imported sheet or a calculation).
+2. Work down the banks that are waiting. Type the new balance and press Enter for the next one, or paste a column from Excel or your bank app into the first box. **Same** keeps one balance as it was; **Nothing changed at (bank)** does it for the whole bank. A note under a box tells you how far the new figure is from the last, and warns about a likely typing slip.
+3. Press **Save**. Nothing is stored until then, and **Discard** drops the lot. The dashboard and the history chart update.
+4. Deposits are worked out from their terms and sit in a closed box under each bank; only a matured deposit needs you to say where the money went. Property, pension, shares and money lent are on the second tab, **Property, loans and other**.
+5. Check **Bank emails** for balances read from your email that are waiting for you, and **Tasks** for anything the app has raised.
+
+## Bank emails
+
+Forward bank alerts to the Gmail label shown in Settings. A balance from the bank's own address that matches exactly one of your accounts is recorded by itself. Everything else waits under **Needs your review** with the reason in plain words ("it did not come from the bank's own address", "the amount is very different from the last value"). Choose the account and press **Apply**, or **Ignore** (you can put an ignored message back). **Recorded** lists what was taken in, **Skipped** lists what was set aside and why (not a balance email, older than what you have, ignored by you, reader problems), and **Automation** shows when the email reader, market data, daily summary and rate pages last did their work.
+
+## Import
+
+**Import** has three tabs. **Workbook**: apply your sheet's layout (safe to repeat) or, once, import the whole workbook. **Fund statement (CAS)**: upload a CAMS/KFintech/MF Central statement, or forward it by email; the password is the one you chose, usually your PAN in capitals. **Tax statement (26AS, AIS)**: upload Form 26AS or the AIS; the date of birth saved in Settings opens a protected PDF. Each tab shows the last import result and anything that needs a look.
 
 ## Fixed deposits
 
