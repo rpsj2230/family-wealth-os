@@ -81,6 +81,12 @@ export async function loadPortfolioData(
       p.amfi_code ?? null,
     ]),
   );
+  const units = new Map(
+    ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [
+      p.asset_id,
+      { units: p.units === null ? null : Number(p.units), asOf: p.units_as_of },
+    ]),
+  );
   const sip = new Map(
     ((positions.data ?? []) as unknown as PositionRow[])
       .filter((p) => p.sip_monthly && p.started_on)
@@ -96,6 +102,8 @@ export async function loadPortfolioData(
   const assetRows = ((assets.data ?? []) as unknown as AssetRow[]).map((a) => ({
     ...a,
     amfi_code: code.get(a.id) ?? null,
+    units: units.get(a.id)?.units ?? null,
+    units_as_of: units.get(a.id)?.asOf ?? null,
     sip: sip.get(a.id) ?? null,
   }));
   const obsRows = (observations.data ?? []) as unknown as ObservationRow[];

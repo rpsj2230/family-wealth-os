@@ -247,6 +247,63 @@ export function estimateFundWithSip(args: {
   );
 }
 
+/**
+ * Fund whose units are known: today's value is units x today's NAV (the live feed), plus the units any SIP instalment since the
+ * units were counted would have bought. Exact when no instalment is assumed; an estimate only for the assumed instalments.
+ * A fund statement (or the monthly update) replaces the units and the estimate restarts from there.
+ */
+export function estimateFundUnitsWithSip(args: {
+  units: number;
+  unitsAsOf: Date;
+  /** the latest recorded value, kept as the anchor so the change since then is visible */
+  anchorAmount: number;
+  anchorAsOf: Date;
+  navToday: number;
+  navOn: (date: string) => number | null;
+  sip: SipPlan | null;
+  today: Date;
+}): CurrentValueEstimate {
+  assertFinite('units', args.units);
+  const held = args.units * args.navToday;
+  const components: EstimateComponent[] = [
+    {
+      kind: 'market',
+      amount: held - args.anchorAmount,
+      note: `${args.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units at today's price`,
+    },
+  ];
+  let assumed = false;
+  if (args.sip && !args.sip.stopped && args.sip.monthly > 0) {
+    const dates = sipDates(args.sip.startedOn, args.unitsAsOf, args.today);
+    if (dates.length > 0) {
+      assumed = true;
+      let invested = 0;
+      let worth = 0;
+      for (const d of dates) {
+        const n = args.navOn(d);
+        invested += args.sip.monthly;
+        worth += n && n > 0 ? (args.sip.monthly * args.navToday) / n : args.sip.monthly;
+      }
+      components.push(
+        {
+          kind: 'contribution',
+          amount: invested,
+          note: `${dates.length} SIP instalment${dates.length === 1 ? '' : 's'} of ₹${args.sip.monthly.toLocaleString('en-IN')} since the units were counted`,
+        },
+        { kind: 'market', amount: worth - invested, note: 'NAV change on those instalments' },
+      );
+    }
+  }
+  return build(
+    args.anchorAmount,
+    args.anchorAsOf,
+    args.today,
+    components,
+    assumed ? 'estimated' : 'calculated',
+    assumed ? 'units_nav_sip' : 'units_nav',
+  );
+}
+
 /** Foreign-currency balance (e.g. S$): native amount valued at today's rate versus the anchor rate. */
 export function estimateForeign(args: {
   nativeAmount: number;

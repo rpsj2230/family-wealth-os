@@ -49,14 +49,30 @@ and balanceToRupees (up to; null when there is no upper limit), both null when t
 page says NRE, otherwise "any". Give the rate for regular (not senior-citizen) customers and mention a senior-citizen premium in conditions.
 Never invent a rate: if the page has none of these, return {"offers":[]}.`;
 
+/** Corrections you made earlier, as rules the reader must follow for this bank (kept short, newest first). */
+export const withHints = (prompt: string, hints: string[]) =>
+  hints.length === 0
+    ? prompt
+    : `${prompt}\nKnown corrections for this bank. Follow them exactly:\n${hints
+        .slice(0, 8)
+        .map((h) => `- ${h.slice(0, 400)}`)
+        .join('\n')}`;
+
 export function buildRatesRequest(
   provider: AiProvider,
   apiKey: string,
   bank: string,
   pageText: string,
   model?: string,
+  hints: string[] = [],
 ): AiHttp {
-  return buildAiChat(provider, apiKey, PROMPT(bank), pageText.slice(0, 30_000), model);
+  return buildAiChat(
+    provider,
+    apiKey,
+    withHints(PROMPT(bank), hints),
+    pageText.slice(0, 30_000),
+    model,
+  );
 }
 
 const KINDS = new Set(['NRE', 'NRO', 'resident', 'any']);

@@ -7,6 +7,7 @@ import {
   carryForward,
   estimateFd,
   estimateForeign,
+  estimateFundUnitsWithSip,
   estimateFundWithSip,
   estimateSavings,
   type CurrentValueEstimate,
@@ -43,6 +44,9 @@ export interface AssetRow {
   tds_rate?: number | null;
   /** AMFI scheme code once you have confirmed which scheme this fund is */
   amfi_code?: string | null;
+  /** units held and the date they were counted (from a fund statement or the monthly update) */
+  units?: number | null;
+  units_as_of?: string | null;
   /** active SIP for this fund, if any (from the fund register) */
   sip?: { monthly: number; startedOn: string; stopped: boolean } | null;
 }
@@ -196,16 +200,32 @@ export function buildPortfolio(
         const atAnchor = [...series].reverse().find((n) => n.date <= obs.as_of) ?? null;
         const near =
           atAnchor && (dt(obs.as_of).getTime() - dt(atAnchor.date).getTime()) / 86_400_000 <= 7;
-        estimate = estimateFundWithSip({
-          anchorAmount: obs.amount,
-          anchorAsOf: asOf,
-          navAtAnchor: near ? atAnchor!.nav : null,
-          navToday: last.nav,
-          navOn: (d) => [...series].reverse().find((n) => n.date <= d)?.nav ?? null,
-          sip: defaults.includeSip === false ? null : (a.sip ?? null),
-          today,
-        });
-        if (estimate.basis === 'estimated') marketDate = last.date;
+        const unitsFresh =
+          typeof a.units === 'number' &&
+          a.units > 0 &&
+          typeof a.units_as_of === 'string' &&
+          a.units_as_of >= obs.as_of;
+        estimate = unitsFresh
+          ? estimateFundUnitsWithSip({
+              units: a.units as number,
+              unitsAsOf: dt(a.units_as_of as string),
+              anchorAmount: obs.amount,
+              anchorAsOf: asOf,
+              navToday: last.nav,
+              navOn: (d) => [...series].reverse().find((n) => n.date <= d)?.nav ?? null,
+              sip: defaults.includeSip === false ? null : (a.sip ?? null),
+              today,
+            })
+          : estimateFundWithSip({
+              anchorAmount: obs.amount,
+              anchorAsOf: asOf,
+              navAtAnchor: near ? atAnchor!.nav : null,
+              navToday: last.nav,
+              navOn: (d) => [...series].reverse().find((n) => n.date <= d)?.nav ?? null,
+              sip: defaults.includeSip === false ? null : (a.sip ?? null),
+              today,
+            });
+        if (estimate.basis !== 'carried_forward') marketDate = last.date;
       } else {
         estimate = carryForward({ amount: obs.amount, asOf, today });
       }

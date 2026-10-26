@@ -84,7 +84,7 @@ test('security headers are sent and no page breaks under the content policy', as
 
 test('the sample dashboard fits every screen and has working navigation', async ({ page }) => {
   await page.goto('/demo/dashboard');
-  await expect(page.getByText('Household net worth')).toBeVisible();
+  await expect(page.getByText('Net worth today')).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );

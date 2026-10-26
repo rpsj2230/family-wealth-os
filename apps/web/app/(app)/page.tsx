@@ -164,7 +164,7 @@ export default async function Dashboard({
   const pace = paceFromSeries(trend);
   const projection =
     pace && pace.months >= 2 && trend.length >= 3
-      ? linearPath(trend[trend.length - 1]!, pace.monthlyChange, 5)
+      ? linearPath(trend[trend.length - 1]!, pace.monthlyChange, 2)
       : [];
   const liquid = nw.byLiquidity.liquid;
 
@@ -500,7 +500,7 @@ export default async function Dashboard({
               Dotted line: if the last {pace.months} month{pace.months === 1 ? '' : 's'}&apos; pace
               ({rupees(pace.monthlyChange)} a month) simply continues. It reaches{' '}
               {formatInrCompact(projection[0]!.value)} in a year and{' '}
-              {formatInrCompact(projection[projection.length - 1]!.value)} in five. This is a
+              {formatInrCompact(projection[projection.length - 1]!.value)} in two years. This is a
               straight extension, not a forecast.
             </p>
           )}

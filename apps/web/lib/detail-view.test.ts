@@ -79,7 +79,9 @@ describe('observationsTable', () => {
     expect(t.rows[0]!.dim).toBe(true);
     expect(t.rows[0]!.cells[1]).toBe('SGD 8,300');
     expect(t.rows[0]!.cells[2]).toBe('₹6,14,200');
-    expect(t.rows[1]!.cells[6]).toBe('Yes');
+    expect(t.rows[1]!.cells[7]).toBe('Yes');
+    expect(t.rows[1]!.cells[3]).toBe('–'); // the first reading has nothing before it to compare with
+    expect(t.columns[3]).toBe('Change');
   });
 });
 
@@ -262,5 +264,35 @@ describe('bankHistory', () => {
     const sep = h.find((p) => p.date >= '2026-09-30')!;
     expect(sep.value).toBeGreaterThan(1_200_000);
     expect(bankHistory({ today: '2026-10-26', cash: [], deposits: [] })).toEqual([]);
+  });
+});
+
+describe('observationsTable: change and links', () => {
+  const mk = (id: string, as_of: string, amount: number, superseded_by: string | null = null) => ({
+    id,
+    amount,
+    currency: 'INR',
+    fx_rate: null,
+    as_of,
+    confidence: 'verified',
+    source: 'email',
+    note: null,
+    created_at: `${as_of}T10:00:00Z`,
+    superseded_by,
+  });
+  it('shows the change from the reading before and links each row to its own page', () => {
+    const t = observationsTable(
+      [mk('a', '2026-08-31', 1000), mk('b', '2026-09-30', 1500), mk('c', '2026-10-25', 1200)],
+      'asset-1',
+    );
+    expect(t.rows.map((r) => r.cells[3])).toEqual(['−₹300', '+₹500', '–']);
+    expect(t.rows[0]!.href).toBe('/asset/asset-1/reading/c');
+  });
+  it('skips replaced readings when working out the change', () => {
+    const t = observationsTable(
+      [mk('a', '2026-08-31', 1000), mk('b', '2026-09-30', 9999, 'c'), mk('c', '2026-09-30', 1100)],
+      'x',
+    );
+    expect(t.rows.find((r) => r.href?.endsWith('/c'))!.cells[3]).toBe('+₹100');
   });
 });

@@ -295,7 +295,17 @@ export function BankTable({
                   >
                     <tr className="secthead">
                       <th colSpan={9}>
-                        <PersonBadge p={styles[sct.ownerId]} name size={18} />
+                        {b.key === '__none' ? (
+                          <PersonBadge p={styles[sct.ownerId]} name size={18} />
+                        ) : (
+                          <Link
+                            className="personlink"
+                            href={`/bank/${b.key}/${sct.ownerId}`}
+                            title={`Open ${styles[sct.ownerId]?.name ?? 'this person'}'s page at ${b.name}`}
+                          >
+                            <PersonBadge p={styles[sct.ownerId]} name size={18} />
+                          </Link>
+                        )}
                         <Tot t={sct.totals} />
                       </th>
                     </tr>

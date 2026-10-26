@@ -60,6 +60,30 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           </>
         }
       />
+      {d.view.kpis.length > 0 && (
+        <section className="kpis assetkpis" aria-label="Key figures">
+          {d.view.kpis.map((k) => (
+            <article key={k.label} className="kpi">
+              <div className="kpi-label">{k.label}</div>
+              <div className={`kpi-value ${k.tone ?? ''}`}>{k.value}</div>
+              {k.note && <div className="kpi-sub muted">{k.note}</div>}
+            </article>
+          ))}
+        </section>
+      )}
+      {d.view.progress && (
+        <section className="detailsection" aria-label={d.view.progress.title}>
+          <h2>{d.view.progress.title}</h2>
+          <div className="termbar" role="img" aria-label={d.view.progress.caption}>
+            <span style={{ width: `${Math.round(d.view.progress.pct * 100)}%` }} />
+          </div>
+          <div className="termends small muted">
+            <span>Booked {d.view.progress.from}</span>
+            <b>{d.view.progress.caption}</b>
+            <span>Matures {d.view.progress.to}</span>
+          </div>
+        </section>
+      )}
       <AssetFacts facts={d.view.facts} />
       {fundView && (
         <section className="detailsection" aria-label="Fund progress">
@@ -86,6 +110,19 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           <HistoryLine points={c.points} label={c.label} money={c.money} />
         </section>
       ))}
+      {d.view.related.length > 0 && (
+        <section className="detailsection" aria-label="Other accounts at this bank">
+          <h2>Other accounts of {d.person?.name ?? 'this person'} at this bank</h2>
+          <ul className="related">
+            {d.view.related.map((r) => (
+              <li key={r.href}>
+                <Link href={r.href}>{r.label}</Link>
+                <span className="num">{r.value}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <DetailTables tables={d.view.tables} />
       <ActivityLog items={d.activity} />
     </>

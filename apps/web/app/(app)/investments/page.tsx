@@ -172,6 +172,7 @@ export default async function InvestmentsPage({
                     </td>
                     <td className="num amount" data-label="Value today">
                       {f.value ? formatInr(Math.round(f.value)) : '–'}
+                      <div className="small muted">{f.valueBasis}</div>
                     </td>
                     <td className={`num ${tone(f.dayAmount)}`} data-label="Today">
                       {f.dayAmount === null ? '–' : rupees(f.dayAmount)}

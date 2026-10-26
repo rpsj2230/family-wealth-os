@@ -80,7 +80,8 @@ export default async function AccountsPage({
           Banks in your sheet&apos;s order. Current value of a deposit is worked out from its rate
           and start date, and equals the full amount on the maturity date. Today&apos;s wealth uses
           these current values. <Link href="/accounts/reorder">Change the order</Link> ·{' '}
-          <Link href="/accounts/edit">Correct tags and details</Link>
+          <Link href="/accounts/edit">Correct tags and details</Link> ·{' '}
+          <Link href="/accounts/tidy-notes">Move bank-level notes up</Link>
         </p>
         <PersonFilter
           people={Object.values(styles)}

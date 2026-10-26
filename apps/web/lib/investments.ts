@@ -35,6 +35,8 @@ export interface FundRow {
   dayFrom: string | null;
   dayTo: string | null;
   goalIds: string[];
+  /** how today's value was worked out */
+  valueBasis: string;
   units: number | null;
   nav: number | null;
   navDate: string | null;
@@ -77,6 +79,16 @@ export interface InvestmentView {
 }
 
 type Supabase = Ctx['supabase'];
+
+/** In plain words, where today's value of a fund comes from. */
+const basisText = (method: string | undefined) =>
+  method === 'units_nav'
+    ? 'units × live price'
+    : method === 'units_nav_sip'
+      ? 'units × live price + SIPs since'
+      : method === 'nav_ratio' || method === 'nav_ratio_sip'
+        ? 'last value moved with the live price'
+        : 'last recorded value (no live price yet)';
 
 function totalsOf(rows: FundRow[], forReturns: FundForReturns[], today: string): Totals {
   const r = returnsFor(forReturns, today);
@@ -155,6 +167,7 @@ export async function loadInvestmentView(
   const value = new Map(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
+  const methodOf = new Map(l.portfolio.valued.map((v) => [v.assetId, v.estimate?.method] as const));
   const txBy = new Map<string, FundTxn[]>();
   for (const t of tx)
     txBy.set(t.asset_id, [
@@ -243,6 +256,9 @@ export async function loadInvestmentView(
       dayFrom: move?.from ?? null,
       dayTo: move?.to ?? null,
       goalIds: goalsBy.get(p.asset_id) ?? [],
+      valueBasis: basisText(
+        value.get(p.asset_id) !== undefined ? methodOf.get(p.asset_id) : undefined,
+      ),
       units: l.fundInfo[p.asset_id]?.units ?? null,
       nav: l.fundInfo[p.asset_id]?.nav ?? null,
       navDate: l.fundInfo[p.asset_id]?.navDate ?? null,

@@ -160,3 +160,17 @@ describe('parseRatesResponse: savings slabs and what is ignored', () => {
     ]);
   });
 });
+
+describe('buildRatesRequest: corrections are passed to the reader', () => {
+  it('adds the rules for the bank to the instructions, and nothing when there are none', () => {
+    const plain = JSON.stringify(buildRatesRequest('groq', 'k', 'Jana', 'page text'));
+    const hinted = JSON.stringify(
+      buildRatesRequest('groq', 'k', 'Jana', 'page text', undefined, [
+        'For NRE fixed deposit, 24 months: the right rate is 8%.',
+      ]),
+    );
+    expect(plain).not.toContain('Known corrections');
+    expect(hinted).toContain('Known corrections for this bank');
+    expect(hinted).toContain('the right rate is 8%');
+  });
+});

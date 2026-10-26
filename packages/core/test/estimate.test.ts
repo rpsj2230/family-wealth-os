@@ -5,6 +5,7 @@ import {
   estimateForeign,
   estimateFundByNavRatio,
   estimateFundByUnits,
+  estimateFundUnitsWithSip,
   estimateFundWithSip,
   sipDates,
   estimateSavings,
@@ -249,5 +250,43 @@ describe('estimateFundWithSip', () => {
     });
     expect(e.basis).toBe('carried_forward');
     expect(e.estimatedAmount).toBe(100_000);
+  });
+});
+
+describe('estimateFundUnitsWithSip', () => {
+  const d = (s: string) => new Date(`${s}T00:00:00Z`);
+  const base = {
+    units: 1000,
+    unitsAsOf: d('2026-10-01'),
+    anchorAmount: 120_000,
+    anchorAsOf: d('2026-10-01'),
+    navToday: 130,
+    navOn: () => 125,
+    sip: null,
+    today: d('2026-10-20'),
+  };
+  it('values the units at today’s price and calls it calculated', () => {
+    const e = estimateFundUnitsWithSip(base);
+    expect(e.estimatedAmount).toBe(130_000);
+    expect(e.basis).toBe('calculated');
+    expect(e.components[0]!.amount).toBe(10_000);
+  });
+  it('adds the units a SIP would have bought since the units were counted, and says it is an estimate', () => {
+    const e = estimateFundUnitsWithSip({
+      ...base,
+      sip: { monthly: 5000, startedOn: '2025-01-15', stopped: false },
+      today: d('2026-10-20'),
+    });
+    // one instalment on 15 Oct: 5000 / 125 = 40 units, worth 5200 at 130
+    expect(e.estimatedAmount).toBeCloseTo(130_000 + 5200, 6);
+    expect(e.basis).toBe('estimated');
+  });
+  it('ignores a stopped SIP', () => {
+    const e = estimateFundUnitsWithSip({
+      ...base,
+      sip: { monthly: 5000, startedOn: '2025-01-15', stopped: true },
+    });
+    expect(e.estimatedAmount).toBe(130_000);
+    expect(e.basis).toBe('calculated');
   });
 });

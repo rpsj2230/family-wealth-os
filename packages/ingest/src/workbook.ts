@@ -10,6 +10,7 @@
  *  - identifiers are masked to the last 4 characters before they leave this module
  *  - every planned value keeps its source cell (`sourceRef`)
  */
+import { withChangeRequest } from '@fwos/core';
 import ExcelJS from 'exceljs';
 
 // ----------------------------------------------------------------------------------------------
@@ -219,6 +220,12 @@ const iso = (d: Date): string => d.toISOString().slice(0, 10);
 export function maskIdentifiers(s: string): string {
   // "300017790142-1": the digits after the hyphen are a sub-deposit suffix, not part of the number
   return s.replace(/(\d{6,})(?:-\d+)?/g, (_m, main: string) => '…' + main.slice(-4));
+}
+
+/** The row's note, with the sheet's "Changes Req" for that row written in so it stays with the account. */
+function rowNotes(N: string | null | undefined, M: string | null | undefined): { notes?: string } {
+  const n = withChangeRequest(N ? maskIdentifiers(N) : null, M ? maskIdentifiers(M) : null);
+  return n ? { notes: n } : {};
 }
 
 const MONTHS: Record<string, number> = {
@@ -508,7 +515,7 @@ export async function planWorkbook(
         ...(kind ? { accountKind: kind } : joint ? { accountKind: 'joint' as const } : {}),
         currency: 'INR',
         status: matured ? 'matured_unconfirmed' : 'active',
-        ...(N ? { notes: maskIdentifiers(N) } : {}),
+        ...rowNotes(N, M),
         sourceRef: cell('B'),
       });
       fixedDeposits.push({
@@ -562,7 +569,7 @@ export async function planWorkbook(
           accountKind: kind,
           currency: 'INR',
           status: 'active',
-          ...(N ? { notes: maskIdentifiers(N) } : {}),
+          ...rowNotes(N, M),
           sourceRef: cell('B'),
         });
         observations.push({
@@ -617,7 +624,7 @@ export async function planWorkbook(
         accountKind: kind,
         currency: 'INR',
         status: 'active',
-        ...(N ? { notes: maskIdentifiers(N) } : {}),
+        ...rowNotes(N, M),
         sourceRef: cell('B'),
       });
       observations.push({
@@ -658,7 +665,7 @@ export async function planWorkbook(
         currency: 'SGD',
         accountKind: 'other',
         status: 'active',
-        ...(N ? { notes: maskIdentifiers(N) } : {}),
+        ...rowNotes(N, M),
         sourceRef: cell('B'),
       });
       if (sgd && base) {
@@ -718,7 +725,7 @@ export async function planWorkbook(
         ),
         currency: 'INR',
         status: stopped ? 'stopped' : 'active',
-        ...(N ? { notes: maskIdentifiers(N) } : {}),
+        ...rowNotes(N, M),
         sourceRef: cell('B'),
       });
       observations.push({

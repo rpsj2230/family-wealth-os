@@ -78,6 +78,7 @@ export interface AssetViewInput {
     plan_type: string;
   } | null;
   txns: {
+    id?: string;
     txn_on: string;
     kind: string;
     amount: number;
@@ -97,6 +98,19 @@ export interface AssetViewInput {
   payments: { amount: number; paid_on: string; note: string | null }[];
   goalNames: string[];
   linked: { id: string; label: string } | null;
+  /** the rate a savings account earns today and where that figure comes from */
+  rateInfo?: { rate: number; tag: 'own' | 'market' | 'assumed'; note: string } | null;
+  /** the best NRE fixed deposit on offer right now, from the rates on file */
+  market?: { bank: string; rate: number; tenure: string; checkedOn: string } | null;
+  /** the person's other accounts at the same bank */
+  related?: { id: string; label: string; value: number | null }[];
+}
+
+export interface Kpi {
+  label: string;
+  value: string;
+  note?: string | undefined;
+  tone?: 'gain' | 'fail' | undefined;
 }
 
 export interface AssetView {
@@ -112,6 +126,11 @@ export interface AssetView {
     points: { date: string; value: number }[];
   }[];
   tables: DetailTableData[];
+  /** the few figures that matter most, shown as tiles under the heading */
+  kpis: Kpi[];
+  /** where a deposit is between its start and its maturity */
+  progress: { title: string; from: string; to: string; pct: number; caption: string } | null;
+  related: { label: string; href: string; value: string }[];
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -167,23 +186,33 @@ const daysBetween = (a: string, b: string) =>
   Math.round((utc(b).getTime() - utc(a).getTime()) / 86_400_000);
 
 const inrOf = (o: ObsIn) => o.amount * (o.fx_rate ?? 1);
+const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
 
 /** All recorded values, newest first; replaced ones are dimmed. */
-export function observationsTable(obs: ObsIn[]): DetailTableData {
+export function observationsTable(obs: ObsIn[], assetId?: string): DetailTableData {
   const sorted = [...obs].sort(
     (a, b) => b.as_of.localeCompare(a.as_of) || b.created_at.localeCompare(a.created_at),
   );
+  // the change from the value before it (counting only values still in use)
+  const used = sorted.filter((o) => !o.superseded_by);
+  const before = new Map<string, number>();
+  used.forEach((o, i) => {
+    const prev = used[i + 1];
+    if (prev) before.set(o.id, inrOf(o) - inrOf(prev));
+  });
   return {
     title: 'Recorded values',
     hint: 'Every balance recorded for this item. A value that was later replaced is shown dimmed and is not used.',
-    columns: ['Date', 'Amount', 'In rupees', 'Source', 'Confidence', 'Note', 'Used'],
-    numeric: [1, 2],
+    columns: ['Date', 'Amount', 'In rupees', 'Change', 'Source', 'Confidence', 'Note', 'Used'],
+    numeric: [1, 2, 3],
     rows: sorted.map((o) => ({
       dim: !!o.superseded_by,
+      ...(assetId ? { href: `/asset/${assetId}/reading/${o.id}` } : {}),
       cells: [
         o.as_of,
         o.currency === 'INR' ? inr(o.amount) : `${o.currency} ${num(o.amount, 2)}`,
         inr(inrOf(o)),
+        before.has(o.id) ? signed(before.get(o.id)!) : '–',
         sourceTag(o.source, o.as_of, false).label,
         CONF[o.confidence] ?? o.confidence.replace(/_/g, ' '),
         o.note ?? '',
@@ -274,6 +303,7 @@ function fundTables(i: AssetViewInput, value: number | null) {
     columns: ['Date', 'Kind', 'Amount', 'Units', 'Price (NAV)', 'Units held after'],
     numeric: [2, 3, 4, 5],
     rows: [...txns].reverse().map((t) => ({
+      ...(t.id ? { href: `/asset/${i.asset.id}/txn/${t.id}` } : {}),
       cells: [
         t.txn_on,
         KIND[t.kind] ?? t.kind,
@@ -381,6 +411,8 @@ export function buildAssetView(i: AssetViewInput): AssetView {
 
   const charts: AssetView['charts'] = [];
   const tables: DetailTableData[] = [];
+  const kpis: Kpi[] = [];
+  let progress: AssetView['progress'] = null;
   const obsPoints = i.observations
     .filter((o) => !o.superseded_by)
     .sort((x, y) => x.as_of.localeCompare(y.as_of))
@@ -460,10 +492,93 @@ export function buildAssetView(i: AssetViewInput): AssetView {
           }),
         })),
       });
+    const total = Math.max(1, daysBetween(fd.booked_on, fd.maturity_on));
+    const done = Math.min(total, Math.max(0, daysBetween(fd.booked_on, i.today)));
+    progress = {
+      title: 'Where this deposit is in its term',
+      from: fd.booked_on,
+      to: fd.maturity_on,
+      pct: done / total,
+      caption:
+        left >= 0
+          ? `Day ${done} of ${total}: ${left} day${left === 1 ? '' : 's'} to go`
+          : `Matured ${-left} day${left === -1 ? '' : 's'} ago`,
+    };
+    const yieldYr = Math.pow(atMaturity / fd.principal, 365.25 / total) - 1;
+    kpis.push(
+      {
+        label: 'Worth today',
+        value: inr(accrued),
+        note: `${inr(accrued - fd.principal)} earned so far`,
+        tone: 'gain',
+      },
+      {
+        label: 'Interest still to come',
+        value: inr(Math.max(0, atMaturity - accrued)),
+        note: `until ${fd.maturity_on}`,
+      },
+      {
+        label: 'Total interest at maturity',
+        value: inr(atMaturity - fd.principal),
+        note: `${pct(fd.rate)} a year on ${inr(fd.principal)}`,
+      },
+      { label: 'Effective yield', value: pct(yieldYr), note: 'a year, including compounding' },
+    );
+    if (i.market)
+      kpis.push({
+        label: 'Best NRE deposit now',
+        value: pct(i.market.rate),
+        note: `${i.market.bank}, ${i.market.tenure} (checked ${i.market.checkedOn}); this one earns ${pct(fd.rate)}`,
+        tone: i.market.rate > fd.rate + 0.0005 ? 'fail' : 'gain',
+      });
     const t = fdTable(i);
     if (t) tables.push(t);
   } else if (obsPoints.length > 0) {
     charts.push({ title: 'Balance over time', label: 'Balance', money: true, points: obsPoints });
+    if (a.type === 'bank_account') {
+      const last = obsPoints[obsPoints.length - 1]!;
+      const yearAgo = new Date(utc(i.today));
+      yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
+      const lastYear = obsPoints.filter((p) => p.date >= yearAgo.toISOString().slice(0, 10));
+      const vals = (lastYear.length ? lastYear : obsPoints).map((p) => p.value);
+      const avg = vals.reduce((x, y) => x + y, 0) / vals.length;
+      const cutoff = new Date(utc(last.date).getTime() - 30 * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      const base = [...obsPoints].reverse().find((p) => p.date <= cutoff);
+      kpis.push({
+        label: 'Balance',
+        value: inr(cur.amount ?? last.value),
+        note: cur.asOf ? `as of ${cur.asOf}` : undefined,
+      });
+      if (base)
+        kpis.push({
+          label: 'Change in 30 days',
+          value: signed(last.value - base.value),
+          note: `since ${base.date}`,
+          tone: last.value - base.value >= 0 ? 'gain' : 'fail',
+        });
+      kpis.push(
+        {
+          label: 'Lowest, last year',
+          value: inr(Math.min(...vals)),
+          note: `${vals.length} readings`,
+        },
+        { label: 'Highest, last year', value: inr(Math.max(...vals)) },
+      );
+      if (i.rateInfo)
+        kpis.push({
+          label: 'Interest rate',
+          value: `${i.rateInfo.tag === 'assumed' ? '~' : ''}${pct(i.rateInfo.rate)}`,
+          note: i.rateInfo.note,
+        });
+      if (i.rateInfo)
+        kpis.push({
+          label: 'Interest a year, about',
+          value: inr(avg * i.rateInfo.rate),
+          note: 'average balance × rate; the bank statement is exact',
+        });
+    }
   }
 
   if (i.position) {
@@ -553,7 +668,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     });
   }
 
-  tables.unshift(observationsTable(i.observations));
+  tables.unshift(observationsTable(i.observations, a.id));
   return {
     title,
     subtitle,
@@ -562,6 +677,13 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     facts,
     charts,
     tables,
+    kpis,
+    progress,
+    related: (i.related ?? []).map((r) => ({
+      label: r.label,
+      href: `/asset/${r.id}`,
+      value: r.value === null ? '–' : inr(r.value),
+    })),
   };
 }
 

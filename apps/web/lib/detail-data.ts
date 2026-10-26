@@ -1,6 +1,9 @@
 import { notFound } from 'next/navigation';
 import {
   buildBankBlocks,
+  capacityLabel,
+  filterBlocksByOwner,
+  tenureText,
   formatInr,
   personStyles,
   type BankBlock,
@@ -10,6 +13,8 @@ import {
 import type { ActivityItem } from '@/components/ActivityLog';
 import type { DetailTableData } from '@/components/DetailTable';
 import type { Fact } from '@/components/AssetFacts';
+import { loadSettings } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext, type Ctx } from './data';
 import {
   bankHistory,
@@ -23,6 +28,8 @@ import {
   type ObsIn,
 } from './detail-view';
 import { loadPortfolio } from './portfolio-data';
+import { cashRatesFor, loadOffers } from './rates-view';
+import { buildDeposits } from './deposits';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Supabase = Ctx['supabase'];
@@ -70,50 +77,52 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
   if (!asset) notFound();
   const yearAgo = new Date(l.today);
   yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
-  const [obs, pos, tx, rec, pays, owners, insts, allocs, goals, audit, inbox] = await Promise.all([
-    supabase
-      .from('observations')
-      .select(
-        'id, amount, currency, fx_rate, as_of, confidence, source, note, created_at, superseded_by',
-      )
-      .eq('asset_id', id)
-      .order('as_of', { ascending: false })
-      .limit(500),
-    supabase
-      .from('mf_positions')
-      .select(
-        'fund_name, invested, started_on, sip_monthly, sip_stopped, folio_last4, isin, amfi_code, plan_type',
-      )
-      .eq('asset_id', id)
-      .maybeSingle(),
-    supabase
-      .from('mf_transactions')
-      .select('txn_on, kind, amount, units, nav, balance_units, description')
-      .eq('asset_id', id)
-      .order('txn_on')
-      .limit(5000),
-    supabase
-      .from('receivables')
-      .select('counterparty, lent, lent_on, expected_on, interest_note')
-      .eq('asset_id', id)
-      .maybeSingle(),
-    supabase
-      .from('receivable_payments')
-      .select('amount, paid_on, note')
-      .eq('asset_id', id)
-      .order('paid_on'),
-    supabase.from('owners').select('id, display_name').order('created_at'),
-    supabase.from('institutions').select('id, name, notes'),
-    supabase.from('goal_allocations').select('goal_id').eq('asset_id', id),
-    supabase.from('goals').select('id, name'),
-    auditRows(supabase),
-    supabase
-      .from('inbox_messages')
-      .select('received_on, created_at, from_domain, subject, outcome, reason')
-      .eq('asset_id', id)
-      .order('created_at', { ascending: false })
-      .limit(50),
-  ]);
+  const [obs, pos, tx, rec, pays, owners, insts, allocs, goals, audit, inbox, offers] =
+    await Promise.all([
+      supabase
+        .from('observations')
+        .select(
+          'id, amount, currency, fx_rate, as_of, confidence, source, note, created_at, superseded_by',
+        )
+        .eq('asset_id', id)
+        .order('as_of', { ascending: false })
+        .limit(500),
+      supabase
+        .from('mf_positions')
+        .select(
+          'fund_name, invested, started_on, sip_monthly, sip_stopped, folio_last4, isin, amfi_code, plan_type',
+        )
+        .eq('asset_id', id)
+        .maybeSingle(),
+      supabase
+        .from('mf_transactions')
+        .select('id, txn_on, kind, amount, units, nav, balance_units, description')
+        .eq('asset_id', id)
+        .order('txn_on')
+        .limit(5000),
+      supabase
+        .from('receivables')
+        .select('counterparty, lent, lent_on, expected_on, interest_note')
+        .eq('asset_id', id)
+        .maybeSingle(),
+      supabase
+        .from('receivable_payments')
+        .select('amount, paid_on, note')
+        .eq('asset_id', id)
+        .order('paid_on'),
+      supabase.from('owners').select('id, display_name').order('created_at'),
+      supabase.from('institutions').select('id, name, notes'),
+      supabase.from('goal_allocations').select('goal_id').eq('asset_id', id),
+      supabase.from('goals').select('id, name'),
+      auditRows(supabase),
+      supabase
+        .from('inbox_messages')
+        .select('received_on, created_at, from_domain, subject, outcome, reason')
+        .eq('asset_id', id)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      loadOffers(supabase),
+    ]);
   const ownerList = ((owners.data ?? []) as unknown as { id: string; display_name: string }[]).map(
     (o) => ({ id: o.id, name: o.display_name }),
   );
@@ -173,7 +182,37 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
   const goalNames = new Map(
     ((goals.data ?? []) as unknown as { id: string; name: string }[]).map((g) => [g.id, g.name]),
   );
+  const myBank = bank?.name ?? '';
+  const cashRate =
+    asset.type === 'bank_account' && row
+      ? cashRatesFor(
+          [{ ...row, bank: myBank }],
+          new Map([[id, asset.interest_rate ?? null]]),
+          offers,
+          (await loadSettings(supabase as unknown as SupabaseClient)).config.estimates.savingsRate,
+        )[id]
+      : undefined;
+  const bestFd = offers
+    .filter((o) => o.product === 'fd' && o.accountKind !== 'NRO' && o.accountKind !== 'resident')
+    .reduce<(typeof offers)[number] | null>((m, o) => (!m || o.rate > m.rate ? o : m), null);
+  const siblings = blocks
+    .flatMap((b) =>
+      b.sections.filter((sct) => sct.ownerId === asset.owner_id && b.key === asset.institution_id),
+    )
+    .flatMap((sct) => sct.rows)
+    .filter((r) => r.assetId !== id)
+    .map((r) => ({ id: r.assetId, label: r.code, value: r.current }));
   const input: AssetViewInput = {
+    rateInfo: cashRate ?? null,
+    market: bestFd
+      ? {
+          bank: bestFd.bank,
+          rate: bestFd.rate,
+          tenure: tenureText(bestFd),
+          checkedOn: bestFd.checkedOn,
+        }
+      : null,
+    related: siblings,
     today: l.today.toISOString().slice(0, 10),
     asset: {
       id,
@@ -283,6 +322,8 @@ export interface BankDetail {
   note: string | null;
   block: BankBlock | null;
   styles: Record<string, PersonStyle>;
+  /** set on a person's page within the bank */
+  person: PersonStyle | null;
   facts: Fact[];
   tables: DetailTableData[];
   history: { date: string; value: number }[];
@@ -291,15 +332,22 @@ export interface BankDetail {
 
 const inr = (n: number | null) => (n === null ? '–' : formatInr(Math.round(n)));
 
-export async function loadBankDetail(id: string): Promise<BankDetail> {
+export async function loadBankDetail(id: string, ownerId?: string): Promise<BankDetail> {
   if (!UUID.test(id)) notFound();
   const { supabase, householdId, userId } = await loadContext();
   if (!householdId) notFound();
-  const [l, insts, owners, audit] = await Promise.all([
+  if (ownerId && !UUID.test(ownerId)) notFound();
+  const [l, insts, owners, audit, depAssets, st] = await Promise.all([
     loadPortfolio(supabase),
     supabase.from('institutions').select('id, name, notes'),
     supabase.from('owners').select('id, display_name').order('created_at'),
     auditRows(supabase),
+    supabase
+      .from('assets')
+      .select(
+        'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
+      ),
+    loadSettings(supabase as unknown as SupabaseClient),
   ]);
   const instRows = (insts.data ?? []) as unknown as {
     id: string;
@@ -320,8 +368,13 @@ export async function loadBankDetail(id: string): Promise<BankDetail> {
     institutionNames: Object.fromEntries(instRows.map((i) => [i.id, i.name])),
     today: l.today,
   });
-  const block = blocks.find((b) => b.key === id) ?? null;
-  const mineAssets = l.assetRows.filter((a) => a.institution_id === id);
+  const block0 = blocks.find((b) => b.key === id) ?? null;
+  if (ownerId && !ownerList.some((o) => o.id === ownerId)) notFound();
+  const block = ownerId && block0 ? (filterBlocksByOwner([block0], ownerId)[0] ?? null) : block0;
+  if (ownerId && !block) notFound();
+  const mineAssets = l.assetRows.filter(
+    (a) => a.institution_id === id && (!ownerId || a.owner_id === ownerId),
+  );
   const ids = new Set(mineAssets.map((a) => a.id));
   const todayIso = l.today.toISOString().slice(0, 10);
   const counted = (s: string) => s === 'active' || s === 'stopped';
@@ -421,14 +474,101 @@ export async function loadBankDetail(id: string): Promise<BankDetail> {
     ...Object.fromEntries(ownerList.map((o) => [o.id, o.name])),
     ...Object.fromEntries(instRows.map((i) => [i.id, i.name])),
   };
+  const fdLines = rows.filter((r) => r.fd && r.status === 'active');
+  if (fdLines.length > 0) {
+    const sorted = [...fdLines].sort((a, b) => a.fd!.maturityOn.localeCompare(b.fd!.maturityOn));
+    const principal = sorted.reduce((s2, r) => s2 + r.fd!.principal, 0);
+    const avg =
+      principal > 0
+        ? sorted.reduce((s2, r) => s2 + r.fd!.rate * r.fd!.principal, 0) / principal
+        : 0;
+    facts.push(
+      {
+        label: 'Next maturity',
+        value: sorted[0]!.fd!.maturityOn,
+        note: `${sorted[0]!.fd!.daysLeft} days`,
+      },
+      {
+        label: 'Average deposit rate',
+        value: `${(avg * 100).toFixed(2)}%`,
+        note: 'weighted by amount invested',
+      },
+    );
+    tables.push({
+      title: 'Maturities, soonest first',
+      hint: 'Open one for its full history and interest by year.',
+      columns: [
+        'Deposit',
+        'Person',
+        'Rate',
+        'Matures',
+        'Days left',
+        'Invested',
+        'Interest to come',
+        'At maturity',
+      ],
+      numeric: [2, 4, 5, 6, 7],
+      rows: sorted.map((r) => ({
+        href: `/asset/${r.assetId}`,
+        cells: [
+          r.code,
+          styles[r.ownerId]?.name ?? '',
+          `${(r.fd!.rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`,
+          r.fd!.maturityOn,
+          String(r.fd!.daysLeft),
+          inr(r.fd!.principal),
+          inr(Math.max(0, r.fd!.maturityAmount - (r.current ?? r.fd!.principal))),
+          inr(r.fd!.maturityAmount),
+        ],
+      })),
+    });
+  }
+  const cover = buildDeposits(
+    ((depAssets.data ?? []) as unknown as Record<string, unknown>[]).map((a) => ({
+      id: a.id as string,
+      ownerId: a.owner_id as string,
+      institutionId: (a.institution_id as string | null) ?? null,
+      type: a.type as string,
+      status: a.status as string,
+      nickname: a.nickname as string,
+      accountKind: (a.account_kind as string | null) ?? null,
+      isJoint: !!a.is_joint,
+      jointHolderId: (a.joint_holder_id as string | null) ?? null,
+    })),
+    l.portfolio.valued,
+    l.fdRows,
+    new Map(instRows.map((i) => [i.id, i.name])),
+    new Map(ownerList.map((o) => [o.id, o.name])),
+    l.today,
+    st.config.deposits.insuranceLimit,
+  ).cover;
+  const coverRows = cover.rows.filter(
+    (r) => r.bankId === id && (!ownerId || r.capacityKey.split(/[:+]/).includes(ownerId)),
+  );
+  if (coverRows.length > 0)
+    tables.push({
+      title: 'Deposit insurance by name',
+      hint: `Cover is ${inr(cover.limit)} per bank for each ownership name as written; interest counts. A joint account in the order A & B is a different name from B & A.`,
+      columns: ['Held in the name of', 'Total at this bank', 'Insured', 'Above the limit'],
+      numeric: [1, 2, 3],
+      rows: coverRows.map((r) => ({
+        cells: [
+          capacityLabel(r.capacityKey, cover.ownerNames),
+          inr(r.total),
+          inr(r.insured),
+          r.uninsured > 0 ? inr(r.uninsured) : '–',
+        ],
+      })),
+    });
   const mine = audit.filter((r) =>
-    r.table_name === 'institutions' ? r.row_id === id : ids.has(String(assetOf(r))),
+    r.table_name === 'institutions' ? !ownerId && r.row_id === id : ids.has(String(assetOf(r))),
   );
   return {
     name: inst.name,
     note: inst.notes,
     block,
     styles,
+    person: ownerId ? (styles[ownerId] ?? null) : null,
     facts,
     tables,
     history,

@@ -28,3 +28,5 @@ export * from './activity';
 export * from './fund-series';
 export * from './dashboard';
 export * from './rate-notes';
+export * from './rate-board';
+export * from './notes-tidy';
