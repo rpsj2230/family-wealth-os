@@ -1,0 +1,14 @@
+.sharetext {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 0 0 14px;
+  max-height: 60vh;
+  overflow-y: auto;
+}

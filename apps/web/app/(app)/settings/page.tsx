@@ -1,74 +1,98 @@
-import { loadContext } from '@/lib/data';
-import { formatInr, profileFromJson, RULES, type TaxRuleRow } from '@fwos/core';
+import { Suspense } from 'react';
+import { configFromJson, fyOf, profileFromJson, RULES } from '@fwos/core';
+import type { TaxRuleRow } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { WhatsAppButton } from '../share/WhatsAppButton';
-import { TelegramForm } from './TelegramForm';
+import { PageHead } from '@/components/PageHead';
+import { loadContext } from '@/lib/data';
+import { confirmedGroups } from '@/lib/settings-fields';
+import { SETTINGS_TABS, settingsTabOf, todoByTab } from '@/lib/settings-tabs';
+import { loadSetupStatus, setupProgress, sgToday } from '@/lib/setup-status';
+import './settings.css';
+import type { FlowRow, PersonRow } from './PeopleForms';
+import { AnchorRedirect, SettingsNav } from './SettingsNav';
 import {
-  deleteCashflow,
-  deleteRateSource,
-  saveEmergencyAccess,
-  resetTaxRule,
-  saveDigestSettings,
-  saveIntegrations,
-} from './actions';
-import {
-  CashflowForm,
-  ConfigForm,
-  EmergencyForm,
-  LiquidityForm,
-  PersonForm,
-  RateSourceForm,
-  TaxRuleForm,
-  type PersonRow,
-} from './SettingsForms';
+  AccessSection,
+  ConnectionsSection,
+  NotificationsSection,
+  PeopleSection,
+  RulesSection,
+  SetupSection,
+  TaxSection,
+  type DeliveryRow,
+  type RateSourceRow,
+  type TaxYear,
+} from './sections';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SettingsPage() {
-  const { supabase, householdId, role } = await loadContext();
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const tab = settingsTabOf((await searchParams).tab);
+  const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [s, log, integ, people, flows, ruleRows, settings, fx, rsources, eprof, eaccess] =
-    await Promise.all([
-      supabase
-        .from('digest_settings')
-        .select('enabled, extra_recipients, include_retirement')
-        .maybeSingle(),
-      supabase
-        .from('digest_log')
-        .select('digest_date, status, recipients, error, created_at')
-        .order('digest_date', { ascending: false })
-        .limit(10),
-      supabase
-        .from('integration_settings')
-        .select('ai_provider, ai_key_set, inbox_label, telegram_set, telegram_chat_ids')
-        .maybeSingle(),
-      supabase
-        .from('owners')
-        .select(
-          'id, display_name, dob, pan_last4, tax_residency, guardian_id, plan_role, is_minor, notes',
-        )
-        .order('created_at'),
-      supabase
-        .from('cashflow_items')
-        .select('id, owner_id, kind, label, amount, currency, frequency')
-        .order('kind')
-        .order('created_at'),
-      supabase.from('tax_rules').select('*').order('fy'),
-      loadSettings(supabase as unknown as SupabaseClient),
-      supabase
-        .from('fx_rates')
-        .select('currency, rate_date, inr_per_unit')
-        .order('rate_date', { ascending: false })
-        .limit(20),
-      supabase.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
-      supabase.from('emergency_profile').select('content').maybeSingle(),
-      supabase.from('emergency_access').select('mode, inactive_days, released').maybeSingle(),
-    ]);
+  const db = supabase as unknown as SupabaseClient;
+  const items = await loadSetupStatus(db);
+  const { done, total } = setupProgress(items);
+  const meta = SETTINGS_TABS.find((t) => t.key === tab)!;
+
+  return (
+    <>
+      <PageHead
+        title="Settings"
+        subtitle="Everything you can change, one section at a time. Numbers that rules or laws can change live here, never in the code."
+        pills={[
+          done === total
+            ? { label: 'Everything set up', tone: 'ok' }
+            : { label: `${total - done} setup items open`, tone: 'warn' },
+        ]}
+      />
+      <Suspense fallback={null}>
+        <AnchorRedirect />
+      </Suspense>
+      <div className="setlayout">
+        <SettingsNav current={tab} todo={todoByTab(items)} />
+        <div className="setmain">
+          <h2 className="settitle">{meta.label}</h2>
+          {tab === 'setup' && <SetupSection items={items} />}
+          {tab === 'people' && <PeopleTab db={db} />}
+          {tab === 'rules' && <RulesTab db={db} />}
+          {tab === 'tax' && <TaxTab db={db} />}
+          {tab === 'notifications' && <NotificationsTab db={db} />}
+          {tab === 'connections' && <ConnectionsTab db={db} />}
+          {tab === 'access' && <AccessTab db={db} />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+async function PeopleTab({ db }: { db: SupabaseClient }) {
+  const [people, flows, fx] = await Promise.all([
+    db
+      .from('owners')
+      .select(
+        'id, display_name, dob, pan_last4, tax_residency, guardian_id, plan_role, is_minor, notes',
+      )
+      .order('created_at'),
+    db
+      .from('cashflow_items')
+      .select('id, owner_id, kind, label, amount, currency, frequency')
+      .order('kind')
+      .order('created_at'),
+    db
+      .from('fx_rates')
+      .select('currency, rate_date, inr_per_unit')
+      .order('rate_date', { ascending: false })
+      .limit(20),
+  ]);
   const fxNow: Record<string, number> = { INR: 1 };
   for (const r of fx.data ?? [])
     if (!((r.currency as string) in fxNow)) fxNow[r.currency as string] = Number(r.inr_per_unit);
-  const peopleRows: PersonRow[] = (people.data ?? []).map((o) => ({
+  const rows: PersonRow[] = (people.data ?? []).map((o) => ({
     id: o.id as string,
     name: o.display_name as string,
     dob: (o.dob as string | null) ?? '',
@@ -79,500 +103,133 @@ export default async function SettingsPage() {
     isMinor: !!o.is_minor,
     notes: (o.notes as string | null) ?? '',
   }));
-  const nameOfOwner = new Map(peopleRows.map((o) => [o.id, o.name]));
-  const monthly = (x: { amount: number; frequency: string }) =>
-    x.frequency === 'yearly' ? Number(x.amount) / 12 : Number(x.amount);
-  const sums = new Map<string, { inc: number; exp: number }>();
-  for (const f of flows.data ?? []) {
-    const cur = f.currency as string;
-    const e = sums.get(cur) ?? { inc: 0, exp: 0 };
-    if (f.kind === 'income') e.inc += monthly(f as never);
-    else e.exp += monthly(f as never);
-    sums.set(cur, e);
-  }
-  const savingInr = [...sums.entries()].reduce(
-    (t, [cur, e]) => t + (e.inc - e.exp) * (fxNow[cur] ?? 0),
-    0,
-  );
-  const missingFx = [...sums.keys()].filter((c) => !(c in fxNow));
-  const custom = new Map(((ruleRows.data ?? []) as unknown as TaxRuleRow[]).map((r) => [r.fy, r]));
-  const c = settings.config;
-  const years = [
-    ...new Map([
-      ...RULES.map((r) => [r.fy, r.fy] as const),
-      ...[...custom.keys()].map((k) => [k, k] as const),
-    ]).keys(),
-  ].sort();
-  const ruleOf = (fy: string) => settings.rules.find((r) => r.fy === fy)!;
-  const ic = integ.data as {
-    ai_provider: 'groq' | 'gemini' | null;
-    ai_key_set: boolean;
-    inbox_label: string;
-    telegram_set: boolean;
-    telegram_chat_ids: string | null;
-  } | null;
-  const cfg = s.data as {
+  const flowRows: FlowRow[] = (flows.data ?? []).map((f) => ({
+    id: f.id as string,
+    ownerId: (f.owner_id as string | null) ?? null,
+    kind: f.kind as 'income' | 'expense',
+    label: f.label as string,
+    amount: Number(f.amount),
+    currency: f.currency as string,
+    frequency: f.frequency as 'monthly' | 'yearly',
+  }));
+  return <PeopleSection people={rows} flows={flowRows} fxNow={fxNow} />;
+}
+
+async function RulesTab({ db }: { db: SupabaseClient }) {
+  const r = await db.from('household_config').select('config').maybeSingle();
+  const raw = (r.data as { config?: unknown } | null)?.config ?? null;
+  const config = configFromJson(raw);
+  return <RulesSection config={config} confirmed={confirmedGroups(raw, config)} />;
+}
+
+async function TaxTab({ db }: { db: SupabaseClient }) {
+  const [settings, custom] = await Promise.all([
+    loadSettings(db),
+    db.from('tax_rules').select('*'),
+  ]);
+  const customFy = new Set(((custom.data ?? []) as unknown as TaxRuleRow[]).map((c) => c.fy));
+  const currentFy = fyOf(sgToday());
+  const years: TaxYear[] = settings.rules.map((r) => ({
+    custom: customFy.has(r.fy),
+    builtin: RULES.some((b) => b.fy === r.fy),
+    current: r.fy === currentFy,
+    sources: customFy.has(r.fy) ? [] : r.sources,
+    v: {
+      fy: r.fy,
+      months: r.equity.holdingMonthsLong,
+      stcg: Math.round(r.equity.stcgRate * 1e4) / 100,
+      ltcg: Math.round(r.equity.ltcgRate * 1e4) / 100,
+      exemption: r.equity.ltcgExemption,
+      cess: Math.round(r.cess * 1e4) / 100,
+      verified: r.verification === 'primary',
+      note: r.notes[0] ?? '',
+    },
+  }));
+  return <TaxSection years={years} currentFy={currentFy} />;
+}
+
+async function NotificationsTab({ db }: { db: SupabaseClient }) {
+  const [digest, integ, log] = await Promise.all([
+    db
+      .from('digest_settings')
+      .select('enabled, extra_recipients, include_retirement')
+      .maybeSingle(),
+    db.from('integration_settings').select('telegram_set, telegram_chat_ids').maybeSingle(),
+    db
+      .from('digest_log')
+      .select('digest_date, channel, status, recipients, error')
+      .order('digest_date', { ascending: false })
+      .limit(14),
+  ]);
+  const d = digest.data as {
     enabled: boolean;
     extra_recipients: string[];
     include_retirement: boolean;
   } | null;
+  const t = integ.data as { telegram_set: boolean; telegram_chat_ids: string | null } | null;
+  const deliveries: DeliveryRow[] = (log.data ?? []).map((r) => ({
+    date: r.digest_date as string,
+    channel: (r.channel as string | null) ?? 'email',
+    status: r.status as string,
+    recipients: Number(r.recipients),
+    error: (r.error as string | null) ?? null,
+  }));
   return (
-    <>
-      <h1>Settings</h1>
-      <nav className="chipbar small" aria-label="Settings sections">
-        <a className="fchip" href="#people">
-          People
-        </a>
-        <a className="fchip" href="#money">
-          Income and spending
-        </a>
-        <a className="fchip" href="#limits">
-          Limits and reminders
-        </a>
-        <a className="fchip" href="#tax">
-          Tax rules
-        </a>
-        <a className="fchip" href="#email">
-          Email and AI
-        </a>
-      </nav>
+    <NotificationsSection
+      digest={{
+        enabled: d?.enabled ?? false,
+        extra: d?.extra_recipients ?? [],
+        includeRetirement: d?.include_retirement ?? true,
+      }}
+      telegram={{ isSet: !!t?.telegram_set, chatIds: t?.telegram_chat_ids ?? '' }}
+      deliveries={deliveries}
+    />
+  );
+}
 
-      <section className="card" id="people">
-        <h2>People</h2>
-        <p className="muted small">
-          Dates of birth drive the retirement ages. The PAN is stored write-only: it can be replaced
-          or removed but never shown again; the app keeps the last four characters for display and
-          uses the full PAN only to open your fund statements. A minor can be linked to the guardian
-          who handles their money.
-        </p>
-        {peopleRows.map((p) => (
-          <PersonForm
-            key={p.id}
-            p={p}
-            others={peopleRows
-              .filter((o) => o.id !== p.id)
-              .map((o) => ({ id: o.id, name: o.name }))}
-          />
-        ))}
-      </section>
+async function ConnectionsTab({ db }: { db: SupabaseClient }) {
+  const [integ, sources] = await Promise.all([
+    db.from('integration_settings').select('ai_provider, ai_key_set, inbox_label').maybeSingle(),
+    db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
+  ]);
+  const i = integ.data as {
+    ai_provider: 'groq' | 'gemini' | null;
+    ai_key_set: boolean;
+    inbox_label: string;
+  } | null;
+  const rows: RateSourceRow[] = (sources.data ?? []).map((r) => ({
+    id: r.id as string,
+    bank: r.bank as string,
+    url: r.url as string,
+    lastRunOn: (r.last_run_on as string | null) ?? null,
+    lastResult: (r.last_result as string | null) ?? null,
+  }));
+  return (
+    <ConnectionsSection
+      ai={{
+        provider: i?.ai_provider ?? null,
+        keySet: !!i?.ai_key_set,
+        label: i?.inbox_label ?? 'FWOS/Inbox',
+      }}
+      sources={rows}
+    />
+  );
+}
 
-      <section className="card" id="money">
-        <h2>Income and spending</h2>
-        <p className="muted small">
-          Add each source in its own currency. The saving each month is worked out from these and
-          shown below; nothing is assumed.
-        </p>
-        {(flows.data ?? []).length === 0 ? (
-          <p className="muted">Nothing entered yet.</p>
-        ) : (
-          <table className="tbl lines">
-            <tbody>
-              {(flows.data ?? []).map((f) => (
-                <tr key={f.id as string}>
-                  <td>
-                    {f.kind === 'income' ? 'Income' : 'Spending'} · {f.label as string}
-                  </td>
-                  <td className="muted small">
-                    {f.owner_id ? nameOfOwner.get(f.owner_id as string) : 'Household'}
-                  </td>
-                  <td className="num">
-                    {f.currency as string} {Number(f.amount).toLocaleString('en-IN')}{' '}
-                    {f.frequency === 'yearly' ? 'a year' : 'a month'}
-                  </td>
-                  <td>
-                    <form action={deleteCashflow}>
-                      <input type="hidden" name="id" value={f.id as string} />
-                      <button
-                        className="btn compact ghost"
-                        aria-label={`Remove ${f.label as string}`}
-                      >
-                        Remove
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {[...sums.entries()].map(([cur, e]) => (
-          <p key={cur} className="small">
-            Each month in {cur}: income {e.inc.toLocaleString('en-IN')}, spending{' '}
-            {e.exp.toLocaleString('en-IN')},{' '}
-            <strong>left {(e.inc - e.exp).toLocaleString('en-IN')}</strong>
-          </p>
-        ))}
-        {sums.size > 0 && missingFx.length === 0 && (
-          <p className="small">
-            About <strong>{formatInr(Math.round(savingInr))}</strong> a month at today&apos;s
-            exchange rates.
-          </p>
-        )}
-        {missingFx.length > 0 && (
-          <p className="small muted">
-            The exchange rate for {missingFx.join(', ')} loads with the daily market-data job.
-          </p>
-        )}
-        <CashflowForm people={peopleRows.map((o) => ({ id: o.id, name: o.name }))} />
-      </section>
-
-      <section className="card" id="limits">
-        <h2>Limits and reminders</h2>
-        <p className="muted small">
-          These numbers can change by law or by choice. Change them here and every screen, alert and
-          reminder follows.
-        </p>
-        <ConfigForm
-          v={{
-            limit: c.deposits.insuranceLimit,
-            alertDays: c.deposits.maturityAlertDays.join(', '),
-            soonDays: c.reminders.maturitySoonDays,
-            policyDays: c.reminders.policyDays,
-            taskDays: c.reminders.taskDays,
-            harvestMonth: c.reminders.harvestMonth,
-            harvestDay: c.reminders.harvestDay,
-            freshness: c.estimates.freshnessDays,
-            savingsRate: Math.round(c.estimates.savingsRate * 1e4) / 100,
-            tdsRate: Math.round(c.estimates.interestTdsRate * 1e4) / 100,
-            includeSip: c.estimates.includeSip,
-            rateStale: c.rates.staleDays,
-            rateGap: Math.round(c.rates.minRateGap * 1e4) / 100,
-            rateGain: c.rates.minAnnualGain,
-            nroTax: Math.round(c.rates.nroTaxRate * 1e4) / 100,
-            rateTenure: c.rates.defaultTenureMonths,
-            rateLook: c.rates.fdLookaheadDays,
-            rateBuffer: c.rates.savingsBuffer,
-            minSell: c.harvest.minSellAmount,
-            margin: c.harvest.holdingMarginMonths,
-            skipSip: c.harvest.skipActiveSip,
-            nri: c.harvest.nri,
-            exitLoadPct: Math.round(c.harvest.exitLoadPct * 1e4) / 100,
-            exitLoadDays: c.harvest.exitLoadDays,
-            sttPct: Math.round(c.harvest.sttPct * 1e6) / 1e4,
-            stampPct: Math.round(c.harvest.stampDutyPct * 1e6) / 1e4,
-            incomeLimit: c.refunds.incomeLimit,
-            otherIncome: c.refunds.otherIncome,
-          }}
-        />
-      </section>
-
-      <section className="card" id="liquidity">
-        <h2>When I need money</h2>
-        <p className="muted small">
-          The &ldquo;I need money&rdquo; page uses these choices to work out where an amount can
-          come from and by when. Untick a source to never use it.
-        </p>
-        <LiquidityForm c={c.liquidity} />
-      </section>
-
-      <section className="card" id="emergency">
-        <h2>Emergency information</h2>
-        <p className="muted small">
-          The family handbook (Emergency in the menu) is written from your records plus what you
-          enter here. The read-only family login can open it without seeing anything else. Nothing
-          here is a password: say <em>where</em> things are, not what they are.
-        </p>
-        <form action={saveEmergencyAccess} className="form">
-          <h3>When the read-only family login can open the handbook</h3>
-          {(() => {
-            const a = (eaccess.data as {
-              mode: string;
-              inactive_days: number;
-              released: boolean;
-            } | null) ?? {
-              mode: 'always',
-              inactive_days: 30,
-              released: false,
-            };
-            return (
-              <>
-                <label className="check">
-                  <input
-                    type="radio"
-                    name="mode"
-                    value="always"
-                    defaultChecked={a.mode === 'always'}
-                  />{' '}
-                  Always
-                </label>
-                <label className="check">
-                  <input
-                    type="radio"
-                    name="mode"
-                    value="inactive"
-                    defaultChecked={a.mode === 'inactive'}
-                  />{' '}
-                  Only after nobody from the household has signed in for{' '}
-                  <input
-                    className="mini"
-                    name="days"
-                    inputMode="numeric"
-                    defaultValue={a.inactive_days}
-                    aria-label="Days"
-                  />{' '}
-                  days
-                </label>
-                <label className="check">
-                  <input
-                    type="radio"
-                    name="mode"
-                    value="manual"
-                    defaultChecked={a.mode === 'manual'}
-                  />{' '}
-                  Only when I release it
-                </label>
-                <p className="muted small">
-                  Now: {a.released ? 'released by hand' : 'not released by hand'}. Members always
-                  have access.
-                </p>
-                <div className="row">
-                  <button className="btn" name="intent" value="save">
-                    Save
-                  </button>
-                  <button className="btn" name="intent" value="release">
-                    Release now
-                  </button>
-                  <button className="btn" name="intent" value="lock">
-                    Lock again
-                  </button>
-                </div>
-              </>
-            );
-          })()}
-        </form>
-        <EmergencyForm p={profileFromJson((eprof.data as { content: unknown } | null)?.content)} />
-      </section>
-
-      <section className="card" id="rates">
-        <h2>Bank rate pages</h2>
-        <p className="muted small">
-          List the page where each bank publishes its deposit rates. Every Monday the app reads them
-          with your AI key (see Bank emails and AI below) and keeps the rates, with the date it
-          checked. Rates you type on the Rates page are never overwritten. To refresh now: GitHub
-          &gt; Actions &gt; Refresh interest rates &gt; Run workflow.
-        </p>
-        {(rsources.data ?? []).length > 0 && (
-          <table className="tbl lines">
-            <tbody>
-              {(rsources.data ?? []).map((r) => (
-                <tr key={r.id as string}>
-                  <td>
-                    <strong>{r.bank as string}</strong>
-                    <div className="small muted" style={{ wordBreak: 'break-all' }}>
-                      {r.url as string}
-                    </div>
-                  </td>
-                  <td className="small muted">
-                    {r.last_run_on
-                      ? `${r.last_run_on as string}: ${(r.last_result as string | null) ?? ''}`
-                      : 'not read yet'}
-                  </td>
-                  <td>
-                    <form action={deleteRateSource}>
-                      <input type="hidden" name="id" value={r.id as string} />
-                      <button
-                        className="btn compact ghost"
-                        aria-label={`Remove ${r.bank as string}`}
-                      >
-                        Remove
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <RateSourceForm />
-      </section>
-
-      <section className="card" id="tax">
-        <h2>Tax rules by financial year</h2>
-        <p className="muted small">
-          The tax-free allowance, the rates and the holding period are inputs, not facts built into
-          the app. When the rules change, edit the year here (or add the new year). A year with no
-          entry assumes the latest earlier year and says so on the Tax page.
-        </p>
-        {years.map((fy) => {
-          const r = ruleOf(fy);
-          const isCustom = custom.has(fy);
-          return (
-            <div key={fy}>
-              <TaxRuleForm
-                custom={isCustom}
-                v={{
-                  fy,
-                  months: r.equity.holdingMonthsLong,
-                  stcg: Math.round(r.equity.stcgRate * 1e4) / 100,
-                  ltcg: Math.round(r.equity.ltcgRate * 1e4) / 100,
-                  exemption: r.equity.ltcgExemption,
-                  cess: Math.round(r.cess * 1e4) / 100,
-                  verified: r.verification === 'primary',
-                  note: r.notes[0] ?? '',
-                }}
-              />
-              {isCustom && (
-                <form action={resetTaxRule} style={{ marginTop: -6, marginBottom: 12 }}>
-                  <input type="hidden" name="fy" value={fy} />
-                  <button className="linkbtn">Go back to the built-in numbers for {fy}</button>
-                </form>
-              )}
-            </div>
-          );
-        })}
-        <TaxRuleForm
-          isNew
-          custom
-          v={{
-            fy: '',
-            months: 12,
-            stcg: 20,
-            ltcg: 12.5,
-            exemption: 125000,
-            cess: 4,
-            verified: false,
-            note: '',
-          }}
-        />
-      </section>
-
-      <div id="email" />
-      <section className="card">
-        <h2>Daily summary email</h2>
-        <p className="muted small">
-          A short summary at 08:30 Singapore time: estimated net worth, what changed, what needs
-          attention, and how old each input is. It goes to everyone who can sign in to this
-          household, plus any extra addresses below. Mail is sent from your own Gmail account (set
-          up once; see the setup notes).
-        </p>
-        <form action={saveDigestSettings} className="form">
-          <label className="check">
-            <input type="checkbox" name="enabled" defaultChecked={cfg?.enabled ?? false} /> Send the
-            daily summary
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              name="include_retirement"
-              defaultChecked={cfg?.include_retirement ?? true}
-            />{' '}
-            Include the retirement view when I have saved assumptions
-          </label>
-          <label>
-            Extra recipients (up to 5, separated by commas)
-            <input
-              name="extra"
-              defaultValue={(cfg?.extra_recipients ?? []).join(', ')}
-              placeholder="parent@example.com"
-            />
-          </label>
-          <div className="row">
-            <button className="btn primary" disabled={role !== 'admin' && role !== 'member'}>
-              Save
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="card">
-        <h2>Bank emails and AI</h2>
-        <p className="muted small">
-          Balance alerts from a bank&apos;s own address are read by fixed rules and need no key. To
-          read PDF statements and unfamiliar emails, add a free key from Groq or Google AI Studio
-          (Gemini). Account numbers are removed before any text is sent. The key is stored on the
-          server and cannot be viewed again here; saving a new one replaces it.
-        </p>
-        <form action={saveIntegrations} className="form">
-          <div className="formgrid">
-            <label>
-              AI service
-              <select name="provider" defaultValue={ic?.ai_provider ?? 'groq'}>
-                <option value="groq">Groq</option>
-                <option value="gemini">Google Gemini</option>
-              </select>
-            </label>
-            <label>
-              API key {ic?.ai_key_set ? '(one is saved; leave empty to keep it)' : ''}
-              <input
-                name="key"
-                type="password"
-                autoComplete="off"
-                placeholder={ic?.ai_key_set ? '••••••••' : 'paste key'}
-              />
-            </label>
-            <label>
-              Gmail label with forwarded bank emails
-              <input name="label" defaultValue={ic?.inbox_label ?? 'FWOS/Inbox'} />
-            </label>
-          </div>
-          {ic?.ai_key_set && (
-            <label className="check">
-              <input type="checkbox" name="clear" /> Remove the saved key
-            </label>
-          )}
-          <button className="btn primary">Save</button>
-        </form>
-      </section>
-
-      <section className="card" id="telegram">
-        <h2>Daily summary on Telegram (automatic)</h2>
-        <p className="muted small">
-          The same summary as the e-mail, sent to your phone every day with nothing to press.
-          Telegram&apos;s bot service is free and needs no phone number or business account.{' '}
-          {ic?.telegram_set ? 'Telegram is on.' : 'Telegram is off.'}
-        </p>
-        <TelegramForm isSet={!!ic?.telegram_set} chatIds={ic?.telegram_chat_ids ?? ''} />
-      </section>
-
-      <section className="card">
-        <h2>WhatsApp</h2>
-        <p className="muted small">
-          WhatsApp does not allow free automatic messages from a personal number. The official route
-          (the WhatsApp Business platform) needs a verified business account and charges per
-          message, and unofficial tools risk the number being blocked. So this only opens WhatsApp
-          with today&apos;s summary ready for you to send; use Telegram above for a fully automatic
-          message.
-        </p>
-        <WhatsAppButton />
-      </section>
-
-      <section className="card">
-        <h2>Recent deliveries</h2>
-        {(log.data ?? []).length === 0 ? (
-          <p className="muted">Nothing sent yet.</p>
-        ) : (
-          <table className="tbl responsive">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Result</th>
-                <th className="num">Recipients</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(log.data ?? []).map((r) => (
-                <tr key={r.digest_date as string}>
-                  <td data-label="Date">{r.digest_date as string}</td>
-                  <td data-label="Result">
-                    {r.status === 'accepted_by_provider'
-                      ? 'Handed to the mail server'
-                      : r.status === 'failed'
-                        ? `Failed${r.error ? `: ${r.error as string}` : ''}`
-                        : 'In progress'}
-                  </td>
-                  <td className="num" data-label="Recipients">
-                    {r.recipients as number}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <p className="muted small">
-          &ldquo;Handed to the mail server&rdquo; is the most the app can know. It cannot confirm
-          that an inbox received the message.
-        </p>
-      </section>
-    </>
+async function AccessTab({ db }: { db: SupabaseClient }) {
+  const [profile, access] = await Promise.all([
+    db.from('emergency_profile').select('content').maybeSingle(),
+    db.from('emergency_access').select('mode, inactive_days, released').maybeSingle(),
+  ]);
+  const a = access.data as { mode: string; inactive_days: number; released: boolean } | null;
+  return (
+    <AccessSection
+      profile={profileFromJson((profile.data as { content: unknown } | null)?.content)}
+      access={{
+        mode: a?.mode === 'inactive' || a?.mode === 'manual' ? a.mode : 'always',
+        days: a?.inactive_days ?? 30,
+        released: !!a?.released,
+      }}
+    />
   );
 }

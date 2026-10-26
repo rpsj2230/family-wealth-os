@@ -1,0 +1,144 @@
+import { describe, expect, it } from 'vitest';
+import { configFromJson, DEFAULT_CONFIG } from '@fwos/core';
+import {
+  CONFIG_GROUPS,
+  confirmedGroups,
+  groupIsDefault,
+  groupValues,
+  mergeGroup,
+  parseGroup,
+  parseNumber,
+  RULE_GROUPS,
+  withConfirmed,
+} from './settings-fields';
+import { ANCHOR_TAB, SETTINGS_TABS, settingsTabOf, tabForAnchor } from './settings-tabs';
+
+const group = (k: string) => CONFIG_GROUPS.find((g) => g.key === k)!;
+const form = (o: Record<string, string>) => (n: string) => o[n] ?? null;
+
+describe('settings fields', () => {
+  it('shows the built-in numbers the way a person types them', () => {
+    const v = groupValues(group('harvest'), DEFAULT_CONFIG);
+    expect(v.sttPct).toBe('0.001');
+    expect(v.stampPct).toBe('0.005');
+    expect(v.exitLoadPct).toBe('1');
+    expect(v.nri).toBe(true);
+    expect(groupValues(group('deposits'), DEFAULT_CONFIG).alertDays).toBe('7, 15, 30, 60, 90');
+    expect(groupValues(group('rates'), DEFAULT_CONFIG).rateGap).toBe('0.25');
+  });
+
+  it('every field has a plain label and a one-line what-this-changes', () => {
+    for (const g of CONFIG_GROUPS)
+      for (const f of g.fields) {
+        expect(f.label.length).toBeGreaterThan(8);
+        expect(f.hint.length).toBeGreaterThan(15);
+      }
+  });
+
+  it('a group typed back unchanged equals the built-in configuration', () => {
+    for (const g of CONFIG_GROUPS) {
+      const v = groupValues(g, DEFAULT_CONFIG);
+      const typed = Object.fromEntries(
+        Object.entries(v).map(([k, x]) => [k, typeof x === 'boolean' ? (x ? 'on' : '') : x]),
+      );
+      const r = parseGroup(g, form(typed as Record<string, string>));
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      const cfg = configFromJson(mergeGroup({}, r.raw));
+      expect(groupIsDefault(g, cfg)).toBe(true);
+    }
+  });
+
+  it('reads Indian-style numbers and percentages', () => {
+    expect(parseNumber('₹ 5,00,000')).toBe(500000);
+    expect(parseNumber('abc')).toBeNull();
+    const r = parseGroup(
+      group('estimates'),
+      form({ freshness: '40', savingsRate: '3.5', tdsRate: '0', includeSip: 'on' }),
+    );
+    expect(r).toEqual({
+      ok: true,
+      raw: {
+        estimates: { freshnessDays: 40, savingsRate: 0.035, interestTdsRate: 0, includeSip: true },
+      },
+    });
+  });
+
+  it('names the box that is wrong instead of quietly using the built-in value', () => {
+    const r = parseGroup(
+      group('reminders'),
+      form({ policyDays: '45', taskDays: 'x', harvestMonth: '3', harvestDay: '15' }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain('Tasks due within');
+    const month = parseGroup(
+      group('reminders'),
+      form({ policyDays: '45', taskDays: '7', harvestMonth: '13', harvestDay: '15' }),
+    );
+    expect(month.ok).toBe(false);
+    const days = parseGroup(
+      group('deposits'),
+      form({ limit: '500000', alertDays: '7, 400', soonDays: '30' }),
+    );
+    expect(days.ok).toBe(false);
+  });
+
+  it('saving one group leaves the others and the liquidity choices as they were', () => {
+    const prior = {
+      liquidity: { mode: 'fastest' },
+      deposits: { insuranceLimit: 100 },
+      harvest: { nri: false },
+    };
+    const r = parseGroup(
+      group('deposits'),
+      form({ limit: '600000', alertDays: '7, 30', soonDays: '20' }),
+    );
+    if (!r.ok) throw new Error('should parse');
+    const cfg = configFromJson(mergeGroup(prior, r.raw));
+    expect(cfg.deposits.insuranceLimit).toBe(600000);
+    expect(cfg.deposits.maturityAlertDays).toEqual([7, 30]);
+    expect(cfg.reminders.maturitySoonDays).toBe(20);
+    expect(cfg.liquidity.mode).toBe('fastest');
+    expect(cfg.harvest.nri).toBe(false);
+  });
+
+  it('tracks which groups the household has confirmed', () => {
+    expect(confirmedGroups(null, DEFAULT_CONFIG)).toEqual([]);
+    const cfg = configFromJson({});
+    const first = withConfirmed(cfg, null, cfg, 'harvest');
+    expect(first.confirmed).toEqual(['harvest']);
+    const second = withConfirmed(cfg, first, configFromJson(first), 'deposits');
+    expect(second.confirmed).toEqual(['deposits', 'harvest']);
+    // the extra list does not disturb reading the numbers
+    expect(configFromJson(second)).toEqual(cfg);
+  });
+
+  it('a document saved before the list existed counts a group as confirmed when it differs from the built-in numbers', () => {
+    const raw = { deposits: { insuranceLimit: 700000 } };
+    expect(confirmedGroups(raw, configFromJson(raw))).toEqual(['deposits']);
+    expect(RULE_GROUPS).toHaveLength(7);
+  });
+});
+
+describe('settings sections', () => {
+  it('an unknown or missing tab opens the Setup view', () => {
+    expect(settingsTabOf(undefined)).toBe('setup');
+    expect(settingsTabOf('nonsense')).toBe('setup');
+    expect(settingsTabOf('tax')).toBe('tax');
+    expect(settingsTabOf(['access', 'x'])).toBe('access');
+  });
+
+  it('every old anchor lands on the section that now holds it', () => {
+    expect(tabForAnchor('#email')).toBe('connections');
+    expect(tabForAnchor('#rates')).toBe('connections');
+    expect(tabForAnchor('#tax')).toBe('tax');
+    expect(tabForAnchor('#limits')).toBe('rules');
+    expect(tabForAnchor('#liquidity')).toBe('rules');
+    expect(tabForAnchor('#emergency')).toBe('access');
+    expect(tabForAnchor('#telegram')).toBe('notifications');
+    expect(tabForAnchor('#people')).toBe('people');
+    expect(tabForAnchor('#unknown')).toBeNull();
+    const keys = SETTINGS_TABS.map((t) => t.key as string);
+    for (const t of Object.values(ANCHOR_TAB)) expect(keys).toContain(t);
+  });
+});

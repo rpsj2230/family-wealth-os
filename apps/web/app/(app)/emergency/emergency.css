@@ -1,0 +1,214 @@
+/* Family handbook: a first page in large type, then reference. It must read well on a phone and print on one sheet. */
+
+.hb {
+  max-width: 900px;
+}
+.hb-disclaimer {
+  margin-bottom: 14px;
+}
+.hb-page1 .card {
+  padding: 20px;
+}
+.hb-page1 h2 {
+  margin: 0 0 12px;
+  font-size: 1.4rem;
+  letter-spacing: -0.01em;
+}
+.hb-message {
+  font-size: 1.15rem;
+  line-height: 1.5;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--primary);
+  background: var(--primary-soft);
+  border-radius: 8px;
+}
+.hb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.hb-steps li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  font-size: 1.15rem;
+  line-height: 1.5;
+}
+.hb-num {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+.hb-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.hb-people li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--soft);
+}
+.hb-order {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  border: 2px solid var(--primary);
+  color: var(--primary);
+}
+.hb-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hb-who strong {
+  font-size: 1.2rem;
+}
+.hb-rel,
+.hb-note {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.hb-phone {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: var(--primary-fg);
+  font-weight: 700;
+  font-size: 1.2rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.hb-phone.plain {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 1rem;
+  padding-left: 0;
+}
+@media (min-width: 720px) {
+  .hb-people li {
+    grid-template-columns: auto 1fr auto;
+  }
+  .hb-phone {
+    grid-column: auto;
+  }
+}
+.hb-dl {
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.hb-dl > div {
+  display: grid;
+  gap: 2px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.hb-dl > div:first-child {
+  border-top: 0;
+}
+.hb-dl dt {
+  font-weight: 600;
+  font-size: 1.02rem;
+}
+.hb-dl dd {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.hb-dl .is-missing dd {
+  color: var(--muted);
+  font-style: italic;
+}
+@media (min-width: 720px) {
+  .hb-dl > div {
+    grid-template-columns: 2fr 3fr;
+  }
+}
+.hb-ref {
+  margin-top: 28px;
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+.hb-sec {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+table.hb-table {
+  min-width: 0;
+  font-size: 0.88rem;
+}
+table.hb-table td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+@media print {
+  .hb {
+    max-width: none;
+    font-size: 12pt;
+  }
+  .hb-page1 {
+    break-after: page;
+  }
+  .hb-page1 .card,
+  .hb-people li,
+  .hb-steps li,
+  .hb-dl > div {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+  .hb-phone {
+    background: none;
+    color: #000;
+    border: 2px solid #000;
+  }
+  .hb-num {
+    background: none;
+    color: #000;
+    border: 2px solid #000;
+  }
+  .hb-message {
+    background: none;
+    border-left-color: #000;
+  }
+  .hb-people li {
+    background: none;
+  }
+  .hb-ref {
+    break-before: auto;
+  }
+  .hb-disclaimer {
+    background: none;
+    border: 1px solid #999;
+    color: #000;
+  }
+}
