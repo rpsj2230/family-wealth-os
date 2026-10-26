@@ -1,18 +1,25 @@
-# Short list: what I still need from you (updated 26 Oct, after your answers)
+# What I still need from you (updated 27 Oct 2026)
 
-Done by me, no action from you: database migrations applied; all three logins are members of the household; nightly encrypted backup
-works (tested end to end, published to the `backups` branch); execution-plan steps can be loaded as tasks (Tasks > Load my execution
-plan); daily summary reminders for tasks, policies and deposits; Vercel set to the Mumbai region.
+Everything below is optional or one-time. The app runs without them; each item makes one part more exact.
 
-Only you can do these (each is a one-time step):
-00. **Settings → People**: enter each person's date of birth, PAN, residency, guardian for the minors and who is primary/spouse; **Income and spending**: salary and spending; **Limits and reminders / Tax rules**: confirm the numbers. Until the dates of birth are entered, the retirement answer will say it cannot assess.
-1. **Save the private backup key** (file sent to you) in your password manager and give Ragini a copy. Without it no backup can be opened.
-2. **Three GitHub secrets** (repo > Settings > Secrets and variables > Actions > Secrets > New repository secret):
-   `SUPABASE_SERVICE_ROLE_KEY` (Supabase > Project Settings > API keys > service_role), `SMTP_USER` (your Gmail address),
-   `SMTP_APP_PASSWORD` (Google account > Security > App passwords). This switches on the daily summary email and the bank-email reader.
-3. **Gmail**: turn on IMAP (Gmail > Settings > Forwarding and POP/IMAP) and create the label `FWOS/Inbox` with a filter that forwards or labels bank mail.
-4. **Supabase region**: the project is in Sydney. Moving it to Mumbai means creating a new Supabase project in Mumbai (a Supabase account action); say the word and I will migrate everything with a script.
-5. **Fund statements** (CAS or Kuvera export) for you and Ragini, and sample bank emails/PDF statements for banks other than HDFC. The attachments did not reach the session; please send again.
+**Already done, nothing for you to do:** database and all migrations applied; backups running (encrypted, `backups` branch); daily summary
+email; bank-email reader; market data; CAS (fund statement) importer; automatic harvest plan, refund tracker (harvest and NRO interest),
+rates page, "I need money" planner, family emergency handbook; repository private with a clean history.
+
+1. **Forward your fund statements (CAS) once.** Ask CAMS/KFintech (or MF Central) for a *detailed* statement, **from the first investment to today**,
+   for you and for Ragini, and forward the e-mails to your `FWOS/Inbox` label. They are opened with the PAN saved in Settings and imported by
+   themselves (or upload the PDF under Import). A full history is what lets harvesting use your real purchase dates.
+2. **Settings → People / Income / Tax refunds / When I need money / Emergency information**: fill in once, review the starting numbers.
+3. **Import → "Apply the sheet layout"** (upload the workbook once) so the screens keep your Excel order and notes.
+4. **Settings → Rate pages and AI key**: add the bank rate-page URLs and a free Groq or Gemini key so rates and PDF statements are read automatically.
+5. **Delete the old branch `claude/phase1-docs`** on GitHub (Branches page): it still holds the early history and I cannot delete it from here.
+6. Optional: moving Supabase to Mumbai (needs a new project; say the word and I will script the move).
+
+Not built, because it needs files only the tax portal can give: reading Form 26AS and the Annual Information Statement. When you have them,
+forward them and I will add the reader.
+
+---
+*The sheet below is the original questionnaire from October; almost all of it has been answered and applied.*
 
 # Needs from you — review sheet
 
