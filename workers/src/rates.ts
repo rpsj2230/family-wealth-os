@@ -11,6 +11,7 @@ import {
   htmlToText,
   parseRatesResponse,
   planSync,
+  resolveModel,
   type AiProvider,
   type CorrectionReason,
   type StoredOffer,
@@ -28,6 +29,8 @@ const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'),
   auth: { persistSession: false },
 });
 const today = new Date().toISOString().slice(0, 10);
+
+let model: string | null = null;
 
 async function main() {
   const hh = await db.from('households').select('id');
@@ -117,16 +120,28 @@ async function main() {
         const forThisBank = ((bankHints.data ?? []) as { bank: string; hint: string }[])
           .filter((h) => sameBank(h.bank, bankName))
           .map((h) => h.hint);
+        // providers retire models without notice (a retired name answers 404), so ask which ones this key can use
+        model ??=
+          (await resolveModel(
+            (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
+            ai.ai_provider,
+            ai.ai_api_key,
+          )) ?? '';
         const req = buildRatesRequest(
           ai.ai_provider,
           ai.ai_api_key,
           bankName,
           text,
-          undefined,
+          model || undefined,
           forThisBank,
         );
         const res = await fetch(req.url, { ...req.init, signal: AbortSignal.timeout(60_000) });
-        if (!res.ok) throw new Error(`AI service answered ${res.status}`);
+        if (!res.ok) {
+          const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
+          throw new Error(
+            `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}`,
+          );
+        }
         const read = parseRatesResponse(ai.ai_provider, await res.json(), bankName);
         if (read.length === 0) throw new Error('no rates could be read from the page');
 

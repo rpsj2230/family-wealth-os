@@ -8,7 +8,13 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
-import { runInbox, type InboxIo, type InboxMessage, type KnownAccount } from '@fwos/ingest';
+import {
+  resolveModel,
+  runInbox,
+  type InboxIo,
+  type InboxMessage,
+  type KnownAccount,
+} from '@fwos/ingest';
 import { importCasPdf, importTaxFile } from '@fwos/data';
 
 const need = (n: string) => {
@@ -63,9 +69,18 @@ async function main() {
     inbox_label: string;
   } | null;
   const label = settings?.inbox_label ?? 'FWOS/Inbox';
+  // providers retire models without notice, so ask which one this key can use
+  const model =
+    settings?.ai_provider && settings.ai_api_key
+      ? await resolveModel(
+          (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
+          settings.ai_provider,
+          settings.ai_api_key,
+        )
+      : null;
   const ai =
     settings?.ai_provider && settings.ai_api_key
-      ? { provider: settings.ai_provider, key: settings.ai_api_key }
+      ? { provider: settings.ai_provider, key: settings.ai_api_key, ...(model ? { model } : {}) }
       : null;
 
   const io: InboxIo = {
@@ -247,7 +262,10 @@ async function main() {
     },
     async fetchJson(url, init) {
       const res = await fetch(url, init);
-      if (!res.ok) throw new Error(`AI service answered ${res.status}`);
+      if (!res.ok) {
+        const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
+        throw new Error(`AI service answered ${res.status}: ${body}`);
+      }
       return res.json();
     },
     async pdfText(content) {

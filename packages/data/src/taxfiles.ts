@@ -45,7 +45,7 @@ export async function importTaxFile(
   bytes: Uint8Array,
   opts: {
     passwords: string[];
-    ai: { provider: AiProvider; key: string } | null;
+    ai: { provider: AiProvider; key: string; model?: string } | null;
     fyHint?: string | null;
     fetchJson?: (
       url: string,
@@ -110,8 +110,8 @@ export async function importTaxFile(
     const body = text ?? JSON.stringify(json);
     const req =
       parsed.kind === '26as'
-        ? build26asRequest(opts.ai.provider, opts.ai.key, body)
-        : buildAisRequest(opts.ai.provider, opts.ai.key, body);
+        ? build26asRequest(opts.ai.provider, opts.ai.key, body, opts.ai.model)
+        : buildAisRequest(opts.ai.provider, opts.ai.key, body, opts.ai.model);
     try {
       const answer = await opts.fetchJson(req.url, req.init);
       const viaAi =

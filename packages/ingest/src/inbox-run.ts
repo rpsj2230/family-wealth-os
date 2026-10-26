@@ -81,7 +81,7 @@ export interface InboxReport {
 export async function runInbox(
   messages: InboxMessage[],
   io: InboxIo,
-  cfg: { today: string; ai: { provider: AiProvider; key: string } | null },
+  cfg: { today: string; ai: { provider: AiProvider; key: string; model?: string } | null },
 ): Promise<InboxReport> {
   const report: InboxReport = {
     seen: 0,
@@ -188,7 +188,12 @@ export async function runInbox(
           });
           continue;
         }
-        const req = buildAiRequest(cfg.ai.provider, cfg.ai.key, `${m.subject}\n${text}`);
+        const req = buildAiRequest(
+          cfg.ai.provider,
+          cfg.ai.key,
+          `${m.subject}\n${text}`,
+          cfg.ai.model,
+        );
         const json = await io.fetchJson(req.url, req.init);
         readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
           ...r,
