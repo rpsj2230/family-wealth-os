@@ -248,3 +248,23 @@ describe('OpenRouter free models', () => {
     expect(n).toBe(1);
   });
 });
+
+describe('withModelFallback remembers what it learned', () => {
+  const body = JSON.stringify({ messages: [] });
+  const ok = JSON.stringify({ choices: [{ message: { content: '{"a":1}' } }] });
+  it('asks a model that worked first next time, and does not ask one that was refused again', async () => {
+    const asked: string[] = [];
+    const f = async (_u: string, init?: Record<string, unknown>) => {
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+      asked.push(model);
+      if (model === 'restricted') return { ok: false, status: 403, text: async () => 'no' };
+      return { ok: true, status: 200, text: async () => ok };
+    };
+    const call = withModelFallback(f, 'openrouter', ['restricted', 'good', 'other']);
+    await call('https://x.test', { body });
+    expect(asked).toEqual(['restricted', 'good']);
+    asked.length = 0;
+    await call('https://x.test', { body });
+    expect(asked).toEqual(['good']);
+  });
+});

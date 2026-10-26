@@ -124,23 +124,49 @@ test.describe('One bank’s rates (public sample)', () => {
 });
 
 test.describe('New money (public sample)', () => {
-  test('places an amount over banks inside the insurance limit and says what it earns', async ({
+  test('gives five reasoned options and one recommendation, with no dropdowns to fill in', async ({
     page,
   }) => {
     await page.goto('/demo/new-money?amount=2500000');
     await expect(page.getByRole('heading', { name: 'New money', level: 1 })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Put it here' })).toBeVisible();
-    await expect(page.getByText('Interest a year, after tax')).toBeVisible();
-    await expect(page.getByText('More than plain savings')).toBeVisible();
-    await expect(page.locator('.nm-place').first()).toContainText('Sample');
+    await expect(page.locator('form.nmo-form select')).toHaveCount(0);
+    await expect(page.getByText(/Recommended for/)).toBeVisible();
+    await expect(page.locator('.nmo-pick li').first()).toBeVisible();
+    await expect(page.locator('details.nmo-card')).toHaveCount(5);
+    for (const t of ['Highest return', 'Balanced', 'Ladder', 'Safest spread', 'Stay flexible'])
+      await expect(page.locator('details.nmo-card', { hasText: t }).first()).toBeVisible();
+    // exactly one is marked recommended and it is open, with its lines and its checks
+    await expect(page.locator('details.nmo-card.rec')).toHaveCount(1);
+    const rec = page.locator('details.nmo-card.rec');
+    await expect(rec).toHaveAttribute('open', '');
+    await expect(rec.locator('.nmo-line').first()).toContainText('Sample');
+    await expect(rec.getByText('Inside the deposit-insurance limit at every bank')).toBeVisible();
+    await expect(rec.getByText('More than plain savings')).toBeVisible();
+    await noSideScroll(page);
+  });
+
+  test('another option opens to show its own lines and reasons', async ({ page }) => {
+    await page.goto('/demo/new-money?amount=2500000');
+    const ladder = page.locator('details.nmo-card', { hasText: 'Ladder' }).first();
+    await ladder.locator('summary').click();
+    await expect(ladder.locator('.nmo-line').first()).toBeVisible();
+    await expect(ladder.locator('.nmo-why li').first()).toBeVisible();
+    await noSideScroll(page);
+  });
+
+  test('NRO and the other person are links under the amount', async ({ page }) => {
+    await page.goto('/demo/new-money?amount=2500000');
+    await page.getByRole('link', { name: 'NRO', exact: true }).click();
+    await expect(page).toHaveURL(/kind=NRO/);
+    await expect(page.getByText('after tax').first()).toBeVisible();
     await noSideScroll(page);
   });
 
   test('reads an amount typed in words and keeps it when you change tab', async ({ page }) => {
     await page.goto('/demo/new-money');
     await page.getByLabel(/Amount/).fill('25 lakh');
-    await page.getByRole('button', { name: 'Show where it should go' }).click();
-    await expect(page.getByRole('heading', { name: 'Put it here' })).toBeVisible();
+    await page.getByRole('button', { name: 'Show the best ways' }).click();
+    await expect(page.getByText(/Recommended for/)).toBeVisible();
     await page.getByRole('link', { name: /Earning more elsewhere/ }).click();
     await expect(page).toHaveURL(/tab=better/);
     await expect(page).toHaveURL(/amount=25(\+|%20)lakh/);

@@ -3,7 +3,7 @@ import {
   compareHoldings,
   formatInr,
   offerAge,
-  placeNewMoney,
+  planOptions,
   type PersonStyle,
   type RateHolding,
   type RateOffer,
@@ -12,7 +12,8 @@ import {
 import { readAmount } from '@/lib/read-amount';
 import { PageHead } from '@/components/PageHead';
 import { ParamTabs } from '@/components/ParamTabs';
-import { InsuranceRoom, PlanResult, PlannerForm, Suggestions } from './Parts';
+import { AmountForm, OptionsView } from './Options';
+import { InsuranceRoom, Suggestions } from './Parts';
 import '../rates/rates.css';
 
 export const NM_TABS = ['place', 'better', 'room'] as const;
@@ -57,19 +58,13 @@ export function NewMoneyView({
 }) {
   const amount = readAmount(sp.amount);
   const kind: 'NRE' | 'NRO' = sp.kind === 'NRO' ? 'NRO' : 'NRE';
-  const who = sp.who && styles[sp.who] ? sp.who : people[0]?.id;
-  const joint = sp.joint === 'on';
-  const tenure = Number(sp.tenure) > 0 ? Number(sp.tenure) : prefs.defaultTenureMonths;
-  const plan =
+  const who = sp.who && styles[sp.who] ? sp.who : (people[0]?.id ?? '');
+  const result =
     amount > 0 && who
-      ? placeNewMoney({
+      ? planOptions({
           amount,
           kind,
           ownerId: who,
-          joint,
-          jointHolderId: joint && sp.with && styles[sp.with] && sp.with !== who ? sp.with : null,
-          tenureMonths: tenure,
-          keepLiquid: readAmount(sp.liquid),
           holdings,
           offers,
           prefs,
@@ -86,7 +81,7 @@ export function NewMoneyView({
     <>
       <PageHead
         title="New money"
-        subtitle="Type an amount. The app spreads it over the banks that pay most after tax, never more than the deposit-insurance limit at one bank for one person, counting what is already there."
+        subtitle="Type an amount. You get five ways to place it with the reasons, and a recommendation that balances the rate, the deposit-insurance limit and how the money is spread."
         pills={[
           { label: `${offers.length} rates on file`, tone: 'info' },
           { label: `insurance limit ${formatInr(limit)} per person per bank` },
@@ -120,27 +115,29 @@ export function NewMoneyView({
         <>
           <section className="card" aria-labelledby="nm-h">
             <h2 id="nm-h">I have new money</h2>
-            <PlannerForm
+            <AmountForm
               action={formAction}
+              amount={sp.amount ?? ''}
+              kind={kind}
+              who={who}
               people={people}
-              defaultTenure={prefs.defaultTenureMonths}
-              values={{
-                amount: sp.amount ?? '',
-                kind,
-                who: who ?? '',
-                tenure: String(tenure),
-                liquid: sp.liquid ?? '',
-                joint,
-                with: sp.with ?? '',
-              }}
+              styles={styles}
+              base={base}
             />
           </section>
-          {plan ? (
-            <PlanResult plan={plan} amount={amount} prefs={prefs} banksBase={banksBase} />
+          {result ? (
+            <OptionsView
+              result={result}
+              amount={amount}
+              banksBase={banksBase}
+              ratesHref={ratesHref}
+            />
           ) : (
             <p className="empty">
-              Enter an amount to see how to place it. Rates are as on the{' '}
-              <Link href={ratesHref}>Rates page</Link>; change a figure there and this page follows.
+              Type an amount. You get five ways to place it, each with its reasons, and one
+              recommendation: savings and fixed deposits of different terms, the bank rates after
+              tax, the insurance limit at each bank and how the money is spread. Rates are as on the{' '}
+              <Link href={ratesHref}>Rates page</Link>.
             </p>
           )}
         </>
@@ -167,8 +164,10 @@ export function NewMoneyView({
         <section className="card" aria-labelledby="room-h">
           <h2 id="room-h">Who holds what today</h2>
           <p className="muted small">
-            Each person&apos;s balances and deposits at each bank, including interest. Deposit
-            insurance covers up to {formatInr(limit)} per person per bank; the limit is a setting.
+            Each ownership name at each bank, with interest. Deposit insurance covers up to{' '}
+            {formatInr(limit)} per bank for each name, savings, fixed and other deposits added
+            together; a joint account counts under its names in the order written, so A &amp; B and
+            B &amp; A are separate. The limit is a setting.
           </p>
           <InsuranceRoom holdings={holdings} limit={limit} styles={styles} />
         </section>

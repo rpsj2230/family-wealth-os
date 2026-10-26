@@ -128,6 +128,8 @@ export interface OverviewOptions {
   tdsRate?: number;
   /** deposit insurance limit per bank per ownership name (Settings: deposits.insuranceLimit) */
   insuranceLimit?: number;
+  /** banks outside deposit insurance, by the block key (a foreign bank's branch): left out of the cover */
+  uninsuredBanks?: ReadonlySet<string>;
   /** second holder of a joint account, by asset id, so cover is counted per ownership name */
   jointHolders?: Record<string, string>;
 }
@@ -234,7 +236,13 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
           todaySavings += (Math.max(0, current) * rate * (1 - tds)) / 365;
         }
 
-        if (opts.insuranceLimit && isBank && r.currency === 'INR' && r.status === 'active') {
+        if (
+          opts.insuranceLimit &&
+          isBank &&
+          !opts.uninsuredBanks?.has(b.key) &&
+          r.currency === 'INR' &&
+          r.status === 'active'
+        ) {
           coverRows.push({
             id: r.assetId,
             bankId: b.key,

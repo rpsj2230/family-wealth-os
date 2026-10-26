@@ -51,7 +51,7 @@ export default async function AccountsPage({
     fxHint,
   ] = await Promise.all([
     loadPortfolio(supabase),
-    supabase.from('institutions').select('id, name, notes'),
+    supabase.from('institutions').select('id, name, notes, deposit_insured'),
     loadSettings(supabase as unknown as SupabaseClient),
     loadOffers(supabase),
     loadJointHolders(supabase as unknown as SupabaseClient),
@@ -89,6 +89,9 @@ export default async function AccountsPage({
     defaultSavingsRate: settings.config.estimates.savingsRate,
     tdsRate: settings.config.estimates.interestTdsRate,
     insuranceLimit: settings.config.deposits.insuranceLimit,
+    uninsuredBanks: new Set(
+      (inst.data ?? []).filter((i) => i.deposit_insured === false).map((i) => i.id as string),
+    ),
     jointHolders,
   });
   const quick = quickModel({

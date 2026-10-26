@@ -34,7 +34,7 @@ export async function loadRatesContext(
       ...(opts.today ? { today: opts.today } : {}),
     }),
     loadSettings(db, opts.householdId),
-    scoped('institutions', 'id, name'),
+    scoped('institutions', 'id, name, deposit_insured'),
     scoped(
       'rate_offers',
       'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days, source_note, source_url',
@@ -49,6 +49,12 @@ export async function loadRatesContext(
   );
   const names = Object.fromEntries(
     ((inst.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [i.id, i.name]),
+  );
+  // banks outside deposit insurance (a foreign bank's branch here): their money has no cover and counts against nothing
+  const uninsured = new Set(
+    ((inst.data ?? []) as unknown as { id: string; deposit_insured: boolean | null }[])
+      .filter((i) => i.deposit_insured === false)
+      .map((i) => i.id),
   );
   const blocks = buildBankBlocks({
     assets: l.assetRows,
@@ -76,6 +82,7 @@ export async function loadRatesContext(
           ownerId: r.ownerId,
           ownerName: l.ownerName.get(r.ownerId) ?? 'Owner',
           bank: b.name,
+          insured: !uninsured.has(b.key),
           product: r.kind === 'fd' ? 'fd' : 'savings',
           kind: r.accountKind,
           joint: r.joint,

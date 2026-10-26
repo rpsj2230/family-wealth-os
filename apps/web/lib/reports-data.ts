@@ -98,7 +98,7 @@ export async function loadReportsInput(
       .select(
         'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
       ),
-    supabase.from('institutions').select('id, name'),
+    supabase.from('institutions').select('id, name, deposit_insured'),
     loadSettings(supabase as unknown as SupabaseClient),
   ]);
   const depositAssets: DepositAsset[] = (assets.data ?? []).map((a) => ({
@@ -121,6 +121,9 @@ export async function loadReportsInput(
     loaded.ownerName,
     loaded.today,
     settings.config.deposits.insuranceLimit,
+    new Set(
+      (banks.data ?? []).filter((b) => b.deposit_insured === false).map((b) => b.id as string),
+    ),
   );
   const people = [...loaded.ownerName.entries()].map(([id, name]) => ({ id, name }));
   const styles = personStyles(people);

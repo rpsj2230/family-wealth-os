@@ -163,7 +163,15 @@ Accounts, **Manage**, **Edit many accounts at once** is one table of every accou
 
 Open a bank to change its rates in place: edit the figure and press Save. If you change a figure the bank page gave, pick why it was wrong; the refresh checks the page again next time, takes the rate back when the page agrees with you, and otherwise saves a rule (shown under _How it is read_, with an on and off switch, and you can write your own). _History and log_ shows the best rates over time and every change with the old and new figure, who made it and why. Paste your notes or add a rate under _Add or import_.
 
-**New money** is where an amount is placed. Type an amount (25 lakh or 2500000), the account type and whose money; it is spread over the banks that pay most after tax, never above the insurance limit per person per bank. The other tabs show which of your holdings could earn more elsewhere and how much insurance room is left at each bank.
+**New money** answers one question: where should this amount go? Type only the amount (25 lakh or 2500000). The app looks at the savings rates and the fixed-deposit rates of every term on file, after tax (NRE interest is not taxed in India; NRO is, at the rate in Settings), and gives **five options, each with its reasons, and one recommendation**:
+
+- **Highest return**: the most interest whatever the term, inside insurance. It ignores how the money is spread, so it is never the recommendation.
+- **Balanced**: good rates, no bank above a set share, part kept in savings.
+- **Ladder**: the deposit part split over several terms (6, 12, 24, 36 months by default), so money keeps coming free.
+- **Safest spread**: as many banks as it takes, none above a smaller share.
+- **Stay flexible**: half in savings and the rest in short deposits.
+
+Every option stays inside the deposit-insurance limit at each bank for the chosen name, leaving a buffer for the interest that will be added, and counts what is already there (savings and deposits of the bank together, joint accounts under their names in order, foreign banks left out). The recommendation is the option that earns most among those that meet every check: inside the limit, spread over banks, part free to withdraw any time, all of the amount placed. Each option shows its lines (bank, product and term, rate, amount, interest a year, room left), what it earns over plain savings, the largest bank share, how much is free any time and within a year, and its cautions (stale rates, money that does not fit). If no fixed-deposit rates are on file the page says so at the top, since a savings-only plan understates what the money could earn. Whose money and NRE or NRO are links under the amount; each person has their own insurance room at each bank. All the numbers (longest terms, ladder terms, bank shares, the share kept in savings, the insurance buffer, the smallest deposit) are in Settings → Rates. The other tabs show which of your holdings could earn more elsewhere and, under **Insurance room**, each ownership name at each bank against the limit.
 
 ## Tasks
 

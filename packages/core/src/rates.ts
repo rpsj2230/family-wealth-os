@@ -10,7 +10,7 @@
  *  - Every figure says how old the rate is.
  */
 import type { AppConfig } from './config';
-import { capacityKeyFor } from './dicgc';
+import { capacityKeyFor, dicgcPosition } from './dicgc';
 
 export type RateKind = 'NRE' | 'NRO' | 'resident' | 'any';
 
@@ -70,6 +70,8 @@ const bankKey = (b: string) =>
     .toLowerCase()
     .replace(/\b(bank|small finance|sfb|ltd|limited|the)\b/g, '')
     .replace(/[^a-z0-9]/g, '');
+/** One spelling of a bank for comparing names ("Equitas Small Finance Bank" and "Equitas" are the same). */
+export const rateBankKey = bankKey;
 export const sameBank = (a: string, b: string) => {
   const x = bankKey(a);
   const y = bankKey(b);
@@ -135,6 +137,8 @@ export interface RateHolding {
   ownerId: string;
   ownerName: string;
   bank: string;
+  /** false for a bank outside deposit insurance (a foreign bank's branch): nothing there is covered or counted against a limit */
+  insured?: boolean;
   product: 'savings' | 'fd';
   kind: 'NRE' | 'NRO' | null;
   joint: boolean;
@@ -155,11 +159,83 @@ const capacityKey = (ownerId: string, joint: boolean, jointHolderId?: string | n
 export function exposureByBank(holdings: RateHolding[]): Map<string, number> {
   const m = new Map<string, number>();
   for (const h of holdings) {
-    if (h.needsConfirmation) continue;
+    if (h.needsConfirmation || h.insured === false) continue;
     const k = `${bankKey(h.bank)}|${capacityKey(h.ownerId, h.joint, h.jointHolderId)}`;
     m.set(k, (m.get(k) ?? 0) + h.current);
   }
   return m;
+}
+
+/** One ownership name at one bank: what it holds, how much of that the cover protects, and the room left. */
+export interface RoomRow {
+  bank: string;
+  /** "single:<owner>" or "joint:<first>+<second>"; see capacityLabel */
+  capacityKey: string;
+  ownerId: string;
+  total: number;
+  insured: number;
+  uninsured: number;
+  /** what can still be added before the limit is reached (0 when over) */
+  room: number;
+  /** the savings accounts and deposits added together in this row */
+  parts: { assetId: string; product: 'savings' | 'fd'; amount: number }[];
+}
+
+/**
+ * The cover position per bank and ownership name, by the deposit-insurance rules: the limit applies to principal plus interest,
+ * savings and fixed deposits (every kind) of the same bank are added together, a joint account is counted under its names in the
+ * order written (A & B and B & A are separate), and a bank outside the insurance scheme is not counted at all.
+ * Banks outside the scheme are returned apart so they can be shown as "not covered".
+ */
+export function insuranceRoom(
+  holdings: RateHolding[],
+  limit: number,
+): { rows: RoomRow[]; outside: { bank: string; total: number }[] } {
+  const live = holdings.filter((h) => !h.needsConfirmation && h.current > 0);
+  const covered = live.filter((h) => h.insured !== false);
+  const nameOf = new Map(covered.map((h) => [bankKey(h.bank), h.bank]));
+  const ownerOf = new Map(
+    covered.map((h) => [
+      `${bankKey(h.bank)}||${capacityKey(h.ownerId, h.joint, h.jointHolderId)}`,
+      h.ownerId,
+    ]),
+  );
+  const pos = dicgcPosition(
+    covered.map((h) => ({
+      id: h.assetId,
+      bankId: bankKey(h.bank),
+      capacityKey: capacityKey(h.ownerId, h.joint, h.jointHolderId),
+      amountIncludingInterest: Math.max(0, h.current),
+      kind: h.product,
+    })),
+    limit,
+  );
+  const product = new Map(covered.map((h) => [h.assetId, h.product]));
+  const rows: RoomRow[] = pos.rows
+    .map((r) => ({
+      bank: nameOf.get(r.bankId) ?? r.bankId,
+      capacityKey: r.capacityKey,
+      ownerId: ownerOf.get(`${r.bankId}||${r.capacityKey}`) ?? '',
+      total: r.total,
+      insured: r.insured,
+      uninsured: r.uninsured,
+      room: Math.max(0, limit - r.total),
+      parts: r.parts.map((p) => ({
+        assetId: p.id,
+        product: product.get(p.id) ?? 'savings',
+        amount: p.amount,
+      })),
+    }))
+    .sort((a, b) => b.total - a.total);
+  const out = new Map<string, number>();
+  for (const h of live.filter((x) => x.insured === false))
+    out.set(h.bank, (out.get(h.bank) ?? 0) + h.current);
+  return {
+    rows,
+    outside: [...out.entries()]
+      .map(([bank, total]) => ({ bank, total }))
+      .sort((a, b) => b.total - a.total),
+  };
 }
 
 export interface Suggestion {
@@ -193,8 +269,9 @@ export function compareHoldings(
 ): Suggestion[] {
   const out: Suggestion[] = [];
   const exposure = exposureByBank(holdings);
+  const outside = holdings.filter((x) => x.insured === false).map((x) => x.bank);
   for (const h of holdings) {
-    if (h.current <= 0) continue;
+    if (h.current <= 0 || h.insured === false) continue;
     const tenure = prefs.defaultTenureMonths;
     const ranked = rankOffers(
       offers,
@@ -221,7 +298,7 @@ export function compareHoldings(
       h.product === 'savings' ? Math.max(0, h.current - prefs.savingsBuffer) : h.current;
     if (moveable <= 0) continue;
     for (const o of ranked) {
-      if (sameBank(o.bank, h.bank)) continue;
+      if (sameBank(o.bank, h.bank) || outside.some((b) => sameBank(b, o.bank))) continue;
       const gap = o.net - mine;
       if (gap < prefs.minRateGap) break; // ranked best first: nothing further down will be better
       const used =

@@ -239,6 +239,9 @@ export async function probeModels(
 /** The reason an AI service refused, in plain words and with the way out; null when there is nothing more to add. */
 export function aiErrorHint(provider: AiProvider, status: number, body: string): string | null {
   const b = body.toLowerCase();
+  // every model failed for its own reason (restricted, busy, slow): that says nothing about the key itself
+  if (provider === 'openrouter' && b.includes('every free model tried failed'))
+    return 'The free models tried were restricted, busy or too slow. The key itself is fine if another page was read. Try again later, or add a small credit on openrouter.ai, or use a free Groq key.';
   if (provider === 'openrouter' && (status === 401 || status === 403))
     return 'OpenRouter refused the key. Create a key at openrouter.ai/keys and save it in Settings > Bank emails and AI.';
   if (provider === 'openrouter' && (status === 402 || status === 429 || status === 503))
@@ -303,6 +306,9 @@ export function withModelFallback(
   models: string[],
   opts: { maxTries?: number } = {},
 ): (u: string, init?: Record<string, unknown>) => Promise<Answer> {
+  // what this run has learned: a model that answered goes first next time, one the service refused (403/404) is not asked again
+  const worked: string[] = [];
+  const refused = new Set<string>();
   return async (u, init) => {
     if (provider !== 'openrouter' || models.length === 0 || typeof init?.body !== 'string') {
       const r = await f(u, init);
@@ -312,11 +318,19 @@ export function withModelFallback(
     const body = JSON.parse(init.body) as Record<string, unknown>;
     const notes: string[] = [];
     let last: Answer | null = null;
-    for (const model of models.slice(0, opts.maxTries ?? 5)) {
+    const order = [
+      ...worked.filter((m) => models.includes(m)),
+      ...models.filter((m) => !worked.includes(m) && !refused.has(m)),
+    ];
+    for (const model of order.slice(0, opts.maxTries ?? 5)) {
       try {
         const r = await f(u, { ...init, body: JSON.stringify({ ...body, model }) });
         const t = await r.text();
-        if (r.ok && usableAnswer(t)) return answer(true, r.status, t, model);
+        if (r.ok && usableAnswer(t)) {
+          if (!worked.includes(model)) worked.unshift(model);
+          return answer(true, r.status, t, model);
+        }
+        if (r.status === 403 || r.status === 404) refused.add(model);
         notes.push(`${model}: ${r.ok ? 'no JSON answer' : r.status}`);
         last = answer(false, r.ok ? 502 : r.status, t);
       } catch (e) {

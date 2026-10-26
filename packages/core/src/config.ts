@@ -48,6 +48,26 @@ export interface AppConfig {
     fdLookaheadDays: number;
     /** savings above this amount in a low-rate account is worth moving */
     savingsBuffer: number;
+    /** New money: the longest deposit term any option may use, in months */
+    maxTermMonths: number;
+    /** New money: the longest term the balanced and safest options use, in months */
+    balancedTermMonths: number;
+    /** New money: the longest term the flexible option uses, in months */
+    flexibleTermMonths: number;
+    /** New money: the terms of the ladder, in months, one rung each */
+    ladderTermsMonths: number[];
+    /** New money: the most of the amount the balanced option puts in one bank (0.4 = 40%) */
+    maxBankShare: number;
+    /** New money: the most of the amount the safest option puts in one bank */
+    safeBankShare: number;
+    /** New money: the share kept in savings, available any time, by the balanced, ladder and safest options */
+    liquidShare: number;
+    /** New money: the share kept in savings by the flexible option */
+    flexibleLiquidShare: number;
+    /** New money: the part of the insurance limit left unused at a bank, for interest that will be added */
+    insuranceBuffer: number;
+    /** New money: the smallest amount worth putting in one deposit */
+    minPiece: number;
   };
   refunds: {
     /** income per person per year up to which no Indian tax is due (the basic exemption); tax withheld on NRO interest is then refunded */
@@ -136,6 +156,16 @@ export const DEFAULT_CONFIG: AppConfig = {
     defaultTenureMonths: 12,
     fdLookaheadDays: 180,
     savingsBuffer: 100_000,
+    maxTermMonths: 60,
+    balancedTermMonths: 24,
+    flexibleTermMonths: 12,
+    ladderTermsMonths: [6, 12, 24, 36],
+    maxBankShare: 0.4,
+    safeBankShare: 0.25,
+    liquidShare: 0.15,
+    flexibleLiquidShare: 0.5,
+    insuranceBuffer: 0.1,
+    minPiece: 25_000,
   },
   refunds: { incomeLimit: 400_000, otherIncome: 0 },
   liquidity: {
@@ -255,6 +285,27 @@ export function configFromJson(raw: unknown): AppConfig {
       ),
       fdLookaheadDays: Math.round(num(rat.fdLookaheadDays, d.rates.fdLookaheadDays, 1, 730)),
       savingsBuffer: num(rat.savingsBuffer, d.rates.savingsBuffer, 0, 1e9),
+      maxTermMonths: Math.round(num(rat.maxTermMonths, d.rates.maxTermMonths, 1, 120)),
+      balancedTermMonths: Math.round(
+        num(rat.balancedTermMonths, d.rates.balancedTermMonths, 1, 120),
+      ),
+      flexibleTermMonths: Math.round(
+        num(rat.flexibleTermMonths, d.rates.flexibleTermMonths, 1, 120),
+      ),
+      ladderTermsMonths: (() => {
+        const t = Array.isArray(rat.ladderTermsMonths)
+          ? (rat.ladderTermsMonths as unknown[])
+              .map(Number)
+              .filter((x) => Number.isInteger(x) && x >= 1 && x <= 120)
+          : [];
+        return t.length > 0 ? [...new Set(t)].sort((a, b) => a - b) : d.rates.ladderTermsMonths;
+      })(),
+      maxBankShare: num(rat.maxBankShare, d.rates.maxBankShare, 0.05, 1),
+      safeBankShare: num(rat.safeBankShare, d.rates.safeBankShare, 0.05, 1),
+      liquidShare: num(rat.liquidShare, d.rates.liquidShare, 0, 1),
+      flexibleLiquidShare: num(rat.flexibleLiquidShare, d.rates.flexibleLiquidShare, 0, 1),
+      insuranceBuffer: num(rat.insuranceBuffer, d.rates.insuranceBuffer, 0, 0.5),
+      minPiece: num(rat.minPiece, d.rates.minPiece, 0, 1e9),
     },
     refunds: {
       incomeLimit: num(ref.incomeLimit, d.refunds.incomeLimit, 0, 1e9),

@@ -61,7 +61,7 @@ test.describe('Deposits: the overview (public sample)', () => {
       .getByRole('link', { name: /^Beena/ })
       .first()
       .click();
-    await expect(page).toHaveURL(/\?p=p2/);
+    await expect(page).toHaveURL(/[?&]p=p2/);
     await expect(panel(page).getByRole('heading', { level: 2 })).toContainText('Beena');
     expect(await panel(page).getByTestId('dv-current').innerText()).not.toBe(all);
     await noSideways(page);
