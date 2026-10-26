@@ -67,7 +67,7 @@ export default async function ImportPage({
       transactions: Number(c.transactions ?? 0),
       outcome: c.outcome as 'imported' | 'partial' | 'failed',
       detail: (c.detail as string | null) ?? null,
-      fromEmail: !String(c.source_ref ?? '').startsWith('upload:'),
+      fromEmail: !/^(upload|csv):/.test(String(c.source_ref ?? '')),
     })),
     tax: (tax.data ?? []).map((t) => ({
       owner: name.get(t.owner_id as string) ?? '?',

@@ -1,13 +1,17 @@
 'use client';
 
-import { useActionState } from 'react';
+import { startTransition, useActionState, useState } from 'react';
 import Link from 'next/link';
+import { formatInr } from '@fwos/core';
 import {
+  commitFundCsv,
   commitImport,
   importCas,
+  previewFundCsv,
   previewImport,
   syncLayout,
   type CasState,
+  type FundCsvState,
   type ImportState,
 } from './actions';
 
@@ -192,5 +196,222 @@ export function CasForm({ owners }: { owners: { id: string; name: string }[] }) 
         </ul>
       )}
     </form>
+  );
+}
+
+const FUND_STATUS = {
+  updated: { tone: 'ok', text: 'Updates a fund you have' },
+  added: { tone: 'warn', text: 'New fund' },
+  review: { tone: 'bad', text: 'Needs a look' },
+} as const;
+const csvIdle: FundCsvState = { stage: 'idle' };
+
+/** First name in a file name ("Rupash__Advika_-_transactions.csv") against the people's names. */
+function guessOwner(file: string, owners: { id: string; name: string }[]): string {
+  const first =
+    file
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .find(Boolean) ?? '';
+  return owners.find((o) => first && o.name.toLowerCase().startsWith(first))?.id ?? '';
+}
+
+/**
+ * Fund transactions from an investment app's CSV export. Files and the person chosen for each are held here (not in the form),
+ * so the preview and the import both send the same files.
+ */
+export function FundCsvForm({ owners }: { owners: { id: string; name: string }[] }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [who, setWho] = useState<string[]>([]);
+  const [preview, previewAct, previewing] = useActionState(previewFundCsv, csvIdle);
+  const [commit, commitAct, committing] = useActionState(commitFundCsv, csvIdle);
+  const [done, setDone] = useState(false);
+  const shown = done && commit.stage !== 'idle' ? commit : preview;
+  const busy = previewing || committing;
+  const ready = files.length > 0 && who.every(Boolean);
+
+  const send = (act: (f: FormData) => void) => {
+    const fd = new FormData();
+    files.forEach((f, i) => {
+      fd.append('files', f);
+      fd.set(`owner_${i}`, who[i] ?? '');
+    });
+    startTransition(() => act(fd));
+  };
+
+  return (
+    <div className="form" aria-busy={busy}>
+      <label>
+        Transaction files (.csv), one per account; several can be chosen together
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          multiple
+          onChange={(e) => {
+            const chosen = Array.from(e.target.files ?? []);
+            setFiles(chosen);
+            setWho(chosen.map((f) => guessOwner(f.name, owners)));
+            setDone(false);
+          }}
+        />
+      </label>
+      {files.length > 0 && (
+        <table className="tbl lines responsive">
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Whose</th>
+            </tr>
+          </thead>
+          <tbody>
+            {files.map((f, i) => (
+              <tr key={`${f.name}-${i}`}>
+                <td data-label="File">{f.name}</td>
+                <td data-label="Whose">
+                  <select
+                    aria-label={`Whose is ${f.name}`}
+                    value={who[i] ?? ''}
+                    onChange={(e) => {
+                      setWho(who.map((w, j) => (j === i ? e.target.value : w)));
+                      setDone(false);
+                    }}
+                  >
+                    <option value="">Choose…</option>
+                    {owners.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="row">
+        <button
+          type="button"
+          className="btn"
+          disabled={busy || !ready}
+          onClick={() => {
+            setDone(false);
+            send(previewAct);
+          }}
+        >
+          {previewing ? 'Reading…' : 'Preview (nothing is saved)'}
+        </button>
+      </div>
+
+      {shown.stage === 'error' && (
+        <p className="notice warn" role="alert">
+          {shown.message}
+        </p>
+      )}
+      {(shown.stage === 'previewed' || shown.stage === 'committed') && (
+        <>
+          {shown.stage === 'committed' && (
+            <div className="notice ok" role="status">
+              <p>Imported. Units, amounts invested and values are updated for the funds below.</p>
+              <Link className="btn primary" href="/investments">
+                See the funds
+              </Link>
+            </div>
+          )}
+          {shown.people?.map((p) => {
+            const held = p.funds.filter((x) => x.status !== 'review');
+            return (
+              <section key={p.name} className="csvperson">
+                <h3>
+                  {p.name}
+                  {p.files.length > 0 && (
+                    <span className="muted small"> · {p.files.join(', ')}</span>
+                  )}
+                </h3>
+                {p.funds.length > 0 && (
+                  <table className="tbl lines responsive">
+                    <thead>
+                      <tr>
+                        <th>Fund</th>
+                        <th>What happens</th>
+                        <th className="num">Lines (new)</th>
+                        <th className="num">Units</th>
+                        <th className="num">Invested</th>
+                        <th className="num">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.funds.map((x) => (
+                        <tr key={x.name}>
+                          <td data-label="Fund">{x.name}</td>
+                          <td data-label="What happens">
+                            <span className={`pill ${FUND_STATUS[x.status].tone}`}>
+                              {FUND_STATUS[x.status].text}
+                            </span>
+                          </td>
+                          <td className="num" data-label="Lines (new)">
+                            {x.transactions} ({x.newTransactions})
+                          </td>
+                          <td className="num" data-label="Units">
+                            {x.units === null ? '–' : x.units.toLocaleString('en-IN')}
+                          </td>
+                          <td className="num" data-label="Invested">
+                            {formatInr(x.invested)}
+                          </td>
+                          <td className="num" data-label="Value">
+                            {x.value === null ? '–' : formatInr(x.value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th colSpan={4}>Total ({held.length} funds)</th>
+                        <th className="num">
+                          {formatInr(held.reduce((a, x) => a + x.invested, 0))}
+                        </th>
+                        <th className="num">
+                          {formatInr(held.reduce((a, x) => a + (x.value ?? 0), 0))}
+                        </th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+                {p.skipped > 0 && (
+                  <p className="muted small">
+                    {p.skipped} fund(s) fully sold before this financial year were not added.
+                  </p>
+                )}
+                {p.notes.length > 0 && (
+                  <ul className="list small">
+                    {p.notes.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            );
+          })}
+          {shown.stage === 'previewed' && (
+            <div className="row">
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => {
+                  setDone(true);
+                  send(commitAct);
+                }}
+              >
+                {committing ? 'Importing…' : 'Import these funds'}
+              </button>
+              <span className="muted small">
+                Saves the transactions, the units held, the amount invested and today&rsquo;s value.
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

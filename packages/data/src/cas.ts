@@ -1,11 +1,16 @@
 import {
   casPdfText,
+  fundCsvToStatement,
   isPasswordError,
   parseCas,
   runCasImport,
   type CasFund,
   type CasIo,
   type CasReport,
+  type CasSave,
+  type CasScheme,
+  type CasTxn,
+  type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -13,6 +18,29 @@ const must = <T>(r: { data: T | null; error: { message: string } | null }, what:
   if (r.error) throw new Error(`${what}: ${r.error.message}`);
   return r.data as T;
 };
+
+/** The same line twice on one day is two lines: the reference carries an occurrence number. */
+function txnRows(hh: string, assetId: string, scheme: CasScheme, transactions: CasTxn[]) {
+  const seen = new Map<string, number>();
+  return transactions.map((t) => {
+    const base = `${t.date}|${t.kind}|${t.amount}|${t.units}|${scheme.folio}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return {
+      household_id: hh,
+      asset_id: assetId,
+      txn_on: t.date,
+      kind: t.kind,
+      amount: t.amount,
+      units: t.units,
+      nav: t.nav,
+      balance_units: t.balance,
+      description: t.description,
+      source: 'cas',
+      source_ref: `${base}|${n}`.slice(0, 200),
+    };
+  });
+}
 
 /** Reads and writes for the fund-statement importer. Works with a user client (RLS) or the service role. */
 export function casIo(db: SupabaseClient, hh: string): CasIo {
@@ -105,26 +133,7 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       return a.id;
     },
     async save({ assetId, scheme, transactions, position, valuation, closed }) {
-      // the same line twice on one day is two lines: the reference carries an occurrence number
-      const seen = new Map<string, number>();
-      const rows = transactions.map((t) => {
-        const base = `${t.date}|${t.kind}|${t.amount}|${t.units}|${scheme.folio}`;
-        const n = (seen.get(base) ?? 0) + 1;
-        seen.set(base, n);
-        return {
-          household_id: hh,
-          asset_id: assetId,
-          txn_on: t.date,
-          kind: t.kind,
-          amount: t.amount,
-          units: t.units,
-          nav: t.nav,
-          balance_units: t.balance,
-          description: t.description,
-          source: 'cas',
-          source_ref: `${base}|${n}`.slice(0, 200),
-        };
-      });
+      const rows = txnRows(hh, assetId, scheme, transactions);
       let added = 0;
       for (let i = 0; i < rows.length; i += 200) {
         const r = must(
@@ -161,6 +170,23 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
           .select('asset_id'),
         'update position',
       );
+      if (position.units !== null && position.casAsOf) {
+        // the units held on that date; a later hand-entered count is never replaced by an older statement
+        const cur = must(
+          await db.from('mf_positions').select('units_as_of').eq('asset_id', assetId).limit(1),
+          'current units',
+        ) as { units_as_of: string | null }[];
+        if (!cur[0]?.units_as_of || cur[0].units_as_of <= position.casAsOf)
+          must(
+            await db
+              .from('mf_positions')
+              .update({ units: position.units, units_as_of: position.casAsOf })
+              .eq('asset_id', assetId)
+              .eq('household_id', hh)
+              .select('asset_id'),
+            'save units',
+          );
+      }
       if (closed)
         must(
           await db
@@ -182,6 +208,23 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
             .limit(1),
           'latest value',
         ) as { as_of: string }[];
+        if (valuation.amount >= 0 && position.units !== null)
+          must(
+            await db.from('mf_snapshots').upsert(
+              {
+                asset_id: assetId,
+                household_id: hh,
+                as_of: valuation.asOf,
+                units: position.units,
+                nav: scheme.nav && scheme.nav > 0 ? scheme.nav : null,
+                value: valuation.amount,
+                invested: position.invested,
+                source: 'cas',
+              },
+              { onConflict: 'asset_id,as_of' },
+            ),
+            'save snapshot',
+          );
         if (!latest[0] || valuation.asOf > latest[0].as_of)
           must(
             await db.from('observations').insert({
@@ -321,4 +364,110 @@ export async function importCasPdf(
     report,
     detail: [...report.lines, ...stmt.warnings].join('\n'),
   });
+}
+
+export interface FundCsvFund {
+  name: string;
+  status: 'updated' | 'added' | 'review';
+  /** lines in the file for this fund / lines that are not stored yet */
+  transactions: number;
+  newTransactions: number;
+  units: number | null;
+  invested: number;
+  value: number | null;
+}
+
+export interface FundCsvOwnerResult {
+  ownerId: string;
+  report: CasReport;
+  funds: FundCsvFund[];
+  /** lines of the file left out, and why */
+  notes: string[];
+}
+
+/**
+ * Applies fund-transaction lines (see `fundCsvToStatement`) for one person. With `dryRun` it reads the same data and applies
+ * the same rules, but writes nothing, so the preview matches what the import will do.
+ */
+export async function importFundCsv(
+  db: SupabaseClient,
+  hh: string,
+  ownerId: string,
+  rows: TxnCsvRow[],
+  opts: { today: string; dryRun: boolean },
+): Promise<FundCsvOwnerResult> {
+  const { statement, notes } = fundCsvToStatement(rows, opts.today);
+  const real = casIo(db, hh);
+  const funds: FundCsvFund[] = [];
+  const summarize = (
+    s: CasSave,
+    status: 'updated' | 'added',
+    newTransactions: number,
+  ): FundCsvFund => ({
+    name: s.scheme.name,
+    status,
+    transactions: s.transactions.length,
+    newTransactions,
+    units: s.position.units,
+    invested: s.position.invested,
+    value: s.valuation?.amount ?? null,
+  });
+  const created = new Set<string>();
+  let fake = 0;
+  const io: CasIo = {
+    funds: (o) => real.funds(o),
+    isinToAmfi: (isin) => real.isinToAmfi(isin),
+    async createFund(args) {
+      if (!opts.dryRun) {
+        const id = await real.createFund(args);
+        created.add(id);
+        return id;
+      }
+      const id = `new-${++fake}`;
+      created.add(id);
+      return id;
+    },
+    async save(args) {
+      let res: { added: number };
+      if (!opts.dryRun) res = await real.save(args);
+      else {
+        const wanted = txnRows(hh, args.assetId, args.scheme, args.transactions).map(
+          (r) => r.source_ref,
+        );
+        let have = new Set<string>();
+        if (!args.assetId.startsWith('new-')) {
+          const r = must(
+            await db
+              .from('mf_transactions')
+              .select('source_ref')
+              .eq('household_id', hh)
+              .eq('asset_id', args.assetId)
+              .limit(5000),
+            'stored transactions',
+          ) as { source_ref: string }[];
+          have = new Set(r.map((x) => x.source_ref));
+        }
+        res = { added: wanted.filter((w) => !have.has(w)).length };
+      }
+      funds.push(summarize(args, created.has(args.assetId) ? 'added' : 'updated', res.added));
+      return res;
+    },
+  };
+  const report = await runCasImport(ownerId, statement, io, { today: opts.today });
+  for (const name of report.needsReview)
+    funds.push({
+      name,
+      status: 'review',
+      transactions: 0,
+      newTransactions: 0,
+      units: null,
+      invested: 0,
+      value: null,
+    });
+  return {
+    ownerId,
+    report,
+    funds: funds.sort((a, b) => a.name.localeCompare(b.name)),
+    notes: [...notes, ...statement.warnings],
+  };
 }

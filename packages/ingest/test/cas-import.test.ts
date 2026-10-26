@@ -112,12 +112,14 @@ describe('runCasImport', () => {
     expect(a.position.startedOn).toBe('2023-01-05');
     expect(a.position.amfiCode).toBe('120503');
     expect(a.position.casAsOf).toBe('2026-10-25');
+    expect(a.position.units).toBeCloseTo(670.909, 3); // the units held on the statement date
     expect(a.valuation).toEqual({ amount: 107345.44, asOf: '2026-10-25' });
     expect(r.transactionsAdded).toBe(4 + 2);
     const closed = saved.find((x) => x.assetId === 'new-1')!;
     expect(closed.closed).toBe(true);
     expect(closed.valuation).toEqual({ amount: 0, asOf: '2026-10-25' });
     expect(closed.position.invested).toBe(0);
+    expect(closed.position.units).toBe(0);
   });
   it('reads a SIP and notices when it has stopped', async () => {
     const { io, saved } = fakeIo([

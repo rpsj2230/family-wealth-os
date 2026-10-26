@@ -2,8 +2,14 @@
 
 import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { importCasPdf } from '@fwos/data';
-import { planWorkbook, type ImportException, type ImportPlan } from '@fwos/ingest';
+import { importCasPdf, importFundCsv, type FundCsvFund } from '@fwos/data';
+import {
+  parseTxnCsv,
+  planWorkbook,
+  type ImportException,
+  type ImportPlan,
+  type TxnCsvRow,
+} from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { recordSnapshot } from '@/lib/portfolio-data';
@@ -199,4 +205,114 @@ export async function importCas(_p: CasState | null, f: FormData): Promise<CasSt
   } catch (e) {
     return { ok: false, message: `The statement could not be imported (${(e as Error).message}).` };
   }
+}
+
+export interface FundCsvState {
+  stage: 'idle' | 'previewed' | 'committed' | 'error';
+  message?: string;
+  people?: {
+    name: string;
+    files: string[];
+    funds: FundCsvFund[];
+    skipped: number;
+    notes: string[];
+  }[];
+}
+
+const CSV_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Reads every chosen file and the person chosen for it; the lines of one person's files are combined. */
+async function readFundCsv(formData: FormData) {
+  const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { error: 'Choose at least one transactions file first.' } as const;
+  if (files.length > 12) return { error: 'Choose at most 12 files at a time.' } as const;
+  const byOwner = new Map<string, { rows: TxnCsvRow[]; files: string[]; hashes: string[] }>();
+  const notes: string[] = [];
+  for (const [i, file] of files.entries()) {
+    const owner = String(formData.get(`owner_${i}`) ?? '');
+    if (!/^[0-9a-f-]{36}$/.test(owner))
+      return { error: `Choose whose file "${file.name}" is.` } as const;
+    if (!/\.csv$/i.test(file.name)) return { error: `"${file.name}" is not a .csv file.` } as const;
+    if (file.size > CSV_MAX_BYTES) return { error: `"${file.name}" is larger than 2 MB.` } as const;
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const parsed = parseTxnCsv(bytes.toString('utf8'));
+    if (parsed.rows.length === 0)
+      return { error: `${file.name}: ${parsed.warnings[0] ?? 'no transactions found.'}` } as const;
+    for (const w of parsed.warnings) notes.push(`${file.name}: ${w}`);
+    const g = byOwner.get(owner) ?? { rows: [], files: [], hashes: [] };
+    g.rows.push(...parsed.rows);
+    g.files.push(file.name);
+    g.hashes.push(createHash('sha256').update(bytes).digest('hex'));
+    byOwner.set(owner, g);
+  }
+  return { byOwner, notes } as const;
+}
+
+async function runFundCsv(formData: FormData, dryRun: boolean): Promise<FundCsvState> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { stage: 'error', message: 'Create your household first.' };
+  const f = await readFundCsv(formData);
+  if ('error' in f) return { stage: 'error', message: f.error };
+  const { data: owners } = await supabase.from('owners').select('id, display_name');
+  const names = new Map((owners ?? []).map((o) => [o.id as string, o.display_name as string]));
+  const today = new Date().toISOString().slice(0, 10);
+  const people: NonNullable<FundCsvState['people']> = [];
+  try {
+    for (const [ownerId, g] of f.byOwner) {
+      if (!names.has(ownerId)) return { stage: 'error', message: 'Choose a person from the list.' };
+      const res = await importFundCsv(
+        supabase as unknown as SupabaseClient,
+        householdId,
+        ownerId,
+        g.rows,
+        { today, dryRun },
+      );
+      people.push({
+        name: names.get(ownerId)!,
+        files: g.files,
+        funds: res.funds,
+        skipped: res.report.skipped,
+        notes: [...res.notes, ...res.report.lines.filter((l) => l.startsWith('error'))],
+      });
+      if (!dryRun) {
+        const sourceRef = `csv:${ownerId}:${createHash('sha256').update(g.hashes.sort().join()).digest('hex').slice(0, 24)}`;
+        await supabase.from('cas_imports').upsert(
+          {
+            household_id: householdId,
+            owner_id: ownerId,
+            source_ref: sourceRef,
+            received_on: today,
+            schemes: res.funds.filter((x) => x.status !== 'review').length,
+            transactions: res.report.transactionsAdded,
+            outcome: res.report.needsReview.length ? 'partial' : 'imported',
+            detail: [`From ${g.files.join(', ')}`, ...res.report.lines].join('\n').slice(0, 2000),
+          },
+          { onConflict: 'household_id,source_ref' },
+        );
+      }
+    }
+  } catch (e) {
+    return {
+      stage: 'error',
+      message: `${dryRun ? 'The preview' : 'The import'} could not be completed (${(e as Error).message}).${dryRun ? '' : ' Run the preview again to see what was saved.'}`,
+    };
+  }
+  if (!dryRun) {
+    await recordSnapshot(supabase, householdId, 'import');
+    revalidatePath('/', 'layout');
+  }
+  const extra = f.notes.length
+    ? [{ name: 'Files', files: [], funds: [], skipped: 0, notes: f.notes }]
+    : [];
+  return { stage: dryRun ? 'previewed' : 'committed', people: [...people, ...extra] };
+}
+
+/** Shows what a fund-transactions file would do, without saving anything. */
+export async function previewFundCsv(_p: FundCsvState, f: FormData): Promise<FundCsvState> {
+  return runFundCsv(f, true);
+}
+
+/** Stores the funds, transactions, units, amount invested and value from the file(s), for the person chosen for each. */
+export async function commitFundCsv(_p: FundCsvState, f: FormData): Promise<FundCsvState> {
+  return runFundCsv(f, false);
 }

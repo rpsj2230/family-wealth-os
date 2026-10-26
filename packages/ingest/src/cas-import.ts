@@ -31,6 +31,8 @@ export interface CasSave {
     isin: string | null;
     amfiCode: string | null;
     casAsOf: string | null;
+    /** units held on the statement date (0 when sold in full); null when the statement does not say */
+    units: number | null;
   };
   /** value on the statement date, when it can be stated (0 for a fund that has been sold in full) */
   valuation: { amount: number; asOf: string } | null;
@@ -193,6 +195,7 @@ export async function runCasImport(
           isin: s.isin,
           amfiCode: amfi,
           casAsOf: asOf,
+          units: s.closingUnits === null ? null : held ? s.closingUnits : 0,
         },
         valuation: !asOf
           ? null

@@ -3,10 +3,10 @@ import { longDate, type AutomationCard } from '@fwos/core';
 import { AutomationCards } from '@/components/AutomationCards';
 import { Tabs } from '@/components/Tabs';
 import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
-import { CasForm, ImportForm, SyncLayoutForm } from './ImportForm';
+import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
 import '@/components/datain.css';
 
-export const IMPORT_TABS = ['workbook', 'cas', 'tax'] as const;
+export const IMPORT_TABS = ['workbook', 'cas', 'csv', 'tax'] as const;
 export type ImportTab = (typeof IMPORT_TABS)[number];
 
 export interface ImportData {
@@ -68,6 +68,7 @@ export function ImportHub({
         tabs={[
           { key: 'workbook', label: 'Workbook' },
           { key: 'cas', label: 'Fund statement (CAS)', badge: casReview.length || null },
+          { key: 'csv', label: 'Fund transactions (CSV)' },
           { key: 'tax', label: 'Tax statement (26AS, AIS)', badge: taxReview.length || null },
         ]}
       />
@@ -125,6 +126,36 @@ export function ImportHub({
               <ImportForm today={data.today} />
             </fieldset>
           </details>
+        </div>
+      )}
+
+      {tab === 'csv' && (
+        <div className="hubgrid">
+          <section className="card">
+            <h2>What this does</h2>
+            <p className="small">
+              Reads the transactions export of an investment app (columns: Date, Folio Number, Name
+              of the Fund, Order, Units, NAV, Current Nav, Amount). For each fund it stores every
+              buy and sale, works out the units you hold and the amount invested, spots the monthly
+              SIP, and values the fund as units times the current NAV in the file. After that the
+              fund follows the live NAV by itself.
+            </p>
+            <div className="rulebox small">
+              <p>
+                <strong>Good to know.</strong> Choose all the files of one person together: folios
+                of the same fund are combined into one holding. Importing the same file again adds
+                nothing twice. Sales are matched to purchases oldest first, which is an
+                approximation across folios; a fund statement (CAS) corrects it later. Lines without
+                a folio number (for example digital gold) are not mutual funds and are left out.
+              </p>
+            </div>
+          </section>
+          <section className="card">
+            <h2>Upload the files</h2>
+            <fieldset disabled={demo} className="plain">
+              <FundCsvForm owners={data.owners} />
+            </fieldset>
+          </section>
         </div>
       )}
 

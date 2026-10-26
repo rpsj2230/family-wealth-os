@@ -23,7 +23,7 @@ Forward bank alerts to the Gmail label shown in Settings. A balance from the ban
 
 ## Import
 
-**Import** has three tabs. **Workbook**: apply your sheet's layout (safe to repeat) or, once, import the whole workbook. **Fund statement (CAS)**: upload a CAMS/KFintech/MF Central statement, or forward it by email; the password is the one you chose, usually your PAN in capitals. **Tax statement (26AS, AIS)**: upload Form 26AS or the AIS; the date of birth saved in Settings opens a protected PDF. Each tab shows the last import result and anything that needs a look.
+**Import** has four tabs. **Workbook**: apply your sheet's layout (safe to repeat) or, once, import the whole workbook. **Fund statement (CAS)**: upload a CAMS/KFintech/MF Central statement, or forward it by email; the password is the one you chose, usually your PAN in capitals. **Fund transactions (CSV)**: upload the transactions export of an investment app (Kuvera layout: Date, Folio Number, Name of the Fund, Order, Units, NAV, Current Nav, Amount). Choose all the files at once and pick the person for each (the first name in the file name is pre-selected). Press **Preview** to see, per fund, whether it updates a fund you have or adds a new one, with units, amount invested and value; then **Import**. Folios of the same fund are combined; importing a file twice adds nothing twice; digital gold (no folio) is left out. **Tax statement (26AS, AIS)**: upload Form 26AS or the AIS; the date of birth saved in Settings opens a protected PDF. Each tab shows the last import result and anything that needs a look.
 
 ## Fixed deposits
 
