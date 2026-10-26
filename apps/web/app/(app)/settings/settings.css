@@ -1,0 +1,340 @@
+/* Settings: a list of sections, one section at a time, forms with a label, a unit and a "what this changes" line. */
+
+.setlayout {
+  display: block;
+}
+.setmain {
+  min-width: 0;
+}
+.setnav {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+.setnav-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.92rem;
+}
+.setnav-item:hover {
+  background: var(--soft);
+}
+.setnav-item.on {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: var(--primary);
+}
+.setnav-badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.setnav-item.on .setnav-badge {
+  background: var(--primary-fg);
+  color: var(--primary);
+}
+@media (min-width: 1180px) {
+  .setlayout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+  }
+  .setnav {
+    position: sticky;
+    top: 16px;
+    flex-direction: column;
+    overflow: visible;
+    border-bottom: 0;
+    padding: 0;
+    margin: 0;
+    gap: 2px;
+  }
+  .setnav-item {
+    border-radius: 10px;
+    border-color: transparent;
+    background: transparent;
+    justify-content: space-between;
+    white-space: normal;
+  }
+  .setnav-item.on {
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: transparent;
+  }
+  .setnav-item.on .setnav-badge {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+  }
+}
+
+.settitle {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+}
+.setintro {
+  margin: 0 0 16px;
+  max-width: 70ch;
+}
+.setsec {
+  margin: 0 0 18px;
+}
+.setsec.card {
+  padding: 18px;
+}
+.sectionhead .pill,
+.rulehead .pill,
+.personhead .pill {
+  margin-top: 0;
+}
+
+/* a field: label, box, unit, and one line of what it changes */
+.fld {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-weight: 400;
+  min-width: 0;
+}
+.fld-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.fld-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  font-weight: 400;
+}
+.fld-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fld-input > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fld-unit {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  max-width: 9.5rem;
+  line-height: 1.2;
+}
+.fld.wide {
+  grid-column: 1 / -1;
+}
+.fld.tick {
+  gap: 2px;
+}
+.tick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tick .fld-hint {
+  padding-left: 28px;
+}
+.ticks {
+  display: flex;
+  gap: 8px 24px;
+  flex-wrap: wrap;
+}
+.ticks.stack {
+  flex-direction: column;
+  margin: 8px 0 4px;
+}
+.saverow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.saved.ok {
+  color: var(--ok-fg);
+  font-weight: 500;
+}
+.form h4,
+.card h4 {
+  margin: 14px 0 4px;
+  font-size: 0.95rem;
+}
+.rulehead,
+.personhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rulehead h3,
+.personhead h3 {
+  margin: 0;
+  margin-right: auto;
+}
+.pill.info {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: transparent;
+}
+.ruleform .formgrid {
+  margin: 4px 0;
+}
+.taxform.is-current {
+  border-color: var(--primary);
+}
+
+/* people */
+.personform {
+  background: var(--card);
+}
+.personform .personhead h3 {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* income and spending lines */
+.flowlist {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.flowrow {
+  display: grid;
+  grid-template-columns: 1fr 90px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--soft);
+}
+.flowrow .flow-name {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+}
+.flowrow .saved {
+  grid-column: 1 / -1;
+}
+@media (min-width: 900px) {
+  .flowrow {
+    grid-template-columns: minmax(160px, 1.5fr) 130px 76px 120px auto auto;
+  }
+  .flowrow .flow-name {
+    grid-column: auto;
+  }
+  .flowrow .saved {
+    grid-column: 1 / -1;
+  }
+}
+.addflow {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* notifications */
+.channels {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.channels li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  font-weight: 500;
+}
+.channels .pill {
+  margin-top: 0;
+}
+
+/* emergency */
+fieldset.choices {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+fieldset.choices legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 6px;
+}
+.choice {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-weight: 400;
+}
+.choice input[type='radio'] {
+  margin-top: 4px;
+  accent-color: var(--primary);
+}
+.choice b {
+  font-weight: 600;
+}
+.choice .fld-hint {
+  display: block;
+}
+fieldset.contacts {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+fieldset.contacts legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+.contactrow {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+@media (min-width: 900px) {
+  .contactrow {
+    grid-template-columns: 1.2fr 1fr 1fr 1.6fr auto;
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+}
