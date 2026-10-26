@@ -167,3 +167,8 @@ Every bank with a rate page saved in Settings is read, including banks where you
 - A savings account with no rate of its own is estimated at the rate on the **Rates** list for its bank, its kind (NRE or NRO) and the slab its balance falls in. The flat figure in Settings is used only when the list has nothing for that bank.
 - **Recently added deposits** are their own source on the "I need money" page: a deposit booked within the number of days set in Settings (default 90) can be broken with little interest lost, so it ranks right after deposits that mature in time. You can change its priority or switch it off in Settings > Where money may come from.
 - **Gifts**: on Others > Money lent, choose *Gift (will not come back, not counted)*, or mark an existing loan as a gift. It stays on the list for the record but is left out of net worth, totals, reminders and the monthly update.
+
+
+## AI key: OpenRouter with automatic fallback
+
+In **Settings > Bank emails and AI** choose **OpenRouter** and paste a free key from openrouter.ai/keys (the key is write-only). The reader asks OpenRouter for its free text models, orders them (large instruction models first, reasoning models last) and tries them one after another: if one is busy, rate limited, withdrawn or does not answer in the expected form, the next one is used, up to six per request. Groq and Google Gemini still work as before. To check the chain at any time, run **Check email and AI reading** in GitHub > Actions: it reads back a made-up alert and lists the models in the order they will be tried. Free models have daily limits; adding a small credit on openrouter.ai raises them.

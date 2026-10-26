@@ -44,7 +44,7 @@ export function IntegrationsForm({
   keySet,
   label,
 }: {
-  provider: 'groq' | 'gemini' | null;
+  provider: 'groq' | 'gemini' | 'openrouter' | null;
   keySet: boolean;
   label: string;
 }) {
@@ -53,7 +53,8 @@ export function IntegrationsForm({
     <form action={act} className="form" aria-busy={pending}>
       <div className="formgrid g3">
         <Field label="AI service" hint="Both have a free tier that is enough for this household.">
-          <select name="provider" defaultValue={provider ?? 'groq'}>
+          <select name="provider" defaultValue={provider ?? 'openrouter'}>
+            <option value="openrouter">OpenRouter (free models, tried one after another)</option>
             <option value="groq">Groq</option>
             <option value="gemini">Google Gemini</option>
           </select>

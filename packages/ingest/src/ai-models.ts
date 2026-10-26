@@ -3,7 +3,7 @@
  * which models the key can use and picks the best available one, falling back to a built-in name only when the list cannot be read.
  * Pure: the worker supplies `fetch`.
  */
-import { buildAiChat, type AiProvider } from './bank-email';
+import { buildAiChat, parseJsonLoosely, type AiProvider } from './bank-email';
 
 export interface ModelsHttp {
   url: string;
@@ -11,6 +11,11 @@ export interface ModelsHttp {
 }
 
 export function modelsRequest(provider: AiProvider, apiKey: string): ModelsHttp {
+  if (provider === 'openrouter')
+    return {
+      url: 'https://openrouter.ai/api/v1/models',
+      init: { method: 'GET', headers: { authorization: `Bearer ${apiKey}` } },
+    };
   return provider === 'groq'
     ? {
         url: 'https://api.groq.com/openai/v1/models',
@@ -24,6 +29,20 @@ export function modelsRequest(provider: AiProvider, apiKey: string): ModelsHttp 
 
 /** Best first. A name matches the first pattern it fits. */
 const PREFER: Record<AiProvider, RegExp[]> = {
+  // free models only (see modelNames); larger, instruction-tuned and current ones first, reasoning models last
+  openrouter: [
+    /llama-3\.3-70b/,
+    /gpt-oss-120b/,
+    /qwen3?-.*(235b|72b|32b|30b)/,
+    /deepseek.*v3/,
+    /gemma-3-27b/,
+    /mistral-(small|nemo|7b)/,
+    /llama-4/,
+    /gpt-oss-20b/,
+    /gemma-3/,
+    /llama-3/,
+    /deepseek/,
+  ],
   groq: [
     /^llama-3\.3-70b/,
     /^openai\/gpt-oss-120b$/,
@@ -48,7 +67,35 @@ const PREFER: Record<AiProvider, RegExp[]> = {
 const NOT_CHAT =
   /(whisper|tts|guard|embed|image|audio|live|transcri|moderation|imagen|veo|robotics|computer-use|preview|exp)/i;
 
+/** OpenRouter: models with no price for text in and text out, the larger context first. */
+function openRouterFree(listJson: unknown): string[] {
+  type M = {
+    id?: string;
+    context_length?: number;
+    pricing?: { prompt?: string; completion?: string };
+    architecture?: { input_modalities?: string[]; output_modalities?: string[] };
+  };
+  const d = (listJson as { data?: M[] } | null)?.data ?? [];
+  return d
+    .filter((m) => {
+      const free =
+        String(m.id ?? '').endsWith(':free') ||
+        (Number(m.pricing?.prompt) === 0 && Number(m.pricing?.completion) === 0);
+      const textIn = m.architecture?.input_modalities?.includes('text') ?? true;
+      const textOut = m.architecture?.output_modalities?.every((x) => x === 'text') ?? true;
+      return (
+        free &&
+        textIn &&
+        textOut &&
+        !/(embed|guard|moderat|whisper|tts|image|audio|vision|-vl\b)/i.test(String(m.id))
+      );
+    })
+    .sort((a, b) => (b.context_length ?? 0) - (a.context_length ?? 0))
+    .map((m) => String(m.id));
+}
+
 function modelNames(provider: AiProvider, listJson: unknown): string[] {
+  if (provider === 'openrouter') return openRouterFree(listJson);
   if (provider === 'groq') {
     const d = (listJson as { data?: { id?: string; active?: boolean }[] } | null)?.data;
     return (d ?? []).filter((m) => m.active !== false).map((m) => String(m.id ?? ''));
@@ -70,7 +117,9 @@ const version = (n: string) => Number(/^gemini-(\d+(?:\.\d+)?)-/.exec(n)?.[1] ??
  * 404 "no longer available to new users"), so the caller tries these in order (see `resolveWorkingModel`).
  */
 export function rankModels(provider: AiProvider, listJson: unknown): string[] {
-  const usable = modelNames(provider, listJson).filter((n) => n && !NOT_CHAT.test(n));
+  const usable = modelNames(provider, listJson).filter(
+    (n) => n && (provider === 'openrouter' || !NOT_CHAT.test(n)),
+  );
   const out: string[] = [];
   const add = (n: string) => {
     if (!out.includes(n)) out.push(n);
@@ -190,6 +239,10 @@ export async function probeModels(
 /** The reason an AI service refused, in plain words and with the way out; null when there is nothing more to add. */
 export function aiErrorHint(provider: AiProvider, status: number, body: string): string | null {
   const b = body.toLowerCase();
+  if (provider === 'openrouter' && (status === 401 || status === 403))
+    return 'OpenRouter refused the key. Create a key at openrouter.ai/keys and save it in Settings > Bank emails and AI.';
+  if (provider === 'openrouter' && (status === 402 || status === 429 || status === 503))
+    return 'The free models are busy or the free daily limit is used up. They are tried one after another; try again later, or add a small credit on openrouter.ai to raise the limit.';
   if (status === 403 && /free tier|billing/.test(b))
     return provider === 'gemini'
       ? 'This Gemini key belongs to a Google project that has no free tier. Create a new key in Google AI Studio (aistudio.google.com, "Create API key" in a new project), or use a free Groq key (console.groq.com), and save it in Settings > Bank emails and AI.'
@@ -201,4 +254,68 @@ export function aiErrorHint(provider: AiProvider, status: number, body: string):
   if (status === 429)
     return 'The free quota is used up for now; it resets by itself (usually within a minute or a day).';
   return null;
+}
+
+type Answer = { ok: boolean; status: number; json(): Promise<unknown>; text(): Promise<string> };
+type RawFetch = (
+  u: string,
+  init?: Record<string, unknown>,
+) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+
+const answer = (ok: boolean, status: number, text: string): Answer => ({
+  ok,
+  status,
+  text: async () => text,
+  json: async () => JSON.parse(text) as unknown,
+});
+
+/** Whether an OpenAI-style reply holds a JSON answer (a free model may answer 200 with an error, nothing, or prose). */
+function usableAnswer(text: string): boolean {
+  try {
+    const j = JSON.parse(text) as {
+      error?: unknown;
+      choices?: { message?: { content?: unknown } }[];
+    };
+    if (j.error) return false;
+    const c = j.choices?.[0]?.message?.content;
+    return typeof c === 'string' && parseJsonLoosely(c) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * For OpenRouter's free models: asks the first model; if it errors, is rate limited, is gone, or answers something that is not
+ * JSON, asks the next, and so on, so one flaky free model never stops the reading. Other providers are called as they are.
+ * Every attempt is returned in `tried` of the last answer's text on failure, so the reason shows up in the job's log.
+ */
+export function withModelFallback(
+  f: RawFetch,
+  provider: AiProvider,
+  models: string[],
+  opts: { maxTries?: number } = {},
+): (u: string, init?: Record<string, unknown>) => Promise<Answer> {
+  return async (u, init) => {
+    if (provider !== 'openrouter' || models.length === 0 || typeof init?.body !== 'string') {
+      const r = await f(u, init);
+      const t = await r.text();
+      return answer(r.ok, r.status, t);
+    }
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    const notes: string[] = [];
+    let last: Answer | null = null;
+    for (const model of models.slice(0, opts.maxTries ?? 5)) {
+      try {
+        const r = await f(u, { ...init, body: JSON.stringify({ ...body, model }) });
+        const t = await r.text();
+        if (r.ok && usableAnswer(t)) return answer(true, r.status, t);
+        notes.push(`${model}: ${r.ok ? 'no JSON answer' : r.status}`);
+        last = answer(false, r.ok ? 502 : r.status, t);
+      } catch (e) {
+        notes.push(`${model}: ${(e as Error).message}`);
+      }
+    }
+    const status = last?.status ?? 503;
+    return answer(false, status, `Every free model tried failed (${notes.join('; ')}).`);
+  };
 }

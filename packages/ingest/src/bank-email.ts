@@ -169,7 +169,7 @@ export function redactForAi(s: string): string {
     .replace(/\b(?:\d[ -]?){12,}\d\b/g, '[number]');
 }
 
-export type AiProvider = 'groq' | 'gemini';
+export type AiProvider = 'groq' | 'gemini' | 'openrouter';
 
 const PROMPT = `You read bank emails and statements. Return ONLY JSON of the form
 {"readings":[{"bank":"<bank name>","last4":"<last 4 digits of the account or null>","amount":<closing or available balance as a number>,"currency":"INR|SGD|USD","asOf":"YYYY-MM-DD"}]}.
@@ -198,6 +198,30 @@ export function buildAiChat(
   body: string,
   model?: string,
 ): AiHttp {
+  if (provider === 'openrouter')
+    return {
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      init: {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+          'x-title': 'Family Wealth OS',
+        },
+        body: JSON.stringify({
+          model: model ?? 'meta-llama/llama-3.3-70b-instruct:free',
+          temperature: 0,
+          // not every free model supports a JSON response mode, so JSON is asked for in words and checked on arrival
+          messages: [
+            {
+              role: 'system',
+              content: `${system}\nReply with one JSON object only: no commentary, no code fence.`,
+            },
+            { role: 'user', content: body },
+          ],
+        }),
+      },
+    };
   if (provider === 'groq')
     return {
       url: 'https://api.groq.com/openai/v1/chat/completions',
@@ -234,17 +258,30 @@ export function buildAiChat(
 export function aiJson(provider: AiProvider, json: unknown): unknown {
   const j = json as Record<string, unknown>;
   let content: string;
-  if (provider === 'groq') {
+  if (provider !== 'gemini') {
     const choices = j?.choices as { message?: { content?: string } }[] | undefined;
     content = choices?.[0]?.message?.content ?? '';
   } else {
     const cands = j?.candidates as { content?: { parts?: { text?: string }[] } }[] | undefined;
     content = cands?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
   }
+  return parseJsonLoosely(content);
+}
+
+/** JSON from a model's text: plain, inside a code fence, or with a sentence before or after it. Null when there is none. */
+export function parseJsonLoosely(content: string): unknown {
+  const t = content.replace(/^```(?:json)?|```$/g, '').trim();
   try {
-    return JSON.parse(content.replace(/^```(?:json)?|```$/g, '').trim());
+    return JSON.parse(t);
   } catch {
-    return null;
+    const a = t.indexOf('{');
+    const b = t.lastIndexOf('}');
+    if (a < 0 || b <= a) return null;
+    try {
+      return JSON.parse(t.slice(a, b + 1));
+    } catch {
+      return null;
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import {
   pickModel,
   aiErrorHint,
   rankModels,
+  withModelFallback,
   resolveModel,
   resolveWorkingModel,
 } from '../src/ai-models';
@@ -149,5 +150,101 @@ describe('aiErrorHint', () => {
     );
     expect(aiErrorHint('groq', 429, '')).toContain('quota');
     expect(aiErrorHint('groq', 500, '')).toBeNull();
+  });
+});
+
+describe('OpenRouter free models', () => {
+  const list = {
+    data: [
+      {
+        id: 'anthropic/claude-sonnet',
+        pricing: { prompt: '0.003', completion: '0.015' },
+        context_length: 200000,
+      },
+      {
+        id: 'google/gemma-3-27b-it:free',
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 96000,
+      },
+      {
+        id: 'meta-llama/llama-3.3-70b-instruct:free',
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 65000,
+      },
+      {
+        id: 'deepseek/deepseek-r1:free',
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 163000,
+      },
+      {
+        id: 'openai/gpt-oss-120b:free',
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 131000,
+      },
+      {
+        id: 'some/vision-model-vl:free',
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 32000,
+      },
+      {
+        id: 'img/maker:free',
+        pricing: { prompt: '0', completion: '0' },
+        architecture: { input_modalities: ['text'], output_modalities: ['image'] },
+      },
+    ],
+  };
+  it('keeps only free, text-only models and ranks the strong instruction models first', () => {
+    const r = rankModels('openrouter', list);
+    expect(r).not.toContain('anthropic/claude-sonnet');
+    expect(r).not.toContain('some/vision-model-vl:free');
+    expect(r).not.toContain('img/maker:free');
+    expect(r.slice(0, 3)).toEqual([
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'openai/gpt-oss-120b:free',
+      'google/gemma-3-27b-it:free',
+    ]);
+    expect(r[r.length - 1]).toBe('deepseek/deepseek-r1:free');
+  });
+
+  const ok = (content: string) => JSON.stringify({ choices: [{ message: { content } }] });
+  const reply = (status: number, text: string) => ({
+    ok: status < 300,
+    status,
+    text: async () => text,
+  });
+
+  it('moves to the next free model when one errors, is limited, or answers something that is not JSON', async () => {
+    const asked: string[] = [];
+    const f = withModelFallback(
+      async (_u, init) => {
+        const m = JSON.parse(String(init?.body)).model as string;
+        asked.push(m);
+        if (m === 'a') return reply(429, 'rate limited');
+        if (m === 'b') return reply(200, ok('Sorry, I cannot help with that.'));
+        if (m === 'c') return reply(200, JSON.stringify({ error: { message: 'upstream down' } }));
+        return reply(200, ok('Here you go: ```json\n{"readings": []}\n```'));
+      },
+      'openrouter',
+      ['a', 'b', 'c', 'd', 'e'],
+    );
+    const r = await f('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'x', messages: [] }),
+    });
+    expect(r.ok).toBe(true);
+    expect(asked).toEqual(['a', 'b', 'c', 'd']);
+  });
+  it('says which models failed and why when none works', async () => {
+    const f = withModelFallback(async () => reply(429, 'limit'), 'openrouter', ['a', 'b']);
+    const r = await f('u', { body: JSON.stringify({}) });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(429);
+    expect(await r.text()).toContain('a: 429; b: 429');
+  });
+  it('calls other providers exactly once, as they are', async () => {
+    let n = 0;
+    const f = withModelFallback(async () => (n++, reply(200, '{}')), 'groq', ['a', 'b']);
+    await f('u', { body: '{}' });
+    expect(n).toBe(1);
   });
 });

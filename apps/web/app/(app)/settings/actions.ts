@@ -66,7 +66,8 @@ export async function saveIntegrations(_p: FormResult | null, f: FormData): Prom
       .slice(0, 100) || 'FWOS/Inbox';
   const { error } = await supabase.rpc('save_integrations', {
     p_household: householdId,
-    p_provider: provider === 'groq' || provider === 'gemini' ? provider : null,
+    p_provider:
+      provider === 'groq' || provider === 'gemini' || provider === 'openrouter' ? provider : null,
     p_key: key === '' ? null : key,
     p_label: label,
     p_clear: clear,

@@ -8,9 +8,9 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
+import { prepareAi } from './ai';
 import {
   aiErrorHint,
-  resolveWorkingModel,
   runInbox,
   type InboxIo,
   type InboxMessage,
@@ -65,20 +65,17 @@ async function main() {
       .maybeSingle(),
     'settings',
   ) as {
-    ai_provider: 'groq' | 'gemini' | null;
+    ai_provider: 'groq' | 'gemini' | 'openrouter' | null;
     ai_api_key: string | null;
     inbox_label: string;
   } | null;
   const label = settings?.inbox_label ?? 'FWOS/Inbox';
-  // providers retire models without notice, so ask which one this key can use
-  const model =
+  // providers retire models without notice, so the model is checked first; OpenRouter's free models fall back one to the next
+  const runtime =
     settings?.ai_provider && settings.ai_api_key
-      ? await resolveWorkingModel(
-          (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
-          settings.ai_provider,
-          settings.ai_api_key,
-        )
+      ? await prepareAi(settings.ai_provider, settings.ai_api_key)
       : null;
+  const model = runtime?.model ?? null;
   const ai =
     settings?.ai_provider && settings.ai_api_key
       ? { provider: settings.ai_provider, key: settings.ai_api_key, ...(model ? { model } : {}) }
@@ -262,7 +259,9 @@ async function main() {
       return { outcome: 'failed', reason: lastReason };
     },
     async fetchJson(url, init) {
-      const res = await fetch(url, init);
+      const res = runtime
+        ? await runtime.call(url, init as unknown as Record<string, unknown>)
+        : await fetch(url, init);
       if (!res.ok) {
         const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
         const hint = ai ? aiErrorHint(ai.provider, res.status, body) : null;

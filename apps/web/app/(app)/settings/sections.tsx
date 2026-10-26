@@ -420,7 +420,7 @@ export function ConnectionsSection({
   ai,
   sources,
 }: {
-  ai: { provider: 'groq' | 'gemini' | null; keySet: boolean; label: string };
+  ai: { provider: 'groq' | 'gemini' | 'openrouter' | null; keySet: boolean; label: string };
   sources: RateSourceRow[];
 }) {
   return (
@@ -438,9 +438,10 @@ export function ConnectionsSection({
         </div>
         <p className="muted small">
           Balance alerts from a bank’s own address are read by fixed rules and need no key. To read
-          PDF statements and unfamiliar e-mails, add a free key from Groq or Google AI Studio
-          (Gemini). Account numbers are removed before any text is sent. See what the reader did in
-          the <Link href="/inbox">bank e-mail inbox</Link>.
+          PDF statements and unfamiliar e-mails, add a free key from OpenRouter (recommended: it
+          tries several free models one after another), Groq or Google AI Studio (Gemini). Account
+          numbers are removed before any text is sent. See what the reader did in the{' '}
+          <Link href="/inbox">bank e-mail inbox</Link>.
         </p>
         <ol className="stepper small">
           <li>

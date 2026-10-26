@@ -12,6 +12,8 @@ select t.assert(t.throws($q$select ai_api_key from public.integration_settings$q
 select t.assert(t.throws($q$select * from public.integration_settings$q$), 'select * is refused too (it includes the key)');
 select t.assert(t.throws($q$select public.save_integrations((select h from ictx), 'other', 'abcdefghij', 'x')$q$), 'unknown provider rejected');
 select t.assert(t.throws($q$select public.save_integrations((select h from ictx), 'groq', 'short', 'x')$q$), 'too-short key rejected');
+select public.save_integrations(h, 'openrouter', 'sk-or-v1-test_key_12345', 'FWOS/Inbox') from ictx;
+select t.assert((select ai_provider from public.integration_settings) = 'openrouter', 'OpenRouter is an accepted provider');
 select public.save_integrations(h, 'gemini', 'AIza_test_key_67890', 'FWOS/Inbox') from ictx;
 select t.assert((select ai_provider from public.integration_settings) = 'gemini', 'saving again replaces the key');
 select public.save_integrations(h, 'gemini', '', 'My/Label') from ictx;

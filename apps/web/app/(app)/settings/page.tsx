@@ -193,7 +193,7 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
     db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
   ]);
   const i = integ.data as {
-    ai_provider: 'groq' | 'gemini' | null;
+    ai_provider: 'groq' | 'gemini' | 'openrouter' | null;
     ai_key_set: boolean;
     inbox_label: string;
   } | null;

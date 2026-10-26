@@ -5,6 +5,7 @@
  * records why, so nothing silently disappears.
  */
 import { createClient } from '@supabase/supabase-js';
+import { prepareAi, type AiRuntime } from './ai';
 import { sameBank } from '@fwos/core';
 import {
   buildRatesRequest,
@@ -15,7 +16,6 @@ import {
   planSync,
   rateDocsFor,
   aiErrorHint,
-  resolveWorkingModel,
   type AiProvider,
   type CorrectionReason,
   type StoredOffer,
@@ -34,7 +34,7 @@ const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'),
 });
 const today = new Date().toISOString().slice(0, 10);
 
-let model: string | null = null;
+let runtime: AiRuntime | null = null;
 
 const AGENT = 'family-wealth-os/1.0 (personal use)';
 const hostOf = (u: string) => {
@@ -158,13 +158,9 @@ async function main() {
         const forThisBank = ((bankHints.data ?? []) as { bank: string; hint: string }[])
           .filter((h) => sameBank(h.bank, bankName))
           .map((h) => h.hint);
-        // providers retire models without notice (a retired name answers 404), so ask which ones this key can use
-        model ??=
-          (await resolveWorkingModel(
-            (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
-            ai.ai_provider,
-            ai.ai_api_key,
-          )) ?? '';
+        // providers retire models without notice, so the model is checked first; OpenRouter's free models fall back one to the next
+        runtime ??= await prepareAi(ai.ai_provider, ai.ai_api_key);
+        const model = runtime.model;
         const req = buildRatesRequest(
           ai.ai_provider,
           ai.ai_api_key,
@@ -173,11 +169,12 @@ async function main() {
           model || undefined,
           forThisBank,
         );
-        const res = await fetch(req.url, { ...req.init, signal: AbortSignal.timeout(60_000) });
+        const res = await runtime.call(req.url, req.init as unknown as Record<string, unknown>);
         if (!res.ok) {
-          const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
+          const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300);
+          const hint = aiErrorHint(ai.ai_provider, res.status, body);
           throw new Error(
-            `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}${aiErrorHint(ai.ai_provider, res.status, body) ? ` — ${aiErrorHint(ai.ai_provider, res.status, body)}` : ''}`,
+            `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}${hint ? ` — ${hint}` : ''}`,
           );
         }
         const read = parseRatesResponse(ai.ai_provider, await res.json(), bankName);

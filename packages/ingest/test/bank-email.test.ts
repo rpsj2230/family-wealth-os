@@ -6,6 +6,7 @@ import {
   parseAmount,
   parseBankDate,
   parseBankEmail,
+  parseJsonLoosely,
   redactForAi,
   senderDomain,
   type BalanceReading,
@@ -207,5 +208,42 @@ describe('matchAccount', () => {
   it('reports ambiguity instead of choosing', () => {
     const dup = [...accts, { ...accts[0]!, assetId: 'a4' }];
     expect(matchAccount(reading(), dup)).toEqual({ status: 'ambiguous', candidates: ['a1', 'a4'] });
+  });
+});
+
+describe('OpenRouter request and answers', () => {
+  it('builds a chat request for the chosen free model without a JSON-mode flag, asking for JSON in words', () => {
+    const r = buildAiRequest(
+      'openrouter',
+      'sk-or-test',
+      'balance text',
+      'meta-llama/llama-3.3-70b-instruct:free',
+    );
+    expect(r.url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    const body = JSON.parse(String(r.init.body));
+    expect(body.model).toBe('meta-llama/llama-3.3-70b-instruct:free');
+    expect(body.response_format).toBeUndefined();
+    expect(body.messages[0].content).toContain('JSON object only');
+    expect((r.init.headers as Record<string, string>).authorization).toBe('Bearer sk-or-test');
+  });
+  it('reads a reading out of an OpenAI-style answer, even with prose or a code fence around the JSON', () => {
+    const answer = (content: string) => ({ choices: [{ message: { content } }] });
+    const json =
+      '{"readings":[{"bank":"Sample Bank","last4":"4321","amount":123456.78,"currency":"INR","asOf":"2026-10-25"}]}';
+    for (const c of [
+      json,
+      '```json\n' + json + '\n```',
+      'Here is the result:\n' + json + '\nHope that helps.',
+    ]) {
+      const r = parseAiResponse('openrouter', answer(c), { today: '2026-10-26' });
+      expect(r[0]).toMatchObject({ amount: 123456.78, last4: '4321' });
+    }
+    expect(
+      parseAiResponse('openrouter', answer('no json at all'), { today: '2026-10-26' }),
+    ).toEqual([]);
+  });
+  it('parseJsonLoosely finds the object or gives null', () => {
+    expect(parseJsonLoosely('x {"a":1} y')).toEqual({ a: 1 });
+    expect(parseJsonLoosely('nothing')).toBeNull();
   });
 });

@@ -9,13 +9,8 @@
  */
 import { ImapFlow } from 'imapflow';
 import { createClient } from '@supabase/supabase-js';
-import {
-  aiErrorHint,
-  buildAiRequest,
-  parseAiResponse,
-  probeModels,
-  resolveWorkingModel,
-} from '@fwos/ingest';
+import { aiErrorHint, buildAiRequest, parseAiResponse, probeModels } from '@fwos/ingest';
+import { prepareAi } from './ai';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -46,7 +41,7 @@ async function checkAi(): Promise<void> {
     .eq('household_id', id ?? '')
     .maybeSingle();
   const s = cfg.data as {
-    ai_provider: 'groq' | 'gemini' | null;
+    ai_provider: 'groq' | 'gemini' | 'openrouter' | null;
     ai_api_key: string | null;
     inbox_label: string | null;
   } | null;
@@ -57,12 +52,18 @@ async function checkAi(): Promise<void> {
     return;
   }
   ok(`An AI key is saved (${s.ai_provider}).`);
-  const model = await resolveWorkingModel(
-    (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
-    s.ai_provider,
-    s.ai_api_key,
-  );
-  if (!model) {
+  const rt = await prepareAi(s.ai_provider, s.ai_api_key);
+  if (s.ai_provider === 'openrouter') {
+    if (rt.models.length === 0) {
+      bad(
+        'OpenRouter did not list any free model for this key. Check the key at openrouter.ai/keys; free models need no credit.',
+      );
+      return;
+    }
+    ok(
+      `OpenRouter lists ${rt.models.length} free models; they are tried in this order: ${rt.models.slice(0, 5).join(', ')}`,
+    );
+  } else if (!rt.model) {
     const probes = await probeModels(
       (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(30_000) }),
       s.ai_provider,
@@ -74,14 +75,15 @@ async function checkAi(): Promise<void> {
       `No model answered with this key. ${first ? (aiErrorHint(s.ai_provider, first.status, first.note) ?? '') : ''}`.trim(),
     );
     return;
-  }
-  ok(`The key works; model chosen: ${model}`);
+  } else ok(`The key works; model chosen: ${rt.model}`);
   const alert = `Dear Customer, your Sample Bank account XXXXXX4321 has been credited with INR 25,000.00 on ${today}. Available balance in your account is INR 1,23,456.78 as on ${today}.`;
-  const req = buildAiRequest(s.ai_provider, s.ai_api_key, alert, model);
-  const res = await fetch(req.url, { ...req.init, signal: AbortSignal.timeout(60_000) });
+  const req = buildAiRequest(s.ai_provider, s.ai_api_key, alert, rt.model ?? undefined);
+  const res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
   if (!res.ok) {
-    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-    bad(`The AI service answered ${res.status} to a reading request: ${body}`);
+    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 400);
+    bad(
+      `The AI service answered ${res.status} to a reading request: ${body} ${aiErrorHint(s.ai_provider, res.status, body) ?? ''}`.trim(),
+    );
     return;
   }
   const readings = parseAiResponse(s.ai_provider, await res.json(), { today });

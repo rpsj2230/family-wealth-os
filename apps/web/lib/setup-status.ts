@@ -123,7 +123,7 @@ export function computeSetupStatus(f: SetupFacts): SetupItem[] {
       href: '/settings?tab=connections#email',
       hint: f.aiKeySet
         ? 'Saved on the server; it cannot be shown again.'
-        : 'Lets the app read PDF statements and unfamiliar e-mails. A free Groq or Gemini key is enough.',
+        : 'Lets the app read PDF statements and unfamiliar e-mails. A free OpenRouter, Groq or Gemini key is enough.',
     },
     {
       key: 'gmail',
