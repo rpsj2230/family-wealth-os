@@ -9,7 +9,7 @@ import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
 import {
-  resolveModel,
+  resolveWorkingModel,
   runInbox,
   type InboxIo,
   type InboxMessage,
@@ -72,7 +72,7 @@ async function main() {
   // providers retire models without notice, so ask which one this key can use
   const model =
     settings?.ai_provider && settings.ai_api_key
-      ? await resolveModel(
+      ? await resolveWorkingModel(
           (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
           settings.ai_provider,
           settings.ai_api_key,

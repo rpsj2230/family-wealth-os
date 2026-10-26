@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { modelsRequest, pickModel, resolveModel } from '../src/ai-models';
+import {
+  modelsRequest,
+  pickModel,
+  rankModels,
+  resolveModel,
+  resolveWorkingModel,
+} from '../src/ai-models';
 
 describe('pickModel', () => {
   it('prefers a current Groq chat model and skips speech and safety models', () => {
@@ -80,5 +86,47 @@ describe('resolveModel', () => {
         'K',
       ),
     ).toBeNull();
+  });
+});
+
+describe('a listed model that cannot be called', () => {
+  const list = {
+    models: [
+      'gemini-2.5-flash',
+      'gemini-3.8-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-3.8-flash-image',
+    ].map((n) => ({ name: `models/${n}`, supportedGenerationMethods: ['generateContent'] })),
+  };
+  it('ranks the newest stable flash model first, then older ones', () => {
+    expect(rankModels('gemini', list).slice(0, 3)).toEqual([
+      'gemini-3.8-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+    ]);
+  });
+  it('skips a model that answers 404 and keeps the first that answers', async () => {
+    const asked: string[] = [];
+    const f = async (u: string) => {
+      if (u.includes('/models?')) return { ok: true, status: 200, json: async () => list };
+      asked.push(u);
+      return u.includes('gemini-3.8-flash:')
+        ? { ok: false, status: 404, json: async () => ({}) }
+        : { ok: true, status: 200, json: async () => ({}) };
+    };
+    expect(await resolveWorkingModel(f, 'gemini', 'K')).toBe('gemini-2.5-flash');
+    expect(asked).toHaveLength(2);
+  });
+  it('keeps a model that is only rate limited, and gives null when none answers', async () => {
+    const limited = async (u: string) =>
+      u.includes('/models?')
+        ? { ok: true, status: 200, json: async () => list }
+        : { ok: false, status: 429, json: async () => ({}) };
+    expect(await resolveWorkingModel(limited, 'gemini', 'K')).toBe('gemini-3.8-flash');
+    const none = async (u: string) =>
+      u.includes('/models?')
+        ? { ok: true, status: 200, json: async () => list }
+        : { ok: false, status: 404, json: async () => ({}) };
+    expect(await resolveWorkingModel(none, 'gemini', 'K')).toBeNull();
   });
 });

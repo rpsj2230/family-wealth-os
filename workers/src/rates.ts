@@ -14,7 +14,7 @@ import {
   parseRatesResponse,
   planSync,
   rateDocsFor,
-  resolveModel,
+  resolveWorkingModel,
   type AiProvider,
   type CorrectionReason,
   type StoredOffer,
@@ -159,7 +159,7 @@ async function main() {
           .map((h) => h.hint);
         // providers retire models without notice (a retired name answers 404), so ask which ones this key can use
         model ??=
-          (await resolveModel(
+          (await resolveWorkingModel(
             (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
             ai.ai_provider,
             ai.ai_api_key,

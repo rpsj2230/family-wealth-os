@@ -9,7 +9,7 @@
  */
 import { ImapFlow } from 'imapflow';
 import { createClient } from '@supabase/supabase-js';
-import { buildAiRequest, parseAiResponse, resolveModel } from '@fwos/ingest';
+import { buildAiRequest, parseAiResponse, resolveWorkingModel } from '@fwos/ingest';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -51,14 +51,14 @@ async function checkAi(): Promise<void> {
     return;
   }
   ok(`An AI key is saved (${s.ai_provider}).`);
-  const model = await resolveModel(
+  const model = await resolveWorkingModel(
     (u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }),
     s.ai_provider,
     s.ai_api_key,
   );
   if (!model) {
     bad(
-      'The AI service did not accept the key when asked which models it may use. Check that the key is current and belongs to the chosen provider.',
+      'No model answered with this key (the provider listed models but none could be called). Check that the key is current, belongs to the chosen provider and has quota left.',
     );
     return;
   }
