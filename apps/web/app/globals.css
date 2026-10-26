@@ -2184,3 +2184,229 @@ details.bankdet {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ---- shared page pattern: header, tabs, meter, cards ---- */
+.pagehead2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+}
+.pagehead2 h1 {
+  margin: 0;
+}
+.ph-main {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+.ph-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.ph-sub {
+  margin: 6px 0 0;
+  max-width: 70ch;
+}
+.ph-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tabs2 {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  margin: 0 0 16px;
+  padding-bottom: 0;
+  scrollbar-width: none;
+}
+.tabs2::-webkit-scrollbar {
+  display: none;
+}
+.tab2 {
+  padding: 9px 14px;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--muted, #6b7280);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-weight: 500;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.tab2:hover {
+  color: var(--fg, #111827);
+}
+.tab2.on {
+  color: var(--primary, #4f46e5);
+  border-bottom-color: var(--primary, #4f46e5);
+}
+.tab2-badge {
+  font-size: 0.72rem;
+  background: var(--soft, #eef2ff);
+  border-radius: 999px;
+  padding: 1px 7px;
+  color: var(--primary, #4f46e5);
+}
+.meter-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--border, #e5e7eb);
+}
+.meter-bar span {
+  display: block;
+  height: 100%;
+}
+.meter-legend {
+  list-style: none;
+  display: flex;
+  gap: 6px 18px;
+  flex-wrap: wrap;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.meter-legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+.cardgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+.pickcard {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--card, #fff);
+}
+.pickcard h3 {
+  margin: 0 0 2px;
+  font-size: 1rem;
+}
+.pickcard dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin: 10px 0 0;
+}
+.pickcard dt {
+  color: var(--muted, #6b7280);
+  font-size: 0.85rem;
+}
+.pickcard dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.chips2 {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.status {
+  display: inline-block;
+  font-size: 0.74rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.status.picked {
+  background: #dcfce7;
+  color: #166534;
+}
+.status.ready_not_needed {
+  background: #e0f2fe;
+  color: #075985;
+}
+.status.waiting {
+  background: #fef3c7;
+  color: #92400e;
+}
+.status.no_gain,
+.status.no_lots {
+  background: #f3f4f6;
+  color: #374151;
+}
+.status.excluded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.stepper {
+  counter-reset: s;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.stepper li {
+  counter-increment: s;
+  position: relative;
+  padding-left: 38px;
+}
+.stepper li::before {
+  content: counter(s);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--soft, #eef2ff);
+  color: var(--primary, #4f46e5);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.sectionhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 8px;
+}
+.sectionhead h2 {
+  margin: 0;
+}
+.callout {
+  border-left: 4px solid var(--primary, #4f46e5);
+  background: var(--soft, #eef2ff);
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+.callout.warn {
+  border-left-color: var(--warn, #d97706);
+  background: #fffbeb;
+}
+.empty {
+  text-align: center;
+  padding: 28px 12px;
+  color: var(--muted, #6b7280);
+}
+.personcard {
+  border-top: 4px solid var(--person, var(--primary, #4f46e5));
+}
+.disclose {
+  margin-top: 14px;
+}
+.disclose > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}

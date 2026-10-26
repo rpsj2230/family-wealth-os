@@ -173,6 +173,17 @@ export default async function RatesPage({
           person per bank. A running deposit is never suggested to be broken early; moves are for
           maturity.
         </p>
+        {(sources.data ?? []).some((x) =>
+          String(x.last_result ?? '').startsWith('Not read: no AI key'),
+        ) && (
+          <p className="notice warn" role="alert">
+            The weekly refresh ran but could not read any bank page, because no AI key is saved. Add
+            a free Groq or Gemini key in{' '}
+            <Link href="/settings#email">Settings, Bank emails and AI</Link>, then run
+            &ldquo;Refresh interest rates&rdquo; again from GitHub &gt; Actions. Until then, load
+            rates from your notes below.
+          </p>
+        )}
         <section className="card" aria-labelledby="board">
           <h2 id="board">Rate board</h2>
           <p className="muted small">

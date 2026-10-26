@@ -201,6 +201,10 @@ export interface ConfigValues {
   margin: number;
   skipSip: boolean;
   nri: boolean;
+  exitLoadPct: number;
+  exitLoadDays: number;
+  sttPct: number;
+  stampPct: number;
   incomeLimit: number;
   otherIncome: number;
 }
@@ -332,6 +336,22 @@ export function ConfigForm({ v }: { v: ConfigValues }) {
         <label>
           Extra months of holding before counting a fund as long-term
           <input name="margin" inputMode="numeric" defaultValue={v.margin} />
+        </label>
+        <label>
+          Usual exit load on units sold early (%)
+          <input name="exitLoadPct" inputMode="decimal" defaultValue={v.exitLoadPct} />
+        </label>
+        <label>
+          …for this many days from each purchase
+          <input name="exitLoadDays" inputMode="numeric" defaultValue={v.exitLoadDays} />
+        </label>
+        <label>
+          Transaction tax on selling equity funds (%)
+          <input name="sttPct" inputMode="decimal" defaultValue={v.sttPct} />
+        </label>
+        <label>
+          Stamp duty on buying fund units (%)
+          <input name="stampPct" inputMode="decimal" defaultValue={v.stampPct} />
         </label>
         <span>
           <label className="check">

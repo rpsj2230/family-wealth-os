@@ -1,6 +1,6 @@
-import { ListingTools } from '@/components/ListingTools';
 import Link from 'next/link';
 import { formatInr, personStyles } from '@fwos/core';
+import { planLossHarvest } from '@fwos/core';
 import {
   ensureInterestRefundRecords,
   ensureRefundRecords,
@@ -10,36 +10,45 @@ import {
   planInterestRefunds,
 } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { PageHead } from '@/components/PageHead';
 import { PersonBadge } from '@/components/Person';
+import { Tabs } from '@/components/Tabs';
 import { TaxSimulator } from '@/components/TaxSimulator';
 import { loadContext } from '@/lib/data';
 import { updateRefund } from './actions';
+import { Checklist, HarvestCard, LossCard, niceDate } from './Parts';
 
 export const dynamic = 'force-dynamic';
 
-const niceDate = (iso: string) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+const TABS = ['harvest', 'losses', 'refunds', 'more'] as const;
 
-export default async function TaxPage() {
+export default async function TaxPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const sp = await searchParams;
+  const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
+    ? (sp.tab as (typeof TABS)[number])
+    : 'harvest';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const { positions, ownerName, today, ytdRealised } = await loadHarvestPositions(
-    supabase as unknown as SupabaseClient,
-  );
+  const db = supabase as unknown as SupabaseClient;
+  const { positions, ownerName, today, ytdRealised, ytd } = await loadHarvestPositions(db);
   const iso = today.toISOString().slice(0, 10);
-  const settings = await loadSettings(supabase as unknown as SupabaseClient);
+  const settings = await loadSettings(db);
   const plan = planHarvest(positions, iso, {
     ytdRealised,
     rules: settings.rules,
     config: settings.config.harvest,
   });
+  const losses = planLossHarvest(positions, iso, {
+    ytd,
+    plannedGain: Object.fromEntries(plan.plans.map((p) => [p.ownerId, p.totalGain])),
+    rules: settings.rules,
+    config: settings.config.harvest,
+  });
   try {
-    const db = supabase as unknown as SupabaseClient;
     await ensureRefundRecords(db, householdId, plan);
     await ensureInterestRefundRecords(
       db,
@@ -76,122 +85,126 @@ export default async function TaxPage() {
   const daysLeft = Math.round(
     (Date.parse(`${plan.deadline}T00:00:00Z`) - today.getTime()) / 86_400_000,
   );
+  const totalGain = plan.plans.reduce((a, p) => a + p.totalGain, 0);
+  const totalRoom = plan.plans.reduce((a, p) => a + p.room, 0);
+  const totalLossTax = losses.plans.reduce((a, p) => a + p.taxSavedNow, 0);
+  const lossCount = losses.plans.reduce((a, p) => a + p.candidates.length, 0);
+  const refundsOpen = (refunds ?? []).filter((r) => r.status !== 'received').length;
+  const excluded = plan.plans.reduce(
+    (a, p) => a + p.funds.filter((f) => f.status === 'excluded').length,
+    0,
+  );
 
   return (
     <>
-      <h1>Tax</h1>
-      <ListingTools name="tax">
-        <p className="muted">
-          Worked out for you from your holdings; nothing to type. Each person can realise ₹1,25,000
-          of long-term equity-fund gain a year without tax. Unused allowance is lost on 31 March.
-        </p>
+      <PageHead
+        title="Tax"
+        subtitle="Worked out from your funds, nothing to type. Each person can book ₹1,25,000 of long-term equity-fund gain a year with no tax; what is not used by 31 March is lost."
+        pills={[
+          { label: `FY ${plan.fy}`, tone: 'info' },
+          {
+            label: `${daysLeft} days to ${niceDate(plan.deadline)}`,
+            tone: daysLeft < 30 ? 'warn' : 'ok',
+          },
+          ...(plan.rulesCarriedForward
+            ? [{ label: 'last year’s rules assumed', tone: 'warn' as const }]
+            : !plan.rulesVerified
+              ? [{ label: 'rates not yet verified', tone: 'warn' as const }]
+              : []),
+        ]}
+        actions={
+          <>
+            <Link className="btn" href="/tax/filing">
+              Filing papers
+            </Link>
+            <Link className="btn ghost" href="/settings#tax">
+              Tax rules
+            </Link>
+          </>
+        }
+      />
 
-        <section className="card hero" aria-label="Harvest deadline">
-          <p className="muted small">Financial year {plan.fy}</p>
-          <p className="big">{daysLeft} days left</p>
-          <p className="small">
-            to use this year&apos;s tax-free allowance, by {niceDate(plan.deadline)}.
+      <section className="kpis" aria-label="This year at a glance">
+        <article className="kpi main">
+          <div className="kpi-label">Tax-free gain you can still book</div>
+          <div className="kpi-value">{formatInr(Math.round(totalRoom))}</div>
+          <div className="kpi-sub muted">
+            {formatInr(Math.round(totalGain))} of it can be booked now with funds that are ready
+          </div>
+        </article>
+        <article className="kpi">
+          <div className="kpi-label">Loss to book</div>
+          <div className="kpi-value">{lossCount}</div>
+          <div className="kpi-sub muted">
+            {totalLossTax > 0 ? `saves ${formatInr(totalLossTax)} now` : 'funds in loss'}
+          </div>
+        </article>
+        <article className="kpi">
+          <div className="kpi-label">Funds left out</div>
+          <div className="kpi-value">{excluded}</div>
+          <div className="kpi-sub muted">not equity-oriented</div>
+        </article>
+        <article className="kpi">
+          <div className="kpi-label">Refunds open</div>
+          <div className="kpi-value">{refundsOpen}</div>
+          <div className="kpi-sub muted">
+            <a href="/tax?tab=refunds">see the tracker</a>
+          </div>
+        </article>
+      </section>
+
+      <Tabs
+        base="/tax"
+        current={tab}
+        tabs={[
+          {
+            key: 'harvest',
+            label: 'Gain harvest',
+            badge: plan.plans.reduce((a, p) => a + p.picks.length, 0),
+          },
+          { key: 'losses', label: 'Loss harvest', badge: lossCount },
+          { key: 'refunds', label: 'Refunds', badge: refundsOpen },
+          { key: 'more', label: 'How it works' },
+        ]}
+      />
+
+      {tab === 'harvest' && (
+        <>
+          {plan.plans.length === 0 && <p className="notice warn">No fund holdings found yet.</p>}
+          {plan.plans.map((pp) => (
+            <HarvestCard key={pp.ownerId} pp={pp} person={styles[pp.ownerId]} today={iso} />
+          ))}
+          {plan.plans.length > 0 && <Checklist plan={plan} today={iso} />}
+        </>
+      )}
+
+      {tab === 'losses' && (
+        <>
+          <p className="callout">
+            Booking a loss lets you set it against gains. Units are sold oldest first and cannot be
+            picked one by one, so each figure below is what selling the oldest units books in total.
+            There is no wash-sale rule in India, but a sale and repurchase with no purpose other
+            than tax can be questioned: keep your reasons, and consider a similar fund or a gap
+            before buying back.
           </p>
-          {plan.rulesCarriedForward && (
-            <p className="small muted">
-              No tax numbers are entered for {plan.fy} yet, so last year&apos;s are assumed.{' '}
-              <Link href="/settings#tax">Check them in Settings</Link>.
-            </p>
-          )}
-          {!plan.rulesVerified && !plan.rulesCarriedForward && (
-            <p className="small muted">
-              Rates and limits come from secondary sources and are marked unverified until checked
-              on the official site.
-            </p>
-          )}
-        </section>
+          {losses.plans.length === 0 && <p className="notice warn">No fund holdings found yet.</p>}
+          {losses.plans.map((pl) => (
+            <LossCard key={pl.ownerId} pl={pl} person={styles[pl.ownerId]} />
+          ))}
+        </>
+      )}
 
-        {plan.plans.length === 0 && <p className="notice warn">No fund holdings found yet.</p>}
-        {plan.plans.map((pp) => (
-          <section
-            className="card bank"
-            key={pp.ownerId}
-            style={{ ['--person' as string]: styles[pp.ownerId]?.colour }}
-          >
-            <header className="bankhead personhead">
-              <div>
-                <h2>
-                  <PersonBadge p={styles[pp.ownerId]} name size={26} />
-                </h2>
-                <div className="muted small">
-                  Tax-free allowance {formatInr(pp.exemption)} · already used{' '}
-                  {formatInr(pp.alreadyUsed)}
-                </div>
-              </div>
-              <div className="bankright">
-                {pp.picks.length > 0 ? (
-                  <>
-                    <div className="bankTotal num">{formatInr(pp.totalGain)}</div>
-                    <div className="small muted">tax-free gain to realise</div>
-                  </>
-                ) : (
-                  <span className="pill">Nothing to do now</span>
-                )}
-              </div>
-            </header>
-            {pp.picks.length > 0 ? (
-              <>
-                <table className="tbl lines responsive">
-                  <thead>
-                    <tr>
-                      <th>Do this</th>
-                      <th className="num">Sell about</th>
-                      <th className="num">Gain realised</th>
-                      <th className="num">Then buy back</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pp.picks.map((x) => (
-                      <tr key={x.assetId}>
-                        <td data-label="Do this">
-                          {x.fullExit ? 'Sell all of' : 'Sell part of'} <strong>{x.fund}</strong>,
-                          then buy it back
-                        </td>
-                        <td className="num" data-label="Sell about">
-                          {formatInr(x.sellAmount)}
-                        </td>
-                        <td className="num gain" data-label="Gain realised">
-                          +{formatInr(x.estimatedGain)}
-                        </td>
-                        <td className="num" data-label="Then buy back">
-                          {formatInr(x.buyBackAmount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="small muted" style={{ padding: '4px 18px 14px' }}>
-                  Tax avoided on these gains later, if you would otherwise have sold them: about{' '}
-                  {formatInr(pp.futureTaxMayBeAvoided)}. As a non-resident the fund house withholds
-                  about {formatInr(pp.tdsWithheld)} now. All of it comes back when you file, because
-                  these gains stay inside the tax-free allowance. Put {formatInr(pp.buyBackTotal)}{' '}
-                  back into the same funds straight after the sales. A reminder task is created
-                  automatically.
-                </p>
-              </>
-            ) : (
-              <p className="muted small" style={{ padding: '4px 18px 14px' }}>
-                {pp.notes[0] ?? 'Nothing qualifies this year.'}
-              </p>
-            )}
-          </section>
-        ))}
-
+      {tab === 'refunds' && (
         <section className="card" id="refunds">
           <h2>Tax refunds to claim</h2>
           <p className="muted small">
             As a non-resident, tax is withheld when funds are sold. Each harvest creates a record
-            here by itself. After you sell, enter what was actually withheld (it is on the fund
-            house&apos;s contract note); when you file, mark it claimed; when the money arrives,
-            enter it. <Link href="/tax/refunds/csv">Download as CSV</Link>
+            here by itself. After you sell, enter what was actually withheld (it is on the contract
+            note); when you file, mark it claimed; when the money arrives, enter it.{' '}
+            <Link href="/tax/refunds/csv">Download as CSV</Link>
           </p>
           {(refunds ?? []).length === 0 ? (
-            <p className="muted small">
+            <p className="empty">
               Nothing to claim yet. A record appears when a harvest is planned.
             </p>
           ) : (
@@ -267,34 +280,40 @@ export default async function TaxPage() {
               ? `, with ${formatInr(settings.config.refunds.otherIncome)} of other income counted`
               : ''}
             ). Over the limit the refund depends on the tax actually due, so none is expected until
-            you check with an adviser. See the <Link href="/tax/filing">filing papers</Link> for the
-            interest itself.
+            you check with an adviser.
           </p>
         </section>
+      )}
 
-        <details className="card">
-          <summary>How this is worked out, and its limits</summary>
-          <ul className="list small">
-            {plan.assumptions.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-        </details>
-
-        <section className="card">
-          <h2>Other tax tools</h2>
-          <p className="row">
-            <Link className="btn" href="/tax/filing">
-              Filing papers (FD interest per person, checklist)
-            </Link>
-          </p>
-        </section>
-
-        <details className="card">
-          <summary>Try a specific sale (simulator)</summary>
-          <TaxSimulator rules={settings.rules} />
-        </details>
-      </ListingTools>
+      {tab === 'more' && (
+        <>
+          <section className="card">
+            <h2>How this is worked out, and its limits</h2>
+            <ul className="list small">
+              {plan.assumptions.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+              <li>
+                Units bought on a monthly SIP are separate lots, each with its own one-year clock,
+                exit-load window and (for ELSS) lock-in. With a fund statement the lots are exact;
+                without one they are estimated from the SIP start date and marked so.
+              </li>
+              <li>
+                Units bought before 1 February 2018 use the higher of what was paid and the lower of
+                the 31 January 2018 price and the sale price, when that price is available.
+              </li>
+              <li>
+                Only equity-oriented funds are harvested. International, gold and debt funds, and
+                hybrids whose equity share is unclear, are left out and named.
+              </li>
+            </ul>
+          </section>
+          <details className="card">
+            <summary>Try a specific sale (simulator)</summary>
+            <TaxSimulator rules={settings.rules} />
+          </details>
+        </>
+      )}
     </>
   );
 }

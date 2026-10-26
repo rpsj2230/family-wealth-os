@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_CONFIG } from '../src/config';
 import {
   harvestDueOn,
   harvestTaskTitle,
@@ -56,14 +57,14 @@ describe('planHarvest uses the rules it is given', () => {
     const withSip = [pos({ assetId: 's', value: 300_000, invested: 200_000, sipActive: true })];
     expect(
       planHarvest(withSip, TODAY, {
-        config: { minSellAmount: 1000, holdingMarginMonths: 1, skipActiveSip: false, nri: true },
+        config: { ...DEFAULT_CONFIG.harvest, skipActiveSip: false },
       }).plans[0]!.picks,
     ).toHaveLength(1);
     expect(planHarvest(withSip, TODAY).plans[0]!.picks).toHaveLength(0);
     const resident = planHarvest(
       [pos({ assetId: 'a', value: 150_000, invested: 100_000 })],
       TODAY,
-      { config: { minSellAmount: 1000, holdingMarginMonths: 1, skipActiveSip: true, nri: false } },
+      { config: { ...DEFAULT_CONFIG.harvest, nri: false } },
     );
     expect(resident.plans[0]!.tdsWithheld).toBe(0);
     expect(harvestDueOn(resident, TODAY, { month: 2, day: 1 })).toBe('2027-02-01');

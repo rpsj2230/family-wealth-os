@@ -189,6 +189,10 @@ export async function saveConfig(_p: FormResult | null, f: FormData): Promise<Fo
       holdingMarginMonths: numeric(f, 'margin'),
       skipActiveSip: f.get('skipSip') === 'on',
       nri: f.get('nri') === 'on',
+      exitLoadPct: pct(f, 'exitLoadPct'),
+      exitLoadDays: numeric(f, 'exitLoadDays'),
+      sttPct: pct(f, 'sttPct'),
+      stampDutyPct: pct(f, 'stampPct'),
     },
   };
   const existing = await supabase.from('household_config').select('config').maybeSingle();

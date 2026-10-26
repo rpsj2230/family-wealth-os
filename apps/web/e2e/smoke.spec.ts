@@ -190,3 +190,17 @@ test('sample hard need: step by step with bank, account code and the date it all
   await page.getByText('Show the accounts').first().click();
   await expect(page.getByText(/Sample .* Bank · (Cash|FD)-/).first()).toBeVisible();
 });
+
+test('the sample tax harvest page shows the allowance, the instalment calendar and the checklist', async ({
+  page,
+}) => {
+  await page.goto('/demo/tax-harvest');
+  await expect(page.getByRole('heading', { name: 'Tax', level: 1 })).toBeVisible();
+  await expect(page.getByText('When more units become ready')).toBeVisible();
+  await expect(page.getByText('Redeem by units, not by amount.')).toBeVisible();
+  await expect(page.getByText('Every fund, and why it is or is not in the plan')).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});

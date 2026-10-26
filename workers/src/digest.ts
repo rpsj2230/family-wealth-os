@@ -18,7 +18,7 @@ import {
   loadSettings,
   planHarvest,
 } from '@fwos/data';
-import { runDigests, type Claim, type DigestStore } from '@fwos/ingest';
+import { parseChatIds, runDigests, sendTelegram, type Claim, type DigestStore } from '@fwos/ingest';
 
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SMTP_USER, SMTP_APP_PASSWORD, APP_URL } =
   process.env;
@@ -179,6 +179,15 @@ const store: DigestStore = {
   },
 };
 
+// remember each summary as it is built, so Telegram sends the same text without building it twice
+const built = new Map<string, string>();
+const buildOnce = store.build;
+store.build = async (householdId, d) => {
+  const m = await buildOnce(householdId, d);
+  built.set(householdId, m.text);
+  return m;
+};
+
 const transport = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 465,
@@ -202,6 +211,81 @@ const results = await runDigests(
   date,
 );
 console.log(JSON.stringify({ date, results }, null, 2));
+
+/** The same summary on Telegram, for every household that saved a bot and a chat. Once a day; a failure is logged, never fatal. */
+async function pushTelegram() {
+  const cfg = await db
+    .from('integration_settings')
+    .select('household_id, telegram_bot_token, telegram_chat_ids')
+    .not('telegram_bot_token', 'is', null)
+    .not('telegram_chat_ids', 'is', null);
+  if (cfg.error) throw new Error(cfg.error.message);
+  for (const row of cfg.data ?? []) {
+    const hh = row.household_id as string;
+    const chats = parseChatIds(String(row.telegram_chat_ids ?? ''));
+    if (chats.length === 0) continue;
+    const ins = await db
+      .from('digest_log')
+      .insert({ household_id: hh, digest_date: date, channel: 'telegram', status: 'sending' });
+    if (ins.error) {
+      if (ins.error.code !== '23505') throw new Error(ins.error.message);
+      const cur = await db
+        .from('digest_log')
+        .select('status, attempts')
+        .eq('household_id', hh)
+        .eq('digest_date', date)
+        .eq('channel', 'telegram')
+        .single();
+      const c = cur.data as { status: string; attempts: number } | null;
+      if (!c || c.status === 'accepted_by_provider') {
+        console.log(`Telegram: ${hh} already has today's summary.`);
+        continue;
+      }
+      await db
+        .from('digest_log')
+        .update({ status: 'sending', attempts: c.attempts + 1, error: null })
+        .eq('household_id', hh)
+        .eq('digest_date', date)
+        .eq('channel', 'telegram');
+    }
+    let error: string | null = null;
+    try {
+      const text = built.get(hh) ?? (await store.build(hh, date)).text;
+      for (const chat of chats) {
+        const r = await sendTelegram(
+          async (u, init) => fetch(u, init),
+          String(row.telegram_bot_token),
+          chat,
+          text,
+        );
+        if (!r.ok) error = `${error ? `${error}; ` : ''}chat ${chat}: ${r.error}`;
+      }
+    } catch (e) {
+      error = (e as Error).message;
+    }
+    await db
+      .from('digest_log')
+      .update({
+        status: error ? 'failed' : 'accepted_by_provider',
+        recipients: chats.length,
+        error: error ? error.slice(0, 500) : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('household_id', hh)
+      .eq('digest_date', date)
+      .eq('channel', 'telegram');
+    console.log(
+      error
+        ? `::warning::Telegram not sent: ${error}`
+        : `Telegram: sent to ${chats.length} chat(s).`,
+    );
+  }
+}
+try {
+  await pushTelegram();
+} catch (e) {
+  console.warn(`::warning::Telegram step failed: ${(e as Error).message}`);
+}
 if (results.some((r) => r.outcome === 'failed' || r.outcome === 'no_recipients')) {
   console.error(
     '::error::At least one summary could not be sent; see the delivery log in the app.',

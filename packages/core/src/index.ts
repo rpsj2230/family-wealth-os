@@ -30,3 +30,6 @@ export * from './dashboard';
 export * from './rate-notes';
 export * from './rate-board';
 export * from './notes-tidy';
+export * from './fund-class';
+export * from './harvest-lots';
+export * from './loss-harvest';

@@ -6,6 +6,7 @@
  * 31 January 2018 value per unit (grandfathering); it is not guessed, the row is left blank and counted in `needsFmv`.
  */
 import { computePosition, type Position, type TaxRuleSet } from './tax';
+import { fundTaxClass } from './fund-class';
 
 export interface RealisedRow {
   ownerId: string;
@@ -28,11 +29,11 @@ export interface GainLine extends RealisedRow {
   beforeFeb2018: boolean;
 }
 
-const DEBT_WORDS =
-  /\b(debt|liquid|overnight|money market|gilt|bond|income|credit|duration|ultra short|low duration|short term|corporate|banking and psu|floater|fixed maturity|fmp|arbitrage)\b/i;
-
-/** A fund whose name says it is not an equity fund. Hybrid and unknown names are treated as equity and marked as such in the notes. */
-export const looksLikeDebtFund = (name: string) => DEBT_WORDS.test(name);
+/** A fund that does not get the equity treatment: debt funds (slab rate) and international, gold or fund-of-funds units (24 months, no allowance). Hybrids and unknown names stay with equity and are marked as such in the notes. */
+export const looksLikeDebtFund = (name: string) => {
+  const c = fundTaxClass(name).class;
+  return c === 'debt_slab' || c === 'other_long';
+};
 
 const addMonths = (iso: string, m: number) => {
   const d = new Date(`${iso}T00:00:00Z`);

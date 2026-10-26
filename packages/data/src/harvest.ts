@@ -1,8 +1,11 @@
 import {
+  approximateFlows,
+  fundTaxClass,
   harvestDueOn,
   harvestTaskTitle,
   planHarvest,
   type HarvestPlan,
+  type HarvestLot,
   type HarvestPosition,
 } from '@fwos/core';
 import { fifoLots, type CasTxn } from '@fwos/ingest';
@@ -20,6 +23,8 @@ export async function loadHarvestPositions(
   today: Date;
   /** long-term gains already realised this financial year per person, from the fund statements */
   ytdRealised: Record<string, number>;
+  /** net short- and long-term equity gains already booked this financial year per person, before set-off */
+  ytd: Record<string, { stcg: number; ltcg: number }>;
 }> {
   const l = await loadPortfolioData(db, {
     ...(opts.householdId ? { householdId: opts.householdId } : {}),
@@ -27,7 +32,9 @@ export async function loadHarvestPositions(
   });
   const q = db
     .from('mf_positions')
-    .select('asset_id, fund_name, invested, started_on, sip_monthly, sip_stopped');
+    .select(
+      'asset_id, fund_name, invested, started_on, sip_monthly, sip_stopped, amfi_code, exit_load_pct, exit_load_days',
+    );
   const rows = ((await (opts.householdId ? q.eq('household_id', opts.householdId) : q)).data ??
     []) as unknown as {
     asset_id: string;
@@ -36,6 +43,9 @@ export async function loadHarvestPositions(
     started_on: string | null;
     sip_monthly: number | null;
     sip_stopped: boolean;
+    amfi_code: string | null;
+    exit_load_pct: number | null;
+    exit_load_days: number | null;
   }[];
   const owner = new Map(l.assetRows.map((a) => [a.id, a.owner_id]));
   const value = new Map(
@@ -74,8 +84,54 @@ export async function loadHarvestPositions(
       },
     ]);
   const todayIso = l.today.toISOString().slice(0, 10);
+  // categories (for the tax class) and prices on 31 Jan 2018 (for units bought before 1 Feb 2018)
+  const codes = [...new Set(rows.map((r) => r.amfi_code).filter((c): c is string => !!c))];
+  const categoryOf = new Map<string, string | null>();
+  if (codes.length > 0) {
+    const cq = db.from('amfi_schemes').select('code, category').in('code', codes);
+    for (const c of ((await cq).data ?? []) as unknown as {
+      code: string;
+      category: string | null;
+    }[])
+      categoryOf.set(c.code, c.category);
+  }
+  const fmv2018 = new Map<string, number>();
+  if (codes.length > 0) {
+    const fq = db
+      .from('mf_navs')
+      .select('amfi_code, nav_date, nav')
+      .in('amfi_code', codes)
+      .gte('nav_date', '2018-01-20')
+      .lte('nav_date', '2018-01-31')
+      .order('nav_date');
+    for (const n of ((await fq).data ?? []) as unknown as { amfi_code: string; nav: number }[])
+      fmv2018.set(n.amfi_code, Number(n.nav)); // the last one on or before 31 Jan 2018 wins
+  }
+  // price history since each fund's start, to estimate lots for funds without a fund statement
+  const need = rows.filter((r) => !byAsset.has(r.asset_id) && r.amfi_code && r.started_on);
+  const navHist = new Map<string, { date: string; nav: number }[]>();
+  if (need.length > 0) {
+    const since = need.reduce((m, r) => (r.started_on! < m ? r.started_on! : m), todayIso);
+    const needCodes = [...new Set(need.map((r) => r.amfi_code!))];
+    const navRows = await pageAll<{ amfi_code: string; nav_date: string; nav: number }>(
+      (from, to) =>
+        db
+          .from('mf_navs')
+          .select('amfi_code, nav_date, nav')
+          .in('amfi_code', needCodes)
+          .gte('nav_date', since)
+          .order('nav_date')
+          .range(from, to),
+    );
+    for (const n of navRows)
+      navHist.set(n.amfi_code, [
+        ...(navHist.get(n.amfi_code) ?? []),
+        { date: n.nav_date, nav: Number(n.nav) },
+      ]);
+  }
   const fyStart = `${Number(todayIso.slice(5, 7)) >= 4 ? todayIso.slice(0, 4) : String(Number(todayIso.slice(0, 4)) - 1)}-04-01`;
   const ytdRealised: Record<string, number> = {};
+  const ytd: Record<string, { stcg: number; ltcg: number }> = {};
   const lotsOf = new Map<string, HarvestPosition['lots']>();
   for (const r of rows) {
     const txns = byAsset.get(r.asset_id);
@@ -105,15 +161,65 @@ export async function loadHarvestPositions(
       const heldMonths =
         (Date.parse(`${x.soldOn}T00:00:00Z`) - Date.parse(`${x.acquiredOn}T00:00:00Z`)) /
         (86_400_000 * 30.4375);
-      if (heldMonths > 12) ytdRealised[ow] = (ytdRealised[ow] ?? 0) + (x.proceeds - x.cost);
+      if (fundTaxClass(r.fund_name, categoryOf.get(r.amfi_code ?? '') ?? null).class !== 'equity')
+        continue;
+      const cur = (ytd[ow] ??= { stcg: 0, ltcg: 0 });
+      if (heldMonths > 12) {
+        ytdRealised[ow] = (ytdRealised[ow] ?? 0) + (x.proceeds - x.cost);
+        cur.ltcg += x.proceeds - x.cost;
+      } else cur.stcg += x.proceeds - x.cost;
     }
+  }
+  // a short-term loss is set off against long-term gain before the allowance applies
+  for (const k of Object.keys(ytd)) {
+    const y = ytd[k]!;
+    y.stcg = Math.round(y.stcg);
+    y.ltcg = Math.round(y.ltcg);
+    ytdRealised[k] = Math.max(0, Math.round(Math.max(0, y.ltcg + Math.min(0, y.stcg))));
   }
   for (const k of Object.keys(ytdRealised))
     ytdRealised[k] = Math.max(0, Math.round(ytdRealised[k]!));
   const positions: HarvestPosition[] = rows
     .filter((r) => owner.has(r.asset_id))
     .map((r) => {
-      const lots = lotsOf.get(r.asset_id);
+      let lots = lotsOf.get(r.asset_id);
+      let estimated = false;
+      // no fund statement: lots are worked out from the SIP plan and the price history, and marked as estimates
+      if (!lots && r.amfi_code && r.started_on && Number(r.invested ?? 0) > 0) {
+        const series = navHist.get(r.amfi_code) ?? [];
+        const navOn = (d: string) =>
+          [...series].reverse().find((n) => n.date <= d)?.nav ?? series[0]?.nav ?? null;
+        const flows = approximateFlows(
+          {
+            invested: Number(r.invested),
+            startedOn: r.started_on,
+            sipMonthly: r.sip_monthly === null ? null : Number(r.sip_monthly),
+            sipStopped: r.sip_stopped,
+          },
+          todayIso,
+        );
+        const built: HarvestLot[] = [];
+        for (const f of flows) {
+          const n = navOn(f.date);
+          if (n && n > 0)
+            built.push({
+              acquiredOn: f.date,
+              units: f.amount / n,
+              cost: f.amount,
+              estimated: true,
+            });
+        }
+        if (built.length > 0 && built.length === flows.length) {
+          const known = l.fundInfo[r.asset_id]?.units ?? null;
+          const total = built.reduce((a, x) => a + x.units, 0);
+          // when the units held are known, the estimated lots are scaled to them
+          const k = known && known > 0 && total > 0 ? known / total : 1;
+          lots = built.map((x) => ({ ...x, units: x.units * k }));
+          estimated = true;
+        }
+      }
+      void estimated;
+      const cls = fundTaxClass(r.fund_name, categoryOf.get(r.amfi_code ?? '') ?? null);
       return {
         assetId: r.asset_id,
         ownerId: owner.get(r.asset_id)!,
@@ -122,10 +228,18 @@ export async function loadHarvestPositions(
         invested: Number(r.invested ?? 0),
         startedOn: r.started_on,
         sipActive: !!r.sip_monthly && !r.sip_stopped,
+        taxClass: cls.class,
+        classCertain: cls.certain,
+        nav: l.fundInfo[r.asset_id]?.nav ?? null,
+        lockInMonths: cls.lockInMonths,
+        ...(r.exit_load_pct !== null && r.exit_load_days !== null
+          ? { exitLoad: { pct: Number(r.exit_load_pct), days: r.exit_load_days } }
+          : {}),
+        ...(r.amfi_code && fmv2018.has(r.amfi_code) ? { fmv2018: fmv2018.get(r.amfi_code)! } : {}),
         ...(lots ? { lots } : {}),
       };
     });
-  return { positions, ownerName: l.ownerName, today: l.today, ytdRealised };
+  return { positions, ownerName: l.ownerName, today: l.today, ytdRealised, ytd };
 }
 
 /**

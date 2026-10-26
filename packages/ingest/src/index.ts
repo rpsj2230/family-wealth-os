@@ -10,3 +10,4 @@ export * from './cas-import';
 export * from './cas-pdf';
 export * from './taxfiles';
 export * from './rates-sync';
+export * from './telegram';

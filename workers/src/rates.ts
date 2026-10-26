@@ -51,7 +51,15 @@ async function main() {
       continue;
     }
     if (!ai?.ai_provider || !ai.ai_api_key) {
-      console.log('Rate pages are listed but no AI key is saved in Settings; skipping.');
+      // say so where it can be seen: on each page's line in Settings and on the Rates page, and as a warning on this run
+      const why =
+        'Not read: no AI key is saved. Add a free Groq or Gemini key in Settings > Bank emails and AI.';
+      await db
+        .from('rate_sources')
+        .update({ last_run_on: today, last_result: why })
+        .eq('household_id', household)
+        .eq('enabled', true);
+      console.log(`::warning::${why}`);
       continue;
     }
     // only banks where you hold a savings account or a deposit are read; a rate page for any other bank is left alone
@@ -70,6 +78,13 @@ async function main() {
     ];
     for (const src of sources.data) {
       if (heldNames.length > 0 && !heldNames.some((n) => sameBank(n, src.bank as string))) {
+        await db
+          .from('rate_sources')
+          .update({
+            last_run_on: today,
+            last_result: 'Skipped: you hold no savings account or deposit at this bank.',
+          })
+          .eq('id', src.id);
         console.log(`${src.bank}: skipped, you hold no account or deposit there`);
         continue;
       }

@@ -2,7 +2,7 @@ import { ListingTools } from '@/components/ListingTools';
 import { coreTokens, matchFund, type AmfiScheme } from '@fwos/ingest';
 import { formatInr } from '@fwos/core';
 import { loadContext } from '@/lib/data';
-import { clearMatch, confirmMatch } from './actions';
+import { clearMatch, confirmMatch, setExitLoad } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,7 @@ export default async function FundsPage() {
     supabase
       .from('mf_positions')
       .select(
-        'asset_id, fund_name, plan_type, invested, sip_monthly, sip_stopped, nav_hint, amfi_code, started_on',
+        'asset_id, fund_name, plan_type, invested, sip_monthly, sip_stopped, nav_hint, amfi_code, started_on, exit_load_pct, exit_load_days',
       ),
     supabase.from('assets').select('id, owner_id, status'),
     supabase.from('owners').select('id, display_name'),
@@ -94,6 +94,7 @@ export default async function FundsPage() {
                 <th>Your fund</th>
                 <th className="num">Last value</th>
                 <th>Matched scheme</th>
+                <th>Exit load</th>
               </tr>
             </thead>
             <tbody>
@@ -164,6 +165,31 @@ export default async function FundsPage() {
                       ) : (
                         <span className="muted">Waiting for the scheme list</span>
                       )}
+                    </td>
+                    <td data-label="Exit load">
+                      <form action={setExitLoad} className="row small">
+                        <input type="hidden" name="asset" value={id} />
+                        <input
+                          className="mini"
+                          name="pct"
+                          inputMode="decimal"
+                          placeholder="default"
+                          defaultValue={
+                            f.exit_load_pct === null ? '' : String(Number(f.exit_load_pct) * 100)
+                          }
+                          aria-label={`Exit load percent for ${String(f.fund_name)}`}
+                        />
+                        <span className="muted">% for</span>
+                        <input
+                          className="mini"
+                          name="days"
+                          inputMode="numeric"
+                          placeholder="days"
+                          defaultValue={f.exit_load_days === null ? '' : String(f.exit_load_days)}
+                          aria-label={`Exit load days for ${String(f.fund_name)}`}
+                        />
+                        <button className="btn compact ghost">Save</button>
+                      </form>
                     </td>
                   </tr>
                 );

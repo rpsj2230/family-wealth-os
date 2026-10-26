@@ -96,6 +96,12 @@ export interface AppConfig {
     skipActiveSip: boolean;
     /** assume an NRI: the fund house withholds tax on redemption */
     nri: boolean;
+    /** exit load charged on units sold inside the window, as a fraction, and the window in days from each purchase (0 = none) */
+    exitLoadPct: number;
+    exitLoadDays: number;
+    /** securities transaction tax on selling equity fund units, and stamp duty on buying them, as fractions */
+    sttPct: number;
+    stampDutyPct: number;
   };
 }
 
@@ -130,7 +136,16 @@ export const DEFAULT_CONFIG: AppConfig = {
     receivableDays: 30,
     scenarioDays: [0, 3, 14, 45, 120],
   },
-  harvest: { minSellAmount: 1000, holdingMarginMonths: 1, skipActiveSip: true, nri: true },
+  harvest: {
+    minSellAmount: 1000,
+    holdingMarginMonths: 1,
+    skipActiveSip: true,
+    nri: true,
+    exitLoadPct: 0.01,
+    exitLoadDays: 365,
+    sttPct: 0.00001,
+    stampDutyPct: 0.00005,
+  },
 };
 
 const num = (v: unknown, d: number, lo: number, hi: number) =>
@@ -244,6 +259,10 @@ export function configFromJson(raw: unknown): AppConfig {
       ),
       skipActiveSip: bool(har.skipActiveSip, d.harvest.skipActiveSip),
       nri: bool(har.nri, d.harvest.nri),
+      exitLoadPct: num(har.exitLoadPct, d.harvest.exitLoadPct, 0, 0.1),
+      exitLoadDays: Math.round(num(har.exitLoadDays, d.harvest.exitLoadDays, 0, 1095)),
+      sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
+      stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
     },
   };
 }

@@ -3,6 +3,7 @@ import { formatInr, profileFromJson, RULES, type TaxRuleRow } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { WhatsAppButton } from '../share/WhatsAppButton';
+import { TelegramForm } from './TelegramForm';
 import {
   deleteCashflow,
   deleteRateSource,
@@ -40,7 +41,7 @@ export default async function SettingsPage() {
         .limit(10),
       supabase
         .from('integration_settings')
-        .select('ai_provider, ai_key_set, inbox_label')
+        .select('ai_provider, ai_key_set, inbox_label, telegram_set, telegram_chat_ids')
         .maybeSingle(),
       supabase
         .from('owners')
@@ -107,6 +108,8 @@ export default async function SettingsPage() {
     ai_provider: 'groq' | 'gemini' | null;
     ai_key_set: boolean;
     inbox_label: string;
+    telegram_set: boolean;
+    telegram_chat_ids: string | null;
   } | null;
   const cfg = s.data as {
     enabled: boolean;
@@ -243,6 +246,10 @@ export default async function SettingsPage() {
             margin: c.harvest.holdingMarginMonths,
             skipSip: c.harvest.skipActiveSip,
             nri: c.harvest.nri,
+            exitLoadPct: Math.round(c.harvest.exitLoadPct * 1e4) / 100,
+            exitLoadDays: c.harvest.exitLoadDays,
+            sttPct: Math.round(c.harvest.sttPct * 1e6) / 1e4,
+            stampPct: Math.round(c.harvest.stampDutyPct * 1e6) / 1e4,
             incomeLimit: c.refunds.incomeLimit,
             otherIncome: c.refunds.otherIncome,
           }}
@@ -507,12 +514,24 @@ export default async function SettingsPage() {
         </form>
       </section>
 
+      <section className="card" id="telegram">
+        <h2>Daily summary on Telegram (automatic)</h2>
+        <p className="muted small">
+          The same summary as the e-mail, sent to your phone every day with nothing to press.
+          Telegram&apos;s bot service is free and needs no phone number or business account.{' '}
+          {ic?.telegram_set ? 'Telegram is on.' : 'Telegram is off.'}
+        </p>
+        <TelegramForm isSet={!!ic?.telegram_set} chatIds={ic?.telegram_chat_ids ?? ''} />
+      </section>
+
       <section className="card">
         <h2>WhatsApp</h2>
         <p className="muted small">
-          Fully automatic WhatsApp messages from a personal number are not possible without paid
-          services or unofficial tools, so this opens WhatsApp with today&apos;s summary ready; you
-          pick who gets it and press send.
+          WhatsApp does not allow free automatic messages from a personal number. The official route
+          (the WhatsApp Business platform) needs a verified business account and charges per
+          message, and unofficial tools risk the number being blocked. So this only opens WhatsApp
+          with today&apos;s summary ready for you to send; use Telegram above for a fully automatic
+          message.
         </p>
         <WhatsAppButton />
       </section>
