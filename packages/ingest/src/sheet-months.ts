@@ -109,7 +109,7 @@ export function parseMonthTitle(title: string): (YearMonth & { style: TitleStyle
       },
     };
   }
-  m = /^(\d{1,2})([\-/.])(\d{4})$/.exec(t);
+  m = /^(\d{1,2})([-/.])(\d{4})$/.exec(t);
   if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12)
     return {
       year: Number(m[3]),

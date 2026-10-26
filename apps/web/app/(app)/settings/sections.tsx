@@ -30,6 +30,9 @@ import {
 import { LiquidityForm, RuleGroupForm, TaxRuleForm, type TaxValues } from './RuleForms';
 import { TelegramForm } from './TelegramForm';
 import { deleteRateSource } from './actions';
+import { GoogleSheetCard } from './GoogleSheetCard';
+import type { GsheetTestState } from '../gsheet/actions';
+import type { SheetSyncInfo } from '@/lib/sheet-sync-status';
 
 /** Every section below takes plain props, so the page and the public sample page build them the same way. */
 
@@ -426,6 +429,8 @@ export interface RateSourceRow {
 export function ConnectionsSection({
   ai,
   sources,
+  gsheet,
+  demoTest,
   demo = false,
 }: {
   ai: {
@@ -437,13 +442,15 @@ export function ConnectionsSection({
     testNote?: string | null;
   };
   sources: RateSourceRow[];
+  gsheet: SheetSyncInfo;
+  demoTest?: GsheetTestState;
   demo?: boolean;
 }) {
   return (
     <>
       <SectionIntro>
         What the portal reads on your behalf: forwarded bank e-mails, PDF statements and the banks’
-        published rates.
+        published rates; and the Google Sheet it writes this month’s figures into.
       </SectionIntro>
       <section className="card" id="email" aria-labelledby="email-h">
         <div className="sectionhead">
@@ -480,6 +487,8 @@ export function ConnectionsSection({
         </ol>
         <IntegrationsForm provider={ai.provider} keySet={ai.keySet} label={ai.label} />
       </section>
+
+      <GoogleSheetCard info={gsheet} demo={demo} {...(demoTest ? { demoTest } : {})} />
 
       <section className="card" id="rates" aria-labelledby="rates-h">
         <h3 id="rates-h">Bank rate pages</h3>

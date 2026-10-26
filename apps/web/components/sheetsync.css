@@ -1,0 +1,148 @@
+/* Sync with Google Sheet: the panel (Import page, Monthly update side sheet) and the Settings > Connections card. */
+.ss-intro {
+  margin: 0 0 10px;
+}
+.ss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.ss-actions .btn {
+  flex: 0 1 auto;
+}
+.ss-preview {
+  margin-top: 12px;
+}
+.ss-target {
+  margin: 0 0 8px;
+}
+.ss-counts {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.ss-counts li {
+  border: 1px solid var(--border);
+  background: var(--soft);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.85rem;
+}
+.ss-group {
+  border-top: 1px solid var(--border);
+  padding: 8px 0 2px;
+}
+.ss-group > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+}
+.ss-group > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.ss-rows {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.ss-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--card);
+  min-width: 0;
+}
+.ss-rowhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+.ss-tag {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 8px;
+  white-space: nowrap;
+  background: var(--soft);
+}
+.ss-changes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+.ss-changes li {
+  overflow-wrap: anywhere;
+}
+.ss-col {
+  display: inline-block;
+  min-width: 6.5em;
+  color: var(--muted);
+}
+.ss-old {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--muted);
+}
+.ss-note {
+  margin: 4px 0 0;
+}
+.ss-dialog {
+  padding: 12px var(--gutter) 24px;
+  overflow: auto;
+}
+
+/* the Settings card */
+.gs-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 10px;
+}
+.gs-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+.gs-facts dt {
+  color: var(--muted);
+}
+.gs-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.gs-key {
+  width: 100%;
+  min-height: 5.5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  /* the key is never shown back, and while it is typed or pasted it is not shown plainly either */
+  -webkit-text-security: disc;
+}
+.gs-steps {
+  margin: 10px 0 14px;
+}
+@media (max-width: 520px) {
+  .ss-col {
+    display: block;
+    min-width: 0;
+  }
+  .ss-tag {
+    margin-left: 0;
+  }
+}

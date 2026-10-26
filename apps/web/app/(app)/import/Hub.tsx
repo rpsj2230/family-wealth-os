@@ -6,6 +6,9 @@ import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
 import { ImportDoor } from './ImportDoor';
 import { plainCountName } from '@/lib/import-detect';
+import type { SyncView } from '@fwos/ingest';
+import { SheetSyncPanel } from '@/components/SheetSync';
+import type { SheetSyncInfo } from '@/lib/sheet-sync-status';
 import '@/components/datain.css';
 
 /** `start` is the front door (choose any file); the others are the pages for one kind of file. */
@@ -41,6 +44,8 @@ export interface ImportData {
     uploadedOn: string;
   }[];
   email: AutomationCard | null;
+  /** the Google Sheet connection and its last sync */
+  sheet: SheetSyncInfo;
 }
 
 const OUTCOME = {
@@ -55,11 +60,14 @@ export function ImportHub({
   tab,
   data,
   demo = false,
+  demoSync,
 }: {
   base: string;
   tab: ImportTab;
   data: ImportData;
   demo?: boolean;
+  /** the public sample's stand-in for Google: the preview it shows */
+  demoSync?: SyncView;
 }) {
   const casReview = data.cas.filter((c) => c.outcome !== 'imported');
   const taxReview = data.tax.filter((t) => t.readBy === 'ai');
@@ -136,6 +144,8 @@ export function ImportHub({
           </article>
         </div>
         {data.email && <AutomationCards cards={[data.email]} />}
+        <h2 className="doorsub">Or send this month to your Google Sheet</h2>
+        <SheetSyncPanel info={data.sheet} {...(demoSync ? { demoView: demoSync } : {})} />
       </>
     );
   return (

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { runSheetSync, testSheetConnection, type SyncApp, type SyncView } from '../src/sheet-sync-run';
+import {
+  runSheetSync,
+  testSheetConnection,
+  type SyncApp,
+  type SyncView,
+} from '../src/sheet-sync-run';
 import { dateToSerial } from '../src/sheet-grid';
 import { CONFIG, NOW, workbook } from './harness';
 import { build, monthRows, appAssets, newAssets, OWNERS } from './synthetic';
@@ -10,13 +15,25 @@ const app = (extra = false): SyncApp => ({
   defaultOwner: 'Asha',
 });
 const sync = (w: ReturnType<typeof workbook>, apply: boolean, a = app()) =>
-  runSheetSync({ api: w.client, spreadsheetId: w.google.spreadsheetId, now: NOW, app: a, config: CONFIG, apply, newSheetId: () => 777 });
+  runSheetSync({
+    api: w.client,
+    spreadsheetId: w.google.spreadsheetId,
+    now: NOW,
+    app: a,
+    config: CONFIG,
+    apply,
+    newSheetId: () => 777,
+  });
 const view = (r: Awaited<ReturnType<typeof sync>>): SyncView => {
   if (!r.ok) throw new Error(`sync failed: ${r.message}`);
   return r.view;
 };
-const snapshot = (w: ReturnType<typeof workbook>, title: string) => JSON.stringify(w.google.sheet(title)!.rows);
-const writes = (w: ReturnType<typeof workbook>) => w.google.calls.filter((c) => c.method === 'POST' && c.url.includes('/v4/') && !c.url.includes('/token'));
+const snapshot = (w: ReturnType<typeof workbook>, title: string) =>
+  JSON.stringify(w.google.sheet(title)!.rows);
+const writes = (w: ReturnType<typeof workbook>) =>
+  w.google.calls.filter(
+    (c) => c.method === 'POST' && c.url.includes('/v4/') && !c.url.includes('/token'),
+  );
 
 describe('preview', () => {
   it('changes nothing in the spreadsheet, and says the tab would be created from last month', async () => {
@@ -24,7 +41,12 @@ describe('preview', () => {
     const before = w.google.tabOrder();
     const v = view(await sync(w, false));
     expect(v.stage).toBe('preview');
-    expect(v.target).toEqual({ title: 'Oct 2026', existed: false, copiedFrom: 'Sep 2026', position: 'left' });
+    expect(v.target).toEqual({
+      title: 'Oct 2026',
+      existed: false,
+      copiedFrom: 'Sep 2026',
+      position: 'left',
+    });
     expect(v.backup).toBeNull();
     expect(v.counts.updated).toBeGreaterThan(5);
     expect(v.summary).toMatch(/rows? to change/);
@@ -32,13 +54,20 @@ describe('preview', () => {
     expect(w.google.tabOrder()).toEqual(before);
     // old -> new for a row
     const cash = v.rows.find((r) => r.label === 'Cash-NRE-1111')!;
-    expect(cash.changes).toEqual([{ cell: 'F5', column: 'Amount', old: '25,000', next: '25,678.12' }]);
+    expect(cash.changes).toEqual([
+      { cell: 'F5', column: 'Amount', old: '25,000', next: '25,678.12' },
+    ]);
   });
 
   it('for a month that already has a tab, previews against that tab and plans a safety copy', async () => {
     const w = workbook(['Oct 2026', 'Sep 2026']);
     const v = view(await sync(w, false));
-    expect(v.target).toMatchObject({ title: 'Oct 2026', existed: true, copiedFrom: null, position: null });
+    expect(v.target).toMatchObject({
+      title: 'Oct 2026',
+      existed: true,
+      copiedFrom: null,
+      position: null,
+    });
     expect(v.backup).toEqual({ title: 'Oct 2026 - before sync', replaces: false });
     expect(writes(w)).toHaveLength(0);
   });
@@ -107,14 +136,18 @@ describe('a month with no tab yet', () => {
     expect(g.cell('Oct 2026', 'C5').fmt?.type).toBe('PERCENT');
     expect(g.value('Oct 2026', 'E5')).toBe(dateToSerial('2027-10-05'));
     // the cash account the second bank gained
-    const cashRow = [...Array(30).keys()].map((i) => i + 1).find((r) => g.value('Oct 2026', `B${r}`) === 'Cash-NRE-8888')!;
+    const cashRow = [...Array(30).keys()]
+      .map((i) => i + 1)
+      .find((r) => g.value('Oct 2026', `B${r}`) === 'Cash-NRE-8888')!;
     expect(g.value('Oct 2026', `F${cashRow}`)).toBe(12_000);
     expect(g.cell('Oct 2026', `G${cashRow}`).f).toBe(`=F${cashRow}`);
     // rows below moved down together with their formulas
     expect(g.cell('Oct 2026', 'G6').f).toBe('=F6');
     expect(g.value('Oct 2026', 'F6')).toBe(25_678.12);
     // the total row (now 3 rows lower) still sums the whole register, so it includes the new rows
-    const totalRow = [...Array(40).keys()].map((i) => i + 1).find((r) => g.cell('Oct 2026', `F${r}`).f?.startsWith('=SUM'))!;
+    const totalRow = [...Array(40).keys()]
+      .map((i) => i + 1)
+      .find((r) => g.cell('Oct 2026', `F${r}`).f?.startsWith('=SUM'))!;
     expect(totalRow).toBe(23);
     const sum = [...Array(totalRow - 3).keys()].reduce((n, i) => {
       const v = g.value('Oct 2026', `F${i + 3}`);
@@ -210,7 +243,7 @@ describe('problems are explained with the way out', () => {
     expect(!a.ok && a.message).toMatch(/sync-bot@fake-project/);
     w.google.shared = true;
     w.google.apiEnabled = false;
-    expect((await sync(w, false) as { code?: string }).code).toBe('api_disabled');
+    expect(((await sync(w, false)) as { code?: string }).code).toBe('api_disabled');
   });
 
   it('a viewer-only account can read for the preview but the write is refused before anything is changed', async () => {
@@ -225,8 +258,18 @@ describe('problems are explained with the way out', () => {
   it('an unexpected failure is reported without crashing', async () => {
     const w = workbook();
     const r = await runSheetSync({
-      api: { ...w.client, email: 'x', listTabs: async () => { throw new Error('boom'); } } as never,
-      spreadsheetId: 'x', now: NOW, app: app(), config: CONFIG, apply: false,
+      api: {
+        ...w.client,
+        email: 'x',
+        listTabs: async () => {
+          throw new Error('boom');
+        },
+      } as never,
+      spreadsheetId: 'x',
+      now: NOW,
+      app: app(),
+      config: CONFIG,
+      apply: false,
     });
     expect(!r.ok && r.message).toMatch(/stopped unexpectedly \(boom\)/);
   });
@@ -235,7 +278,13 @@ describe('problems are explained with the way out', () => {
 describe('the connection test', () => {
   it('reports the month tabs, the template, the layout and the edit right', async () => {
     const w = workbook();
-    const t = await testSheetConnection({ api: w.client, spreadsheetId: w.google.spreadsheetId, now: NOW, app: app(), config: CONFIG });
+    const t = await testSheetConnection({
+      api: w.client,
+      spreadsheetId: w.google.spreadsheetId,
+      now: NOW,
+      app: app(),
+      config: CONFIG,
+    });
     expect(t.ok).toBe(true);
     expect(t.template).toBe('Sep 2026');
     expect(t.target).toBe('Oct 2026');
@@ -244,7 +293,9 @@ describe('the connection test', () => {
     expect(text).toContain('sync-bot@fake-project.iam.gserviceaccount.com');
     expect(text).toMatch(/Month tabs found: Aug 2026, Sep 2026/);
     expect(text).toMatch(/copies “Sep 2026”.*“Oct 2026”.*to its left/);
-    expect(text).toMatch(/layout of “Sep 2026” is recognised: 14 lines \(3 deposits, 6 balances, 3 funds, 1 loans, 1 held by others\)/);
+    expect(text).toMatch(
+      /layout of “Sep 2026” is recognised: 14 lines \(3 deposits, 6 balances, 3 funds, 1 loan, 1 held by others\)/,
+    );
     expect(text).toMatch(/may edit the spreadsheet/);
     // nothing but the file name was "touched", and to the same value
     expect(w.google.title).toBe('Summary - Bank Reports (synthetic)');
@@ -254,12 +305,24 @@ describe('the connection test', () => {
   it('says what is wrong, step by step, when the sheet is not shared or cannot be edited', async () => {
     const w = workbook();
     w.google.shared = false;
-    const a = await testSheetConnection({ api: w.client, spreadsheetId: w.google.spreadsheetId, now: NOW, app: app(), config: CONFIG });
+    const a = await testSheetConnection({
+      api: w.client,
+      spreadsheetId: w.google.spreadsheetId,
+      now: NOW,
+      app: app(),
+      config: CONFIG,
+    });
     expect(a.ok).toBe(false);
     expect(a.steps.at(-1)!.text).toMatch(/not shared with the service account/);
     w.google.shared = true;
     w.google.canEdit = false;
-    const b = await testSheetConnection({ api: w.client, spreadsheetId: w.google.spreadsheetId, now: NOW, app: app(), config: CONFIG });
+    const b = await testSheetConnection({
+      api: w.client,
+      spreadsheetId: w.google.spreadsheetId,
+      now: NOW,
+      app: app(),
+      config: CONFIG,
+    });
     expect(b.ok).toBe(false);
     expect(b.steps.some((s) => s.ok && /layout/.test(s.text))).toBe(true);
     expect(b.steps.at(-1)!.text).toMatch(/Editor/);
@@ -267,7 +330,13 @@ describe('the connection test', () => {
 
   it('a spreadsheet with no earlier month is a failed step, with the reason', async () => {
     const w = workbook(['Nov 2026']);
-    const t = await testSheetConnection({ api: w.client, spreadsheetId: w.google.spreadsheetId, now: NOW, app: app(), config: CONFIG });
+    const t = await testSheetConnection({
+      api: w.client,
+      spreadsheetId: w.google.spreadsheetId,
+      now: NOW,
+      app: app(),
+      config: CONFIG,
+    });
     expect(t.ok).toBe(false);
     expect(t.steps.at(-1)!.text).toMatch(/no month tab before Oct 2026/);
   });

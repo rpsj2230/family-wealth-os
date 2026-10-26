@@ -7,6 +7,7 @@ import { PageHead } from '@/components/PageHead';
 import { loadContext } from '@/lib/data';
 import { confirmedGroups } from '@/lib/settings-fields';
 import { SETTINGS_TABS, settingsTabOf, todoByTab } from '@/lib/settings-tabs';
+import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
 import { loadSetupStatus, setupProgress, sgToday } from '@/lib/setup-status';
 import './settings.css';
 import type { FlowRow, PersonRow } from './PeopleForms';
@@ -25,7 +26,7 @@ import {
 } from './sections';
 
 export const dynamic = 'force-dynamic';
-// the AI connection test waits for the AI service
+// the AI connection test and the Google Sheet test wait for those services
 export const maxDuration = 60;
 
 export default async function SettingsPage({
@@ -190,12 +191,13 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
 }
 
 async function ConnectionsTab({ db }: { db: SupabaseClient }) {
-  const [integ, sources] = await Promise.all([
+  const [integ, sources, gsheet] = await Promise.all([
     db
       .from('integration_settings')
       .select('ai_provider, ai_key_set, inbox_label, ai_tested_at, ai_test_ok, ai_test_note')
       .maybeSingle(),
     db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
+    loadSheetSyncInfo(db as unknown as Parameters<typeof loadSheetSyncInfo>[0]),
   ]);
   const i = integ.data as {
     ai_provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
@@ -223,6 +225,7 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
         testNote: i?.ai_test_note ?? null,
       }}
       sources={rows}
+      gsheet={gsheet}
     />
   );
 }

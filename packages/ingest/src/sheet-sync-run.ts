@@ -421,9 +421,21 @@ export async function testSheetConnection(args: {
       return out(false, choice.newTitle, choice.template?.title ?? null, names);
     }
     const k = layout.byKind;
+    const n = (count: number, one: string, many = `${one}s`) =>
+      `${count} ${count === 1 ? one : many}`;
+    const parts = [
+      n(k.fd ?? 0, 'deposit'),
+      n((k.cash ?? 0) + (k.cash_sg ?? 0), 'balance'),
+      n((k.fund ?? 0) + (k.ulip ?? 0), 'fund'),
+      n(k.loan ?? 0, 'loan'),
+      `${k.third_party ?? 0} held by others`,
+    ].join(', ');
+    const odd = layout.unclassified
+      ? `; ${n(layout.unclassified, 'line')} with an amount match no rule and will be left alone`
+      : '';
     steps.push({
       ok: true,
-      text: `The layout of “${source.title}” is recognised: ${layout.recognised} lines (${k.fd ?? 0} deposits, ${(k.cash ?? 0) + (k.cash_sg ?? 0)} balances, ${(k.fund ?? 0) + (k.ulip ?? 0)} funds, ${k.loan ?? 0} loans, ${k.third_party ?? 0} held by others)${layout.unclassified ? `; ${layout.unclassified} line${layout.unclassified === 1 ? '' : 's'} with an amount match no rule and will be left alone` : ''}.`,
+      text: `The layout of “${source.title}” is recognised: ${n(layout.recognised, 'line')} (${parts})${odd}.`,
     });
     await args.api.confirmEditAccess(args.spreadsheetId, choice.title);
     steps.push({

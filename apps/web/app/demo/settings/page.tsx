@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG, EMPTY_PROFILE, RULES } from '@fwos/core';
 import { PageHead } from '@/components/PageHead';
 import { confirmedGroups } from '@/lib/settings-fields';
 import { SETTINGS_TABS, settingsTabOf, todoByTab } from '@/lib/settings-tabs';
+import { DEMO_SYNC_INFO, DEMO_TEST } from '@/lib/demo-sheet-sync';
 import { computeSetupStatus, setupProgress, type SetupFacts } from '@/lib/setup-status';
 import { AnchorRedirect, SettingsNav } from '@/app/(app)/settings/SettingsNav';
 import type { FlowRow, PersonRow } from '@/app/(app)/settings/PeopleForms';
@@ -212,6 +213,8 @@ export default async function DemoSettings({
                 testNote: 'Read a test alert with meta-llama/llama-3.3-70b-instruct:free',
               }}
               demo
+              gsheet={DEMO_SYNC_INFO}
+              demoTest={DEMO_TEST}
               sources={[
                 {
                   id: 'r1',
