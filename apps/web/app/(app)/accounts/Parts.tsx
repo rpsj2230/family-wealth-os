@@ -1,57 +1,11 @@
 import Link from 'next/link';
-import { formatInr, formatInrCompact, type PersonStyle } from '@fwos/core';
+import { formatInr, type PersonStyle } from '@fwos/core';
 import '@/app/detail.css';
 import './accounts.css';
 import { PersonBadge } from '@/components/Person';
-import { KpiStrip } from '@/components/KpiStrip';
 import { AddButton } from '@/components/QuickEdit';
 import { niceDate } from '@/lib/dates';
-import type { AccountsSummary, ForeignLine } from '@/lib/accounts-summary';
-
-/** The five figures that say how the banks stand and whether anything needs doing. */
-export function AccountsKpis({ s, month }: { s: AccountsSummary; month: string }) {
-  return (
-    <KpiStrip
-      label="Accounts at a glance"
-      items={[
-        {
-          label: 'In banks today',
-          value: formatInrCompact(s.total),
-          sub: `${formatInr(Math.round(s.total))} across ${s.banks} bank${s.banks === 1 ? '' : 's'}`,
-          main: true,
-        },
-        {
-          label: 'Savings and cash',
-          value: formatInrCompact(s.savings),
-          sub: 'last balance you or the bank recorded',
-        },
-        {
-          label: 'Fixed deposits today',
-          value: formatInrCompact(s.fdToday),
-          sub: `${formatInrCompact(s.fdInvested)} put in · ${formatInrCompact(s.fdMaturity)} at maturity`,
-          href: '/deposits',
-        },
-        {
-          label: `Updated in ${month}`,
-          value: (
-            <>
-              {s.banksDone}
-              <span className="muted"> / {s.banks}</span>
-            </>
-          ),
-          sub:
-            s.needsYou > 0
-              ? `${s.needsYou} need you: old balances or deposits to confirm`
-              : s.oldestUpdate
-                ? `nothing waiting · oldest balance ${niceDate(s.oldestUpdate)}`
-                : 'no balance yet',
-          tone: s.needsYou > 0 ? 'warn' : undefined,
-          href: '/monthly',
-        },
-      ]}
-    />
-  );
-}
+import type { ForeignLine } from '@/lib/accounts-summary';
 
 /** Foreign-currency accounts: the balance as recorded, the rate used and what it is worth in rupees today. */
 export function ForeignCard({

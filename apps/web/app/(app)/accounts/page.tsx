@@ -1,6 +1,12 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { buildBankBlocks, filterBlocksByOwner, formatInrCompact, personStyles } from '@fwos/core';
+import {
+  bankOverview,
+  buildBankBlocks,
+  filterBlocksByOwner,
+  formatInrCompact,
+  personStyles,
+} from '@fwos/core';
 import { BankTable } from '@/components/BankTable';
 import { AddButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
@@ -8,7 +14,7 @@ import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
-import { foreignLines, summariseBlocks } from '@/lib/accounts-summary';
+import { foreignLines } from '@/lib/accounts-summary';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { cashRatesFor, loadOffers } from '@/lib/rates-view';
@@ -17,7 +23,8 @@ import { loadFxHint, loadJointHolders } from '@/lib/quick-edit-data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { AccountsKpis, ForeignCard, ManageCards } from './Parts';
+import { BankOverviewPanel } from './BankOverview';
+import { ForeignCard, ManageCards } from './Parts';
 import { saveBankNote } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -67,7 +74,23 @@ export default async function AccountsPage({
     today,
   });
   const blocks = who ? filterBlocksByOwner(all, who) : all;
-  const summary = summariseBlocks(blocks);
+  const cashRates = cashRatesFor(
+    blocks.flatMap((b) =>
+      b.sections.flatMap((sct) => sct.rows.map((r) => ({ ...r, bank: b.name }))),
+    ),
+    new Map(assetRows.map((a) => [a.id, a.interest_rate ?? null])),
+    offers,
+    settings.config.estimates.savingsRate,
+  );
+  const overview = bankOverview(blocks, {
+    today,
+    soonDays: settings.config.reminders.maturitySoonDays,
+    savingsRates: Object.fromEntries(Object.entries(cashRates).map(([id, c]) => [id, c.rate])),
+    defaultSavingsRate: settings.config.estimates.savingsRate,
+    tdsRate: settings.config.estimates.interestTdsRate,
+    insuranceLimit: settings.config.deposits.insuranceLimit,
+    jointHolders,
+  });
   const quick = quickModel({
     blocks: all,
     assets: assetRows,
@@ -96,14 +119,14 @@ export default async function AccountsPage({
   );
 
   const pills = [
-    summary.needsYou > 0
+    overview.needsYou > 0
       ? {
-          label: `${summary.needsYou} need${summary.needsYou === 1 ? 's' : ''} you`,
+          label: `${overview.needsYou} need${overview.needsYou === 1 ? 's' : ''} you`,
           tone: 'warn' as const,
         }
       : { label: 'Nothing waiting', tone: 'ok' as const },
     {
-      label: `${summary.banksDone} of ${summary.banks} banks updated in ${month}`,
+      label: `${overview.banksDone} of ${overview.banks} banks updated in ${month}`,
       tone: 'info' as const,
     },
   ];
@@ -131,7 +154,12 @@ export default async function AccountsPage({
     return withEditor(
       <>
         {head}
-        <AccountsKpis s={summary} month={month} />
+        <BankOverviewPanel
+          o={overview}
+          styles={styles}
+          month={month}
+          scope={who ? styles[who]!.name : null}
+        />
         <Tabs base="/accounts" current={tab} tabs={tabList(assumed)} />
         <p className="lead muted">
           Tools for many accounts at once, and for the order of the list. To change one account,
@@ -149,14 +177,6 @@ export default async function AccountsPage({
     );
   }
 
-  const cashRates = cashRatesFor(
-    blocks.flatMap((b) =>
-      b.sections.flatMap((sct) => sct.rows.map((r) => ({ ...r, bank: b.name }))),
-    ),
-    new Map(assetRows.map((a) => [a.id, a.interest_rate ?? null])),
-    offers,
-    settings.config.estimates.savingsRate,
-  );
   const foreign = foreignLines(
     who ? assetRows.filter((a) => a.owner_id === who) : assetRows,
     obsRows,
@@ -167,7 +187,12 @@ export default async function AccountsPage({
   return withEditor(
     <>
       {head}
-      <AccountsKpis s={summary} month={month} />
+      <BankOverviewPanel
+        o={overview}
+        styles={styles}
+        month={month}
+        scope={who ? styles[who]!.name : null}
+      />
       <Tabs base="/accounts" current={tab} tabs={tabList(assumed)} />
       <PersonFilter
         people={Object.values(styles)}

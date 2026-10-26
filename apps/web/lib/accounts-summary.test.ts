@@ -1,53 +1,6 @@
-import type { AssetRow, BankBlock, ObservationRow } from '@fwos/core';
+import type { AssetRow, ObservationRow } from '@fwos/core';
 import { describe, expect, it } from 'vitest';
-import { foreignLines, latestObservations, summariseBlocks } from './accounts-summary';
-
-const block = (o: Partial<BankBlock> & { key: string }): BankBlock => ({
-  name: o.key,
-  order: 0,
-  sections: [],
-  totals: { fdInvested: 0, fdMaturity: 0, fdCurrent: 0, cash: 0, current: 0 },
-  needsYou: 0,
-  doneThisMonth: true,
-  lastUpdated: null,
-  owners: [],
-  ...o,
-});
-
-describe('summariseBlocks', () => {
-  const blocks = [
-    block({
-      key: 'a',
-      totals: { fdInvested: 100, fdMaturity: 130, fdCurrent: 110, cash: 40, current: 150 },
-      lastUpdated: '2026-10-20',
-    }),
-    block({
-      key: 'b',
-      totals: { fdInvested: 0, fdMaturity: 0, fdCurrent: 0, cash: 60, current: 60 },
-      needsYou: 2,
-      doneThisMonth: false,
-      lastUpdated: '2026-08-02',
-    }),
-    block({ key: 'c' }),
-  ];
-  it('adds the banks up', () => {
-    expect(summariseBlocks(blocks)).toEqual({
-      banks: 3,
-      total: 210,
-      savings: 100,
-      fdInvested: 100,
-      fdMaturity: 130,
-      fdToday: 110,
-      banksDone: 2,
-      needsYou: 2,
-      oldestUpdate: '2026-08-02',
-    });
-  });
-  it('copes with no banks', () => {
-    expect(summariseBlocks([]).oldestUpdate).toBeNull();
-    expect(summariseBlocks([]).total).toBe(0);
-  });
-});
+import { foreignLines, latestObservations } from './accounts-summary';
 
 const obs = (
   id: string,
