@@ -255,15 +255,17 @@ export function BankTable({
                 {saveNote && (
                   <details>
                     <summary>{notes?.[b.key] ? 'Edit note' : 'Add a note'}</summary>
-                    <form action={saveNote} className="row">
+                    <form action={saveNote} className="row notebox">
                       <input type="hidden" name="id" value={b.key} />
-                      <input
+                      <textarea
                         name="note"
+                        rows={2}
                         defaultValue={notes?.[b.key] ?? ''}
                         maxLength={500}
-                        placeholder="e.g. AMB 10,000 · no debit card · lounge card"
+                        placeholder={
+                          'First line: e.g. AMB 10,000 · no debit card\nSecond line: e.g. lounge card, branch, contact'
+                        }
                         aria-label={`Note about ${b.name}`}
-                        style={{ flex: 1, minWidth: 220 }}
                       />
                       <button className="btn compact">Save</button>
                     </form>

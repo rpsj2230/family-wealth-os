@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   Target,
   TrendingUp,
+  Table2,
   Upload,
   UserRound,
   ClipboardCheck,
@@ -50,6 +51,12 @@ export const MENU: MenuGroup[] = [
         label: 'All deposits',
         hint: 'Every fixed deposit with its rate, maturity and insurance cover.',
         icon: Landmark,
+      },
+      {
+        href: '/reports',
+        label: 'Reports',
+        hint: 'Sheet-style summaries of deposits and funds: by maturity, start, bank, person, year.',
+        icon: Table2,
       },
       {
         href: '/investments?tab=match',

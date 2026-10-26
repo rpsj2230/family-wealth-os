@@ -263,10 +263,11 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
   for (const a of i.assets) {
     if (a.type !== 'bank_account' && a.type !== 'fixed_deposit' && a.type !== 'third_party_held')
       continue;
-    const bankKey = a.institution_id ?? NONE;
+    // money held by another person is not in any bank: it sits under "Other holdings" with the rest that has no bank
+    const bankKey = a.type === 'third_party_held' ? NONE : (a.institution_id ?? NONE);
     nameOf.set(
       bankKey,
-      a.institution_id ? (i.institutionNames[a.institution_id] ?? 'Other') : 'Other holdings',
+      bankKey === NONE ? 'Other holdings' : (i.institutionNames[bankKey] ?? 'Other'),
     );
     const v = valued.get(a.id);
     const est = v?.estimate?.estimatedAmount ?? null;
@@ -406,7 +407,10 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       owners: sections.map((sct) => sct.ownerId),
     });
   }
-  return blocks.sort((a, b) => a.order - b.order);
+  // the block of holdings with no bank comes after every bank
+  return blocks.sort(
+    (a, b) => Number(a.key === NONE) - Number(b.key === NONE) || a.order - b.order,
+  );
 }
 
 /** Only one person's rows, with every total worked out again. */

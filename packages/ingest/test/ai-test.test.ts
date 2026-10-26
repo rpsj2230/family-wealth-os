@@ -23,7 +23,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('testAiConnection', () => {
   it('passes when the made-up alert is read back correctly, and names the model that answered', async () => {
-    stub((url, body) =>
+    stub((url) =>
       url.includes('/models')
         ? json({
             data: [

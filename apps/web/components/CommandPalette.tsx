@@ -13,6 +13,13 @@ interface Hit {
 
 /** Pages that are not in the menu but are things people look for. */
 const EXTRA: Hit[] = [
+  {
+    label: 'Reports: maturity summary, start summary, funds by person',
+    hint: 'Reports',
+    href: '/reports',
+  },
+  { label: 'Interest by financial year', hint: 'Reports', href: '/reports' },
+  { label: 'SIP summary', hint: 'Reports', href: '/reports?tab=funds' },
   { label: 'Update fund units and prices', hint: 'Investments', href: '/investments?tab=update' },
   { label: 'Match funds to official schemes', hint: 'Investments', href: '/investments?tab=match' },
   { label: 'Edit many accounts at once', hint: 'Accounts', href: '/accounts/edit' },

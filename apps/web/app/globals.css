@@ -2556,3 +2556,20 @@ details.bankdet {
   font-size: 0.72rem;
   color: var(--muted);
 }
+
+/* the bank note: line breaks are kept, and the box for editing it has two rows */
+.banknote > span {
+  white-space: pre-line;
+}
+.notebox {
+  align-items: flex-start;
+  gap: 8px;
+  min-width: min(100%, 420px);
+}
+.notebox textarea {
+  flex: 1;
+  min-width: 220px;
+  resize: vertical;
+  line-height: 1.4;
+  font: inherit;
+}

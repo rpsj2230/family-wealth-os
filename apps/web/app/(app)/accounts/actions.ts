@@ -58,8 +58,13 @@ export async function saveBankNote(f: FormData): Promise<void> {
   if (!householdId) return;
   const id = String(f.get('id') ?? '');
   if (!/^[0-9a-f-]{36}$/.test(id)) return;
+  // up to four short lines: each is trimmed and empty ones are dropped, so the note reads cleanly
   const note = String(f.get('note') ?? '')
-    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join('\n')
     .slice(0, 500);
   await supabase
     .from('institutions')

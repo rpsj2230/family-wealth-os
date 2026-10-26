@@ -127,6 +127,40 @@ const blocks = buildBankBlocks({
   today,
 });
 
+describe('money held by another person', () => {
+  it('sits under Other holdings, after every bank, whatever bank it was entered against', () => {
+    const more = [
+      asset({
+        id: 'held',
+        type: 'third_party_held',
+        institution_id: 'yb',
+        sort_order: 1,
+        holder_name: 'Atul',
+        account_kind: null,
+      }),
+      ...assets,
+    ];
+    const pf = buildPortfolio(
+      more,
+      [...observations, obs({ id: 'oh', asset_id: 'held' })],
+      fds,
+      today,
+    );
+    const b = buildBankBlocks({
+      assets: more,
+      observations: [...observations, obs({ id: 'oh', asset_id: 'held' })],
+      fds,
+      portfolio: pf,
+      institutionNames: { eq: 'Equitas', yb: 'Yes Bank' },
+      today,
+    });
+    expect(b.map((x) => x.name)).toEqual(['Yes Bank', 'Equitas', 'Other holdings']);
+    expect(b[2]!.sections[0]!.rows.map((r) => r.assetId)).toEqual(['held']);
+    // and Yes Bank no longer lists it
+    expect(b[0]!.sections.flatMap((s) => s.rows).some((r) => r.assetId === 'held')).toBe(false);
+  });
+});
+
 describe('buildBankBlocks', () => {
   it('follows your sheet: banks and rows in sheet order, a section per person', () => {
     expect(blocks.map((b) => b.name)).toEqual(['Yes Bank', 'Equitas']);
