@@ -124,6 +124,8 @@ export interface AppConfig {
     /** securities transaction tax on selling equity fund units, and stamp duty on buying them, as fractions */
     sttPct: number;
     stampDutyPct: number;
+    /** days kept clear before 31 March: an order after the cut-off or on a holiday is priced on the next working day */
+    orderBufferDays: number;
   };
   /** how the mutual-fund statistics and graphs are cut */
   funds: {
@@ -204,6 +206,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     exitLoadDays: 365,
     sttPct: 0.00001,
     stampDutyPct: 0.00005,
+    orderBufferDays: 6,
   },
   funds: {
     annualiseAfterMonths: 12,
@@ -366,6 +369,7 @@ export function configFromJson(raw: unknown): AppConfig {
       exitLoadDays: Math.round(num(har.exitLoadDays, d.harvest.exitLoadDays, 0, 1095)),
       sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
       stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
+      orderBufferDays: Math.round(num(har.orderBufferDays, d.harvest.orderBufferDays, 0, 60)),
     },
     funds: {
       annualiseAfterMonths: Math.round(

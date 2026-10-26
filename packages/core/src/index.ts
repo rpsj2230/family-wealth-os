@@ -34,6 +34,7 @@ export * from './notes-tidy';
 export * from './fund-class';
 export * from './harvest-lots';
 export * from './loss-harvest';
+export * from './harvest-view';
 export * from './data-in';
 export * from './inbox-view';
 export * from './automation';

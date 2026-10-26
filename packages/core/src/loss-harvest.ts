@@ -27,6 +27,17 @@ export interface LossCandidate {
   exitLoad: number;
   lots: number;
   lotsEstimated: boolean;
+  /** the purchases the units come from, oldest first, each sold in full */
+  lotDetail: {
+    acquiredOn: string;
+    units: number;
+    cost: number;
+    value: number;
+    gain: number;
+    longTerm: boolean;
+  }[];
+  /** the units the fund holds in all */
+  unitsHeld: number;
 }
 
 export interface PersonLossHarvest {
@@ -104,7 +115,7 @@ export function planLossHarvest(
       candidates.push({
         assetId: p.assetId,
         fund: p.fund,
-        units: Math.floor(sold.reduce((a, s) => a + s.lot.units, 0) * 1000) / 1000,
+        units: Math.floor(sold.reduce((a, s) => a + s.lot.units, 0) * 1000 + 1e-6) / 1000,
         proceeds: Math.round(split.proceeds),
         shortLoss: Math.round(Math.max(0, -split.short)),
         longLoss: Math.round(Math.max(0, -split.long)),
@@ -113,6 +124,15 @@ export function planLossHarvest(
         ),
         lots: best.k,
         lotsEstimated: sold.some((s) => s.lot.estimated),
+        lotDetail: sold.map((s) => ({
+          acquiredOn: s.lot.acquiredOn,
+          units: s.lot.units,
+          cost: s.value - (s.gain ?? 0),
+          value: s.value,
+          gain: s.gain ?? 0,
+          longTerm: s.longTermOn <= today,
+        })),
+        unitsHeld: units,
       });
     }
     candidates.sort((a, b) => b.shortLoss + b.longLoss - (a.shortLoss + a.longLoss));

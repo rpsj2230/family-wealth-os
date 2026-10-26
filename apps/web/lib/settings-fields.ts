@@ -392,6 +392,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '%',
       },
       {
+        name: 'orderBuffer',
+        label: 'Place orders this many days before 31 March',
+        hint: 'An order after the cut-off time, or on a holiday, is priced on the next working day, which can fall in the next year.',
+        kind: 'int',
+        path: ['harvest', 'orderBufferDays'],
+        unit: 'days',
+      },
+      {
         name: 'skipSip',
         label: 'Leave out funds with an active monthly investment',
         hint: 'Their newest units may still be short-term, so they are skipped.',

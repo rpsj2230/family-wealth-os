@@ -55,7 +55,7 @@ It never says "safe". A range of outcomes (market ups and downs) is shown next t
 
 ## Tax
 
-- **Tax** (redemption simulator): enter the lots of a fund and the amount to redeem. It shows first-in-first-out lots, short or long term, exit load, the allowance used, tax at source for non-residents and the refund expected on filing. The harvest suggestion never trades for you.
+- **Tax** (redemption simulator, under *How it works*): enter the lots of a fund and the amount to redeem. It shows first-in-first-out lots, short or long term, exit load, the allowance used, tax at source for non-residents and the refund expected on filing. The harvest suggestion never trades for you.
 - **Tax filing papers** (`/tax/filing`): fixed-deposit interest per person and financial year (taxable for NRO, exempt for NRE, joint accounts flagged), an optional tax-at-source estimate at a rate you type, a CSV download and a checklist of documents. Capital-gains schedules _(waiting for the consolidated statements)_.
 - Check every figure against your bank certificates, Form 26AS and the Annual Information Statement before filing. Tax rules are marked unverified until checked against the official source.
 
@@ -95,8 +95,17 @@ Nothing is moved for you.
 
 ## Tax harvesting and refunds
 
-**Tax** shows, per person, which funds to sell, how much, the gain realised, and how much to **buy back** afterwards. Each harvest creates a
-**Tax refunds to claim** record by itself (expected tax withheld and expected refund). Update it as the sale happens, the return is filed
+**Tax** (tab *What to sell*) answers one question per person: which units to sell this year, and how many. Each person's block opens with
+one sentence (for example "Asha can book ₹81,000 of tax-free gain this year"), a bar of the yearly free allowance (used / this plan /
+still free) and a **Sell this** list: fund, the exact **units to sell** (plain digits with a Copy button, to type into the platform's sell screen),
+what they are worth, the gain locked in tax-free, and plain checks: held over the long-term period (Settings, Tax rules), no exit load (or the load that
+applies), within the free allowance, and whether the purchases come from your fund statement or are estimated from your SIP history.
+**Show the working** under each fund lists the purchases the units come from, oldest first, with date, cost and gain per purchase, the long- and
+short-term split, the costs, and the amount to put back afterwards. **Do not sell yet** lists funds with short-term units or an exit load still
+running, with the date each turns ready. **Losses you can book** says in plain words which units would book a loss and whether it saves tax this
+year. **On the platform** is a five-line checklist. A small footnote at the bottom gives the costs to expect (stamp duty, transaction tax, exit load).
+Non-resident tax withheld is in the person's working and each harvest creates a
+**Tax refunds to claim** record by itself (expected tax withheld and expected refund; tab *Refunds*). Update it as the sale happens, the return is filed
 and the refund arrives; **Download as CSV** gives it to your adviser. NRO interest tax is handled on the filing papers because the refund
 depends on your total Indian income. The app prepares figures; the return itself is filed on the income-tax portal using Form 26AS and the
 Annual Information Statement, which the app cannot download for you.

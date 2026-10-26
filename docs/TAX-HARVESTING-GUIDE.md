@@ -93,10 +93,14 @@ the plan is cautious). Schedule 112A needs the 2018 price per unit.
 - Works per person, per fund, per lot. Equity-oriented funds only; says why any other fund is left out.
 - With a fund statement the lots are exact. Without one, lots are **estimated** from the SIP start date, instalment and price history
   and are marked as estimates everywhere.
-- Shows units to redeem, buy-back amount, friction costs, expected withholding, and when later instalments become ready.
-- Shows loss candidates with their short- and long-term split, and the tax they would save this year or carry forward.
+- The Tax page (What to sell) gives each person a headline, an allowance bar and one **Sell this** list with exact units, worth, tax-free gain and plain checks
+  (long-term period, exit load, allowance, lots from a statement or estimated). A fund is never listed without units: with no price it is left out and says why.
+- Under **Show the working** per fund: the purchases sold (oldest first, with date, cost, gain), the long/short split, the buy-back amount, stamp duty, STT, exit load and the NRI withholding.
+- **Do not sell yet** names funds with short-term units or an exit load still running and the date each becomes ready. Funds only ready next year, in loss, or of another type are listed with a reason.
+- Shows **Losses you can book** in plain words, with the short- and long-term split, the set-off order and the tax saved this year or carried forward.
 - Does not see shares, ETFs or other brokers' gains, other income, or surcharge. Reduce the allowance by hand for those.
 - Never trades. Always check the redemption screen and the fund's own exit load.
+- Every number (allowance, rates, holding period, exit-load days, stamp duty, STT, days kept clear before 31 March) comes from Settings; nothing is fixed in the page.
 
 ## Sources
 
