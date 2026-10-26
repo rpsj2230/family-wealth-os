@@ -1309,6 +1309,16 @@ td.lg-amt.out {
     padding: 0;
     border: 0;
     text-align: left;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  table.ledger-tbl td.num {
+    white-space: normal;
+  }
+  table.ledger-tbl .ltype {
+    white-space: normal;
+    max-width: 100%;
+    border-radius: 12px;
   }
   table.ledger-tbl td.lg-date {
     grid-column: 1 / 3;

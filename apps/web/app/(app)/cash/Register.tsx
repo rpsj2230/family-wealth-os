@@ -27,7 +27,7 @@ export function CashRegister({
     .sort((a, b) => (b.r.current ?? 0) - (a.r.current ?? 0));
   if (rows.length === 0) return <p className="empty">No savings account is recorded.</p>;
   return (
-    <section className="card" aria-labelledby="cash-reg-h">
+    <section className="card cashreg" aria-labelledby="cash-reg-h">
       <h2 id="cash-reg-h">All savings accounts</h2>
       <table className="tbl lines responsive">
         <thead>
