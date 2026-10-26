@@ -1,5 +1,8 @@
 import {
   combineSeries,
+  paceFromSeries,
+  projectCorpus,
+  projectionPath,
   fundSeries,
   moveAmount,
   sourceTag,
@@ -298,5 +301,22 @@ export async function loadInvestmentView(
       id: g.id,
       name: g.name,
     })),
+  };
+}
+
+/** "If this pace holds": this month's SIPs and the return achieved so far (kept within 0–20% so one lucky year does not mislead). */
+export function fundPace(view: InvestmentView) {
+  const h = view.household;
+  const assumed = h.xirr === null;
+  const rate = Math.max(
+    0,
+    Math.min(0.2, h.xirr ?? paceFromSeries(view.series)?.annualGrowth ?? 0.1),
+  );
+  const args = { today: view.today, value: h.value, monthly: h.sipMonthly, annualReturn: rate };
+  return {
+    rate,
+    assumed,
+    projections: projectCorpus({ ...args, horizons: [1, 3, 5, 10] }),
+    path: projectionPath({ ...args, years: 10 }),
   };
 }

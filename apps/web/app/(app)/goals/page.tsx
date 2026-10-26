@@ -1,22 +1,11 @@
 import { ListingTools } from '@/components/ListingTools';
 import { formatInr, formatInrCompact, projectGoal } from '@fwos/core';
 import { loadContext } from '@/lib/data';
+import { DEFAULT_INFLATION, returnFor } from '@/lib/goals-view';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { createGoal, removeAllocation, setAllocation, updateGoal } from './actions';
 
 export const dynamic = 'force-dynamic';
-
-const DEFAULT_INFLATION: Record<string, number> = {
-  education: 0.09,
-  marriage: 0.07,
-  retirement: 0.055,
-  property: 0.06,
-  emergency: 0.055,
-  other: 0.055,
-};
-
-/** A cautious, horizon-based return assumption for money earmarked for a goal. It is an assumption, not a promise. */
-const returnFor = (years: number) => (years >= 8 ? 0.1 : years >= 4 ? 0.08 : 0.065);
 
 export default async function GoalsPage({
   searchParams,

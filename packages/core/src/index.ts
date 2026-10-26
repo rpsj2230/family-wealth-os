@@ -26,3 +26,5 @@ export * from './capital-gains';
 export * from './tax-reconcile';
 export * from './activity';
 export * from './fund-series';
+export * from './dashboard';
+export * from './rate-notes';

@@ -13,6 +13,7 @@ import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { cashRatesFor, loadOffers } from '@/lib/rates-view';
 
 import { saveBankNote } from './actions';
 
@@ -26,11 +27,12 @@ export default async function AccountsPage({
   const { p } = await searchParams;
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, settings] =
+  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, settings, offers] =
     await Promise.all([
       loadPortfolio(supabase),
       supabase.from('institutions').select('id, name, notes'),
       loadSettings(supabase as unknown as SupabaseClient),
+      loadOffers(supabase),
     ]);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = p && styles[p] ? p : null;
@@ -49,6 +51,14 @@ export default async function AccountsPage({
     today,
   });
   const blocks = who ? filterBlocksByOwner(all, who) : all;
+  const cashRates = cashRatesFor(
+    blocks.flatMap((b) =>
+      b.sections.flatMap((sct) => sct.rows.map((r) => ({ ...r, bank: b.name }))),
+    ),
+    new Map(assetRows.map((a) => [a.id, a.interest_rate ?? null])),
+    offers,
+    settings.config.estimates.savingsRate,
+  );
   const total = blocks.reduce((s, b) => s + b.totals.current, 0);
   const fd = blocks.reduce(
     (s, b) => ({
@@ -98,6 +108,7 @@ export default async function AccountsPage({
           soonDays={settings.config.reminders.maturitySoonDays}
           notes={notes}
           saveNote={saveBankNote}
+          cashRates={cashRates}
         />
       </ListingTools>
     </>

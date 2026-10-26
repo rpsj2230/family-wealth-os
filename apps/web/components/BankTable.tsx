@@ -7,6 +7,7 @@ import {
   type BankRow,
   type PersonStyle,
 } from '@fwos/core';
+import type { CashRate } from '@/lib/rates-view';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
 import { PersonBadge } from './Person';
@@ -53,7 +54,15 @@ function Money({ v }: { v: number | null }) {
   return <>{v === null ? '–' : formatInr(Math.round(v))}</>;
 }
 
-function Row({ r, soonDays }: { r: BankRow; soonDays: number }) {
+function Row({
+  r,
+  soonDays,
+  cashRate,
+}: {
+  r: BankRow;
+  soonDays: number;
+  cashRate?: CashRate | undefined;
+}) {
   const fd = r.fd;
   const note = cleanNote(r.notes);
   return (
@@ -81,7 +90,21 @@ function Row({ r, soonDays }: { r: BankRow; soonDays: number }) {
         {r.kind === 'cash' && <div className="sub">{r.source.label}</div>}
         {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
       </td>
-      <td className="mid">{fd ? pctText(fd.rate) : ''}</td>
+      <td className="mid">
+        {fd ? (
+          pctText(fd.rate)
+        ) : cashRate ? (
+          <span title={cashRate.note}>
+            {cashRate.tag === 'assumed' ? '~' : ''}
+            {pctText(cashRate.rate)}
+            <div className="small muted">
+              {cashRate.tag === 'own' ? 'set' : cashRate.tag === 'market' ? 'bank rate' : 'assumed'}
+            </div>
+          </span>
+        ) : (
+          ''
+        )}
+      </td>
       <td className="mid nowrap">{fd ? fmtDate(fd.bookedOn) : ''}</td>
       <td className="mid nowrap">
         {fd ? fmtDate(fd.maturityOn) : ''}
@@ -162,6 +185,7 @@ export function BankTable({
   soonDays = DEFAULT_CONFIG.reminders.maturitySoonDays,
   notes,
   saveNote,
+  cashRates,
 }: {
   blocks: BankBlock[];
   styles: Record<string, PersonStyle>;
@@ -171,6 +195,8 @@ export function BankTable({
   notes?: Record<string, string>;
   /** server action that saves a bank note; without it the note is shown but not editable */
   saveNote?: (f: FormData) => Promise<void>;
+  /** the interest rate each savings account earns, by asset (see cashRatesFor) */
+  cashRates?: Record<string, CashRate>;
 }) {
   return (
     <>
@@ -274,7 +300,12 @@ export function BankTable({
                       </th>
                     </tr>
                     {sct.rows.map((r) => (
-                      <Row key={r.assetId} r={r} soonDays={soonDays} />
+                      <Row
+                        key={r.assetId}
+                        r={r}
+                        soonDays={soonDays}
+                        cashRate={cashRates?.[r.assetId]}
+                      />
                     ))}
                   </tbody>
                 ))}

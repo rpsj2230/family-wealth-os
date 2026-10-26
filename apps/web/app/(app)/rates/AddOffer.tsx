@@ -45,6 +45,18 @@ export function AddOffer({ banks }: { banks: string[] }) {
         required
         style={{ maxWidth: 90 }}
       />
+      <input
+        name="balfrom"
+        placeholder="Savings: above (e.g. 1 lakh)"
+        aria-label="Savings slab starts above this balance"
+        style={{ maxWidth: 150 }}
+      />
+      <input
+        name="balto"
+        placeholder="up to (e.g. 5 lakh)"
+        aria-label="Savings slab ends at this balance"
+        style={{ maxWidth: 130 }}
+      />
       <input name="conditions" placeholder="Conditions (optional)" aria-label="Conditions" />
       <button className="btn compact primary" disabled={pending}>
         Save rate

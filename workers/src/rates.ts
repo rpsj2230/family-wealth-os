@@ -5,6 +5,7 @@
  * records why, so nothing silently disappears.
  */
 import { createClient } from '@supabase/supabase-js';
+import { sameBank } from '@fwos/core';
 import { buildRatesRequest, htmlToText, parseRatesResponse, type AiProvider } from '@fwos/ingest';
 
 const need = (n: string) => {
@@ -45,7 +46,25 @@ async function main() {
       console.log('Rate pages are listed but no AI key is saved in Settings; skipping.');
       continue;
     }
+    // only banks where you hold a savings account or a deposit are read; a rate page for any other bank is left alone
+    const held = await db
+      .from('assets')
+      .select('institution_id, institutions(name)')
+      .eq('household_id', household)
+      .in('type', ['bank_account', 'fixed_deposit'])
+      .in('status', ['active', 'stopped']);
+    const heldNames = [
+      ...new Set(
+        ((held.data ?? []) as unknown as { institutions: { name: string } | null }[])
+          .map((a) => a.institutions?.name)
+          .filter((n): n is string => !!n),
+      ),
+    ];
     for (const src of sources.data) {
+      if (heldNames.length > 0 && !heldNames.some((n) => sameBank(n, src.bank as string))) {
+        console.log(`${src.bank}: skipped, you hold no account or deposit there`);
+        continue;
+      }
       const note = async (result: string) => {
         await db
           .from('rate_sources')
@@ -71,7 +90,7 @@ async function main() {
         const existing = await db
           .from('rate_offers')
           .select(
-            'product, account_kind, tenure_from_months, tenure_to_months, source_kind, source_url',
+            'product, account_kind, tenure_from_months, tenure_to_months, balance_from, balance_to, source_kind, source_url',
           )
           .eq('household_id', household)
           .eq('bank', src.bank as string);
@@ -79,7 +98,8 @@ async function main() {
           (existing.data ?? [])
             .filter((e) => e.source_kind === 'manual')
             .map(
-              (e) => `${e.product}|${e.account_kind}|${e.tenure_from_months}|${e.tenure_to_months}`,
+              (e) =>
+                `${e.product}|${e.account_kind}|${e.tenure_from_months}|${e.tenure_to_months}|${Number(e.balance_from ?? 0)}|${Number(e.balance_to ?? -1)}`,
             ),
         );
         await db
@@ -93,7 +113,7 @@ async function main() {
           .filter(
             (o) =>
               !manual.has(
-                `${o.product}|${o.accountKind}|${o.tenureFromMonths}|${o.tenureToMonths}`,
+                `${o.product}|${o.accountKind}|${o.tenureFromMonths}|${o.tenureToMonths}|${o.balanceFrom ?? 0}|${o.balanceTo ?? -1}`,
               ),
           )
           .map((o) => ({
@@ -104,6 +124,8 @@ async function main() {
             tenure_from_months: o.tenureFromMonths,
             tenure_to_months: o.tenureToMonths,
             rate: o.rate,
+            balance_from: o.balanceFrom,
+            balance_to: o.balanceTo,
             conditions: o.conditions,
             source_url: src.url,
             source_kind: 'ai',

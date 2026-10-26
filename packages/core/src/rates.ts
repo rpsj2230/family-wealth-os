@@ -25,6 +25,11 @@ export interface RateOffer {
   conditions: string | null;
   sourceKind: 'manual' | 'ai';
   checkedOn: string;
+  /** savings slab: the rate applies when the balance is above `balanceFrom` (default 0) and up to `balanceTo` (none = no upper limit) */
+  balanceFrom?: number | null;
+  balanceTo?: number | null;
+  /** a deposit quoted in days (800 days) keeps the exact figure; the tenure in months is its rounded value */
+  tenureDays?: number | null;
 }
 
 export type RatePrefs = AppConfig['rates'];
@@ -48,9 +53,20 @@ export const sameBank = (a: string, b: string) => {
 
 export function offerFits(
   o: RateOffer,
-  q: { product: 'savings' | 'fd'; kind: RateKind | null; tenureMonths?: number },
+  q: {
+    product: 'savings' | 'fd';
+    kind: RateKind | null;
+    tenureMonths?: number;
+    /** savings only: the balance the rate would apply to */
+    balance?: number;
+  },
 ): boolean {
   if (o.product !== q.product) return false;
+  if (q.product === 'savings' && q.balance !== undefined) {
+    const from = o.balanceFrom ?? 0;
+    if (!(q.balance > from || from === 0)) return false;
+    if (o.balanceTo !== null && o.balanceTo !== undefined && q.balance > o.balanceTo) return false;
+  }
   if (q.kind && q.kind !== 'any' && o.accountKind !== 'any' && o.accountKind !== q.kind)
     return false;
   if (q.product === 'fd' && q.tenureMonths !== undefined) {
@@ -66,7 +82,12 @@ export const offerAge = (o: RateOffer, today: string) => daysBetween(o.checkedOn
 /** The best offer per bank for a product, ranked by after-tax rate. */
 export function rankOffers(
   offers: RateOffer[],
-  q: { product: 'savings' | 'fd'; kind: RateKind | null; tenureMonths?: number },
+  q: {
+    product: 'savings' | 'fd';
+    kind: RateKind | null;
+    tenureMonths?: number;
+    balance?: number;
+  },
   prefs: RatePrefs,
 ): (RateOffer & { net: number })[] {
   const best = new Map<string, RateOffer & { net: number }>();
@@ -154,7 +175,7 @@ export function compareHoldings(
       offers,
       h.product === 'fd'
         ? { product: 'fd', kind: h.kind, tenureMonths: tenure }
-        : { product: 'savings', kind: h.kind },
+        : { product: 'savings', kind: h.kind, balance: h.current },
       prefs,
     );
     const mine = afterTaxRate(h.rate, h.kind, prefs.nroTaxRate);
@@ -281,7 +302,9 @@ export function placeNewMoney(args: {
     let todo = Math.min(budget, left);
     const ranked = rankOffers(
       args.offers,
-      product === 'fd' ? { product, kind, tenureMonths: args.tenureMonths } : { product, kind },
+      product === 'fd'
+        ? { product, kind, tenureMonths: args.tenureMonths }
+        : { product, kind, balance: todo },
       prefs,
     );
     for (const o of ranked) {
@@ -340,4 +363,63 @@ export function placeNewMoney(args: {
     uplift: totalAnnual - baselineAnnual,
     notes,
   };
+}
+
+/** The savings rate a balance earns at a bank: the slab it falls in, from the rates on file. Null when no rate for that bank is on file. */
+export function savingsRateFor(
+  offers: RateOffer[],
+  bank: string,
+  kind: RateKind | null,
+  balance: number,
+): { rate: number; checkedOn: string; sourceKind: 'manual' | 'ai'; slab: string | null } | null {
+  let best: RateOffer | null = null;
+  for (const o of offers) {
+    if (!sameBank(o.bank, bank) || !offerFits(o, { product: 'savings', kind, balance })) continue;
+    if (!best || o.rate > best.rate) best = o;
+  }
+  if (!best) return null;
+  return {
+    rate: best.rate,
+    checkedOn: best.checkedOn,
+    sourceKind: best.sourceKind,
+    slab: slabText(best),
+  };
+}
+
+const lakhs = (n: number) =>
+  n >= 1e7
+    ? `₹${+(n / 1e7).toFixed(2)} Cr`
+    : n >= 1e5
+      ? `₹${+(n / 1e5).toFixed(2)} L`
+      : `₹${Math.round(n).toLocaleString('en-IN')}`;
+
+/** "up to ₹1 L", "₹1 L to ₹5 L", "above ₹50 L"; null for a rate with no slab. */
+export function slabText(o: {
+  balanceFrom?: number | null;
+  balanceTo?: number | null;
+}): string | null {
+  const from = o.balanceFrom ?? 0;
+  const to = o.balanceTo ?? null;
+  if (from === 0 && to === null) return null;
+  if (from === 0) return `up to ${lakhs(to!)}`;
+  if (to === null) return `above ${lakhs(from)}`;
+  return `${lakhs(from)} to ${lakhs(to)}`;
+}
+
+/** A deposit's term as it was quoted: exact days when known, else years or months. */
+export function tenureText(o: {
+  tenureFrom: number;
+  tenureTo: number;
+  tenureDays?: number | null;
+}): string {
+  if (o.tenureDays) {
+    const y = o.tenureDays / 365.25;
+    return o.tenureDays >= 365
+      ? `${o.tenureDays} days (${y.toFixed(1)} yrs)`
+      : `${o.tenureDays} days`;
+  }
+  const f = o.tenureFrom;
+  const t = o.tenureTo || o.tenureFrom;
+  const fmt = (m: number) => (m >= 12 && m % 6 === 0 ? `${m / 12} yr` : `${m} mo`);
+  return f === 0 && t === 0 ? '–' : f === t ? fmt(f) : `${f}–${t} mo`;
 }

@@ -1997,3 +1997,66 @@ details.bankdet {
   background: var(--text, #111);
   opacity: 0.55;
 }
+
+/* page head with a main action, and the "if this pace holds" strip */
+.pagehead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pagehead h1 {
+  margin: 0;
+}
+.pace {
+  margin-top: 12px;
+}
+.pacegrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.pacecell {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.pacecell b {
+  display: block;
+  font-size: 1.1rem;
+}
+
+/* dashboard */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 12px 0 16px; }
+.kpi { background: var(--card, #fff); border: 1px solid var(--border, #e5e7eb); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.kpi.main { grid-column: span 2; background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), transparent 70%), var(--card, #fff); }
+.kpi-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #6b7280); }
+.kpi-value { font-size: 1.55rem; font-weight: 650; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.kpi.main .kpi-value { font-size: 2.1rem; }
+.kpi-sub { font-size: 0.82rem; margin-top: 2px; }
+.kpi-spark { margin-top: 6px; }
+@media (max-width: 560px) { .kpi.main { grid-column: span 1; } }
+.dashgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+.dashgrid > .card { margin: 0; min-width: 0; }
+.dashgrid > .span2 { grid-column: span 2; }
+@media (max-width: 760px) { .dashgrid > .span2 { grid-column: span 1; } }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { padding: 7px 0 7px 14px; border-left: 2px solid var(--border, #e5e7eb); position: relative; }
+.timeline li::before { content: ''; position: absolute; left: -5px; top: 13px; width: 8px; height: 8px; border-radius: 50%; background: var(--border, #cbd5e1); }
+.timeline li.soon { border-left-color: var(--warn, #d97706); }
+.timeline li.soon::before { background: var(--warn, #d97706); }
+.timeline li.late { border-left-color: var(--bad, #b91c1c); }
+.timeline li.late::before { background: var(--bad, #b91c1c); }
+.timeline .when { display: inline-block; min-width: 4.4em; font-size: 0.78rem; color: var(--muted, #6b7280); }
+.goalbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.fresh { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--border, #e5e7eb); margin: 8px 0; }
+.fresh .f-ok { background: var(--ok, #15803d); }
+.fresh .f-aging { background: var(--warn, #d97706); }
+.fresh .f-stale { background: var(--bad, #b91c1c); }
+
+/* rate board */
+.slabs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.slabs li { white-space: nowrap; }
+.rateboard td { vertical-align: top; }

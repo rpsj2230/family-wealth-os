@@ -51,11 +51,15 @@ describe('parseRatesResponse', () => {
         tenureToMonths: 23,
         rate: 0.0725,
         conditions: 'senior +0.5%',
+        balanceFrom: null,
+        balanceTo: null,
       },
       {
         bank: 'Sample Bank',
         product: 'savings',
         accountKind: 'resident',
+        balanceFrom: null,
+        balanceTo: null,
         tenureFromMonths: 0,
         tenureToMonths: 0,
         rate: 0.04,
@@ -104,5 +108,55 @@ describe('parseRatesResponse', () => {
     const q = buildRatesRequest('gemini', 'KEY', 'Sample Bank', 'page text');
     expect(q.init.body).toContain('Sample Bank');
     expect(q.url).not.toContain('KEY');
+  });
+});
+
+describe('parseRatesResponse: savings slabs and what is ignored', () => {
+  const wrapIt = (offers: unknown[]) => ({
+    choices: [{ message: { content: JSON.stringify({ offers }) } }],
+  });
+  it('keeps each savings slab and drops NRO deposits', () => {
+    const r = parseRatesResponse(
+      'groq',
+      wrapIt([
+        {
+          product: 'savings',
+          accountKind: 'any',
+          ratePct: 2.5,
+          balanceFromRupees: 0,
+          balanceToRupees: 100000,
+        },
+        {
+          product: 'savings',
+          accountKind: 'any',
+          ratePct: 3.5,
+          balanceFromRupees: 100000,
+          balanceToRupees: 500000,
+        },
+        {
+          product: 'savings',
+          accountKind: 'any',
+          ratePct: 7,
+          balanceFromRupees: 5000000,
+          balanceToRupees: null,
+        },
+        { product: 'fd', accountKind: 'NRO', tenureFromMonths: 24, tenureToMonths: 24, ratePct: 7 },
+        { product: 'fd', accountKind: 'NRE', tenureFromMonths: 24, tenureToMonths: 24, ratePct: 8 },
+        {
+          product: 'savings',
+          accountKind: 'any',
+          ratePct: 3,
+          balanceFromRupees: 500000,
+          balanceToRupees: 100,
+        },
+      ]),
+      'Jana',
+    );
+    expect(r.map((o) => [o.product, o.rate, o.balanceFrom, o.balanceTo])).toEqual([
+      ['savings', 0.025, null, 100000],
+      ['savings', 0.035, 100000, 500000],
+      ['savings', 0.07, 5000000, null],
+      ['fd', 0.08, null, null],
+    ]);
   });
 });

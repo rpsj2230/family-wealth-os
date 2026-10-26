@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { formatInr, personStyles } from '@fwos/core';
+import { Sparkline } from '@/components/charts';
 import { FundChart } from '@/components/FundChart';
 import { UpdatedCell } from '@/components/BankTable';
 import { GoalTag } from '@/components/GoalTag';
@@ -7,7 +8,7 @@ import { ListingTools } from '@/components/ListingTools';
 import { PersonBadge, PersonFilter } from '@/components/Person';
 import { loadContext } from '@/lib/data';
 import { InvestHeadline, pct, rupees, tone } from '@/components/InvestHeadline';
-import { loadInvestmentView } from '@/lib/investments';
+import { fundPace, loadInvestmentView } from '@/lib/investments';
 import { loadPortfolio } from '@/lib/portfolio-data';
 
 export const dynamic = 'force-dynamic';
@@ -29,9 +30,17 @@ export default async function InvestmentsPage({
     view.groups.map((g) => [g.ownerId, formatInr(Math.round(g.totals.value))]),
   );
 
+  const h = view.household;
+  const { rate, projections: proj, path } = fundPace(view);
+
   return (
     <>
-      <h1>Investments</h1>
+      <div className="pagehead">
+        <h1>Investments</h1>
+        <Link className="btn" href="/investments/update">
+          Update funds
+        </Link>
+      </div>
       <p className="muted">
         Mutual funds by person (PAN holder). &ldquo;Today&rdquo; is the move between the last two
         fund prices; the total gain is shown with its annual return (XIRR). Tag each fund with the
@@ -51,7 +60,29 @@ export default async function InvestmentsPage({
           history={view.series}
           today={view.today}
           caption="Value of all mutual funds against the money put in"
+          projection={path}
         />
+        <div className="pace" aria-label="If this pace holds">
+          <p className="muted small">
+            If you carry on like this: {formatInr(Math.round(h.sipMonthly))} a month in SIPs and{' '}
+            {(rate * 100).toFixed(1)}% a year
+            {h.xirr === null ? ' (assumed)' : ' (your return so far)'}. A range of ±3 points is
+            shown; this is arithmetic, not a promise.
+          </p>
+          <div className="pacegrid">
+            {proj.map((x) => (
+              <div key={x.years} className="pacecell">
+                <div className="muted small">
+                  In {x.years} year{x.years === 1 ? '' : 's'}
+                </div>
+                <b className="num">{formatInr(x.expected)}</b>
+                <div className="muted small">
+                  {formatInr(x.low)} – {formatInr(x.high)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         {view.household.xirrEstimated && (
           <p className="muted small">
             XIRR marked (est.) uses each fund&apos;s start date and SIP until its fund statement is
@@ -87,11 +118,14 @@ export default async function InvestmentsPage({
                 <tr>
                   <th>Fund</th>
                   <th>Goal</th>
+                  <th className="num">Units</th>
+                  <th className="num">Price (NAV)</th>
                   <th className="num">Invested</th>
                   <th className="num">Value today</th>
                   <th className="num">Today</th>
                   <th className="num">Gain</th>
                   <th className="num">XIRR</th>
+                  <th>Trend</th>
                   <th className="num">SIP</th>
                   <th>Updated</th>
                 </tr>
@@ -119,6 +153,20 @@ export default async function InvestmentsPage({
                         <span className="sr-only">{goalName.get(f.goalIds[0]!)}</span>
                       )}
                     </td>
+                    <td className="num" data-label="Units">
+                      {f.units === null
+                        ? '–'
+                        : f.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                    </td>
+                    <td className="num" data-label="Price (NAV)">
+                      {f.nav === null
+                        ? '–'
+                        : f.nav.toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 4,
+                          })}
+                      {f.navDate && <div className="small muted">{f.navDate.slice(5)}</div>}
+                    </td>
                     <td className="num" data-label="Invested">
                       {f.invested ? formatInr(Math.round(f.invested)) : '–'}
                     </td>
@@ -144,8 +192,8 @@ export default async function InvestmentsPage({
                         </span>
                       )}
                     </td>
-                    <td className="upd" data-label="Updated">
-                      <UpdatedCell asOf={f.updatedOn} source={f.updatedSource} />
+                    <td data-label="Trend">
+                      <Sparkline points={f.history.map((x) => x.value)} label={`${f.name} value`} />
                     </td>
                     <td className="num" data-label="SIP">
                       {f.sipMonthly ? (
@@ -157,6 +205,9 @@ export default async function InvestmentsPage({
                       ) : (
                         '–'
                       )}
+                    </td>
+                    <td className="upd" data-label="Updated">
+                      <UpdatedCell asOf={f.updatedOn} source={f.updatedSource} />
                     </td>
                   </tr>
                 ))}

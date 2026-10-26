@@ -8,24 +8,36 @@ import {
   personStyles,
   placeNewMoney,
   rankOffers,
+  sameBank,
+  slabText,
+  tenureText,
   type RateKind,
+  type RateOffer,
 } from '@fwos/core';
 import { loadRatesContext } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PersonBadge } from '@/components/Person';
 import { loadContext } from '@/lib/data';
 import { AddOffer } from './AddOffer';
+import { ImportNotes } from './ImportNotes';
 import { deleteRateOffer } from './actions';
 
 export const dynamic = 'force-dynamic';
 
 const pct = (r: number) => `${(r * 100).toFixed(2)}%`;
-const tenure = (o: { tenureFrom: number; tenureTo: number }) =>
-  o.tenureFrom === 0 && o.tenureTo === 0
-    ? '–'
-    : o.tenureTo && o.tenureTo !== o.tenureFrom
-      ? `${o.tenureFrom}–${o.tenureTo} mo`
-      : `${o.tenureFrom} mo`;
+const tenure = tenureText;
+const ageText = (d: number) => (d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`);
+
+/** The notes the family keeps today; offered as the starting text of the paste box so one click loads them. */
+const NOTES_EXAMPLE = `JanaBank - Saving [2.5%-1Lk, 3.50% - 1Lk to 5Lk, 4.50% - 5Lk to 10 lk, 6.75% - 10lk to 50 lk, 7% - above 50 lk], NRE FD[8% -2 Yr]
+Equitas - Saving [2.5%-3Lk, 5% > 3Lk to 5Lk, 6.00% 5-10lk, 6.50% -above 10lk], NRE FD[8.0% -3 Yrs]
+ESAF - Saving [2.5%-1Lk, 3.00% - 1Lk to 2Lk, 5% - 2Lk to 5lk], NRE FD[8% -800 days (2.2 Yrs)]
+AU Bank - Saving [2.5%-3Lk, 2.75% - 3Lk to 5Lk, 3.50% - 5Lk to 10 lk], NRE FD[7.40% -2.5 yrs]
+YesBank - Saving [2.5%-1Lk, 2.5% > 1 lk to 25Lk], NRE FD[7.25% -1.5Yrs]
+RBL - Saving [3.00%-5Lk, 5% - 5lk to 10lk, 6% - above 10lk], NRE FD[7.20% -1.5 yrs]
+IDFC - Saving [2.5%-3Lk, 7% > 3Lk to 25 Lk, 6.25% >25lk], NRE FD[7.10% - 500 days (1.5 Yrs)]
+IndusInd - Saving [2.5%-1Lk, 3% > 25Lk], NRE FD[7.00% -2Yr]
+HDFC - Saving [3%-50Lk], NRE FD[6.5% - 3Yrs]`;
 
 export default async function RatesPage({
   searchParams,
@@ -35,9 +47,10 @@ export default async function RatesPage({
   const sp = await searchParams;
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [rc, owners] = await Promise.all([
+  const [rc, owners, sources] = await Promise.all([
     loadRatesContext(supabase as unknown as SupabaseClient),
     supabase.from('owners').select('id, display_name').order('created_at'),
+    supabase.from('rate_sources').select('bank, url, enabled, last_run_on, last_result'),
   ]);
   const todayIso = rc.today.toISOString().slice(0, 10);
   const prefs = rc.config.rates;
@@ -91,6 +104,65 @@ export default async function RatesPage({
   );
   const banks = [...new Set(rc.holdings.map((h) => h.bank))];
 
+  // ---- the rate board: one row per bank, with its savings slabs and its best NRE deposit
+  const view = sp.view === 'all' ? 'all' : 'held';
+  const sortBy = ['saving', 'fd', 'name', 'old'].includes(sp.sort ?? '')
+    ? (sp.sort as string)
+    : 'fd';
+  const boardBanks: string[] = [...banks];
+  for (const o of rc.offers)
+    if (!boardBanks.some((b) => sameBank(b, o.bank))) boardBanks.push(o.bank);
+  const heldAt = (b: string) =>
+    rc.holdings
+      .filter((h) => !h.needsConfirmation && sameBank(h.bank, b))
+      .reduce((t, h) => t + h.current, 0);
+  const board = boardBanks
+    .map((bank) => {
+      const mine = rc.offers.filter((o) => sameBank(o.bank, bank));
+      const sav = mine
+        .filter((o) => o.product === 'savings')
+        .sort((a, b) => (a.balanceFrom ?? 0) - (b.balanceFrom ?? 0));
+      const fds = mine.filter(
+        (o) => o.product === 'fd' && o.accountKind !== 'NRO' && o.accountKind !== 'resident',
+      );
+      const bestFd = fds.reduce<RateOffer | null>((m, o) => (!m || o.rate > m.rate ? o : m), null);
+      const bestSav = sav.reduce<RateOffer | null>((m, o) => (!m || o.rate > m.rate ? o : m), null);
+      const newest = mine.reduce<string | null>(
+        (m, o) => (!m || o.checkedOn > m ? o.checkedOn : m),
+        null,
+      );
+      const src = (sources.data ?? []).find((x) => sameBank(x.bank as string, bank));
+      return {
+        bank,
+        held: heldAt(bank),
+        holds: banks.some((b) => sameBank(b, bank)),
+        sav,
+        bestSav,
+        bestFd,
+        newest,
+        sources: [...new Set(mine.map((o) => o.sourceKind))],
+        src: src
+          ? {
+              ran: (src.last_run_on as string | null) ?? null,
+              result: (src.last_result as string | null) ?? null,
+              enabled: !!src.enabled,
+            }
+          : null,
+      };
+    })
+    .filter((r) => view === 'all' || r.holds)
+    .sort((a, b) =>
+      sortBy === 'name'
+        ? a.bank.localeCompare(b.bank)
+        : sortBy === 'saving'
+          ? (b.bestSav?.rate ?? -1) - (a.bestSav?.rate ?? -1)
+          : sortBy === 'old'
+            ? (a.newest ?? '').localeCompare(b.newest ?? '')
+            : (b.bestFd?.rate ?? -1) - (a.bestFd?.rate ?? -1),
+    );
+  const boardHref = (o: { view?: string; sort?: string }) =>
+    `/rates?view=${o.view ?? view}&sort=${o.sort ?? sortBy}`;
+
   return (
     <>
       <h1>Rates and where to put money</h1>
@@ -101,6 +173,130 @@ export default async function RatesPage({
           person per bank. A running deposit is never suggested to be broken early; moves are for
           maturity.
         </p>
+        <section className="card" aria-labelledby="board">
+          <h2 id="board">Rate board</h2>
+          <p className="muted small">
+            Savings rates by balance slab and the best NRE fixed deposit, for the banks you use.
+            Each row says when it was last checked and how. Click a heading to sort, or use the
+            shortcuts.
+          </p>
+          <nav className="chipbar small" aria-label="Rate board options">
+            <Link
+              className={`fchip ${view === 'held' ? 'on' : ''}`}
+              href={boardHref({ view: 'held' })}
+            >
+              Banks I use
+            </Link>
+            <Link
+              className={`fchip ${view === 'all' ? 'on' : ''}`}
+              href={boardHref({ view: 'all' })}
+            >
+              All banks on file
+            </Link>
+            <span className="muted">Sort:</span>
+            {(
+              [
+                ['fd', 'Highest FD'],
+                ['saving', 'Highest savings'],
+                ['name', 'Bank name'],
+                ['old', 'Oldest check first'],
+              ] as const
+            ).map(([k, label]) => (
+              <Link
+                key={k}
+                className={`fchip ${sortBy === k ? 'on' : ''}`}
+                href={boardHref({ sort: k })}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="xlwrap">
+            <table className="xl rateboard">
+              <thead>
+                <tr>
+                  <th>Bank</th>
+                  <th className="num">You hold</th>
+                  <th className="num">Savings, best</th>
+                  <th>Savings by balance</th>
+                  <th className="num">NRE FD, best</th>
+                  <th>FD term</th>
+                  <th>Checked</th>
+                  <th>How</th>
+                </tr>
+              </thead>
+              <tbody>
+                {board.map((r) => {
+                  const age = r.newest
+                    ? offerAge({ checkedOn: r.newest } as RateOffer, todayIso)
+                    : null;
+                  return (
+                    <tr key={r.bank} className="xlrow">
+                      <td>
+                        <strong>{r.bank}</strong>
+                      </td>
+                      <td className="num">{r.held > 0 ? formatInr(Math.round(r.held)) : '–'}</td>
+                      <td className="num cur">{r.bestSav ? pct(r.bestSav.rate) : '–'}</td>
+                      <td>
+                        {r.sav.length === 0 ? (
+                          <span className="muted small">no savings rate yet</span>
+                        ) : (
+                          <ul className="slabs">
+                            {r.sav.map((o) => (
+                              <li key={o.id}>
+                                <b className="num">{pct(o.rate)}</b>{' '}
+                                <span className="muted small">{slabText(o) ?? 'any balance'}</span>
+                                {o.accountKind !== 'any' && (
+                                  <span className="chip tiny"> {o.accountKind}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      <td className="num cur">{r.bestFd ? pct(r.bestFd.rate) : '–'}</td>
+                      <td>{r.bestFd ? tenure(r.bestFd) : ''}</td>
+                      <td className={age !== null && age > prefs.staleDays ? 'warnText' : ''}>
+                        {age === null ? <span className="muted">never</span> : ageText(age)}
+                      </td>
+                      <td className="small">
+                        {r.sources.includes('ai') && (
+                          <span className="srcchip auto">bank page</span>
+                        )}{' '}
+                        {r.sources.includes('manual') && (
+                          <span className="srcchip manual">typed</span>
+                        )}
+                        {r.src ? (
+                          <div className="muted">
+                            {r.src.result ? r.src.result : 'page added, not read yet'}
+                          </div>
+                        ) : (
+                          <div className="muted">
+                            <Link href="/settings#rates">add its rate page</Link>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {board.length === 0 && (
+            <p className="muted">No rates on file for your banks yet. Paste them below.</p>
+          )}
+        </section>
+
+        <section className="card" aria-labelledby="paste">
+          <h2 id="paste">Load or update rates from your notes</h2>
+          <p className="muted small">
+            Paste your list as you keep it today; the app reads the slabs and terms. The weekly
+            refresh then keeps the banks that have a rate page up to date, for savings (NRE and NRO)
+            and NRE deposits only.
+          </p>
+          <ImportNotes example={NOTES_EXAMPLE} />
+        </section>
+
         <div className="card summary">
           <span>
             Rates on file <b className="num">{rc.offers.length}</b>
@@ -340,7 +536,9 @@ export default async function RatesPage({
                             h.bank.toLowerCase().includes(o.bank.toLowerCase().split(' ')[0]!),
                           ) && <span className="chip tiny"> you bank here</span>}
                         </td>
-                        <td>{tenure(o)}</td>
+                        <td>
+                          {fProduct === 'savings' ? (slabText(o) ?? 'any balance') : tenure(o)}
+                        </td>
                         <td className="num">{pct(o.rate)}</td>
                         <td className="num cur">
                           {pct(

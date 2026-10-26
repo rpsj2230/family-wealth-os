@@ -13,6 +13,9 @@ export interface ParsedOffer {
   /** yearly rate as a fraction: 0.0725 */
   rate: number;
   conditions: string | null;
+  /** savings only: the balance slab this rate applies to, in rupees */
+  balanceFrom: number | null;
+  balanceTo: number | null;
 }
 
 /** Visible text of a page: scripts, styles and tags removed, entities decoded, whitespace collapsed, length capped. */
@@ -35,13 +38,16 @@ export function htmlToText(html: string, max = 30_000): string {
 
 const PROMPT = (
   bank: string,
-) => `You read a bank's public interest-rate page and list the deposit rates for ${bank}.
-Return ONLY JSON: {"offers":[{"product":"savings"|"fd","accountKind":"NRE"|"NRO"|"resident"|"any","tenureFromMonths":<integer>,"tenureToMonths":<integer>,"ratePct":<number>,"conditions":"<short text or empty>"}]}.
+) => `You read a bank's public interest-rate page and list ONLY these rates for ${bank}:
+ (1) the savings account interest rate, with every balance slab as its own offer;
+ (2) fixed deposit rates for NRE deposits (if the page does not separate NRE from domestic rates, give the general fixed deposit rates).
+Savings rates may differ for NRE and NRO accounts: give both when the page does. Ignore everything else: NRO or foreign-currency fixed deposits, recurring deposits, tax-saver deposits, senior-citizen-only tables, corporate or bulk deposits.
+Return ONLY JSON: {"offers":[{"product":"savings"|"fd","accountKind":"NRE"|"NRO"|"any","tenureFromMonths":<integer>,"tenureToMonths":<integer>,"ratePct":<number>,"balanceFromRupees":<number or null>,"balanceToRupees":<number or null>,"conditions":"<short text or empty>"}]}.
 Rules: ratePct is the yearly rate in percent exactly as printed (7.25 means 7.25%). For fixed deposits give the tenure band in whole months
-(1 year = 12; "2 years to less than 3 years" = 24 to 35; days: 7-45 days = 0 to 1). For savings accounts use 0 and 0 and the balance
-slab in conditions if there is one. Use accountKind NRE or NRO only when the page says so; otherwise "resident" for domestic rates.
-Give the rate for regular (not senior-citizen) customers and mention a senior-citizen premium in conditions. Never invent a rate:
-if the page has none, return {"offers":[]}.`;
+(1 year = 12; "2 years to less than 3 years" = 24 to 35; days: 7-45 days = 0 to 1). For savings use "any", 0 and 0, with balanceFromRupees (above)
+and balanceToRupees (up to; null when there is no upper limit), both null when the rate has no slab. Use accountKind "NRE" for a deposit only when the
+page says NRE, otherwise "any". Give the rate for regular (not senior-citizen) customers and mention a senior-citizen premium in conditions.
+Never invent a rate: if the page has none of these, return {"offers":[]}.`;
 
 export function buildRatesRequest(
   provider: AiProvider,
@@ -76,12 +82,18 @@ export function parseRatesResponse(
     const from = Number(r.tenureFromMonths ?? 0);
     const to = Number(r.tenureToMonths ?? from);
     if (!product || !Number.isFinite(pctNum) || pctNum < 0.5 || pctNum > 20) continue;
+    if (product === 'fd' && kind === 'NRO') continue; // only NRE deposits are of interest
     if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to > 240)
       continue;
     const cond = typeof r.conditions === 'string' ? r.conditions.trim().slice(0, 200) : '';
     const tFrom = product === 'savings' ? 0 : from;
     const tTo = product === 'savings' ? 0 : to;
-    const key = `${product}|${kind}|${tFrom}|${tTo}`;
+    const num = (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+    const bFrom = product === 'savings' ? num(r.balanceFromRupees) : null;
+    const bTo = product === 'savings' ? num(r.balanceToRupees) : null;
+    if (bTo !== null && bTo <= (bFrom ?? 0)) continue;
+    const key = `${product}|${kind}|${tFrom}|${tTo}|${bFrom ?? 0}|${bTo ?? -1}`;
     if (out.has(key)) continue;
     out.set(key, {
       bank,
@@ -91,6 +103,8 @@ export function parseRatesResponse(
       tenureToMonths: tTo,
       rate: Math.round(pctNum * 100) / 10_000,
       conditions: cond || null,
+      balanceFrom: bFrom === 0 ? null : bFrom,
+      balanceTo: bTo,
     });
   }
   return [...out.values()];
