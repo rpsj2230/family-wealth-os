@@ -17,3 +17,46 @@ export * from './rates-sync';
 export * from './telegram';
 export * from './ai-models';
 export * from './rate-check';
+export {
+  explainGoogleError,
+  GoogleSheetsClient,
+  parseServiceAccountKey,
+  SheetSyncError,
+  signJwt,
+  type HttpFetch,
+  type ServiceAccountKey,
+  type SheetsApi,
+  type SheetSyncErrorCode,
+} from './gsheet-client';
+export { EMPTY_CELL, SheetGrid, type GridCell } from './sheet-grid';
+export { formatMonthTitle, monthIn, parseMonthTitle, type YearMonth } from './sheet-months';
+export {
+  describePlan,
+  layoutOf,
+  planSheetSync,
+  showDate,
+  showMoney,
+  withFdNumber,
+  withForeignNote,
+  type CellChange,
+  type NeedsPlacing,
+  type RowPlan,
+  type RowStatus,
+  type SyncAsset,
+  type SyncKind,
+  type SyncOptions,
+  type SyncPlan,
+} from './sheet-sync';
+export {
+  chooseTabs,
+  runSheetSync,
+  syncView,
+  testSheetConnection,
+  type SheetTestResult,
+  type SyncApp,
+  type SyncConfig,
+  type SyncResult,
+  type SyncRunInput,
+  type SyncView,
+  type TestStep,
+} from './sheet-sync-run';

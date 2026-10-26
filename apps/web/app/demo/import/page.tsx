@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { demoAutomation } from '@/lib/demo-datain';
+import { DEMO_SYNC_INFO, demoSyncView } from '@/lib/demo-sheet-sync';
 import { IMPORT_TABS, ImportHub, type ImportData, type ImportTab } from '@/app/(app)/import/Hub';
 
 export const metadata: Metadata = {
@@ -64,6 +65,7 @@ const DATA: ImportData = {
     { owner: 'Anil', fy: '2025-26', kind: 'ais', readBy: 'ai', uploadedOn: '2026-10-14' },
   ],
   email: demoAutomation().find((c) => c.key === 'email') ?? null,
+  sheet: DEMO_SYNC_INFO,
 };
 
 /** Public preview of the import hub with invented results: the forms are shown but cannot be used. */
@@ -94,7 +96,7 @@ export default async function DemoImport({
             title="Import"
             subtitle="Choose a file and the app works out what it is. Most of this arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
           />
-          <ImportHub base="/demo/import" tab={tab} data={DATA} demo />
+          <ImportHub base="/demo/import" tab={tab} data={DATA} demo demoSync={demoSyncView()} />
         </main>
       </div>
       <BottomNav />

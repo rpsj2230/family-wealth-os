@@ -10,12 +10,16 @@ import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
 import { loadJointHolders } from '@/lib/quick-edit-data';
+import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
+import { SheetSyncButton } from '@/components/SheetSync';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { MonthlyGrid } from './MonthlyGrid';
 import { loadOtherRows } from './other-data';
 
 export const dynamic = 'force-dynamic';
+// the Google Sheet preview and sync wait for Google
+export const maxDuration = 60;
 
 const TABS = ['banks', 'other'] as const;
 
@@ -33,6 +37,8 @@ export default async function MonthlyPage({
   const month = (d: Date) =>
     d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
+  const sheet = await loadSheetSyncInfo(supabase);
+
   if (tab === 'other') {
     const [{ rows, today }, settings] = await Promise.all([
       loadOtherRows(supabase),
@@ -44,6 +50,7 @@ export default async function MonthlyPage({
         <PageHead
           title="Monthly update"
           subtitle="Property, pension, shares, money lent and anything else that is not on the bank sheet."
+          actions={<SheetSyncButton info={sheet} />}
         />
         <Tabs base="/monthly" current="other" tabs={tabList(0)} />
         {rows.length === 0 ? (
@@ -125,9 +132,12 @@ export default async function MonthlyPage({
             : []),
         ]}
         actions={
-          <Link className="btn" href="/inbox">
-            Bank email inbox
-          </Link>
+          <>
+            <SheetSyncButton info={sheet} />
+            <Link className="btn" href="/inbox">
+              Bank email inbox
+            </Link>
+          </>
         }
       />
       <Tabs base="/monthly" current="banks" tabs={tabList(waiting)} />

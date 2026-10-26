@@ -32,7 +32,8 @@ export const SETTINGS_TABS = [
   {
     key: 'connections',
     label: 'Connections',
-    purpose: 'The AI key, the Gmail label for forwarded bank e-mails, and the bank rate pages.',
+    purpose:
+      'The AI key, the Gmail label for forwarded bank e-mails, the bank rate pages and the Google Sheet.',
   },
   {
     key: 'access',
@@ -77,6 +78,7 @@ export const ANCHOR_TAB: Record<string, SettingsTab> = {
   email: 'connections',
   ai: 'connections',
   rates: 'connections',
+  'google-sheet': 'connections',
   emergency: 'access',
   handbook: 'access',
   setup: 'setup',

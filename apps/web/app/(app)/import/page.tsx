@@ -2,9 +2,12 @@ import { currentFy, previousFy } from '@fwos/core';
 import { PageHead } from '@/components/PageHead';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
+import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
 import { IMPORT_TABS, ImportHub, type ImportData, type ImportTab } from './Hub';
 
 export const dynamic = 'force-dynamic';
+// the Google Sheet preview and sync wait for Google
+export const maxDuration = 60;
 
 export default async function ImportPage({
   searchParams,
@@ -17,7 +20,7 @@ export default async function ImportPage({
     : 'start';
   const { supabase } = await loadContext();
   const today = new Date().toISOString().slice(0, 10);
-  const [owners, batch, cas, tax, auto] = await Promise.all([
+  const [owners, batch, cas, tax, auto, sheet] = await Promise.all([
     supabase.from('owners').select('id, display_name, pan_last4, dob').order('created_at'),
     supabase
       .from('import_batches')
@@ -35,6 +38,7 @@ export default async function ImportPage({
       .order('uploaded_on', { ascending: false })
       .limit(40),
     loadAutomation(supabase, today),
+    loadSheetSyncInfo(supabase),
   ]);
   const ownerRows = (owners.data ?? []).map((o) => ({
     id: o.id as string,
@@ -77,6 +81,7 @@ export default async function ImportPage({
       uploadedOn: t.uploaded_on as string,
     })),
     email: auto.cards.find((c) => c.key === 'email') ?? null,
+    sheet,
   };
   return (
     <>

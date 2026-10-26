@@ -9,6 +9,8 @@ import { QuickEditProvider } from '@/components/QuickEdit';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { demoModel } from '@/lib/demo-fixture';
 import { demoAutomation } from '@/lib/demo-datain';
+import { DEMO_SYNC_INFO, demoSyncView } from '@/lib/demo-sheet-sync';
+import { SheetSyncButton } from '@/components/SheetSync';
 import { quickModel } from '@/lib/quick-edit';
 import type { GridRow } from '@/lib/monthly';
 import { MonthlyGrid } from '@/app/(app)/monthly/MonthlyGrid';
@@ -107,6 +109,7 @@ export default async function DemoMonthly({
                 tone: waiting === 0 ? 'ok' : 'warn',
               },
             ]}
+            actions={<SheetSyncButton info={DEMO_SYNC_INFO} demoView={demoSyncView()} />}
           />
           <Tabs base="/demo/monthly" current={tab} tabs={tabs} />
           {tab === 'other' ? (

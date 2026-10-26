@@ -145,3 +145,33 @@ describe('saved order of sources', () => {
     expect(configFromJson({ funds: { benchmarkCode: '' } }).funds.benchmarkCode).toBe('');
   });
 });
+
+describe('sheet sync settings', () => {
+  it('starts at Singapore time, the register rows and the safety-copy name', () => {
+    expect(DEFAULT_CONFIG.sheetSync).toEqual({
+      timeZone: 'Asia/Singapore',
+      firstRow: 3,
+      lastRow: 113,
+      backupSuffix: ' - before sync',
+    });
+    expect(configFromJson({}).sheetSync).toEqual(DEFAULT_CONFIG.sheetSync);
+  });
+
+  it('takes saved values that make sense and falls back for the rest', () => {
+    const s = configFromJson({
+      sheetSync: { timeZone: 'Asia/Kolkata', firstRow: 4, lastRow: 150, backupSuffix: ' (backup)' },
+    }).sheetSync;
+    expect(s).toEqual({
+      timeZone: 'Asia/Kolkata',
+      firstRow: 4,
+      lastRow: 150,
+      backupSuffix: ' (backup)',
+    });
+    const bad = configFromJson({
+      sheetSync: { timeZone: 'Mars/Olympus', firstRow: -2, lastRow: 'x', backupSuffix: 'a/b' },
+    }).sheetSync;
+    expect(bad).toEqual(DEFAULT_CONFIG.sheetSync);
+    // the last row can never be above the first
+    expect(configFromJson({ sheetSync: { firstRow: 50, lastRow: 10 } }).sheetSync.lastRow).toBe(50);
+  });
+});
