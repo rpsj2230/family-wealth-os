@@ -104,8 +104,15 @@ describe('buildDeposits', () => {
     expect(esaf.find((r) => r.capacityKey === 'joint:r+?')!.insured).toBe(500_000);
   });
 
-  it('counts only active deposits and states its assumptions', () => {
-    expect(view.cover.rows.some((r) => r.depositIds.includes('m'))).toBe(false);
+  it('counts running deposits and matured ones not yet paid out, and states its assumptions', () => {
+    // a matured deposit is still money at the bank until it is paid out, so it still counts towards the limit
+    const row = view.cover.rows.find((r) => r.depositIds.includes('m'));
+    expect(row).toBeTruthy();
+    expect(row!.parts.find((p) => p.id === 'm')).toMatchObject({
+      kind: 'Fixed deposit',
+      status: 'matured_unconfirmed',
+    });
+    expect(view.cover.assumptions.join(' ')).toMatch(/added together/i);
     expect(view.cover.assumptions.join(' ')).toMatch(/ownership name/i);
     expect(view.cover.assumptions.join(' ')).toMatch(/no second name/i);
   });
@@ -194,5 +201,33 @@ describe('buildDeposits', () => {
     expect(v.cover.rows).toHaveLength(4);
     expect(v.cover.insured).toBe(2_000_000);
     expect(v.cover.uninsured).toBe(1_200_000);
+  });
+});
+
+describe('foreign banks are left out of the insurance cover', () => {
+  it('does not count money at a bank marked as outside the Indian scheme, and says so', () => {
+    const a = fd('a', 'esaf', 'r', 'NRE', 1_000_000, 0.08, '2026-09-08', '2028-11-16');
+    const x = fd('x', 'uob', 'r', 'NRE', 3_000_000, 0.04, '2026-01-08', '2028-01-16');
+    const names = new Map([...banks, ['uob', 'UOB']]);
+    const all = [a, x];
+    const run = (outside: Set<string>) =>
+      buildDeposits(
+        all.map((i) => i.asset),
+        all.map((i) => i.valued),
+        all.map((i) => i.row),
+        names,
+        owners,
+        today,
+        500_000,
+        outside,
+      );
+    const counted = run(new Set());
+    expect(Object.keys(counted.cover.byBank).sort()).toEqual(['esaf', 'uob']);
+    const left = run(new Set(['uob']));
+    expect(Object.keys(left.cover.byBank)).toEqual(['esaf']);
+    expect(left.cover.uninsured).toBeLessThan(counted.cover.uninsured);
+    expect(left.cover.assumptions.join(' ')).toContain('UOB');
+    // the deposit itself is still listed everywhere else
+    expect(left.fds).toHaveLength(2);
   });
 });

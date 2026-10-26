@@ -369,7 +369,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
   if (ownerId && !UUID.test(ownerId)) notFound();
   const [l, insts, owners, audit, depAssets, st] = await Promise.all([
     loadPortfolio(supabase),
-    supabase.from('institutions').select('id, name, notes'),
+    supabase.from('institutions').select('id, name, notes, deposit_insured'),
     supabase.from('owners').select('id, display_name').order('created_at'),
     auditRows(supabase),
     supabase
@@ -383,6 +383,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
     id: string;
     name: string;
     notes: string | null;
+    deposit_insured?: boolean;
   }[];
   const inst = instRows.find((i) => i.id === id);
   if (!inst) notFound();
@@ -571,6 +572,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
     new Map(ownerList.map((o) => [o.id, o.name])),
     l.today,
     st.config.deposits.insuranceLimit,
+    new Set(instRows.filter((i) => i.deposit_insured === false).map((i) => i.id)),
   ).cover;
   const coverRows = cover.rows.filter(
     (r) => r.bankId === id && (!ownerId || r.capacityKey.split(/[:+]/).includes(ownerId)),

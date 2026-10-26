@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import {
   capacityLabel,
@@ -29,6 +30,13 @@ const KIND: Record<string, string> = {
   unknown: 'Type not stated',
 };
 const rupee = (n: number) => formatInr(Math.round(n));
+/** average rate of a set of deposits, weighted by amount, as shown in the totals row */
+const pctOf = (fds: FdLine[]) => {
+  const p = fds.reduce((a, f) => a + f.principal, 0);
+  return p > 0
+    ? `${((fds.reduce((a, f) => a + f.principal * f.rate, 0) / p) * 100).toFixed(2)}%`
+    : '–';
+};
 const monthName = (m: string) =>
   new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-GB', {
     month: 'long',
@@ -110,10 +118,13 @@ export function RegisterTab({
   fds,
   styles,
   links,
+  group = 'none',
 }: {
   fds: FdLine[];
   styles: Record<string, PersonStyle>;
   links: DepositLinks;
+  /** one block of rows per bank or per person, each with its own subtotal, or one flat list */
+  group?: 'none' | 'bank' | 'owner';
 }) {
   if (fds.length === 0)
     return (
@@ -122,6 +133,27 @@ export function RegisterTab({
         (&ldquo;Add a deposit or account here&rdquo;), or import your workbook.
       </p>
     );
+  const keyOf = (f: FdLine) =>
+    group === 'bank'
+      ? { key: f.bankId ?? f.bank, label: f.bank }
+      : { key: f.ownerId, label: f.owner };
+  const groups: { key: string; label: string; list: FdLine[] }[] =
+    group === 'none'
+      ? [{ key: 'all', label: '', list: fds }]
+      : [
+          ...fds
+            .reduce((m, f) => {
+              const k = keyOf(f);
+              const g = m.get(k.key) ?? { key: k.key, label: k.label, list: [] as FdLine[] };
+              g.list.push(f);
+              return m.set(k.key, g);
+            }, new Map<string, { key: string; label: string; list: FdLine[] }>())
+            .values(),
+        ].sort(
+          (a, b) =>
+            b.list.reduce((x, f) => x + f.accruedToday, 0) -
+            a.list.reduce((x, f) => x + f.accruedToday, 0),
+        );
   return (
     <section className="card" aria-labelledby="reg">
       <div className="cardhead">
@@ -132,6 +164,7 @@ export function RegisterTab({
         <thead>
           <tr>
             <th>Deposit</th>
+            <th>Created</th>
             <th className="num">Principal</th>
             <th className="num">Value today</th>
             <th>Rate</th>
@@ -140,74 +173,113 @@ export function RegisterTab({
           </tr>
         </thead>
         <tbody>
-          {fds.map((f) => {
-            const bank = links.bank(f);
-            const check =
-              f.varianceVsBankPct !== null && Math.abs(f.varianceVsBankPct) > 0.05
-                ? f.varianceVsBankPct
-                : null;
-            return (
-              <tr
-                key={f.id}
-                className={f.status !== 'active' && !needsConfirmation(f) ? 'dim' : ''}
-              >
-                <td data-label="Deposit">
-                  <PersonBadge p={styles[f.ownerId]} size={16} />{' '}
-                  <Link href={links.asset(f)}>
-                    <strong>{f.bank}</strong>
-                  </Link>{' '}
-                  <span className="muted">· {f.owner}</span>
-                  <div className="muted small">
-                    {KIND[f.kind] ?? f.kind} · from {niceDate(f.bookedOn)}
-                    {f.status !== 'active' || needsConfirmation(f) ? (
-                      <>
-                        {' · '}
-                        <span className={needsConfirmation(f) ? 'pill warn' : ''}>
-                          {depositStatusWord(f)}
-                        </span>
-                      </>
-                    ) : null}
-                    {bank && (
-                      <>
-                        {' · '}
-                        <Link href={bank}>bank page</Link>
-                      </>
-                    )}
-                  </div>
-                </td>
-                <td className="num" data-label="Principal">
-                  {rupee(f.principal)}
-                </td>
-                <td className="num" data-label="Value today">
-                  {rupee(f.accruedToday)}
-                </td>
-                <td data-label="Rate">{(f.rate * 100).toFixed(2)}%</td>
-                <td data-label="Matures">
-                  {niceDate(f.maturityOn)}
-                  <div className="muted small">{daysPhrase(f.daysLeft)}</div>
-                </td>
-                <td className="num" data-label="At maturity">
-                  {f.bankMaturity === null ? (
-                    <>
-                      –<div className="muted small wrapnote">bank figure not entered</div>
-                    </>
-                  ) : (
-                    <>
-                      {rupee(f.bankMaturity)}
-                      <div className="muted small wrapnote">bank figure</div>
-                    </>
-                  )}
-                  {check !== null && (
-                    <div className="fail small wrapnote">
-                      Our calculation differs by {Math.abs(check).toFixed(2)}%.{' '}
-                      <Link href={links.editOne(f)}>Check the rate and dates</Link>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {groups.map((g) => (
+            <Fragment key={g.key}>
+              {group !== 'none' && (
+                <tr className="secthead">
+                  <td colSpan={7}>
+                    <strong>{g.label}</strong>{' '}
+                    <span className="muted small">
+                      {g.list.length} deposit{g.list.length === 1 ? '' : 's'} · put in{' '}
+                      {rupee(g.list.reduce((a, f) => a + f.principal, 0))} · worth today{' '}
+                      {rupee(g.list.reduce((a, f) => a + f.accruedToday, 0))} · pays{' '}
+                      {rupee(g.list.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))} at maturity
+                    </span>
+                  </td>
+                </tr>
+              )}
+              {g.list.map((f) => {
+                const bank = links.bank(f);
+                const check =
+                  f.varianceVsBankPct !== null && Math.abs(f.varianceVsBankPct) > 0.05
+                    ? f.varianceVsBankPct
+                    : null;
+                return (
+                  <tr
+                    key={f.id}
+                    className={f.status !== 'active' && !needsConfirmation(f) ? 'dim' : ''}
+                  >
+                    <td data-label="Deposit">
+                      <PersonBadge p={styles[f.ownerId]} size={16} />{' '}
+                      <Link href={links.asset(f)}>
+                        <strong>{f.bank}</strong>
+                      </Link>{' '}
+                      <span className="muted">· {f.owner}</span>
+                      <div className="muted small">
+                        {KIND[f.kind] ?? f.kind}
+                        {f.status !== 'active' || needsConfirmation(f) ? (
+                          <>
+                            {' · '}
+                            <span className={needsConfirmation(f) ? 'pill warn' : ''}>
+                              {depositStatusWord(f)}
+                            </span>
+                          </>
+                        ) : null}
+                        {bank && (
+                          <>
+                            {' · '}
+                            <Link href={bank}>bank page</Link>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                    <td className="nowrap" data-label="Created">
+                      {niceDate(f.bookedOn)}
+                    </td>
+                    <td className="num" data-label="Principal">
+                      {rupee(f.principal)}
+                    </td>
+                    <td className="num" data-label="Value today">
+                      {rupee(f.accruedToday)}
+                    </td>
+                    <td data-label="Rate">{(f.rate * 100).toFixed(2)}%</td>
+                    <td data-label="Matures">
+                      {niceDate(f.maturityOn)}
+                      <div className="muted small">{daysPhrase(f.daysLeft)}</div>
+                    </td>
+                    <td className="num" data-label="At maturity">
+                      {f.bankMaturity === null ? (
+                        <>
+                          –<div className="muted small wrapnote">bank figure not entered</div>
+                        </>
+                      ) : (
+                        <>
+                          {rupee(f.bankMaturity)}
+                          <div className="muted small wrapnote">bank figure</div>
+                        </>
+                      )}
+                      {check !== null && (
+                        <div className="fail small wrapnote">
+                          Our calculation differs by {Math.abs(check).toFixed(2)}%.{' '}
+                          <Link href={links.editOne(f)}>Check the rate and dates</Link>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </Fragment>
+          ))}
         </tbody>
+        <tfoot>
+          <tr data-totals className="sumrow">
+            <th scope="row" data-count>
+              Total · <span data-count-n>{fds.length}</span> deposits
+            </th>
+            <td />
+            <td className="num" data-sum>
+              {rupee(fds.reduce((a, f) => a + f.principal, 0))}
+            </td>
+            <td className="num" data-sum>
+              {rupee(fds.reduce((a, f) => a + f.accruedToday, 0))}
+            </td>
+            <td data-wavg="2">{pctOf(fds)}</td>
+            <td />
+            <td className="num" data-sum>
+              {rupee(fds.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </section>
   );
@@ -347,7 +419,24 @@ export function MaturitiesTab({
 }
 
 /** The deposit-insurance position per bank and per ownership name. */
-export function CoverTab({ v, links }: { v: DepositsView; links: DepositLinks }) {
+export interface CoverBank {
+  id: string;
+  name: string;
+  outside: boolean;
+}
+
+export function CoverTab({
+  v,
+  links,
+  banks,
+  saveForeign,
+}: {
+  v: DepositsView;
+  links: DepositLinks;
+  /** every bank, with whether it is a foreign bank outside the scheme */
+  banks?: CoverBank[];
+  saveForeign?: (f: FormData) => Promise<void>;
+}) {
   const byBank = Object.entries(v.cover.byBank)
     .map(([id, b]) => ({ id, name: v.cover.bankNames[id] ?? 'Unknown', ...b }))
     .sort((a, b) => b.uninsured - a.uninsured);
@@ -430,6 +519,21 @@ export function CoverTab({ v, links }: { v: DepositsView; links: DepositLinks })
                   <td data-label="Bank">{v.cover.bankNames[r.bankId]}</td>
                   <td data-label="Name on the account">
                     {capacityLabel(r.capacityKey, v.cover.ownerNames)}
+                    <details className="parts">
+                      <summary className="small muted">
+                        {r.parts.length} account{r.parts.length === 1 ? '' : 's'} counted
+                      </summary>
+                      <ul className="small">
+                        {[...r.parts]
+                          .sort((a, b) => b.amount - a.amount)
+                          .map((p) => (
+                            <li key={p.id}>
+                              {p.kind} · {p.label} · {rupee(p.amount)}
+                              {p.status !== 'active' ? ` · ${p.status.replace('_', ' ')}` : ''}
+                            </li>
+                          ))}
+                      </ul>
+                    </details>
                     {partnerMissing(r.capacityKey) && (
                       <>
                         {' '}
@@ -464,6 +568,39 @@ export function CoverTab({ v, links }: { v: DepositsView; links: DepositLinks })
           </ul>
         </details>
       </section>
+      {banks && banks.length > 0 && (
+        <section className="card" aria-labelledby="foreignbanks">
+          <div className="cardhead">
+            <h2 id="foreignbanks">Banks outside the Indian scheme</h2>
+            <span className="small muted">
+              Foreign banks are not covered by the Indian deposit insurance, so their money is left
+              out of every figure above.
+            </span>
+          </div>
+          <form action={saveForeign} className="foreignform">
+            <ul className="checks">
+              {banks.map((b) => (
+                <li key={b.id}>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      name="foreign"
+                      value={b.id}
+                      defaultChecked={b.outside}
+                      disabled={links.sample}
+                    />{' '}
+                    <BankBadge name={b.name} /> {b.name}
+                    <span className="muted small"> foreign bank, not covered</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button className="btn primary compact" disabled={links.sample}>
+              Save
+            </button>
+          </form>
+        </section>
+      )}
     </>
   );
 }

@@ -29,3 +29,38 @@
     max-width: 22ch;
   }
 }
+
+.foreignform .checks {
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px 16px;
+}
+
+/* the totals row at the foot of the register, and the heading row of each bank or person */
+table.lines tfoot .sumrow th,
+table.lines tfoot .sumrow td {
+  border-top: 2px solid var(--border, #e5e7eb);
+  border-bottom: 0;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--primary, #4f46e5) 5%, transparent);
+  color: var(--text, inherit);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+}
+table.lines tbody tr.secthead td {
+  background: color-mix(in srgb, var(--primary, #4f46e5) 7%, transparent);
+  font-size: 0.95rem;
+  padding-top: 10px;
+}
+
+details.parts ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+details.parts summary {
+  cursor: pointer;
+}

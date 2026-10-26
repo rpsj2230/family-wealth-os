@@ -129,7 +129,15 @@ export interface AssetView {
   /** the few figures that matter most, shown as tiles under the heading */
   kpis: Kpi[];
   /** where a deposit is between its start and its maturity */
-  progress: { title: string; from: string; to: string; pct: number; caption: string } | null;
+  progress: {
+    title: string;
+    from: string;
+    to: string;
+    pct: number;
+    caption: string;
+    /** the date of the pointer on the bar */
+    today: string;
+  } | null;
   related: { label: string; href: string; value: string }[];
 }
 
@@ -499,6 +507,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
       from: fd.booked_on,
       to: fd.maturity_on,
       pct: done / total,
+      today: i.today,
       caption:
         left >= 0
           ? `Day ${done} of ${total}: ${left} day${left === 1 ? '' : 's'} to go`

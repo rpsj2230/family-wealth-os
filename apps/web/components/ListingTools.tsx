@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { formatInr } from '@fwos/core';
 import { matchesFilter, matchesSearch, parseCell, sortKeyed, toCsv } from '@/lib/listing';
 
 interface Col {
@@ -59,6 +60,45 @@ function readTables(root: HTMLElement): TableModel[] {
     out.push({ el, headers: heads, blocks, separators });
   });
   return out;
+}
+
+/**
+ * A footer row marked `data-totals` follows the rows that are showing: a cell marked `data-sum` adds up its column, `data-wavg="n"`
+ * averages it weighted by column n (counting from 0), and `data-count` counts the rows.
+ */
+function liveTotals(t: TableModel) {
+  const foot = t.el.querySelector<HTMLTableRowElement>('tfoot tr[data-totals]');
+  if (!foot) return;
+  const rows = t.blocks.flat().filter((r) => !r.hidden);
+  const num = (r: HTMLTableRowElement, i: number) => {
+    const c = r.cells[i] ? parseCell(cellText(r.cells[i]!)) : null;
+    return c && c.kind === 'num' ? c.n : null;
+  };
+  [...foot.cells].forEach((cell, i) => {
+    const count = cell.dataset.count;
+    if (count !== undefined) {
+      const el = cell.querySelector<HTMLElement>('[data-count-n]');
+      if (el) el.textContent = String(rows.length);
+      return;
+    }
+    if (cell.dataset.sum !== undefined) {
+      const v = rows.reduce((a, r) => a + (num(r, i) ?? 0), 0);
+      cell.textContent = rows.length ? formatInr(Math.round(v)) : '–';
+    } else if (cell.dataset.wavg !== undefined) {
+      const w = Number(cell.dataset.wavg);
+      let top = 0;
+      let bottom = 0;
+      for (const r of rows) {
+        const v = num(r, i);
+        const wt = num(r, w);
+        if (v !== null && wt !== null) {
+          top += v * wt;
+          bottom += wt;
+        }
+      }
+      cell.textContent = bottom > 0 ? `${(top / bottom).toFixed(2)}%` : '–';
+    }
+  });
 }
 
 const titleOf = (el: Element) => {
@@ -148,6 +188,7 @@ export function ListingTools({
         sep.hidden =
           (q !== '' || active.length > 0) && next.length > 0 && next.every((r) => r.hidden);
       });
+      liveTotals(t);
       const card = t.el.closest('section.card, .xlbank');
       if (card) {
         const visible = t.blocks.flat().some((r) => !r.hidden);

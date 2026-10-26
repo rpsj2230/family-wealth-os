@@ -5,11 +5,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
+import { ParamTabs } from '@/components/ParamTabs';
 import { Tabs } from '@/components/Tabs';
 import { loadContext } from '@/lib/data';
 import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { saveForeignBanks } from './actions';
 import { CoverTab, DepositKpis, MaturitiesTab, RegisterTab, liveLinks } from './Parts';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +21,7 @@ const TABS = ['deposits', 'maturities', 'cover'] as const;
 export default async function DepositsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; p?: string }>;
+  searchParams: Promise<{ tab?: string; p?: string; g?: string }>;
 }) {
   const sp = await searchParams;
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
@@ -34,7 +36,7 @@ export default async function DepositsPage({
       .select(
         'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
       ),
-    supabase.from('institutions').select('id, name'),
+    supabase.from('institutions').select('id, name, deposit_insured'),
     loadSettings(supabase as unknown as SupabaseClient),
   ]);
   const depositAssets: DepositAsset[] = (assets.data ?? []).map((a) => ({
@@ -57,9 +59,13 @@ export default async function DepositsPage({
     ownerName,
     today,
     settings.config.deposits.insuranceLimit,
+    new Set(
+      (banks.data ?? []).filter((b) => b.deposit_insured === false).map((b) => b.id as string),
+    ),
   );
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = sp.p && styles[sp.p] ? sp.p : null;
+  const group = sp.g === 'bank' || sp.g === 'owner' ? sp.g : 'none';
   const windowDays = Math.max(...settings.config.deposits.maturityAlertDays);
   // the person filter narrows the lists and the figures; insurance cover is always the whole household
   const shown = tab === 'cover' || !who ? v.fds : v.fds.filter((f) => f.ownerId === who);
@@ -110,7 +116,23 @@ export default async function DepositsPage({
         />
       )}
       <ListingTools name={`deposits-${tab}`}>
-        {tab === 'deposits' && <RegisterTab fds={shown} styles={styles} links={liveLinks} />}
+        {tab === 'deposits' && (
+          <>
+            <ParamTabs
+              base="/deposits"
+              param="g"
+              label="Group the deposits"
+              current={group}
+              keep={{ tab, p: who ?? undefined }}
+              tabs={[
+                { key: 'none', label: 'One list' },
+                { key: 'bank', label: 'By bank' },
+                { key: 'owner', label: 'By person' },
+              ]}
+            />
+            <RegisterTab fds={shown} styles={styles} links={liveLinks} group={group} />
+          </>
+        )}
         {tab === 'maturities' && (
           <MaturitiesTab
             s={s}
@@ -120,7 +142,20 @@ export default async function DepositsPage({
             styles={styles}
           />
         )}
-        {tab === 'cover' && <CoverTab v={v} links={liveLinks} />}
+        {tab === 'cover' && (
+          <CoverTab
+            v={v}
+            links={liveLinks}
+            banks={(banks.data ?? [])
+              .map((b) => ({
+                id: b.id as string,
+                name: b.name as string,
+                outside: b.deposit_insured === false,
+              }))
+              .sort((a, b) => a.name.localeCompare(b.name))}
+            saveForeign={saveForeignBanks}
+          />
+        )}
       </ListingTools>
     </>
   );

@@ -127,7 +127,7 @@ export default async function Dashboard({
   const nickname = new Map(assetRows.map((a) => [a.id, a.nickname]));
   const [settings, insts, pols, openTasks, assetsFull, goalList, setup] = await Promise.all([
     loadSettings(supabase as unknown as SupabaseClient),
-    supabase.from('institutions').select('id, name'),
+    supabase.from('institutions').select('id, name, deposit_insured'),
     supabase.from('policies').select('id, insurer, kind, renewal_on, expires_on'),
     supabase
       .from('tasks')
@@ -302,6 +302,9 @@ export default async function Dashboard({
     nameOf,
     today,
     settings.config.deposits.insuranceLimit,
+    new Set(
+      (insts.data ?? []).filter((i) => i.deposit_insured === false).map((i) => i.id as string),
+    ),
   ).cover;
   const uninsuredBanks = Object.entries(cover.byBank)
     .map(([id, b]) => ({ id, name: cover.bankNames[id] ?? 'Unknown', ...b }))

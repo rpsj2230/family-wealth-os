@@ -94,8 +94,26 @@ export default async function AssetPage({
       {d.view.progress && (
         <section className="detailsection" aria-label={d.view.progress.title}>
           <h2>{d.view.progress.title}</h2>
-          <div className="termbar" role="img" aria-label={d.view.progress.caption}>
-            <span style={{ width: `${Math.round(d.view.progress.pct * 100)}%` }} />
+          <div className="termtrack">
+            <div className="termbar" role="img" aria-label={d.view.progress.caption}>
+              <span style={{ width: `${(d.view.progress.pct * 100).toFixed(2)}%` }} />
+            </div>
+            {/* the pointer: a line across the bar at today's place, and a label that stays inside the track */}
+            <div
+              className="termline"
+              style={{ left: `${(d.view.progress.pct * 100).toFixed(2)}%` }}
+              aria-hidden
+            />
+            <div
+              className="termnow"
+              style={{
+                left: `clamp(34px, ${(d.view.progress.pct * 100).toFixed(2)}%, calc(100% - 34px))`,
+              }}
+              aria-hidden
+            >
+              Today
+              <span>{d.view.progress.today}</span>
+            </div>
           </div>
           <div className="termends small muted">
             <span>Booked {d.view.progress.from}</span>

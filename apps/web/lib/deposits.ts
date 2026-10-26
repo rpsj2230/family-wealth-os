@@ -67,6 +67,8 @@ export function buildDeposits(
   owners: Map<string, string>,
   today: Date,
   limit: number,
+  /** banks outside the Indian deposit insurance scheme (foreign banks): their money is not counted in the cover */
+  outside: ReadonlySet<string> = new Set(),
 ): DepositsView {
   const val = new Map(valued.map((v) => [v.assetId, v]));
   const fdBy = new Map(fds.map((f) => [f.asset_id, f]));
@@ -122,8 +124,10 @@ export function buildDeposits(
     .filter(
       (a) =>
         (a.type === 'fixed_deposit' || a.type === 'bank_account') &&
-        a.status === 'active' &&
-        a.institutionId,
+        // a deposit that has matured but has not been paid out yet is still a deposit at the bank
+        (a.status === 'active' || a.status === 'matured_unconfirmed') &&
+        a.institutionId &&
+        !outside.has(a.institutionId),
     )
     .map((a) => {
       const v = val.get(a.id)?.estimate?.estimatedAmount ?? 0;
@@ -136,6 +140,9 @@ export function buildDeposits(
           jointHolderId: a.jointHolderId ?? null,
         }),
         amountIncludingInterest: Math.max(0, v),
+        label: a.nickname,
+        kind: a.type === 'fixed_deposit' ? 'Fixed deposit' : 'Savings',
+        status: a.status,
       };
     });
   const pos = dicgcPosition(deposits, limit);
@@ -149,11 +156,18 @@ export function buildDeposits(
     );
   }
   assumptions.push(
+    'All deposits at a bank are added together: savings, fixed and recurring deposits in the same ownership name count towards one limit. Open a row in the table to see what it is made of.',
+  );
+  assumptions.push(
     `Cover limit used: ₹${limit.toLocaleString('en-IN')} per ownership name, per bank (a rule that can change).`,
   );
   assumptions.push(
     'Cover counts the deposit plus accrued interest. Overseas (S$) accounts are not covered by this scheme and are not included.',
   );
+  if (outside.size > 0)
+    assumptions.push(
+      `Not counted, because they are foreign banks outside the Indian scheme: ${[...outside].map((id) => banks.get(id) ?? 'a bank').join(', ')}.`,
+    );
 
   const byMonthMap = new Map<string, FdLine[]>();
   for (const l of lines) {

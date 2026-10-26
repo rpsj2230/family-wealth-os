@@ -198,6 +198,49 @@ table.dtable tr.dim td {
 .assetkpis {
   margin: 12px 0;
 }
+.termtrack {
+  position: relative;
+  padding-top: 40px;
+}
+.termline {
+  position: absolute;
+  bottom: -4px;
+  height: 20px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--text, #111827);
+  box-shadow: 0 0 0 2px var(--card, #fff);
+}
+.termnow {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 3px 10px 4px;
+  border-radius: 8px;
+  background: var(--text, #111827);
+  color: var(--card, #fff);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+}
+.termnow span {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+.termnow::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top-color: var(--text, #111827);
+}
 .termbar {
   height: 12px;
   border-radius: 8px;

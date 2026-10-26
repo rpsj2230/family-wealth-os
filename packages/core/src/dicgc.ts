@@ -10,6 +10,18 @@ export interface DepositForCover {
   capacityKey: string;
   /** principal + accrued interest as of the calculation date */
   amountIncludingInterest: number;
+  /** what the deposit is, so a row of the cover can show what it is made of */
+  label?: string;
+  kind?: string;
+  status?: string;
+}
+
+export interface CoverPart {
+  id: string;
+  label: string;
+  kind: string;
+  status: string;
+  amount: number;
 }
 
 export interface CoverRow {
@@ -19,6 +31,8 @@ export interface CoverRow {
   insured: number;
   uninsured: number;
   depositIds: string[];
+  /** every deposit counted in this row: savings, fixed deposits and the rest of the same bank and name are added together */
+  parts: CoverPart[];
 }
 
 export function dicgcPosition(deposits: DepositForCover[], limit: number) {
@@ -35,9 +49,17 @@ export function dicgcPosition(deposits: DepositForCover[], limit: number) {
       insured: 0,
       uninsured: 0,
       depositIds: [],
+      parts: [] as CoverPart[],
     };
     g.total += d.amountIncludingInterest;
     g.depositIds.push(d.id);
+    g.parts.push({
+      id: d.id,
+      label: d.label ?? d.id,
+      kind: d.kind ?? 'Deposit',
+      status: d.status ?? 'active',
+      amount: d.amountIncludingInterest,
+    });
     groups.set(key, g);
   }
   const rows = [...groups.values()].map((g) => {

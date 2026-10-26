@@ -52,30 +52,28 @@ export function reportFunds(view: InvestmentView, ownerId: string | null): Repor
   return view.groups
     .filter((g) => !ownerId || g.ownerId === ownerId)
     .flatMap((g) =>
-      g.funds.map(
-        (f): ReportFund => ({
-          id: f.assetId,
-          name: f.name,
-          owner: g.name,
-          category: f.category.label,
-          amc: f.amc,
-          value: f.value,
-          invested: f.invested,
-          units: f.units,
-          startedOn: f.startedOn,
-          xirr: f.xirr,
-          sipMonthly: f.sipMonthly,
-          sipStopped: f.sipStopped,
-          txns: f.txns.map((t) => ({
-            date: t.date,
-            kind: t.kind,
-            units: t.units,
-            amount: t.amount,
-          })),
-          lots: f.lots.map((l) => ({ acquiredOn: l.acquiredOn, units: l.units, cost: l.cost })),
-          hasStatement: f.hasStatement,
-        }),
-      ),
+      g.funds.map((f): ReportFund => ({
+        id: f.assetId,
+        name: f.name,
+        owner: g.name,
+        category: f.category.label,
+        amc: f.amc,
+        value: f.value,
+        invested: f.invested,
+        units: f.units,
+        startedOn: f.startedOn,
+        xirr: f.xirr,
+        sipMonthly: f.sipMonthly,
+        sipStopped: f.sipStopped,
+        txns: f.txns.map((t) => ({
+          date: t.date,
+          kind: t.kind,
+          units: t.units,
+          amount: t.amount,
+        })),
+        lots: f.lots.map((l) => ({ acquiredOn: l.acquiredOn, units: l.units, cost: l.cost })),
+        hasStatement: f.hasStatement,
+      })),
     );
 }
 
