@@ -141,3 +141,8 @@ Open a bank to change its rates in place: edit the figure and press Save. If you
 ## Tasks
 
 **Tasks** are grouped as overdue, due in the next 7 days, later and no date. Tick the circle when a task is done; *Not needed* drops it. Each task links to the account, bank or page it concerns. Finished and dropped tasks are on the second tab, with a way back.
+
+
+## Rates from banks that block automatic reading
+
+Every bank with a rate page saved in Settings is read, including banks where you hold nothing yet (so you can compare before you move money). When a bank's own page cannot be read by a program, the weekly job reads the bank's published rate-sheet PDFs where they exist (AU Small Finance Bank), and otherwise public comparison pages, which are marked **Reference only (third party)** with the date to check. A comparison page never deletes a rate that is not on it. If nothing can be read, the reason is shown beside the bank in Settings; paste the rates from your notes on the Rates page. The program does not pretend to be a browser and does not get around a block.

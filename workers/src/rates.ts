@@ -8,9 +8,12 @@ import { createClient } from '@supabase/supabase-js';
 import { sameBank } from '@fwos/core';
 import {
   buildRatesRequest,
+  casPdfText,
   htmlToText,
+  isPdf,
   parseRatesResponse,
   planSync,
+  rateDocsFor,
   resolveModel,
   type AiProvider,
   type CorrectionReason,
@@ -31,6 +34,34 @@ const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'),
 const today = new Date().toISOString().slice(0, 10);
 
 let model: string | null = null;
+
+const AGENT = 'family-wealth-os/1.0 (personal use)';
+const hostOf = (u: string) => {
+  try {
+    return new URL(u).host;
+  } catch {
+    return 'bank page';
+  }
+};
+
+/** One openly published page or PDF as text. A page that answers with an error or has no readable text is reported, not worked around. */
+async function readDoc(url: string, max = 30_000): Promise<string> {
+  const r = await fetch(url, {
+    headers: { 'user-agent': AGENT },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) throw new Error(`answered ${r.status}`);
+  if (isPdf(r.headers.get('content-type'), url)) {
+    const text = (await casPdfText(new Uint8Array(await r.arrayBuffer()))).trim();
+    if (text.length < 200) throw new Error('the PDF had almost no readable text');
+    return text.slice(0, max);
+  }
+  const text = htmlToText(await r.text(), max);
+  if (text.length < 200)
+    throw new Error('the page had almost no readable text (it may need a browser to load)');
+  return text;
+}
 
 async function main() {
   const hh = await db.from('households').select('id');
@@ -65,7 +96,7 @@ async function main() {
       console.log(`::warning::${why}`);
       continue;
     }
-    // only banks where you hold a savings account or a deposit are read; a rate page for any other bank is left alone
+    // names of the banks where you hold something, used to keep one spelling of each bank's name
     const held = await db
       .from('assets')
       .select('institution_id, institutions(name)')
@@ -80,17 +111,6 @@ async function main() {
       ),
     ];
     for (const src of sources.data) {
-      if (heldNames.length > 0 && !heldNames.some((n) => sameBank(n, src.bank as string))) {
-        await db
-          .from('rate_sources')
-          .update({
-            last_run_on: today,
-            last_result: 'Skipped: you hold no savings account or deposit at this bank.',
-          })
-          .eq('id', src.id);
-        console.log(`${src.bank}: skipped, you hold no account or deposit there`);
-        continue;
-      }
       const note = async (result: string) => {
         await db
           .from('rate_sources')
@@ -99,16 +119,33 @@ async function main() {
         console.log(`${src.bank}: ${result}`);
       };
       try {
-        const page = await fetch(src.url as string, {
-          headers: { 'user-agent': 'family-wealth-os/1.0 (personal use)' },
-          redirect: 'follow',
-          signal: AbortSignal.timeout(30_000),
-        });
-        if (!page.ok) throw new Error(`page answered ${page.status}`);
-        const text = htmlToText(await page.text());
-        if (text.length < 200)
-          throw new Error('the page had almost no readable text (it may need a browser to load)');
         const bankName = src.bank as string;
+        // the page saved in Settings, plus the bank's own published rate sheets; public comparison pages only when nothing from the bank can be read
+        const docs = rateDocsFor(bankName);
+        const parts: string[] = [];
+        const used: string[] = [];
+        const problems: string[] = [];
+        const add = async (url: string, label: string, max?: number) => {
+          try {
+            parts.push(`### ${label}\n${await readDoc(url, max)}`);
+            used.push(url);
+            return true;
+          } catch (e) {
+            problems.push(`${hostOf(url)} ${(e as Error).message}`);
+            return false;
+          }
+        };
+        let fromBank = await add(src.url as string, `${bankName}: page saved in Settings`);
+        for (const d of docs.official) fromBank = (await add(d.url, d.label, 14_000)) || fromBank;
+        let thirdParty = false;
+        if (!fromBank)
+          for (const d of docs.reference)
+            thirdParty = (await add(d.url, d.label, 15_000)) || thirdParty;
+        if (parts.length === 0)
+          throw new Error(
+            `no page could be read (${problems.join('; ')}). Paste the rates from your notes on the Rates page, or save another address for this bank.`,
+          );
+        const text = parts.join('\n\n');
         // rules written when you corrected this bank's rates earlier are passed to the reader
         const bankHints = await db
           .from('rate_hints')
@@ -171,18 +208,18 @@ async function main() {
         // one spelling of the bank name: the one already stored, else the name of your account's bank
         const canon = existing[0]?.bank ?? heldNames.find((n) => sameBank(n, bankName)) ?? bankName;
         const fetched = read.map((o) => ({ ...o, bank: canon }));
-        const plan = planSync(existing, fetched, { replaceAbsent: true });
+        // a comparison page may cover only part of what the bank offers, so it never removes a rate that is not on it
+        const plan = planSync(existing, fetched, { replaceAbsent: !thirdParty });
         const must = (r: { error: { message: string } | null }) => {
           if (r.error) throw new Error(r.error.message);
         };
-        const host = (() => {
-          try {
-            return new URL(src.url as string).host;
-          } catch {
-            return 'bank page';
-          }
-        })();
-        const touch = { checked_on: today, source_url: src.url, source_note: `Read from ${host}` };
+        const touch = {
+          checked_on: today,
+          source_url: used[0],
+          source_note: thirdParty
+            ? `Reference only, from ${[...new Set(used.map(hostOf))].join(' and ')} (third party: the bank's own page cannot be read by a program; check the date)`
+            : `Read from ${[...new Set(used.map(hostOf))].join(' and ')}`,
+        };
         if (plan.insert.length)
           must(
             await db.from('rate_offers').insert(
