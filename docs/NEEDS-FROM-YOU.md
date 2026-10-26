@@ -10,7 +10,7 @@ rates page, "I need money" planner, family emergency handbook; repository privat
    for you and for Ragini, and forward the e-mails to your `FWOS/Inbox` label. They are opened with the PAN saved in Settings and imported by
    themselves (or upload the PDF under Import). A full history is what lets harvesting use your real purchase dates.
 2. **Settings → People / Income / Tax refunds / When I need money / Emergency information**: fill in once, review the starting numbers.
-3. **Import → "Apply the sheet layout"** (upload the workbook once) so the screens keep your Excel order and notes.
+3. **Import → choose the workbook → "Update order, names and links"** (upload the workbook once) so the screens keep your Excel order and notes.
 4. **Settings → Rate pages and AI key**: add the bank rate-page URLs and a free Groq or Gemini key so rates and PDF statements are read automatically.
 5. **Delete the old branch `claude/phase1-docs`** on GitHub (Branches page): it still holds the early history and I cannot delete it from here.
 6. Optional: moving Supabase to Mumbai (needs a new project; say the word and I will script the move).

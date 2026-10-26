@@ -28,6 +28,8 @@ import {
   type ObsIn,
 } from './detail-view';
 import { loadPortfolio } from './portfolio-data';
+import { quickModel } from './quick-edit';
+import { loadFxHint, loadJointHolders } from './quick-edit-data';
 import { cashRatesFor, loadOffers } from './rates-view';
 import { buildDeposits } from './deposits';
 
@@ -65,6 +67,13 @@ export interface DetailBase {
   activity: ActivityItem[];
   bank: { id: string; name: string } | null;
   type: string;
+  /** what the edit panel needs for this account (bank-type accounts only) */
+  quick: {
+    model: ReturnType<typeof quickModel>;
+    styles: Record<string, PersonStyle>;
+    today: string;
+    fxHint: Record<string, number>;
+  } | null;
 }
 
 /** Everything for one asset, or a 404 when it is not one of the signed-in person's. */
@@ -313,6 +322,27 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     }),
     bank,
     type: asset.type,
+    quick: await (async () => {
+      if (!['bank_account', 'fixed_deposit', 'third_party_held'].includes(asset.type)) return null;
+      const [jointHolders, fxHint] = await Promise.all([
+        loadJointHolders(supabase as unknown as SupabaseClient),
+        loadFxHint(supabase as unknown as SupabaseClient),
+      ]);
+      const model = quickModel({
+        blocks,
+        assets: l.assetRows,
+        fds: l.fdRows,
+        ownerNames: Object.fromEntries(ownerList.map((o) => [o.id, o.name])),
+        institutions: instRows.map((i) => ({ id: i.id, name: i.name })),
+        jointHolders,
+      });
+      return {
+        model: { ...model, rows: model.rows.filter((x) => x.id === id) },
+        styles,
+        today: l.today.toISOString().slice(0, 10),
+        fxHint,
+      };
+    })(),
   };
 }
 

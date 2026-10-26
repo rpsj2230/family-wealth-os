@@ -22,7 +22,16 @@ function money(row: GridRow, v: number | null) {
     : `${row.currency} ${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
-export function MonthlyGrid({ rows, today }: { rows: GridRow[]; today: string }) {
+export function MonthlyGrid({
+  rows,
+  today,
+  assumedRate,
+}: {
+  rows: GridRow[];
+  today: string;
+  /** the savings rate assumed when none is set (Settings), as a fraction */
+  assumedRate?: number;
+}) {
   const [edits, setEdits] = useState<Record<string, RowEdit>>({});
   const [result, setResult] = useState<SaveResult | null>(null);
   const [pending, start] = useTransition();
@@ -210,7 +219,9 @@ export function MonthlyGrid({ rows, today }: { rows: GridRow[]; today: string })
                             aria-label={`Annual interest % for ${r.name}`}
                             placeholder={
                               r.interestRate === null
-                                ? 'assumed 3 %'
+                                ? assumedRate === undefined
+                                  ? 'bank rate'
+                                  : `assumed ${(assumedRate * 100).toFixed(2).replace(/\.?0+$/, '')} %`
                                 : `${(r.interestRate * 100).toFixed(2)} %`
                             }
                             value={e.interestRate ?? ''}

@@ -11,6 +11,7 @@ import type { CashRate } from '@/lib/rates-view';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
 import { PersonBadge } from './Person';
+import { EditButton } from './QuickEdit';
 import { slugify } from '@/lib/slug';
 
 const D = new Intl.DateTimeFormat('en-GB', {
@@ -77,14 +78,16 @@ function Row({
             {r.code}
           </Link>
           {r.kindInferred && (
-            <Link
+            <EditButton
+              id={r.assetId}
+              name={r.code}
+              label="type assumed"
               className="pill assumed"
-              href="/accounts/edit"
               title="The type (NRE or NRO) is not recorded on this row and is taken from the savings account. Click to correct it."
-            >
-              type assumed
-            </Link>
+              plain
+            />
           )}
+          <EditButton id={r.assetId} name={r.code} className="onlynarrow" />
         </div>
         {fd?.linkedTo && <div className="sub">↳ linked to {fd.linkedTo}</div>}
         {r.kind === 'cash' && <div className="sub">{r.source.label}</div>}
@@ -149,6 +152,9 @@ function Row({
       </td>
       <td className="notes">
         {fd?.refLast4 && <span className="chip tiny">FD no. …{fd.refLast4}</span>} {note}
+      </td>
+      <td className="editcol">
+        <EditButton id={r.assetId} name={r.code} className="onlywide" />
       </td>
     </tr>
   );
@@ -264,16 +270,16 @@ export function BankTable({
             <div className="xlwrap">
               <table className="xl">
                 <colgroup>
-                  <col style={{ width: '25%' }} />
+                  <col style={{ width: '20%' }} />
                   <col style={{ width: '6%' }} />
-                  <col style={{ width: '9%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '8%' }} />
                   <col style={{ width: '11%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '6%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -286,6 +292,9 @@ export function BankTable({
                     <th className="num">Current value</th>
                     <th>Updated</th>
                     <th>Notes</th>
+                    <th className="editcol">
+                      <span className="sr-only">Edit</span>
+                    </th>
                   </tr>
                 </thead>
                 {b.sections.map((sct) => (
@@ -294,7 +303,7 @@ export function BankTable({
                     style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
                   >
                     <tr className="secthead">
-                      <th colSpan={9}>
+                      <th colSpan={10}>
                         {b.key === '__none' ? (
                           <PersonBadge p={styles[sct.ownerId]} name size={18} />
                         ) : (

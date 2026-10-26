@@ -1,11 +1,11 @@
 # Family Wealth OS: user guide
 
-For Rupash and Ragini. Everything here describes what the app does today. Items marked *(waiting)* need something from you first (see `docs/NEEDS-FROM-YOU.md`).
+For Rupash and Ragini. Everything here describes what the app does today. Items marked _(waiting)_ need something from you first (see `docs/NEEDS-FROM-YOU.md`).
 
 ## What the numbers mean
 
 - **Verified** is the last balance you entered or an official statement showed, with its date.
-- **Estimated today** is the verified figure moved forward: fixed deposits by their own interest terms, savings at an assumed rate, mutual funds by the latest published NAV, Singapore dollars by the latest exchange rate. Each figure is labelled *calculated*, *estimated* or *carried forward*.
+- **Estimated today** is the verified figure moved forward: fixed deposits by their own interest terms, savings at an assumed rate, mutual funds by the latest published NAV, Singapore dollars by the latest exchange rate. Each figure is labelled _calculated_, _estimated_ or _carried forward_.
 - An asset with no value is listed but never counted as zero. Insurance cover and matured deposits you have not confirmed are never counted in net worth.
 - Money you have lent is shown as owed, not as cash.
 
@@ -13,7 +13,7 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 
 1. Open **Monthly update**. The top box says which banks are up to date for the month, which are waiting for a value, and how each latest balance arrived (email, you, a statement, the imported sheet or a calculation).
 2. Work down the banks that are waiting. Type the new balance and press Enter for the next one, or paste a column from Excel or your bank app into the first box. **Same** keeps one balance as it was; **Nothing changed at (bank)** does it for the whole bank. A note under a box tells you how far the new figure is from the last, and warns about a likely typing slip.
-3. Press **Save**. Nothing is stored until then, and **Discard** drops the lot. The dashboard and the history chart update.
+3. To change a rate, a note, a name or a deposit's terms while you are here, press **Edit** on that line (the same panel as on Accounts; see "Changing one account" below). Press **Save**. Nothing is stored until then, and **Discard** drops the lot. The dashboard and the history chart update.
 4. Deposits are worked out from their terms and sit in a closed box under each bank; only a matured deposit needs you to say where the money went. Property, pension, shares and money lent are on the second tab, **Property, loans and other**.
 5. Check **Bank emails** for balances read from your email that are waiting for you, and **Tasks** for anything the app has raised.
 
@@ -23,20 +23,27 @@ Forward bank alerts to the Gmail label shown in Settings. A balance from the ban
 
 ## Import
 
-**Import** has four tabs. **Workbook**: apply your sheet's layout (safe to repeat) or, once, import the whole workbook. **Fund statement (CAS)**: upload a CAMS/KFintech/MF Central statement, or forward it by email; the password is the one you chose, usually your PAN in capitals. **Fund transactions (CSV)**: upload the transactions export of an investment app (Kuvera layout: Date, Folio Number, Name of the Fund, Order, Units, NAV, Current Nav, Amount). Choose all the files at once and pick the person for each (the first name in the file name is pre-selected). Press **Preview** to see, per fund, whether it updates a fund you have or adds a new one, with units, amount invested and value; then **Import**. Folios of the same fund are combined; importing a file twice adds nothing twice; digital gold (no folio) is left out. **Tax statement (26AS, AIS)**: upload Form 26AS or the AIS; the date of birth saved in Settings opens a protected PDF. Each tab shows the last import result and anything that needs a look.
+Open **Import**, press **Choose a file** and pick whatever you have: your Excel workbook (.xlsx), a fund statement (PDF), a fund app export (CSV) or a tax statement (Form 26AS or AIS). The page works out which one it is from the file's name and first lines (in your browser; nothing is uploaded yet) and shows the matching form with the file already attached. If it cannot tell, it asks "What is this file?"; you can also correct a wrong guess. Below the box there is a card for each kind if you prefer to choose yourself.
+
+- **Excel workbook**: _Update order, names and links_ makes the screens follow your sheet (order, NRE or NRO, joint, which savings account each deposit belongs to, deposit numbers as last four digits, notes). It never changes a balance and is safe to repeat. _Import balances and deposits_ is for the first time or a new household: it shows a preview with checks against your own sheet and saves nothing until you press Import. The same file cannot be imported twice.
+- **Fund statement**: a CAMS/KFintech/MF Central PDF. Choose whose it is (taken from the file name when possible) and type the password you chose when you requested it, usually your PAN in capitals; it is used once and never saved. Statements forwarded by email are read by themselves.
+- **Fund app export (CSV)** (Kuvera layout: Date, Folio Number, Name of the Fund, Order, Units, NAV, Current Nav, Amount): choose all the files at once, one per person (the first name in the file name is pre-selected). Press **Preview** to see, per fund, whether it updates a fund you have or adds a new one, with units, amount invested and value; then **Import**. Folios of the same fund are combined; importing a file twice adds nothing twice; digital gold (no folio) is left out.
+- **Tax statement**: Form 26AS or the AIS. The date of birth saved in Settings opens a protected PDF.
+
+Each kind keeps its own page (open its card) with the last result and anything that needs a look.
 
 ## Fixed deposits
 
-**Deposits** has three tabs: Deposits (every deposit with its bank, owner, rate, maturity date and the amount at maturity), Maturities (what to confirm, what matures soon, a calendar) and Insurance cover. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account under **Correct tags and details** (Joint with; Swap names reverses the order); until then a joint account is grouped under its first name.
+**Deposits** has three tabs: Deposits (every deposit with its bank, owner, rate, maturity date and the amount at maturity), Maturities (what to confirm, what matures soon, a calendar) and Insurance cover. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account by pressing **Edit** on it, then **More details** (Joint account, Second name; the swap button reverses the order); until then a joint account is grouped under its first name.
 
 ## Mutual funds and goals
 
 - **Investments, Match funds** matches each fund in your sheet to the official scheme list once; you confirm the match. (The old Funds address still works and opens this tab.) **Investments, Update funds** is the monthly entry of units and prices.
-- **Goals** has one progress card per goal: how much of the cost is set aside today, how much the projection covers, the extra to put in each month, and the funds set aside for it. Add a goal with just a name; set a target and date later under *Edit this goal*. The second tab, *Money not set aside*, lists each holding with the share no goal claims, so you can set it aside in one step. A holding can be split across goals but never above 100%.
+- **Goals** has one progress card per goal: how much of the cost is set aside today, how much the projection covers, the extra to put in each month, and the funds set aside for it. Add a goal with just a name; set a target and date later under _Edit this goal_. The second tab, _Money not set aside_, lists each holding with the share no goal claims, so you can set it aside in one step. A holding can be split across goals but never above 100%.
 
 ## Can I retire now?
 
-Open **Retire**. The verdict stays at the top while you work in the tabs below it: *Your inputs* (about you, spending and saving, market assumptions; Save keeps them), *Compare* (three scenarios, retirement ages, the effect of common changes), *Range of outcomes* and *Corpus and method*. The result is one of:
+Open **Retire**. The verdict stays at the top while you work in the tabs below it: _Your inputs_ (about you, spending and saving, market assumptions; Save keeps them), _Compare_ (three scenarios, retirement ages, the effect of common changes), _Range of outcomes_ and _Corpus and method_. The result is one of:
 
 - **Meets the plan** under your assumptions,
 - **Shortfall**, with the size of the gap and what would close it (spend less, retire later, save more),
@@ -47,7 +54,7 @@ It never says "safe". A range of outcomes (market ups and downs) is shown next t
 ## Tax
 
 - **Tax** (redemption simulator): enter the lots of a fund and the amount to redeem. It shows first-in-first-out lots, short or long term, exit load, the allowance used, tax at source for non-residents and the refund expected on filing. The harvest suggestion never trades for you.
-- **Tax filing papers** (`/tax/filing`): fixed-deposit interest per person and financial year (taxable for NRO, exempt for NRE, joint accounts flagged), an optional tax-at-source estimate at a rate you type, a CSV download and a checklist of documents. Capital-gains schedules *(waiting for the consolidated statements)*.
+- **Tax filing papers** (`/tax/filing`): fixed-deposit interest per person and financial year (taxable for NRO, exempt for NRE, joint accounts flagged), an optional tax-at-source estimate at a rate you type, a CSV download and a checklist of documents. Capital-gains schedules _(waiting for the consolidated statements)_.
 - Check every figure against your bank certificates, Form 26AS and the Annual Information Statement before filing. Tax rules are marked unverified until checked against the official source.
 
 ## Money lent and policies
@@ -114,7 +121,7 @@ in for a number of days, or only when you release it. Release or lock it again w
 
 ## Changing the order
 
-Accounts → **Manage** → **Change the order** lists your banks and, inside each, its rows. Drag a bank or a row, or use the arrow buttons (they work from the keyboard), then press **Save this order**. Accounts and the monthly update follow the new order from then on. Uploading your workbook again with "Apply the sheet layout" sets the order back to the sheet's.
+Accounts → **Manage** → **Change the order** lists your banks and, inside each, its rows. Drag a bank or a row, or use the arrow buttons (they work from the keyboard), then press **Save this order**. Accounts and the monthly update follow the new order from then on. Uploading your workbook again under Import (_Update order, names and links_) sets the order back to the sheet's.
 
 ## Form 26AS and the AIS
 
@@ -126,22 +133,25 @@ Tax filing papers → "What the tax department holds". Download **Form 26AS** fr
 2. When the form asks for a password, **type your PAN in capital letters** (the same one saved in Settings). The password is whatever you choose on that form.
 3. In Gmail, make a filter: from `camsonline.com`, `kfintech.com`, `mfcentral.com`, `cdslindia.com` or `nsdl.com` and has an attachment, then apply the label `FWOS/Inbox`. Statements are then imported by themselves, now and when the registrars send you monthly ones.
 
-## Correct tags and details
+## Changing one account
 
-Accounts → **Correct tags and details** is one grid of every account and deposit, bank by bank in your sheet's order. Fix the type (NRE, NRO, FCNR, savings, resident, joint, other), the joint flag, last four digits, the savings account a deposit is linked to, label, note, person, bank and status, and a deposit's rate, dates, amount invested, amount at maturity and number. Changed rows are marked; nothing is saved until you press **Save all** (or **Discard**). Tick rows (or a whole bank) to set a type, mark joint or move them to another bank in one step. **Suggest types for empty rows** fills the blanks from the linked savings account, or from the one type a person has at that bank, and highlights them for you to check before saving. Balances are not here: they change only through the monthly update.
+On **Accounts** (and on the Monthly update, and on an account's own page) press **Edit** on any line. A panel opens on the side with only what people change: the name, the balance now (with its date), the interest rate, the type (NRE, NRO and so on), the status and a note; for a deposit the rate, maturity date, amount invested and amount at maturity. Rare things (last four digits, joint account and second name, person, bank, a deposit's start date, number and linked savings account) are under **More details**. The panel says what you changed ("Changed: name, balance."), explains a mistake in words, and shows "Saved: ..." as soon as it is kept; closing it with unsaved changes asks first. A new balance is added to the history, never written over the old one. **Add an account** (top of Accounts, or under a bank's person in the Monthly update) opens the same kind of panel for a new savings account or deposit and places it where it belongs in your order.
+
+## Changing many accounts at once
+
+Accounts, **Manage**, **Edit many accounts at once** is one table of every account and deposit, bank by bank in your sheet's order (a bank's own page links to the table for just that bank). It starts with the columns people use: person, name, type, rate, maturity, amount invested, notes and status; **Show every column** adds joint and second name, last four digits, linked savings account, start date, amount at maturity and deposit number. Changed rows are marked; nothing is saved until you press **Save all** (or **Discard**). Tick rows (or a whole bank) to set a type, mark joint or move them to another bank in one step. **Suggest types for empty rows** fills the blanks from the linked savings account, or from the one type a person has at that bank, and highlights them for you to check before saving. Balances are changed with **Edit** or in the monthly update.
 
 ## Rates, and where to put new money
 
-**Rates** is only about rates. Each bank has a card: its best savings rate and best NRE deposit rate, the savings rate by balance drawn as steps, how the rates last moved, and a **Where from** line that says whether each rate was typed or pasted by you or read from the bank's page (which page, which date). Show *Banks I use* or *All banks on file*, and sort by highest deposit, highest savings, name or oldest check; the choice is in the address. The weekly refresh runs on Monday; if it could not read a bank's page, the card says why (no AI key, the bank refused, the address has changed, the page needs a browser) and what to do.
+**Rates** is only about rates. Each bank has a card: its best savings rate and best NRE deposit rate, the savings rate by balance drawn as steps, how the rates last moved, and a **Where from** line that says whether each rate was typed or pasted by you or read from the bank's page (which page, which date). Show _Banks I use_ or _All banks on file_, and sort by highest deposit, highest savings, name or oldest check; the choice is in the address. The weekly refresh runs on Monday; if it could not read a bank's page, the card says why (no AI key, the bank refused, the address has changed, the page needs a browser) and what to do.
 
-Open a bank to change its rates in place: edit the figure and press Save. If you change a figure the bank page gave, pick why it was wrong; the refresh checks the page again next time, takes the rate back when the page agrees with you, and otherwise saves a rule (shown under *How it is read*, with an on and off switch, and you can write your own). *History and log* shows the best rates over time and every change with the old and new figure, who made it and why. Paste your notes or add a rate under *Add or import*.
+Open a bank to change its rates in place: edit the figure and press Save. If you change a figure the bank page gave, pick why it was wrong; the refresh checks the page again next time, takes the rate back when the page agrees with you, and otherwise saves a rule (shown under _How it is read_, with an on and off switch, and you can write your own). _History and log_ shows the best rates over time and every change with the old and new figure, who made it and why. Paste your notes or add a rate under _Add or import_.
 
 **New money** is where an amount is placed. Type an amount (25 lakh or 2500000), the account type and whose money; it is spread over the banks that pay most after tax, never above the insurance limit per person per bank. The other tabs show which of your holdings could earn more elsewhere and how much insurance room is left at each bank.
 
 ## Tasks
 
-**Tasks** are grouped as overdue, due in the next 7 days, later and no date. Tick the circle when a task is done; *Not needed* drops it. Each task links to the account, bank or page it concerns. Finished and dropped tasks are on the second tab, with a way back.
-
+**Tasks** are grouped as overdue, due in the next 7 days, later and no date. Tick the circle when a task is done; _Not needed_ drops it. Each task links to the account, bank or page it concerns. Finished and dropped tasks are on the second tab, with a way back.
 
 ## Rates from banks that block automatic reading
 

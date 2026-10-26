@@ -75,7 +75,7 @@ export default async function DemoImport({
   const sp = await searchParams;
   const tab: ImportTab = (IMPORT_TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as ImportTab)
-    : 'workbook';
+    : 'start';
   return (
     <div className="shell">
       <Sidebar email="sample@example.com" signOut={noSignOut} />
@@ -92,7 +92,7 @@ export default async function DemoImport({
           </p>
           <PageHead
             title="Import"
-            subtitle="Bring in data from a file. Most of it arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
+            subtitle="Choose a file and the app works out what it is. Most of this arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
           />
           <ImportHub base="/demo/import" tab={tab} data={DATA} demo />
         </main>

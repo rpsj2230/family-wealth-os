@@ -1,5 +1,5 @@
 /**
- * Rules behind the "correct tags and details" grid. Pure, so they are tested without a browser.
+ * Rules behind the "edit many accounts" table. Pure, so they are tested without a browser.
  * A row carries the values as they are stored; the grid keeps a second copy and sends only what changed.
  */
 import type { AssetRow, BankBlock, FdRow } from '@fwos/core';

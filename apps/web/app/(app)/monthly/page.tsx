@@ -3,10 +3,15 @@ import { buildBankBlocks, personStyles, standings, summarizeStandings } from '@f
 import { AutomationStrip } from '@/components/AutomationCards';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
+import { QuickEditHost } from '@/components/QuickEditHost';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { quickModel } from '@/lib/quick-edit';
+import { loadJointHolders } from '@/lib/quick-edit-data';
+import { loadSettings } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { MonthlyGrid } from './MonthlyGrid';
 import { loadOtherRows } from './other-data';
 
@@ -29,7 +34,11 @@ export default async function MonthlyPage({
     d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   if (tab === 'other') {
-    const { rows, today } = await loadOtherRows(supabase);
+    const [{ rows, today }, settings] = await Promise.all([
+      loadOtherRows(supabase),
+      loadSettings(supabase as unknown as SupabaseClient),
+    ]);
+    const assumedRate = settings.config.estimates.savingsRate;
     return (
       <>
         <PageHead
@@ -50,15 +59,15 @@ export default async function MonthlyPage({
               box. Mutual funds follow their published price by themselves; the units and purchases
               are on <Link href="/investments?tab=update">Update funds</Link>.
             </p>
-            <MonthlyGrid rows={rows} today={today} />
+            <MonthlyGrid rows={rows} today={today} assumedRate={assumedRate} />
           </>
         )}
       </>
     );
   }
 
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, fx] = await Promise.all(
-    [
+  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, fx, jointHolders] =
+    await Promise.all([
       loadPortfolio(supabase),
       supabase.from('institutions').select('id, name'),
       supabase
@@ -66,8 +75,8 @@ export default async function MonthlyPage({
         .select('currency, rate_date, inr_per_unit')
         .order('rate_date', { ascending: false })
         .limit(20),
-    ],
-  );
+      loadJointHolders(supabase as unknown as SupabaseClient),
+    ]);
   const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const names = Object.fromEntries(
@@ -87,9 +96,17 @@ export default async function MonthlyPage({
   const sum = summarizeStandings(standings(blocks, iso));
   const waiting = sum.waiting + sum.attention;
   const { cards, inboxWaiting } = await loadAutomation(supabase, iso);
+  const quick = quickModel({
+    blocks,
+    assets: assetRows,
+    fds: fdRows,
+    ownerNames: Object.fromEntries(ownerName),
+    institutions: (inst.data ?? []).map((i) => ({ id: i.id as string, name: i.name as string })),
+    jointHolders,
+  });
 
   return (
-    <>
+    <QuickEditHost model={quick} styles={styles} today={iso} fxHint={fxHint}>
       <PageHead
         title="Monthly update"
         subtitle={`Keep every balance current for ${month(today)}. Type a new balance, or mark a bank as unchanged; deposits and funds look after themselves.`}
@@ -124,7 +141,7 @@ export default async function MonthlyPage({
         </p>
       )}
       <UpdateGrid blocks={blocks} styles={styles} today={iso} fxHint={fxHint} institutions />
-    </>
+    </QuickEditHost>
   );
 }
 

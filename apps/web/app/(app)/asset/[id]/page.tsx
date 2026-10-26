@@ -4,6 +4,8 @@ import { AssetFacts, DetailHeader, type Crumb } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
 import { HistoryLine } from '@/components/HistoryLine';
 import { FundChart } from '@/components/FundChart';
+import { EditButton } from '@/components/QuickEdit';
+import { QuickEditHost } from '@/components/QuickEditHost';
 import { loadContext } from '@/lib/data';
 import { loadAssetDetail } from '@/lib/detail-data';
 import { loadInvestmentView } from '@/lib/investments';
@@ -46,7 +48,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           },
         ];
   crumbs.push({ label: d.view.title });
-  return (
+  const page = (
     <>
       <DetailHeader
         crumbs={crumbs}
@@ -57,11 +59,7 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
         {...(d.view.headlineNote ? { headlineNote: d.view.headlineNote } : {})}
         actions={
           <>
-            {isBankLike && (
-              <Link className="btn compact" href="/accounts/edit">
-                Edit details
-              </Link>
-            )}
+            {isBankLike && <EditButton id={id} name={d.view.title} label="Edit details" button />}
             {isDeposit && (
               <Link className="btn compact" href="/deposits?tab=maturities">
                 All maturities
@@ -159,5 +157,17 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       <DetailTables tables={d.view.tables} />
       <ActivityLog items={d.activity} />
     </>
+  );
+  return d.quick ? (
+    <QuickEditHost
+      model={d.quick.model}
+      styles={d.quick.styles}
+      today={d.quick.today}
+      fxHint={d.quick.fxHint}
+    >
+      {page}
+    </QuickEditHost>
+  ) : (
+    page
   );
 }

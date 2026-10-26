@@ -1,6 +1,9 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { buildBankBlocks, filterBlocksByOwner, formatInrCompact, personStyles } from '@fwos/core';
 import { BankTable } from '@/components/BankTable';
+import { AddButton } from '@/components/QuickEdit';
+import { QuickEditHost } from '@/components/QuickEditHost';
 import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
@@ -9,6 +12,8 @@ import { foreignLines, summariseBlocks } from '@/lib/accounts-summary';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { cashRatesFor, loadOffers } from '@/lib/rates-view';
+import { quickModel } from '@/lib/quick-edit';
+import { loadFxHint, loadJointHolders } from '@/lib/quick-edit-data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -22,9 +27,9 @@ const TABS = ['banks', 'manage'] as const;
 export default async function AccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string; tab?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string; edit?: string }>;
 }) {
-  const { p, tab: rawTab } = await searchParams;
+  const { p, tab: rawTab, edit } = await searchParams;
   const tab = (TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as (typeof TABS)[number])
     : 'banks';
@@ -35,11 +40,15 @@ export default async function AccountsPage({
     inst,
     settings,
     offers,
+    jointHolders,
+    fxHint,
   ] = await Promise.all([
     loadPortfolio(supabase),
     supabase.from('institutions').select('id, name, notes'),
     loadSettings(supabase as unknown as SupabaseClient),
     loadOffers(supabase),
+    loadJointHolders(supabase as unknown as SupabaseClient),
+    loadFxHint(supabase as unknown as SupabaseClient),
   ]);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = p && styles[p] ? p : null;
@@ -59,6 +68,26 @@ export default async function AccountsPage({
   });
   const blocks = who ? filterBlocksByOwner(all, who) : all;
   const summary = summariseBlocks(blocks);
+  const quick = quickModel({
+    blocks: all,
+    assets: assetRows,
+    fds: fdRows,
+    ownerNames: Object.fromEntries(ownerName),
+    institutions: (inst.data ?? []).map((i) => ({ id: i.id as string, name: i.name as string })),
+    jointHolders,
+  });
+  const todayIso = today.toISOString().slice(0, 10);
+  const withEditor = (children: ReactNode) => (
+    <QuickEditHost
+      model={quick}
+      styles={styles}
+      today={todayIso}
+      fxHint={fxHint}
+      initialOpen={edit ?? null}
+    >
+      {children}
+    </QuickEditHost>
+  );
   const rows = all.flatMap((b) => b.sections.flatMap((s) => s.rows));
   const assumed = rows.filter((r) => r.kindInferred).length;
   const month = today.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
@@ -81,13 +110,14 @@ export default async function AccountsPage({
   const head = (
     <PageHead
       title="Accounts"
-      subtitle="Every bank in your sheet's order, with each person's savings and deposits. Open a bank for its history."
+      subtitle="Every bank in your sheet's order, with each person's savings and deposits. Press Edit on a line to change it."
       pills={pills}
       actions={
         <>
           <Link className="btn primary" href="/monthly">
             Update balances
           </Link>
+          <AddButton label="Add an account" />
           <Link className="btn" href="/accounts?tab=manage">
             Manage
           </Link>
@@ -98,14 +128,14 @@ export default async function AccountsPage({
 
   if (tab === 'manage') {
     const tidy = await loadTidyPlan(supabase);
-    return (
+    return withEditor(
       <>
         {head}
         <AccountsKpis s={summary} month={month} />
         <Tabs base="/accounts" current={tab} tabs={tabList(assumed)} />
         <p className="lead muted">
-          Everything that changes the shape of the list is here: correct a detail, change the order,
-          tidy notes or add an account.
+          Tools for many accounts at once, and for the order of the list. To change one account,
+          press Edit on its line under Banks.
         </p>
         <ManageCards
           facts={{
@@ -115,7 +145,7 @@ export default async function AccountsPage({
             accounts: rows.length,
           }}
         />
-      </>
+      </>,
     );
   }
 
@@ -134,7 +164,7 @@ export default async function AccountsPage({
     marketDates.fx,
   );
 
-  return (
+  return withEditor(
     <>
       {head}
       <AccountsKpis s={summary} month={month} />
@@ -173,7 +203,7 @@ export default async function AccountsPage({
           </li>
         </ul>
       </details>
-    </>
+    </>,
   );
 }
 

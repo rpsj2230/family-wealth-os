@@ -1,0 +1,307 @@
+/* The one-account edit panel: a side sheet on a laptop, a full-width sheet on a phone. */
+.editbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.editbtn:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+.editbtn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+dialog.qe {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: min(480px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: -14px 0 40px rgb(15 23 42 / 0.2);
+  overflow: hidden;
+}
+dialog.qe[open] {
+  display: flex;
+  flex-direction: column;
+  animation: qe-in 0.18s ease-out;
+}
+dialog.qe::backdrop {
+  background: rgb(15 23 42 / 0.42);
+}
+@keyframes qe-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.qe[open] {
+    animation: none;
+  }
+}
+.qe-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.qe-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px var(--gutter) 12px;
+  border-bottom: 1px solid var(--border);
+  border-top: 4px solid var(--person, var(--primary));
+}
+.qe-head h2 {
+  margin: 2px 0 0;
+  font-size: 1.2rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.qe-head p {
+  margin: 0;
+}
+.qe-kicker {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.qe-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.qe-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--person, var(--primary));
+}
+.qe-x {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.qe-x:hover {
+  background: var(--soft);
+}
+.qe-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px var(--gutter);
+}
+.qe-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 12px;
+  align-items: start;
+}
+.qe-grid2 {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 8px;
+}
+.qe-f {
+  min-width: 0;
+}
+.qe-f > span,
+.qe-f > label > span {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.qe-f input:not([type='checkbox']),
+.qe-f select,
+.qe-f textarea {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+.qe-f textarea {
+  resize: vertical;
+  font: inherit;
+  width: 100%;
+}
+.qe-f small {
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+.qe-wide {
+  grid-column: 1 / -1;
+}
+.qe-bal {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+}
+.qe-bal label {
+  min-width: 0;
+}
+.qe-bal label > span {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.qe-bal small {
+  margin: 0;
+}
+.qe-more {
+  margin-top: 16px;
+  border-top: 1px dashed var(--border);
+  padding-top: 4px;
+}
+.qe-more > summary {
+  font-size: 0.88rem;
+  color: var(--primary);
+}
+.qe-more .qe-grid {
+  margin-top: 6px;
+}
+.qe-problems {
+  margin: 14px 0 0;
+  padding: 10px 14px 10px 30px;
+  border-radius: 10px;
+  background: var(--bad-bg);
+  color: var(--fail);
+  font-size: 0.86rem;
+}
+.qe-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px var(--gutter) calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+.qe-msg {
+  flex: 1 1 100%;
+  font-size: 0.86rem;
+  min-height: 1.2em;
+}
+.qe-msg.ok {
+  color: var(--ok-fg);
+  font-weight: 600;
+}
+.qe-msg.fail {
+  color: var(--fail);
+  font-weight: 600;
+}
+.qe-foot .btn {
+  flex: 1;
+}
+.qe-ask {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  font-size: 0.9rem;
+}
+.qe-ask span {
+  flex: 1 1 100%;
+  font-weight: 600;
+}
+.qe-ask .btn {
+  flex: 1;
+}
+@media (max-width: 479px) {
+  .qe-grid {
+    grid-template-columns: 1fr;
+  }
+  .qe-bal {
+    grid-template-columns: 1fr;
+  }
+}
+.plainbtn {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.editbtn.push {
+  margin-left: auto;
+}
+.xl td.editcol,
+.xl th.editcol {
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 4px;
+}
+.xl .onlynarrow {
+  display: none;
+}
+@media (max-width: 1000px) {
+  .xl .onlynarrow {
+    display: inline-flex;
+  }
+  .xl th.editcol,
+  .xl td.editcol {
+    display: none;
+  }
+}
+.qe-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--soft);
+}
+.qe-seg button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.qe-seg button.on {
+  background: var(--card);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.15);
+}

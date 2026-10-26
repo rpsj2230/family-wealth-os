@@ -42,6 +42,8 @@ export interface DepositLinks {
   asset: (f: FdLine) => string;
   monthly: (f: FdLine) => string;
   edit: string;
+  /** opens one deposit's edit panel */
+  editOne: (f: FdLine) => string;
   sample: boolean;
 }
 
@@ -50,6 +52,7 @@ export const liveLinks: DepositLinks = {
   asset: (f) => `/asset/${f.id}`,
   monthly: (f) => `/monthly/${slugify(f.bank)}`,
   edit: '/accounts/edit',
+  editOne: (f) => `/accounts?edit=${f.id}`,
   sample: false,
 };
 
@@ -197,7 +200,7 @@ export function RegisterTab({
                   {check !== null && (
                     <div className="fail small wrapnote">
                       Our calculation differs by {Math.abs(check).toFixed(2)}%.{' '}
-                      <Link href={links.edit}>Check the rate and dates</Link>
+                      <Link href={links.editOne(f)}>Check the rate and dates</Link>
                     </div>
                   )}
                 </td>

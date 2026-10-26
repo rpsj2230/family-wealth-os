@@ -28,8 +28,8 @@ export default async function BankPage({ params }: { params: Promise<{ id: strin
             <Link className="btn compact" href={`/monthly/${slugify(d.name)}`}>
               Update this bank
             </Link>
-            <Link className="btn compact" href="/accounts/edit">
-              Edit details
+            <Link className="btn compact" href={`/accounts/edit?bank=${id}`}>
+              Edit these accounts
             </Link>
             <Link className="btn compact" href="/deposits">
               Deposits

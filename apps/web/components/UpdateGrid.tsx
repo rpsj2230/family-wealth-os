@@ -12,12 +12,13 @@ import {
   type BankRow,
   type PersonStyle,
 } from '@fwos/core';
-import { addBankItem, saveMonthly } from '@/app/(app)/monthly/actions';
+import { saveMonthly } from '@/app/(app)/monthly/actions';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
 import { BankStatusBoard } from './BankStatusBoard';
 import { PersonBadge } from './Person';
-import { UpdatedCell, cleanNote, fmtDate, pctText } from './BankTable';
+import { UpdatedCell, fmtDate, pctText } from './BankTable';
+import { AddButton, EditButton } from './QuickEdit';
 import {
   buildGridChanges,
   carryForward,
@@ -81,8 +82,6 @@ export function UpdateGrid({
 }) {
   const [edits, setEdits] = useState<Record<string, GridEdit>>({});
   const [asOf, setAsOf] = useState(today);
-  const [terms, setTerms] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
   const [onlyWaiting, setOnlyWaiting] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
@@ -196,9 +195,10 @@ export function UpdateGrid({
         <td className="acct">
           <div className="code">
             <span className={`kind ${r.kind}`}>{r.code}</span>
+            <EditButton id={r.assetId} name={r.code} />
           </div>
           {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
-          {!showNotes && r.notes && <div className="sub">{r.notes}</div>}
+          {r.notes && <div className="sub">{r.notes}</div>}
           {errors[r.assetId] && (
             <div className="small fail" role="alert">
               {errors[r.assetId]}
@@ -257,17 +257,6 @@ export function UpdateGrid({
             {hint && <span className={`delta ${hint.warn ? 'warn' : ''}`}>{hint.text}</span>}
           </div>
         </td>
-        {showNotes && (
-          <td className="notecell" data-label="Note">
-            <input
-              className="mini note"
-              aria-label={`Note for ${r.code}`}
-              defaultValue={r.notes ?? ''}
-              placeholder="AMB, debit card, lounge card…"
-              onChange={(ev) => set(r.assetId, { notes: ev.target.value })}
-            />
-          </td>
-        )}
       </tr>
     );
   }
@@ -280,6 +269,7 @@ export function UpdateGrid({
         <td className="acct">
           <div className="code">
             <span className={`kind ${r.kind}`}>{r.code}</span>
+            <EditButton id={r.assetId} name={r.code} />
           </div>
           {fd.linkedTo && <div className="sub">↳ {fd.linkedTo}</div>}
           {fd.refLast4 && <div className="sub">FD no. …{fd.refLast4}</div>}
@@ -290,17 +280,7 @@ export function UpdateGrid({
           )}
         </td>
         <td className="num" data-label="Rate">
-          {terms ? (
-            <input
-              className="mini"
-              inputMode="decimal"
-              aria-label={`Rate for ${r.code}`}
-              defaultValue={String(Math.round(fd.rate * 1e6) / 1e4)}
-              onChange={(ev) => set(r.assetId, { fdRate: ev.target.value })}
-            />
-          ) : (
-            pctText(fd.rate)
-          )}
+          {pctText(fd.rate)}
         </td>
         <td className="num" data-label="Matures">
           {fmtDate(fd.maturityOn)}
@@ -310,17 +290,7 @@ export function UpdateGrid({
           {money(fd.principal)}
         </td>
         <td className="num" data-label="At maturity">
-          {terms ? (
-            <input
-              className="mini"
-              inputMode="decimal"
-              aria-label={`Maturity amount for ${r.code}`}
-              defaultValue={String(Math.round(fd.maturityAmount))}
-              onChange={(ev) => set(r.assetId, { fdMaturityAmount: ev.target.value })}
-            />
-          ) : (
-            money(fd.maturityAmount)
-          )}
+          {money(fd.maturityAmount)}
         </td>
         <td className="num" data-label="Worth today">
           {money(r.current)}
@@ -342,23 +312,6 @@ export function UpdateGrid({
             ))}
           </select>
         </td>
-        {showNotes && (
-          <td className="wide" data-label="Note">
-            <input
-              className="mini note"
-              aria-label={`Note for ${r.code}`}
-              defaultValue={cleanNote(r.notes)}
-              placeholder="Note"
-              onChange={(ev) =>
-                set(r.assetId, {
-                  notes: [r.notes?.match(/FD\s*Number\s*:\s*[^\s,]*/i)?.[0], ev.target.value]
-                    .filter(Boolean)
-                    .join(' · '),
-                })
-              }
-            />
-          </td>
-        )}
       </tr>
     );
   }
@@ -385,18 +338,6 @@ export function UpdateGrid({
             max={today}
             onChange={(e) => setAsOf(e.target.value || today)}
           />
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />{' '}
-          Edit deposit rate and maturity amount
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={showNotes}
-            onChange={(e) => setShowNotes(e.target.checked)}
-          />{' '}
-          Edit notes
         </label>
         {mixedStates && blocks.length > 1 && (
           <label className="check">
@@ -478,7 +419,7 @@ export function UpdateGrid({
                 const toConfirm = personDeps.some((x) =>
                   x.rows.some((d) => d.fd?.needsConfirmation),
                 );
-                const cols = showNotes ? 4 : 3;
+                const cols = 3;
                 return (
                   <>
                     {personBal.length > 0 && (
@@ -489,7 +430,6 @@ export function UpdateGrid({
                               <th>Account</th>
                               <th>Last value</th>
                               <th className="num">New balance</th>
-                              {showNotes && <th>Note</th>}
                             </tr>
                           </thead>
                           {personBal.map(({ sct, rows: rs }) => (
@@ -532,7 +472,6 @@ export function UpdateGrid({
                                 <th className="num">At maturity</th>
                                 <th className="num">Worth today</th>
                                 <th>Status</th>
-                                {showNotes && <th>Note</th>}
                               </tr>
                             </thead>
                             {personDeps.map(({ sct, rows: rs }) => (
@@ -541,7 +480,7 @@ export function UpdateGrid({
                                 style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
                               >
                                 <tr className="secthead">
-                                  <th colSpan={showNotes ? 8 : 7}>
+                                  <th colSpan={7}>
                                     <PersonBadge p={styles[sct.ownerId]} name size={18} />
                                   </th>
                                 </tr>
@@ -556,10 +495,10 @@ export function UpdateGrid({
                       <div className="addcell">
                         {b.sections.map((sct) => (
                           <div key={sct.ownerId}>
-                            <AddItem
-                              ownerId={sct.ownerId}
-                              institutionId={b.key}
-                              who={styles[sct.ownerId]?.name ?? ''}
+                            <AddButton
+                              className="linkbtn"
+                              label={`+ Add a deposit or account for ${styles[sct.ownerId]?.name ?? ''}`.trim()}
+                              preset={{ ownerId: sct.ownerId, institutionId: b.key }}
                             />
                           </div>
                         ))}
@@ -606,153 +545,5 @@ export function UpdateGrid({
         <Link href="/monthly?tab=other">Property, ULIP, loans and other items</Link>
       </p>
     </>
-  );
-}
-
-function AddItem({
-  ownerId,
-  institutionId,
-  who,
-}: {
-  ownerId: string;
-  institutionId: string;
-  who: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [type, setType] = useState<'bank_account' | 'fixed_deposit'>('fixed_deposit');
-  const [f, setF] = useState({
-    accountKind: 'NRE',
-    isJoint: false,
-    last4: '',
-    notes: '',
-    principal: '',
-    ratePct: '',
-    bookedOn: '',
-    maturityOn: '',
-    maturityAmount: '',
-    refLast4: '',
-  });
-  const [msg, setMsg] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const up = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
-  if (!open)
-    return (
-      <button type="button" className="linkbtn" onClick={() => setOpen(true)}>
-        + Add a deposit or account{who ? ` for ${who}` : ''}
-      </button>
-    );
-  return (
-    <form
-      className="addform"
-      onSubmit={(e) => {
-        e.preventDefault();
-        setMsg(null);
-        start(async () => {
-          const r = await addBankItem({
-            type,
-            ownerId,
-            institutionId,
-            ...f,
-            accountKind: f.accountKind as 'NRE' | 'NRO' | '',
-          });
-          setMsg(r.message);
-          if (r.ok) setOpen(false);
-        });
-      }}
-    >
-      <select
-        aria-label="Type"
-        value={type}
-        onChange={(e) => setType(e.target.value as typeof type)}
-      >
-        <option value="fixed_deposit">Fixed deposit</option>
-        <option value="bank_account">Savings account</option>
-      </select>
-      <select
-        aria-label="NRE or NRO"
-        value={f.accountKind}
-        onChange={(e) => up('accountKind', e.target.value)}
-      >
-        <option value="NRE">NRE</option>
-        <option value="NRO">NRO</option>
-        <option value="">Not stated</option>
-      </select>
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={f.isJoint}
-          onChange={(e) => up('isJoint', e.target.checked)}
-        />{' '}
-        Joint
-      </label>
-      <input
-        aria-label="Last 4 digits of the savings account"
-        placeholder="Savings a/c last 4"
-        maxLength={4}
-        value={f.last4}
-        onChange={(e) => up('last4', e.target.value)}
-      />
-      {type === 'fixed_deposit' && (
-        <>
-          <input
-            aria-label="Amount invested"
-            placeholder="Invested ₹"
-            inputMode="decimal"
-            value={f.principal}
-            onChange={(e) => up('principal', e.target.value)}
-          />
-          <input
-            aria-label="Rate in percent"
-            placeholder="Rate %"
-            inputMode="decimal"
-            value={f.ratePct}
-            onChange={(e) => up('ratePct', e.target.value)}
-          />
-          <input
-            aria-label="Start date"
-            type="date"
-            value={f.bookedOn}
-            onChange={(e) => up('bookedOn', e.target.value)}
-          />
-          <input
-            aria-label="Maturity date"
-            type="date"
-            value={f.maturityOn}
-            onChange={(e) => up('maturityOn', e.target.value)}
-          />
-          <input
-            aria-label="Maturity amount"
-            placeholder="At maturity ₹ (optional)"
-            inputMode="decimal"
-            value={f.maturityAmount}
-            onChange={(e) => up('maturityAmount', e.target.value)}
-          />
-          <input
-            aria-label="FD number last 4"
-            placeholder="FD no. last 4"
-            maxLength={4}
-            value={f.refLast4}
-            onChange={(e) => up('refLast4', e.target.value)}
-          />
-        </>
-      )}
-      <input
-        aria-label="Notes"
-        placeholder="Notes"
-        value={f.notes}
-        onChange={(e) => up('notes', e.target.value)}
-      />
-      <button className="btn compact primary" disabled={pending}>
-        Add
-      </button>
-      <button type="button" className="btn compact ghost" onClick={() => setOpen(false)}>
-        Cancel
-      </button>
-      {msg && (
-        <span className="small fail" role="alert">
-          {msg}
-        </span>
-      )}
-    </form>
   );
 }

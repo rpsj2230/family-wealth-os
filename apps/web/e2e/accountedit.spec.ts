@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
 
-test.describe('correct tags and details (sample)', () => {
+test.describe('edit many accounts at once (sample)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/demo/accounts/edit');
     await expect(
-      page.getByRole('heading', { name: 'Correct tags and details', level: 1 }),
+      page.getByRole('heading', { name: 'Edit many accounts at once', level: 1 }),
     ).toBeVisible();
   });
 
@@ -63,5 +63,20 @@ test.describe('correct tags and details (sample)', () => {
     await expect(
       page.getByRole('region', { name: /accounts, scrolls sideways/ }).first(),
     ).toBeVisible();
+  });
+});
+
+test.describe('the table starts with the columns people use', () => {
+  test('rare columns wait behind "Show every column"', async ({ page }) => {
+    await page.goto('/demo/accounts/edit');
+    await expect(page.getByLabel(/^Last four digits, /)).toHaveCount(0);
+    await expect(page.getByLabel(/^Joint, /)).toHaveCount(0);
+    await expect(page.getByLabel(/^Type, /).first()).toBeVisible();
+    await expect(page.getByLabel(/^Status, /).first()).toBeVisible();
+    await page.getByLabel('Show every column').check();
+    await expect(page.getByLabel(/^Last four digits, /).first()).toBeVisible();
+    await expect(page.getByLabel(/^Joint, /).first()).toBeVisible();
+    await page.getByLabel('Show every column').uncheck();
+    await expect(page.getByLabel(/^Joint, /)).toHaveCount(0);
   });
 });
