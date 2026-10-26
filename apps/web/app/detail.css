@@ -1,0 +1,195 @@
+/* Detail pages: breadcrumb, header, facts, history and log */
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.8rem;
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+.crumbs a {
+  text-decoration: none;
+}
+.crumbs a:hover {
+  text-decoration: underline;
+}
+.detailhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  margin: 4px 0 12px;
+  padding-left: 12px;
+  border-left: 5px solid var(--person, var(--border));
+}
+.detailhead h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.detailhead .sub {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.detailhead .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.detailhead .bigvalue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.facts > div {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.facts dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.facts dd .small {
+  font-weight: 400;
+  display: block;
+}
+.detailsection {
+  margin: 16px 0;
+}
+.detailsection h2 {
+  font-size: 1.05rem;
+  margin: 0 0 8px;
+}
+.dtable-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.dtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+table.dtable th,
+table.dtable td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  text-align: left;
+}
+table.dtable thead th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.dtable .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+table.dtable tr.dim td {
+  opacity: 0.55;
+}
+.historyline {
+  width: 100%;
+  height: auto;
+  display: block;
+  color: var(--primary, #4f46e5);
+}
+.historyline .axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.historyline text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.activity li {
+  padding: 10px 0 10px 16px;
+  border-left: 2px solid var(--border);
+  position: relative;
+}
+.activity li::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 15px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--primary, #4f46e5);
+}
+.activity li.mail::before {
+  border-color: var(--ok, #16a34a);
+}
+.activity li.import::before {
+  border-color: #d97706;
+}
+.activity .when {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.activity .title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.activity .changes {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+.activity .changes li {
+  border: 0;
+  padding: 1px 0;
+}
+.activity .changes li::before {
+  display: none;
+}
+.activity .changes .arrow {
+  color: var(--muted);
+  padding: 0 4px;
+}
+.activity .changes del {
+  color: var(--muted);
+}
+.detail-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}

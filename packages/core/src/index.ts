@@ -24,3 +24,4 @@ export * from './liquidity';
 export * from './performance';
 export * from './capital-gains';
 export * from './tax-reconcile';
+export * from './activity';
