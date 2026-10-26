@@ -9,6 +9,7 @@ import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
 import { runInbox, type InboxIo, type InboxMessage, type KnownAccount } from '@fwos/ingest';
+import { importCasPdf } from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -171,6 +172,38 @@ async function main() {
         }),
         'record balance',
       );
+    },
+    async casImport(m) {
+      const pans = must(
+        await db.from('owner_pan').select('owner_id, pan').eq('household_id', hh),
+        'saved PANs',
+      ) as { owner_id: string; pan: string }[];
+      const candidates = pans.map((p) => ({ ownerId: p.owner_id, pan: p.pan }));
+      const results = [];
+      for (const a of m.attachments)
+        results.push(
+          await importCasPdf(db, hh, a.content, candidates, {
+            sourceRef: `${m.messageId}|${a.filename}`,
+            today,
+            receivedOn: m.receivedOn,
+          }),
+        );
+      const ok = results.filter((r) => r.outcome !== 'failed');
+      if (ok.length === 0)
+        return {
+          outcome: 'failed',
+          reason: results
+            .map((r) => r.detail)
+            .join(' ')
+            .slice(0, 300),
+        };
+      const n = ok.reduce((a, r) => a + (r.report?.matched ?? 0) + (r.report?.created ?? 0), 0);
+      const t = ok.reduce((a, r) => a + (r.report?.transactionsAdded ?? 0), 0);
+      const review = ok.flatMap((r) => r.report?.needsReview ?? []);
+      return {
+        outcome: review.length > 0 ? 'partial' : 'imported',
+        reason: `${n} funds updated, ${t} new transactions${review.length ? `; check: ${review.join(', ')}` : ''}`,
+      };
     },
     async fetchJson(url, init) {
       const res = await fetch(url, init);

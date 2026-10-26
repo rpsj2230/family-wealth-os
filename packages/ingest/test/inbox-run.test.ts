@@ -174,3 +174,40 @@ describe('runInbox: statements read by AI', () => {
     expect(r.needsReview).toBe(1);
   });
 });
+
+describe('runInbox: fund statements', () => {
+  const casMsg = msg({
+    messageId: 'cas1',
+    from: 'CAMS <donotreply@camsonline.com>',
+    subject: 'Your Consolidated Account Statement',
+    attachments: [{ filename: 'cas.pdf', content: new Uint8Array([1]) }],
+  });
+  it('hands a statement to the importer and logs it as applied', async () => {
+    const { io, rows } = fakeIo({
+      casImport: async () => ({ outcome: 'imported', reason: '3 funds updated' }),
+    });
+    const r = await runInbox([casMsg], io, cfgNoAi);
+    expect(r).toMatchObject({ applied: 1, needsReview: 0 });
+    expect(rows[0]).toMatchObject({ outcome: 'applied', reason: '3 funds updated' });
+  });
+  it('sends a statement that could not be imported to review, with the reason', async () => {
+    const { io, rows } = fakeIo({
+      casImport: async () => ({ outcome: 'failed', reason: 'password did not open it' }),
+    });
+    await runInbox([casMsg], io, cfgNoAi);
+    expect(rows[0]).toMatchObject({ outcome: 'needs_review', reason: 'password did not open it' });
+  });
+  it('does not treat a bank alert as a statement', async () => {
+    let called = false;
+    const { io } = fakeIo({
+      casImport: async () => ((called = true), { outcome: 'imported', reason: '' }),
+    });
+    await runInbox([msg()], io, cfgNoAi);
+    expect(called).toBe(false);
+  });
+  it('does nothing special when this run has no importer', async () => {
+    const { io, rows } = fakeIo();
+    await runInbox([casMsg], io, cfgNoAi);
+    expect(rows[0]!.outcome).not.toBe('applied');
+  });
+});

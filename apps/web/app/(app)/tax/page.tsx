@@ -27,12 +27,13 @@ const niceDate = (iso: string) =>
 export default async function TaxPage() {
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const { positions, ownerName, today } = await loadHarvestPositions(
+  const { positions, ownerName, today, ytdRealised } = await loadHarvestPositions(
     supabase as unknown as SupabaseClient,
   );
   const iso = today.toISOString().slice(0, 10);
   const settings = await loadSettings(supabase as unknown as SupabaseClient);
   const plan = planHarvest(positions, iso, {
+    ytdRealised,
     rules: settings.rules,
     config: settings.config.harvest,
   });

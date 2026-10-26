@@ -21,6 +21,12 @@ export interface HarvestPosition {
   invested: number;
   startedOn: string | null;
   sipActive: boolean;
+  /**
+   * Units still held, one entry per purchase, from the fund statement. When present the plan uses real purchase dates
+   * and costs (the oldest units are sold first), so a fund with an active SIP is no longer left out. `cost` is null when
+   * the purchase is not on the statement; such units are not counted as harvestable.
+   */
+  lots?: { acquiredOn: string; units: number; cost: number | null }[];
 }
 
 export interface HarvestPick {
@@ -85,7 +91,7 @@ export function planHarvest(
   const endYear = Number(fy.slice(0, 4)) + 1;
   const deadline = `${endYear}-03-31`;
   const assumptions = [
-    'Based on each fund’s total invested amount and first purchase date; exact lots arrive with your fund statement.',
+    'Funds with an imported fund statement use their real purchase dates and costs, selling the oldest units first. Other funds use the total invested amount and first purchase date.',
     ...(cfg.skipActiveSip
       ? [
           'Funds with an active SIP are left out because their recent units may still be short-term.',
@@ -113,24 +119,90 @@ export function planHarvest(
     const used = opts.ytdRealised?.[ownerId] ?? 0;
     const room = Math.max(0, rules.equity.ltcgExemption - used);
     const notes: string[] = [];
-    const eligible = positions
-      .filter(
-        (p) =>
-          p.ownerId === ownerId &&
-          !(cfg.skipActiveSip && p.sipActive) &&
-          p.startedOn !== null &&
-          p.startedOn <= longSince &&
-          p.value > 0 &&
-          p.invested > 0 &&
-          p.value > p.invested,
-      )
-      .map((p) => ({ ...p, gain: p.value - p.invested, ratio: (p.value - p.invested) / p.value }))
+    const mine = positions.filter((p) => p.ownerId === ownerId && p.value > 0);
+    // lots known: the oldest long-term units, their value and gain
+    const withLots = mine
+      .filter((p) => p.lots && p.lots.length > 0)
+      .map((p) => {
+        const units = p.lots!.reduce((a, l) => a + l.units, 0);
+        const unitValue = units > 0 ? p.value / units : 0;
+        const prefix: { value: number; gain: number }[] = [];
+        for (const l of [...p.lots!].sort((a, b) => a.acquiredOn.localeCompare(b.acquiredOn))) {
+          if (l.acquiredOn > longSince || l.cost === null) break;
+          const v = l.units * unitValue;
+          prefix.push({ value: v, gain: v - l.cost });
+        }
+        const gain = prefix.reduce((a, l) => a + l.gain, 0);
+        return { p, prefix, gain, value: prefix.reduce((a, l) => a + l.value, 0) };
+      })
+      .filter((x) => x.prefix.length > 0 && x.gain > 0);
+    const lotted = new Set(mine.filter((p) => p.lots && p.lots.length > 0).map((p) => p.assetId));
+    const eligible = [
+      ...withLots.map((x) => ({
+        ...x.p,
+        gain: x.gain,
+        ratio: x.value > 0 ? x.gain / x.value : 0,
+        prefix: x.prefix as { value: number; gain: number }[] | null,
+        eligibleValue: x.value,
+      })),
+      ...mine
+        .filter(
+          (p) =>
+            !lotted.has(p.assetId) &&
+            !(cfg.skipActiveSip && p.sipActive) &&
+            p.startedOn !== null &&
+            p.startedOn <= longSince &&
+            p.invested > 0 &&
+            p.value > p.invested,
+        )
+        .map((p) => ({
+          ...p,
+          gain: p.value - p.invested,
+          ratio: (p.value - p.invested) / p.value,
+          prefix: null as { value: number; gain: number }[] | null,
+          eligibleValue: p.value,
+        })),
+    ]
       // smallest whole gains first, so as many positions as possible are completed inside the allowance
       .sort((a, b) => a.gain - b.gain);
     const picks: HarvestPick[] = [];
     let left = room;
     for (const p of eligible) {
       if (left < 1) break;
+      if (p.prefix) {
+        // sell the oldest lots in order; the last lot only in part
+        let sell = 0;
+        let gain = 0;
+        let full = true;
+        for (const l of p.prefix) {
+          if (left - gain < 1) {
+            full = false;
+            break;
+          }
+          if (l.gain <= left - gain) {
+            sell += l.value;
+            gain += l.gain;
+          } else {
+            const f = l.gain > 0 ? (left - gain) / l.gain : 0;
+            sell += l.value * f;
+            gain += l.gain * f;
+            full = false;
+            break;
+          }
+        }
+        if (sell >= cfg.minSellAmount) {
+          picks.push({
+            assetId: p.assetId,
+            fund: p.fund,
+            sellAmount: Math.floor(sell),
+            estimatedGain: Math.round(gain),
+            fullExit: full && p.eligibleValue >= p.value - 1,
+            buyBackAmount: Math.floor(sell),
+          });
+        }
+        left -= gain;
+        continue;
+      }
       if (p.gain <= left) {
         picks.push({
           assetId: p.assetId,
@@ -156,7 +228,12 @@ export function planHarvest(
       }
     }
     if (eligible.length === 0)
-      notes.push('Nothing qualifies yet: no profitable, long-held fund without an active SIP.');
+      notes.push(
+        'Nothing qualifies yet: no profitable fund with long-held units' +
+          (cfg.skipActiveSip
+            ? ' (funds with an active SIP are left out until a fund statement is imported).'
+            : '.'),
+      );
     else if (room < rules.equity.ltcgExemption)
       notes.push('Part of this year’s allowance is already used.');
     const totalGain = picks.reduce((s, p) => s + p.estimatedGain, 0);

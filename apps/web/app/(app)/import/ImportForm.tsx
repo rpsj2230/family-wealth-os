@@ -2,7 +2,14 @@
 
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { commitImport, previewImport, syncLayout, type ImportState } from './actions';
+import {
+  commitImport,
+  importCas,
+  previewImport,
+  syncLayout,
+  type CasState,
+  type ImportState,
+} from './actions';
 
 const idle: ImportState = { stage: 'idle' };
 const SEV: Record<string, string> = {
@@ -143,6 +150,51 @@ export function SyncLayoutForm({ today }: { today: string }) {
         <p className="notice ok" role="status">
           {state.message}
         </p>
+      )}
+    </form>
+  );
+}
+
+export function CasForm({ owners }: { owners: { id: string; name: string }[] }) {
+  const [res, act, pending] = useActionState<CasState | null, FormData>(importCas, null);
+  return (
+    <form action={act} className="card form" aria-busy={pending}>
+      <label>
+        Fund statement (CAS, PDF) from CAMS, KFintech, MF Central or CDSL
+        <input name="file" type="file" accept=".pdf" required />
+      </label>
+      <div className="formgrid g3">
+        <label>
+          Whose statement
+          <select name="owner" required>
+            {owners.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          PAN (the PDF password; used once to open the file, never saved)
+          <input name="pan" autoComplete="off" placeholder="ABCDE1234F" />
+        </label>
+      </div>
+      <div className="row" style={{ alignItems: 'center' }}>
+        <button className="btn primary" disabled={pending}>
+          {pending ? 'Reading…' : 'Import statement'}
+        </button>
+        {res && (
+          <span className={res.ok ? 'ok small' : 'fail small'} role={res.ok ? 'status' : 'alert'}>
+            {res.message}
+          </span>
+        )}
+      </div>
+      {res?.lines && (
+        <ul className="list small">
+          {res.lines.map((l) => (
+            <li key={l}>{l}</li>
+          ))}
+        </ul>
       )}
     </form>
   );

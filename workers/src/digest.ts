@@ -126,7 +126,11 @@ const store: DigestStore = {
     try {
       const hv = await loadHarvestPositions(db, { householdId });
       const st = await loadSettings(db, householdId);
-      const plan = planHarvest(hv.positions, d, { rules: st.rules, config: st.config.harvest });
+      const plan = planHarvest(hv.positions, d, {
+        rules: st.rules,
+        config: st.config.harvest,
+        ytdRealised: hv.ytdRealised,
+      });
       const n = await ensureHarvestTasks(db, householdId, plan, hv.ownerName, d, {
         month: st.config.reminders.harvestMonth,
         day: st.config.reminders.harvestDay,

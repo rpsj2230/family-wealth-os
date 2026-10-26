@@ -1,8 +1,13 @@
-import { ImportForm, SyncLayoutForm } from './ImportForm';
+import { loadContext } from '@/lib/data';
+import { CasForm, ImportForm, SyncLayoutForm } from './ImportForm';
 
 export const dynamic = 'force-dynamic';
 
-export default function ImportPage() {
+export default async function ImportPage() {
+  const { supabase } = await loadContext();
+  const owners = (
+    (await supabase.from('owners').select('id, display_name').order('created_at')).data ?? []
+  ).map((o) => ({ id: o.id as string, name: o.display_name as string }));
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
@@ -13,6 +18,15 @@ export default function ImportPage() {
         digits. The same file cannot be imported twice.
       </p>
       <SyncLayoutForm today={today} />
+      <section className="card">
+        <h2>Fund statements (CAS)</h2>
+        <p className="muted small">
+          Forward the statement e-mail to your inbox label and it is imported by itself, opened with
+          the PAN saved in Settings. Or upload the PDF here. Either way every transaction is kept,
+          so tax-gain harvesting uses your real purchase dates and gains.
+        </p>
+        <CasForm owners={owners} />
+      </section>
       <details className="card">
         <summary>Import a workbook (first time, or a new household)</summary>
         <ImportForm today={today} />

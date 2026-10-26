@@ -2,7 +2,9 @@
 
 import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { importCasPdf } from '@fwos/data';
 import { planWorkbook, type ImportException, type ImportPlan } from '@fwos/ingest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { recordSnapshot } from '@/lib/portfolio-data';
 
@@ -136,4 +138,55 @@ export async function syncLayout(_prev: ImportState, formData: FormData): Promis
     message: `Layout applied to ${r.matched} records.${r.unmatched.length ? ` ${r.unmatched.length} could not be matched and were left as they are: ${r.unmatched.slice(0, 6).join(', ')}${r.unmatched.length > 6 ? '…' : ''}.` : ''}`,
     fileName: f.name,
   };
+}
+
+export interface CasState {
+  ok: boolean | null;
+  message: string;
+  lines?: string[];
+}
+
+/**
+ * A fund statement (CAS) uploaded by hand. The PAN typed here only opens the PDF: it is not saved and not logged.
+ * (Statements forwarded to the inbox are opened with the PAN saved in Settings, with nothing to type.)
+ */
+export async function importCas(_p: CasState | null, f: FormData): Promise<CasState> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const file = f.get('file');
+  const owner = String(f.get('owner') ?? '');
+  const pan = String(f.get('pan') ?? '')
+    .trim()
+    .toUpperCase();
+  if (!(file instanceof File) || file.size === 0)
+    return { ok: false, message: 'Choose the statement PDF first.' };
+  if (!/\.pdf$/i.test(file.name))
+    return { ok: false, message: 'Only PDF statements are supported.' };
+  if (file.size > MAX_BYTES) return { ok: false, message: 'That file is larger than 5 MB.' };
+  if (!/^[0-9a-f-]{36}$/.test(owner))
+    return { ok: false, message: 'Choose whose statement this is.' };
+  if (pan !== '' && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan))
+    return { ok: false, message: 'A PAN looks like ABCDE1234F.' };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 24);
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const res = await importCasPdf(
+      supabase as unknown as SupabaseClient,
+      householdId,
+      bytes,
+      pan ? [{ ownerId: owner, pan }] : [],
+      { sourceRef: `upload:${hash}`, today },
+    );
+    revalidatePath('/', 'layout');
+    if (res.outcome === 'failed') return { ok: false, message: res.detail };
+    const r = res.report!;
+    return {
+      ok: true,
+      message: `${r.matched} funds updated, ${r.created} added, ${r.transactionsAdded} new transactions${r.needsReview.length ? `. Please check: ${r.needsReview.join(', ')}` : '.'}`,
+      lines: r.lines,
+    };
+  } catch (e) {
+    return { ok: false, message: `The statement could not be imported (${(e as Error).message}).` };
+  }
 }

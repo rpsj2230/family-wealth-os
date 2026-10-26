@@ -20,6 +20,7 @@ import {
   type BalanceReading,
   type KnownAccount,
 } from './bank-email';
+import { looksLikeCas } from './cas';
 
 export interface InboxMessage {
   messageId: string;
@@ -56,6 +57,10 @@ export interface InboxIo {
     url: string,
     init: { method: 'POST'; headers: Record<string, string>; body: string },
   ): Promise<unknown>;
+  /** Imports a fund statement (CAS) attached to the message; absent when this run cannot do it. */
+  casImport?(
+    m: InboxMessage,
+  ): Promise<{ outcome: 'imported' | 'partial' | 'failed'; reason: string }>;
   /** Text of a PDF; throws if it is encrypted or unreadable. */
   pdfText(content: Uint8Array): Promise<string>;
 }
@@ -110,6 +115,17 @@ export async function runInbox(
           `${row.outcome}: ${domain} "${base.subject}"${row.reason ? ` (${row.reason})` : ''}`,
         );
       };
+
+      if (io.casImport && m.attachments.length > 0 && looksLikeCas(m)) {
+        const res = await io.casImport(m);
+        await log({
+          outcome: res.outcome === 'imported' ? 'applied' : 'needs_review',
+          reason: res.reason.slice(0, 300) || null,
+          reading: null,
+          assetId: null,
+        });
+        continue;
+      }
 
       const parsed = parseBankEmail({
         from: m.from,

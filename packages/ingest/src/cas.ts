@@ -1,0 +1,331 @@
+/**
+ * Reads a Consolidated Account Statement (CAS) from its text. The CAMS and KFintech statements (also the ones from
+ * MF Central) list, per folio, a scheme with its ISIN, a dated transaction table and a closing balance with NAV and
+ * value; the CDSL/NSDL statements list holdings. The text is read without relying on line breaks, because PDF text
+ * extraction does not keep them reliably. Anything not understood is reported in `warnings`, never guessed.
+ */
+export type CasKind =
+  | 'purchase'
+  | 'sip'
+  | 'switch_in'
+  | 'dividend_reinvest'
+  | 'bonus'
+  | 'redeem'
+  | 'switch_out'
+  | 'other';
+
+export interface CasTxn {
+  date: string;
+  kind: CasKind;
+  description: string;
+  amount: number;
+  units: number;
+  nav: number | null;
+  balance: number | null;
+}
+
+export interface CasScheme {
+  amc: string | null;
+  folio: string;
+  folioLast4: string;
+  isin: string | null;
+  name: string;
+  openingUnits: number | null;
+  closingUnits: number | null;
+  navDate: string | null;
+  nav: number | null;
+  costValue: number | null;
+  marketValue: number | null;
+  transactions: CasTxn[];
+  /** only the closing position is known (a holdings statement) */
+  holdingsOnly: boolean;
+}
+
+export interface CasStatement {
+  pan: string | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  schemes: CasScheme[];
+  warnings: string[];
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+export function casDate(s: string): string | null {
+  const m = /^(\d{2})-([A-Za-z]{3})-(\d{4})$/.exec(s.trim());
+  if (!m) return null;
+  const mo = MONTHS.indexOf(m[2]!.toLowerCase()) + 1;
+  if (mo === 0) return null;
+  const iso = `${m[3]}-${String(mo).padStart(2, '0')}-${m[1]}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.getUTCDate() === Number(m[1]) ? iso : null;
+}
+
+/** "1,234.50", "(1,000.00)" (negative) and "-5.00" */
+export function casNumber(s: string): number {
+  const neg = /^\(.*\)$/.test(s.trim()) || s.trim().startsWith('-');
+  const n = Number(s.replace(/[(),\s-]/g, ''));
+  return neg ? -n : n;
+}
+
+const DATE = String.raw`\d{2}-[A-Za-z]{3}-\d{4}`;
+const AMT = String.raw`\(?-?[\d,]+\.\d{2}\)?`;
+const UNITS = String.raw`\(?-?[\d,]+\.\d{3,4}\)?`;
+const PRICE = String.raw`[\d,]+\.\d{2,4}`;
+// date, a description with no date inside it, amount, units, price, unit balance
+const TXN = new RegExp(
+  String.raw`(${DATE})\s+((?:(?!${DATE}).)+?)\s+(${AMT})\s+(${UNITS})\s+(${PRICE})\s+(${UNITS})(?=\s|$)`,
+  'g',
+);
+
+export function classify(description: string, units: number): CasKind {
+  const d = description.toLowerCase();
+  if (units < 0) return /switch/.test(d) ? 'switch_out' : 'redeem';
+  if (/switch/.test(d)) return 'switch_in';
+  if (/dividend|reinvest/.test(d)) return 'dividend_reinvest';
+  if (/bonus/.test(d)) return 'bonus';
+  if (/systematic|\bsip\b/.test(d)) return 'sip';
+  if (/purchase|subscription|new fund offer|nfo|additional/.test(d)) return 'purchase';
+  return 'other';
+}
+
+/** The scheme name sits between the folio header and the ISIN; strip codes, advisor notes and KYC/PAN flags. */
+export function cleanSchemeName(raw: string): string {
+  let s = raw
+    .replace(/PAN\s*:\s*\S+/gi, ' ')
+    .replace(/KYC\s*:\s*\S+/gi, ' ')
+    .replace(/\(\s*Advisor[^)]*\)/gi, ' ')
+    .replace(/\((?:Non-?\s*Demat|Demat|formerly[^)]*)\)/gi, ' ')
+    .replace(/\bScheme\s*(?:Name)?\s*:/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  s = s.replace(/^(?:OK\s+)+/i, '').replace(/^[A-Z0-9]{2,10}\s*-\s+(?=[A-Za-z])/, '');
+  return s.replace(/[\s-]+$/, '').trim();
+}
+
+const money = (re: RegExp, t: string): number | null => {
+  const m = re.exec(t);
+  return m ? casNumber(m[m.length - 1]!) : null;
+};
+
+function parseSchemeBody(
+  t: string,
+  folio: string,
+  name: string,
+  isin: string | null,
+  amc: string | null,
+): CasScheme {
+  const opening = money(/Opening Unit Balance\s*:?\s*([\d,]+\.\d+)/i, t);
+  const closing = money(/Closing Unit Balance\s*:?\s*([\d,]+\.\d+)/i, t);
+  const navM = new RegExp(
+    String.raw`NAV on (${DATE})\s*:?\s*(?:INR|Rs\.?)?\s*([\d,]+\.\d+)`,
+    'i',
+  ).exec(t);
+  const cost = money(/Total Cost Value\s*:?\s*(?:INR|Rs\.?)?\s*([\d,]+\.\d+)/i, t);
+  const mv = money(
+    new RegExp(String.raw`Market Value on ${DATE}\s*:?\s*(?:INR|Rs\.?)?\s*([\d,]+\.\d+)`, 'i'),
+    t,
+  );
+  const txns: CasTxn[] = [];
+  for (const m of t.matchAll(TXN)) {
+    const date = casDate(m[1]!);
+    if (!date) continue;
+    const units = casNumber(m[4]!);
+    const description = m[2]!.replace(/\*+/g, ' ').replace(/\s+/g, ' ').trim();
+    txns.push({
+      date,
+      kind: classify(description, units),
+      description: description.slice(0, 200),
+      amount: casNumber(m[3]!),
+      units,
+      nav: casNumber(m[5]!),
+      balance: casNumber(m[6]!),
+    });
+  }
+  const digits = folio.replace(/[^0-9A-Za-z]/g, '');
+  return {
+    amc,
+    folio,
+    folioLast4: digits.slice(-4),
+    isin,
+    name,
+    openingUnits: opening,
+    closingUnits: closing,
+    navDate: navM ? casDate(navM[1]!) : null,
+    nav: navM ? casNumber(navM[2]!) : null,
+    costValue: cost,
+    marketValue: mv,
+    transactions: txns,
+    holdingsOnly: false,
+  };
+}
+
+export function parseCas(raw: string): CasStatement {
+  const t = raw.replace(/\s+/g, ' ');
+  const warnings: string[] = [];
+  const pan = /PAN\s*:\s*([A-Z]{5}[0-9]{4}[A-Z])/.exec(t)?.[1] ?? null;
+  const period = new RegExp(String.raw`(${DATE})\s+To\s+(${DATE})`, 'i').exec(t);
+  const schemes: CasScheme[] = [];
+
+  const folioRe = /Folio No\s*:?\s*([0-9A-Za-z]+(?:\s*\/\s*[0-9A-Za-z]+)?)/gi;
+  const folios = [...t.matchAll(folioRe)];
+  folios.forEach((f, i) => {
+    const start = f.index! + f[0].length;
+    const end = i + 1 < folios.length ? folios[i + 1]!.index! : t.length;
+    const section = t.slice(start, end);
+    // one folio can list several schemes; each starts at its own ISIN
+    const isins = [...section.matchAll(/ISIN\s*:\s*(INF[0-9A-Z]{9})/gi)];
+    if (isins.length === 0) {
+      warnings.push(`Folio ${f[1]}: no scheme ISIN found, skipped.`);
+      return;
+    }
+    isins.forEach((im, j) => {
+      const nameFrom = j === 0 ? 0 : isins[j]!.index! - 0;
+      const prevEnd =
+        j === 0 ? 0 : section.slice(0, im.index!).lastIndexOf('Closing Unit Balance') + 1 || 0;
+      const head = section.slice(j === 0 ? 0 : Math.max(prevEnd, 0), im.index!);
+      // the name is what follows the last closing-balance text of the previous scheme, if any
+      const afterPrev =
+        j === 0
+          ? head
+          : head.replace(/^.*?Market Value on [^:]*:\s*(?:INR|Rs\.?)?\s*[\d,]+\.\d+/i, '');
+      void nameFrom;
+      const name = cleanSchemeName(afterPrev);
+      const bodyStart = im.index! + im[0].length;
+      const bodyEnd = j + 1 < isins.length ? isins[j + 1]!.index! : section.length;
+      const amc =
+        /([A-Z][A-Za-z&.' ]+ Mutual Fund)/.exec(
+          t.slice(Math.max(0, f.index! - 200), f.index!),
+        )?.[1] ?? null;
+      const s = parseSchemeBody(
+        section.slice(bodyStart, bodyEnd),
+        f[1]!.trim(),
+        name || 'Unnamed scheme',
+        im[1]!,
+        amc,
+      );
+      if (s.closingUnits === null) warnings.push(`${s.name}: no closing balance found.`);
+      schemes.push(s);
+    });
+  });
+
+  if (schemes.length === 0) {
+    // holdings statements (demat): ISIN, name, units, NAV, value
+    const hold =
+      /(INF[0-9A-Z]{9})\s+(.+?)\s+([\d,]+\.\d{3,4})\s+([\d,]+\.\d{2,4})\s+([\d,]+\.\d{2})(?=\s|$)/g;
+    for (const m of t.matchAll(hold)) {
+      schemes.push({
+        amc: null,
+        folio: 'demat',
+        folioLast4: 'demt',
+        isin: m[1]!,
+        name: cleanSchemeName(m[2]!),
+        openingUnits: null,
+        closingUnits: casNumber(m[3]!),
+        navDate: period ? casDate(period[2]!) : null,
+        nav: casNumber(m[4]!),
+        costValue: null,
+        marketValue: casNumber(m[5]!),
+        transactions: [],
+        holdingsOnly: true,
+      });
+    }
+    if (schemes.length > 0)
+      warnings.push(
+        'This looks like a holdings statement: balances are read, but there is no transaction history.',
+      );
+    else warnings.push('No folios or holdings were recognised in this statement.');
+  }
+  return {
+    pan,
+    periodFrom: period ? casDate(period[1]!) : null,
+    periodTo: period ? casDate(period[2]!) : null,
+    schemes,
+    warnings,
+  };
+}
+
+// ------------------------------------------------------------------------------------------------
+// Lots (first in, first out)
+// ------------------------------------------------------------------------------------------------
+export interface CasLot {
+  acquiredOn: string;
+  units: number;
+  /** cost of the units still held; null when the purchase is before the statement began */
+  cost: number | null;
+}
+
+export interface CasRealised {
+  soldOn: string;
+  acquiredOn: string;
+  units: number;
+  cost: number | null;
+  proceeds: number;
+}
+
+export interface LotResult {
+  lots: CasLot[];
+  realised: CasRealised[];
+  /** the lots add up to the closing balance, so they can be relied on */
+  reconciled: boolean;
+  /** units held before the first transaction on the statement, whose purchases are not on it */
+  priorUnits: number;
+}
+
+const EARLY = '1900-01-01';
+
+export function fifoLots(
+  s: Pick<CasScheme, 'transactions' | 'openingUnits' | 'closingUnits' | 'costValue'>,
+): LotResult {
+  const txns = [...s.transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const prior = s.openingUnits && s.openingUnits > 0.0005 ? s.openingUnits : 0;
+  const lots: CasLot[] = prior > 0 ? [{ acquiredOn: EARLY, units: prior, cost: null }] : [];
+  const realised: CasRealised[] = [];
+  for (const t of txns) {
+    if (t.units > 0) {
+      lots.push({
+        acquiredOn: t.date,
+        units: t.units,
+        cost: t.kind === 'bonus' ? 0 : Math.abs(t.amount),
+      });
+      continue;
+    }
+    if (t.units < 0) {
+      let left = -t.units;
+      const perUnit = Math.abs(t.amount) / left;
+      while (left > 0.00005 && lots.length > 0) {
+        const lot = lots[0]!;
+        const take = Math.min(lot.units, left);
+        const costShare = lot.cost === null ? null : (lot.cost * take) / lot.units;
+        realised.push({
+          soldOn: t.date,
+          acquiredOn: lot.acquiredOn,
+          units: take,
+          cost: costShare,
+          proceeds: perUnit * take,
+        });
+        if (lot.cost !== null) lot.cost -= costShare ?? 0;
+        lot.units -= take;
+        left -= take;
+        if (lot.units < 0.00005) lots.shift();
+      }
+    }
+  }
+  const held = lots.reduce((a, l) => a + l.units, 0);
+  const reconciled = s.closingUnits !== null && Math.abs(held - s.closingUnits) <= 0.01;
+  // units from before the statement: cost is what the statement's total cost leaves after the known lots
+  if (prior > 0 && s.costValue !== null) {
+    const known = lots.reduce((a, l) => a + (l.cost ?? 0), 0);
+    const first = lots.find((l) => l.acquiredOn === EARLY);
+    if (first) first.cost = Math.max(0, s.costValue - known);
+  }
+  return { lots, realised, reconciled, priorUnits: prior };
+}
+
+/** Sender or subject of a fund statement mail from a registrar or depository. */
+export function looksLikeCas(m: { from: string; subject: string }): boolean {
+  return (
+    /consolidated account statement|\bcas\b|mutual fund (?:folio|statement)/i.test(m.subject) ||
+    /@(?:[\w-]+\.)*(?:camsonline|cams|kfintech|mfcentral|cdslindia|nsdl)\./i.test(m.from)
+  );
+}

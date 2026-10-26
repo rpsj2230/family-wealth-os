@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@fwos/core": "workspace:*",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "unpdf": "^1.9.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

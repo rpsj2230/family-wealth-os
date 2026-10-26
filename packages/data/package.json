@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@fwos/core": "workspace:*",
+    "@fwos/ingest": "workspace:*",
     "@supabase/supabase-js": "^2.45.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "typescript": "~5.9.3"
   }
 }

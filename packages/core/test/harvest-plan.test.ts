@@ -161,3 +161,49 @@ describe('planHarvest', () => {
     expect(harvestDueOn(plan, '2027-03-20')).toBe('2027-03-20');
   });
 });
+
+describe('planHarvest with purchase lots from a fund statement', () => {
+  const lotted = (over: Partial<HarvestPosition> = {}): HarvestPosition => ({
+    assetId: 'm',
+    ownerId: 'r',
+    fund: 'Statement Fund',
+    // 1,000 units at ₹200 today
+    value: 200_000,
+    invested: 140_000,
+    startedOn: '2023-01-01',
+    sipActive: true,
+    lots: [
+      { acquiredOn: '2023-01-01', units: 400, cost: 40_000 }, // 80,000 now, gain 40,000
+      { acquiredOn: '2024-06-01', units: 400, cost: 60_000 }, // 80,000 now, gain 20,000
+      { acquiredOn: '2026-08-01', units: 200, cost: 40_000 }, // recent
+    ],
+    ...over,
+  });
+
+  it('includes a fund with an active SIP and sells only its old units', () => {
+    const plan = planHarvest([lotted()], TODAY);
+    const p = plan.plans[0]!;
+    expect(p.picks).toHaveLength(1);
+    // both old lots together are worth 160,000 with a gain of 60,000, inside the allowance
+    expect(p.picks[0]!.sellAmount).toBe(160_000);
+    expect(p.picks[0]!.estimatedGain).toBe(60_000);
+    expect(p.picks[0]!.fullExit).toBe(false); // the recent lot stays
+    expect(p.picks[0]!.buyBackAmount).toBe(160_000);
+  });
+
+  it('takes the oldest lots first and part of the next one when the allowance runs out', () => {
+    const plan = planHarvest([lotted()], TODAY, { ytdRealised: { r: 100_000 } }); // 25,000 left
+    const pick = plan.plans[0]!.picks[0]!;
+    expect(pick.estimatedGain).toBe(25_000);
+    // first lot's gain is 40,000 so 25,000 is 62.5% of it: 62.5% of 80,000
+    expect(pick.sellAmount).toBe(50_000);
+  });
+
+  it('ignores units whose cost is not on the statement', () => {
+    const plan = planHarvest(
+      [lotted({ lots: [{ acquiredOn: '1900-01-01', units: 1000, cost: null }] })],
+      TODAY,
+    );
+    expect(plan.plans[0]!.picks).toHaveLength(0);
+  });
+});

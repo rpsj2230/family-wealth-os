@@ -5,6 +5,7 @@ import {
   type HarvestPlan,
   type HarvestPosition,
 } from '@fwos/core';
+import { fifoLots, type CasTxn } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
 
@@ -12,7 +13,13 @@ import { loadPortfolioData } from './index';
 export async function loadHarvestPositions(
   db: SupabaseClient,
   opts: { householdId?: string; today?: Date } = {},
-): Promise<{ positions: HarvestPosition[]; ownerName: Map<string, string>; today: Date }> {
+): Promise<{
+  positions: HarvestPosition[];
+  ownerName: Map<string, string>;
+  today: Date;
+  /** long-term gains already realised this financial year per person, from the fund statements */
+  ytdRealised: Record<string, number>;
+}> {
   const l = await loadPortfolioData(db, {
     ...(opts.householdId ? { householdId: opts.householdId } : {}),
     ...(opts.today ? { today: opts.today } : {}),
@@ -33,18 +40,90 @@ export async function loadHarvestPositions(
   const value = new Map(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
+  // purchase history from imported fund statements
+  const tq = db
+    .from('mf_transactions')
+    .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description')
+    .order('txn_on', { ascending: true })
+    .limit(20000);
+  const txRows = ((await (opts.householdId ? tq.eq('household_id', opts.householdId) : tq)).data ??
+    []) as unknown as {
+    asset_id: string;
+    txn_on: string;
+    kind: CasTxn['kind'];
+    amount: number;
+    units: number;
+    nav: number | null;
+    balance_units: number | null;
+    description: string | null;
+  }[];
+  const byAsset = new Map<string, CasTxn[]>();
+  for (const t of txRows)
+    byAsset.set(t.asset_id, [
+      ...(byAsset.get(t.asset_id) ?? []),
+      {
+        date: t.txn_on,
+        kind: t.kind,
+        description: t.description ?? '',
+        amount: Number(t.amount),
+        units: Number(t.units),
+        nav: t.nav === null ? null : Number(t.nav),
+        balance: t.balance_units === null ? null : Number(t.balance_units),
+      },
+    ]);
+  const todayIso = l.today.toISOString().slice(0, 10);
+  const fyStart = `${Number(todayIso.slice(5, 7)) >= 4 ? todayIso.slice(0, 4) : String(Number(todayIso.slice(0, 4)) - 1)}-04-01`;
+  const ytdRealised: Record<string, number> = {};
+  const lotsOf = new Map<string, HarvestPosition['lots']>();
+  for (const r of rows) {
+    const txns = byAsset.get(r.asset_id);
+    if (!txns || txns.length === 0 || !owner.has(r.asset_id)) continue;
+    const first = txns[0]!;
+    const last = txns[txns.length - 1]!;
+    const prior = first.balance !== null ? Math.max(0, first.balance - first.units) : 0;
+    const res = fifoLots({
+      transactions: txns,
+      openingUnits: prior,
+      closingUnits: last.balance,
+      costValue: Number(r.invested ?? 0) || null,
+    });
+    // lots only count when they add up to the units held; otherwise the old method is used for this fund
+    if (res.reconciled)
+      lotsOf.set(
+        r.asset_id,
+        res.lots.map((x) => ({
+          acquiredOn: x.acquiredOn === '1900-01-01' ? '0001-01-01' : x.acquiredOn,
+          units: x.units,
+          cost: x.acquiredOn === '1900-01-01' ? null : x.cost,
+        })),
+      );
+    const ow = owner.get(r.asset_id)!;
+    for (const x of res.realised) {
+      if (x.soldOn < fyStart || x.cost === null) continue;
+      const heldMonths =
+        (Date.parse(`${x.soldOn}T00:00:00Z`) - Date.parse(`${x.acquiredOn}T00:00:00Z`)) /
+        (86_400_000 * 30.4375);
+      if (heldMonths > 12) ytdRealised[ow] = (ytdRealised[ow] ?? 0) + (x.proceeds - x.cost);
+    }
+  }
+  for (const k of Object.keys(ytdRealised))
+    ytdRealised[k] = Math.max(0, Math.round(ytdRealised[k]!));
   const positions: HarvestPosition[] = rows
     .filter((r) => owner.has(r.asset_id))
-    .map((r) => ({
-      assetId: r.asset_id,
-      ownerId: owner.get(r.asset_id)!,
-      fund: r.fund_name,
-      value: value.get(r.asset_id) ?? 0,
-      invested: Number(r.invested ?? 0),
-      startedOn: r.started_on,
-      sipActive: !!r.sip_monthly && !r.sip_stopped,
-    }));
-  return { positions, ownerName: l.ownerName, today: l.today };
+    .map((r) => {
+      const lots = lotsOf.get(r.asset_id);
+      return {
+        assetId: r.asset_id,
+        ownerId: owner.get(r.asset_id)!,
+        fund: r.fund_name,
+        value: value.get(r.asset_id) ?? 0,
+        invested: Number(r.invested ?? 0),
+        startedOn: r.started_on,
+        sipActive: !!r.sip_monthly && !r.sip_stopped,
+        ...(lots ? { lots } : {}),
+      };
+    });
+  return { positions, ownerName: l.ownerName, today: l.today, ytdRealised };
 }
 
 /**
