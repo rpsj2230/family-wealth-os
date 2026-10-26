@@ -2,58 +2,79 @@
 
 import { revalidatePath } from 'next/cache';
 import { loadContext } from '@/lib/data';
+import { parseExitLoad } from '@/lib/match-funds';
 
-export async function confirmMatch(formData: FormData) {
-  const asset = String(formData.get('asset') ?? '');
-  const code = String(formData.get('code') ?? '');
-  if (!/^[0-9a-f-]{36}$/.test(asset) || !/^\d{3,8}$/.test(code)) return;
+export interface MatchResult {
+  ok: boolean;
+  message: string;
+}
+
+const refresh = () => {
+  revalidatePath('/investments');
+  revalidatePath('/');
+};
+
+/** Ties a fund to the official scheme the person has checked, so its daily price can be used. */
+export async function confirmMatch(_prev: MatchResult | null, f: FormData): Promise<MatchResult> {
+  const asset = String(f.get('asset') ?? '');
+  const code = String(f.get('code') ?? '');
+  if (!/^[0-9a-f-]{36}$/.test(asset) || !/^\d{3,8}$/.test(code))
+    return { ok: false, message: 'That choice is not valid. Reload the page and try again.' };
   const { supabase, householdId } = await loadContext();
-  if (!householdId) return;
-  await supabase.rpc('confirm_scheme_match', {
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const { error } = await supabase.rpc('confirm_scheme_match', {
     p_household: householdId,
     p_asset: asset,
     p_code: code,
   });
-  revalidatePath('/funds');
-  revalidatePath('/');
+  if (error) return { ok: false, message: 'That could not be saved. Nothing was changed.' };
+  refresh();
+  return { ok: true, message: 'Matched. Its price now follows the market every day.' };
 }
 
-export async function clearMatch(formData: FormData) {
-  const asset = String(formData.get('asset') ?? '');
-  if (!/^[0-9a-f-]{36}$/.test(asset)) return;
+/** Removes the match so the fund can be matched again. */
+export async function clearMatch(_prev: MatchResult | null, f: FormData): Promise<MatchResult> {
+  const asset = String(f.get('asset') ?? '');
+  if (!/^[0-9a-f-]{36}$/.test(asset))
+    return { ok: false, message: 'That choice is not valid. Reload the page and try again.' };
   const { supabase, householdId } = await loadContext();
-  if (!householdId) return;
-  await supabase.rpc('confirm_scheme_match', {
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const { error } = await supabase.rpc('confirm_scheme_match', {
     p_household: householdId,
     p_asset: asset,
     p_code: null,
   });
-  revalidatePath('/funds');
-  revalidatePath('/');
+  if (error) return { ok: false, message: 'That could not be saved. Nothing was changed.' };
+  refresh();
+  return { ok: true, message: 'Match removed. Choose the scheme again.' };
 }
 
 /** A fund's own exit load; leaving both fields empty goes back to the household default in Settings. */
-export async function setExitLoad(formData: FormData) {
-  const asset = String(formData.get('asset') ?? '');
-  if (!/^[0-9a-f-]{36}$/.test(asset)) return;
-  const pctRaw = String(formData.get('pct') ?? '').replace(/[%\s]/g, '');
-  const daysRaw = String(formData.get('days') ?? '').trim();
+export async function setExitLoad(_prev: MatchResult | null, f: FormData): Promise<MatchResult> {
+  const asset = String(f.get('asset') ?? '');
+  if (!/^[0-9a-f-]{36}$/.test(asset)) return { ok: false, message: 'Choose the fund.' };
+  const parsed = parseExitLoad(String(f.get('pct') ?? ''), String(f.get('days') ?? ''));
+  if (!parsed)
+    return {
+      ok: false,
+      message: 'Enter a percentage from 0 to 10 and a whole number of days up to 1095.',
+    };
   const { supabase, householdId } = await loadContext();
-  if (!householdId) return;
-  const clear = pctRaw === '' && daysRaw === '';
-  const pct = Number(pctRaw);
-  const days = Number(daysRaw);
-  if (!clear && (!(pct >= 0 && pct <= 10) || !Number.isInteger(days) || days < 0 || days > 1095))
-    return;
-  await supabase
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const { error } = await supabase
     .from('mf_positions')
     .update(
-      clear
+      parsed.clear
         ? { exit_load_pct: null, exit_load_days: null }
-        : { exit_load_pct: pct / 100, exit_load_days: days },
+        : { exit_load_pct: parsed.fraction, exit_load_days: parsed.days },
     )
     .eq('asset_id', asset)
     .eq('household_id', householdId);
-  revalidatePath('/funds');
+  if (error) return { ok: false, message: 'That could not be saved.' };
+  revalidatePath('/investments');
   revalidatePath('/tax');
+  return {
+    ok: true,
+    message: parsed.clear ? 'Back to the default from Settings.' : 'Exit load saved.',
+  };
 }

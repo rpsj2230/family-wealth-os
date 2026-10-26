@@ -1,0 +1,43 @@
+/* Investments: the fund rows, the matching lists and the monthly update tab. */
+.fundcell {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fundcell > div {
+  min-width: 0;
+}
+.fundspark {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+@media (min-width: 720px) {
+  table.funds td:first-child {
+    min-width: 230px;
+  }
+}
+.exitform {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.exitform p {
+  margin: 0;
+}
+.updatehelp {
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+.nobullet .taskrow {
+  align-items: flex-start;
+}
+/* the fund table scrolls inside its card instead of widening the page */
+.fundswrap {
+  contain: inline-size;
+}
+table.funds .goaltag select {
+  min-width: 120px;
+}

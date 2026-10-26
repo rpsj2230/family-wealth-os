@@ -1,0 +1,13 @@
+/* Lent, policies, property: the add forms and the loan and policy cards. */
+.pickcard details.disclose {
+  margin-top: 8px;
+}
+.pickcard details.disclose .formrow {
+  margin-top: 6px;
+}
+.pickcard dl {
+  margin-top: 8px;
+}
+.addbox .formrow {
+  margin-top: 8px;
+}

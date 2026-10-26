@@ -1,0 +1,116 @@
+/* Shared by the Holdings pages (Accounts, Deposits, Others, Investments): small additions to the shared page pattern. */
+.kpi-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.kpi-link:hover .kpi-value {
+  text-decoration: underline;
+}
+.kpi-value.warn {
+  color: var(--warn, #b45309);
+}
+.sectionnote {
+  margin: 0 0 10px;
+  max-width: 70ch;
+}
+.lead {
+  font-size: 0.95rem;
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+.cardhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.cardhead h2,
+.cardhead h3 {
+  margin: 0;
+}
+.cardactions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.stack {
+  display: grid;
+  gap: 12px;
+}
+.pickcard .meta {
+  color: var(--muted, #6b7280);
+  font-size: 0.85rem;
+}
+.pickcard .figure {
+  font-size: 1.25rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pickcard.attention {
+  border-color: var(--warn, #d97706);
+}
+.pickcard.settled {
+  opacity: 0.8;
+}
+.pickcard form + form {
+  margin-top: 8px;
+}
+.formrow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.formrow label {
+  display: grid;
+  gap: 2px;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.formrow input,
+.formrow select {
+  min-width: 0;
+  max-width: 100%;
+}
+.addbox {
+  margin-bottom: 14px;
+}
+.addbox > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+.listlink {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 560px) {
+  .formrow > * {
+    flex: 1 1 100%;
+  }
+  .formrow input,
+  .formrow select {
+    width: 100%;
+  }
+}
+
+.insuredset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 4px 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.insuredset legend {
+  padding: 0;
+  float: left;
+  margin-right: 10px;
+}

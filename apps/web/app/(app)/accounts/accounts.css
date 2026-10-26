@@ -1,0 +1,7 @@
+/* Accounts: the banks accordion keeps its own styles in globals.css; only the page-level additions live here. */
+.accordionbar {
+  margin: 0 0 8px;
+}
+details.disclose.card > summary {
+  padding: 2px 0;
+}

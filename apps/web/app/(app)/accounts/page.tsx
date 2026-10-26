@@ -1,39 +1,46 @@
-import { ListingTools } from '@/components/ListingTools';
 import Link from 'next/link';
-import {
-  buildBankBlocks,
-  filterBlocksByOwner,
-  formatInr,
-  formatInrCompact,
-  personStyles,
-} from '@fwos/core';
+import { buildBankBlocks, filterBlocksByOwner, formatInrCompact, personStyles } from '@fwos/core';
 import { BankTable } from '@/components/BankTable';
+import { ListingTools } from '@/components/ListingTools';
+import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
-import { loadSettings } from '@fwos/data';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { Tabs } from '@/components/Tabs';
+import { foreignLines, summariseBlocks } from '@/lib/accounts-summary';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { cashRatesFor, loadOffers } from '@/lib/rates-view';
-
+import { loadTidyPlan } from '@/lib/tidy-notes';
+import { loadSettings } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { AccountsKpis, ForeignCard, ManageCards } from './Parts';
 import { saveBankNote } from './actions';
 
 export const dynamic = 'force-dynamic';
 
+const TABS = ['banks', 'manage'] as const;
+
 export default async function AccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string }>;
 }) {
-  const { p } = await searchParams;
+  const { p, tab: rawTab } = await searchParams;
+  const tab = (TABS as readonly string[]).includes(rawTab ?? '')
+    ? (rawTab as (typeof TABS)[number])
+    : 'banks';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, settings, offers] =
-    await Promise.all([
-      loadPortfolio(supabase),
-      supabase.from('institutions').select('id, name, notes'),
-      loadSettings(supabase as unknown as SupabaseClient),
-      loadOffers(supabase),
-    ]);
+  const [
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, marketDates },
+    inst,
+    settings,
+    offers,
+  ] = await Promise.all([
+    loadPortfolio(supabase),
+    supabase.from('institutions').select('id, name, notes'),
+    loadSettings(supabase as unknown as SupabaseClient),
+    loadOffers(supabase),
+  ]);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = p && styles[p] ? p : null;
   const names = Object.fromEntries(
@@ -51,6 +58,67 @@ export default async function AccountsPage({
     today,
   });
   const blocks = who ? filterBlocksByOwner(all, who) : all;
+  const summary = summariseBlocks(blocks);
+  const rows = all.flatMap((b) => b.sections.flatMap((s) => s.rows));
+  const assumed = rows.filter((r) => r.kindInferred).length;
+  const month = today.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+  const totals = Object.fromEntries(
+    Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
+  );
+
+  const pills = [
+    summary.needsYou > 0
+      ? {
+          label: `${summary.needsYou} need${summary.needsYou === 1 ? 's' : ''} you`,
+          tone: 'warn' as const,
+        }
+      : { label: 'Nothing waiting', tone: 'ok' as const },
+    {
+      label: `${summary.banksDone} of ${summary.banks} banks updated in ${month}`,
+      tone: 'info' as const,
+    },
+  ];
+  const head = (
+    <PageHead
+      title="Accounts"
+      subtitle="Every bank in your sheet's order, with each person's savings and deposits. Open a bank for its history."
+      pills={pills}
+      actions={
+        <>
+          <Link className="btn primary" href="/monthly">
+            Update balances
+          </Link>
+          <Link className="btn" href="/accounts?tab=manage">
+            Manage
+          </Link>
+        </>
+      }
+    />
+  );
+
+  if (tab === 'manage') {
+    const tidy = await loadTidyPlan(supabase);
+    return (
+      <>
+        {head}
+        <AccountsKpis s={summary} month={month} />
+        <Tabs base="/accounts" current={tab} tabs={tabList(assumed)} />
+        <p className="lead muted">
+          Everything that changes the shape of the list is here: correct a detail, change the order,
+          tidy notes or add an account.
+        </p>
+        <ManageCards
+          facts={{
+            assumedTypes: assumed,
+            notesToMove: tidy.plan.assets.length,
+            banks: all.length,
+            accounts: rows.length,
+          }}
+        />
+      </>
+    );
+  }
+
   const cashRates = cashRatesFor(
     blocks.flatMap((b) =>
       b.sections.flatMap((sct) => sct.rows.map((r) => ({ ...r, bank: b.name }))),
@@ -59,50 +127,25 @@ export default async function AccountsPage({
     offers,
     settings.config.estimates.savingsRate,
   );
-  const total = blocks.reduce((s, b) => s + b.totals.current, 0);
-  const fd = blocks.reduce(
-    (s, b) => ({
-      inv: s.inv + b.totals.fdInvested,
-      mat: s.mat + b.totals.fdMaturity,
-      cur: s.cur + b.totals.fdCurrent,
-    }),
-    { inv: 0, mat: 0, cur: 0 },
-  );
-  const totals = Object.fromEntries(
-    Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
+  const foreign = foreignLines(
+    who ? assetRows.filter((a) => a.owner_id === who) : assetRows,
+    obsRows,
+    new Map(portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? null])),
+    marketDates.fx,
   );
 
   return (
     <>
-      <h1>Accounts</h1>
+      {head}
+      <AccountsKpis s={summary} month={month} />
+      <Tabs base="/accounts" current={tab} tabs={tabList(assumed)} />
+      <PersonFilter
+        people={Object.values(styles)}
+        basePath="/accounts"
+        current={who}
+        totals={totals}
+      />
       <ListingTools name="accounts">
-        <p className="muted small">
-          Banks in your sheet&apos;s order. Current value of a deposit is worked out from its rate
-          and start date, and equals the full amount on the maturity date. Today&apos;s wealth uses
-          these current values. <Link href="/accounts/reorder">Change the order</Link> ·{' '}
-          <Link href="/accounts/edit">Correct tags and details</Link> ·{' '}
-          <Link href="/accounts/tidy-notes">Move bank-level notes up</Link>
-        </p>
-        <PersonFilter
-          people={Object.values(styles)}
-          basePath="/accounts"
-          current={who}
-          totals={totals}
-        />
-        <div className="card summary">
-          <span>
-            Banks total <b className="num">{formatInr(Math.round(total))}</b>
-          </span>
-          <span>
-            FDs invested <b className="num">{formatInr(Math.round(fd.inv))}</b>
-          </span>
-          <span>
-            FDs at maturity <b className="num">{formatInr(Math.round(fd.mat))}</b>
-          </span>
-          <span>
-            FDs today <b className="num">{formatInr(Math.round(fd.cur))}</b>
-          </span>
-        </div>
         <BankTable
           blocks={blocks}
           styles={styles}
@@ -112,6 +155,31 @@ export default async function AccountsPage({
           cashRates={cashRates}
         />
       </ListingTools>
+      <ForeignCard lines={foreign} styles={styles} />
+      <details className="disclose">
+        <summary>How these values are worked out</summary>
+        <ul className="list small muted">
+          <li>
+            A fixed deposit is valued from its rate and start date, and equals the full amount on
+            the maturity date. Today&apos;s wealth uses these values.
+          </li>
+          <li>
+            Savings show the last balance recorded, moved forward at the bank&apos;s rate when the
+            balance is old. The Updated column says who recorded it and when.
+          </li>
+          <li>
+            A deposit past its maturity date is not counted until you say where the money went (see{' '}
+            <Link href="/deposits?tab=maturities">Deposits, Maturities</Link>).
+          </li>
+        </ul>
+      </details>
     </>
   );
+}
+
+function tabList(assumed: number) {
+  return [
+    { key: 'banks', label: 'Banks' },
+    { key: 'manage', label: 'Manage', badge: assumed },
+  ];
 }

@@ -31,6 +31,9 @@ export default async function BankPage({ params }: { params: Promise<{ id: strin
             <Link className="btn compact" href="/accounts/edit">
               Edit details
             </Link>
+            <Link className="btn compact" href="/deposits">
+              Deposits
+            </Link>
           </>
         }
       />

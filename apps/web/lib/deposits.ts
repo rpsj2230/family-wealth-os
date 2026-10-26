@@ -26,6 +26,9 @@ export interface DepositAsset {
 export interface FdLine {
   id: string;
   bank: string;
+  /** the bank's id, for linking to its page (null when the deposit has no bank) */
+  bankId: string | null;
+  ownerId: string;
   owner: string;
   nickname: string;
   kind: string;
@@ -86,6 +89,8 @@ export function buildDeposits(
     lines.push({
       id: a.id,
       bank: a.institutionId ? (banks.get(a.institutionId) ?? 'Unknown bank') : 'Unknown bank',
+      bankId: a.institutionId ?? null,
+      ownerId: a.ownerId,
       owner: owners.get(a.ownerId) ?? '—',
       nickname: a.nickname,
       kind: a.accountKind ?? 'unknown',
