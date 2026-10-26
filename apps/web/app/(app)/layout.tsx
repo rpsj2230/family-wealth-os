@@ -7,6 +7,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await loadAccess();
+  // lets the handbook know someone from the household is around (at most once an hour); a no-op for viewers
+  if (ctx.role !== 'emergency_viewer' && ctx.householdId)
+    await ctx.supabase.rpc('touch_member_activity', { p_household: ctx.householdId });
   if (ctx.role === 'emergency_viewer')
     return (
       <div className="viewer">

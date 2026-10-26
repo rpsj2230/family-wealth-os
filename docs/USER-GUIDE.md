@@ -82,3 +82,16 @@ Nothing is moved for you.
 and the refund arrives; **Download as CSV** gives it to your adviser. NRO interest tax is handled on the filing papers because the refund
 depends on your total Indian income. The app prepares figures; the return itself is filed on the income-tax portal using Form 26AS and the
 Annual Information Statement, which the app cannot download for you.
+
+## Fund statements (CAS) and exact harvesting
+
+Ask CAMS/KFintech (or MF Central) for a **detailed** statement from the first investment to today, for each person, and forward the
+e-mail to your `FWOS/Inbox` label. The inbox job opens it with the PAN saved in Settings, finds each fund by ISIN (or name and folio),
+adds funds it does not know, stores every transaction and updates invested amount, first purchase date, SIP and value. You can also upload
+the PDF under **Import** (type the PAN once to open it; it is not saved). From then on harvesting works from real purchase lots, oldest units
+first, includes funds with a running SIP, and counts long-term gains you have already realised this year.
+
+## Who can open the handbook, and when
+
+Settings → Emergency information: the read-only family login can open the handbook always, only after nobody from the household has signed
+in for a number of days, or only when you release it. Release or lock it again with one button. Members always have access.

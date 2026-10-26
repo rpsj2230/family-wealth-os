@@ -15,6 +15,28 @@ export default async function EmergencyPage() {
   const { supabase, householdId, role } = await loadAccess();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
   const isMember = role === 'admin' || role === 'member';
+  if (!isMember) {
+    const { data: st } = await supabase.rpc('emergency_status', { h: householdId });
+    const status = st as {
+      open: boolean;
+      mode: string;
+      inactiveDays: number;
+      daysUntilOpen: number | null;
+    } | null;
+    if (status && !status.open)
+      return (
+        <>
+          <h1>Family handbook</h1>
+          <p className="notice warn">
+            The handbook is locked for now.{' '}
+            {status.mode === 'inactive'
+              ? `It opens by itself when nobody from the household has signed in for ${status.inactiveDays} days${status.daysUntilOpen !== null ? ` (about ${status.daysUntilOpen} days from now if that stays so)` : ''}.`
+              : 'A family member has to release it first.'}{' '}
+            If something has happened, ask a trusted adult or the people listed on the paper copy.
+          </p>
+        </>
+      );
+  }
   let row = (
     await supabase.from('emergency_documents').select('content, generated_at').maybeSingle()
   ).data as { content: Handbook; generated_at: string } | null;

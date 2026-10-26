@@ -284,6 +284,26 @@ export async function deleteRateSource(f: FormData): Promise<void> {
   revalidatePath('/settings');
 }
 
+/** When the read-only family login may open the handbook. */
+export async function saveEmergencyAccess(f: FormData): Promise<void> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return;
+  const mode = ['always', 'inactive', 'manual'].find((m) => m === f.get('mode')) ?? 'always';
+  const days = Math.min(365, Math.max(7, Math.round(numeric(f, 'days') ?? 30)));
+  const intent = field(f, 'intent');
+  const row: Record<string, unknown> = {
+    household_id: householdId,
+    mode,
+    inactive_days: days,
+    updated_at: new Date().toISOString(),
+  };
+  if (intent === 'release') row.released = true;
+  if (intent === 'lock') row.released = false;
+  await supabase.from('emergency_access').upsert(row, { onConflict: 'household_id' });
+  revalidatePath('/settings');
+  revalidatePath('/emergency');
+}
+
 /** Information the family needs that is not a balance: contacts, where documents are, a message. */
 export async function saveEmergencyProfile(
   _p: FormResult | null,

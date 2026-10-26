@@ -6,6 +6,7 @@ import { WhatsAppButton } from '../share/WhatsAppButton';
 import {
   deleteCashflow,
   deleteRateSource,
+  saveEmergencyAccess,
   resetTaxRule,
   saveDigestSettings,
   saveIntegrations,
@@ -26,8 +27,8 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const { supabase, householdId, role } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [s, log, integ, people, flows, ruleRows, settings, fx, rsources, eprof] = await Promise.all(
-    [
+  const [s, log, integ, people, flows, ruleRows, settings, fx, rsources, eprof, eaccess] =
+    await Promise.all([
       supabase
         .from('digest_settings')
         .select('enabled, extra_recipients, include_retirement')
@@ -61,8 +62,8 @@ export default async function SettingsPage() {
         .limit(20),
       supabase.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
       supabase.from('emergency_profile').select('content').maybeSingle(),
-    ],
-  );
+      supabase.from('emergency_access').select('mode, inactive_days, released').maybeSingle(),
+    ]);
   const fxNow: Record<string, number> = { INR: 1 };
   for (const r of fx.data ?? [])
     if (!((r.currency as string) in fxNow)) fxNow[r.currency as string] = Number(r.inr_per_unit);
@@ -264,6 +265,74 @@ export default async function SettingsPage() {
           enter here. The read-only family login can open it without seeing anything else. Nothing
           here is a password: say <em>where</em> things are, not what they are.
         </p>
+        <form action={saveEmergencyAccess} className="form">
+          <h3>When the read-only family login can open the handbook</h3>
+          {(() => {
+            const a = (eaccess.data as {
+              mode: string;
+              inactive_days: number;
+              released: boolean;
+            } | null) ?? {
+              mode: 'always',
+              inactive_days: 30,
+              released: false,
+            };
+            return (
+              <>
+                <label className="check">
+                  <input
+                    type="radio"
+                    name="mode"
+                    value="always"
+                    defaultChecked={a.mode === 'always'}
+                  />{' '}
+                  Always
+                </label>
+                <label className="check">
+                  <input
+                    type="radio"
+                    name="mode"
+                    value="inactive"
+                    defaultChecked={a.mode === 'inactive'}
+                  />{' '}
+                  Only after nobody from the household has signed in for{' '}
+                  <input
+                    className="mini"
+                    name="days"
+                    inputMode="numeric"
+                    defaultValue={a.inactive_days}
+                    aria-label="Days"
+                  />{' '}
+                  days
+                </label>
+                <label className="check">
+                  <input
+                    type="radio"
+                    name="mode"
+                    value="manual"
+                    defaultChecked={a.mode === 'manual'}
+                  />{' '}
+                  Only when I release it
+                </label>
+                <p className="muted small">
+                  Now: {a.released ? 'released by hand' : 'not released by hand'}. Members always
+                  have access.
+                </p>
+                <div className="row">
+                  <button className="btn" name="intent" value="save">
+                    Save
+                  </button>
+                  <button className="btn" name="intent" value="release">
+                    Release now
+                  </button>
+                  <button className="btn" name="intent" value="lock">
+                    Lock again
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </form>
         <EmergencyForm p={profileFromJson((eprof.data as { content: unknown } | null)?.content)} />
       </section>
 
