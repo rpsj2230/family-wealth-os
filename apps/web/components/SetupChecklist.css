@@ -1,0 +1,154 @@
+/* Setup checklist: one list, each line with a state word (never colour alone) and a direct link. */
+.setupcl {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 0 0 16px;
+}
+.setupcl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.setupcl-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.setupcl-count {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.setupcl-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--soft);
+  margin: 10px 0 12px;
+  overflow: hidden;
+}
+.setupcl-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+.setupcl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.setupcl-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.setupcl-list li:first-child {
+  border-top: 0;
+}
+.setupcl-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  border: 2px solid var(--muted);
+  color: var(--muted);
+}
+.is-done .setupcl-icon {
+  background: var(--ok-bg);
+  border-color: var(--ok-fg);
+  color: var(--ok-fg);
+}
+.is-todo .setupcl-icon {
+  border-color: var(--warn-fg);
+  color: var(--warn-fg);
+}
+.setupcl-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.setupcl-label {
+  font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+}
+.setupcl-label:hover {
+  text-decoration: underline;
+}
+.is-done .setupcl-label {
+  font-weight: 500;
+  color: var(--muted);
+}
+.setupcl-state {
+  margin-left: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+}
+.is-todo .setupcl-state {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.is-done .setupcl-state {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.setupcl-hint {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.setupcl-go {
+  flex: none;
+  align-self: center;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--primary);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.setupcl-go:hover {
+  background: var(--soft);
+}
+.setupcl-empty {
+  margin: 0;
+  color: var(--ok-fg);
+}
+.setupcl-more {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+}
+.setupcl.compact {
+  padding: 14px;
+}
+.setupcl.compact .setupcl-list li {
+  padding: 8px 0;
+}
+.setupcl.compact .setupcl-go {
+  display: none;
+}
+@media print {
+  .setupcl-go {
+    display: none;
+  }
+}
