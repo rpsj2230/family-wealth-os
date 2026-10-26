@@ -15,7 +15,21 @@
 }
 @media (min-width: 720px) {
   table.funds td:first-child {
-    min-width: 230px;
+    min-width: 200px;
+    max-width: 260px;
+  }
+  table.funds th,
+  table.funds td {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  table.funds th:first-child,
+  table.funds td:first-child {
+    padding-left: 0;
+  }
+  table.funds th:last-child,
+  table.funds td:last-child {
+    padding-right: 0;
   }
 }
 .exitform {
@@ -34,10 +48,24 @@
 .nobullet .taskrow {
   align-items: flex-start;
 }
-/* the fund table scrolls inside its card instead of widening the page */
+/* the fund table scrolls inside its card instead of widening the page; the side space lines it up under the person heading (18px card padding + 5px colour bar) */
 .fundswrap {
   contain: inline-size;
+  padding: 0 18px 10px 23px;
 }
 table.funds .goaltag select {
-  min-width: 120px;
+  min-width: 100px;
+  max-width: 128px;
+}
+/* long notes under a figure wrap instead of stretching the column */
+table.funds td.amount {
+  min-width: 140px;
+}
+table.funds td.amount .small {
+  max-width: 170px;
+  margin-left: auto;
+  white-space: normal;
+}
+table.funds td.upd {
+  white-space: nowrap;
 }
