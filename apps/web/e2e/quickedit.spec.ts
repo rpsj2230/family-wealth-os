@@ -103,7 +103,7 @@ test.describe('one place to edit an account (public sample)', () => {
     await expect(panel.getByRole('alert')).toContainText('maturity must be after the start');
     await panel.getByText('More details').click();
     await expect(panel.getByLabel('Started on')).toBeVisible();
-    await expect(panel.getByLabel('Deposit number (last four)')).toBeVisible();
+    await expect(panel.getByLabel('Deposit number')).toBeVisible();
   });
 
   test('add an account: the form says what is missing and works for a deposit and a savings account', async ({

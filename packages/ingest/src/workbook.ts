@@ -89,6 +89,8 @@ export interface PlannedFd {
   bankMaturityAmount: number;
   compounding: 'quarterly';
   refLast4?: string;
+  /** the full deposit number as written in the sheet (deposit numbers are shown in full; account numbers and PANs are not) */
+  ref?: string;
   sourceRef: string;
 }
 
@@ -527,6 +529,9 @@ export async function planWorkbook(
         bankMaturityAmount: G,
         compounding: 'quarterly',
         ...(refLast4 ? { refLast4 } : {}),
+        ...(refDigits.length >= 4 && /^[A-Za-z0-9-]{4,40}$/.test(firstRef)
+          ? { ref: firstRef }
+          : {}),
         sourceRef: cell('B'),
       });
       fdPrincipal += F;
@@ -1134,4 +1139,17 @@ export function formatReport(p: ImportPlan): string {
     for (const e of list) L.push(`    ${e.cell.padEnd(6)} ${e.code}: ${e.message}`);
   }
   return L.join('\n');
+}
+
+/** The deposit numbers in a plan, as rows for `set_fd_numbers`: each is matched in the database by bank and last four digits. */
+export function fdNumbersFromPlan(
+  plan: ImportPlan,
+): { bank: string; last4: string; fdRef: string }[] {
+  const bankOf = new Map<string, string>();
+  const nameOf = new Map(plan.institutions.map((i) => [i.key, i.name]));
+  for (const a of plan.assets) bankOf.set(a.key, nameOf.get(a.institutionKey ?? '') ?? '');
+  return plan.fixedDeposits.flatMap((f) => {
+    const bank = bankOf.get(f.assetKey);
+    return f.ref && f.refLast4 && bank ? [{ bank, last4: f.refLast4, fdRef: f.ref }] : [];
+  });
 }

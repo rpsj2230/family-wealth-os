@@ -100,6 +100,7 @@ export function demoModel() {
           compounding: 'quarterly',
           bank_maturity_amount: pi === 0 ? Math.round((500_000 + bi * 150_000) * 1.28) : null,
           fd_ref_last4: String(2000 + bi * 13),
+          fd_ref: `30001779${2000 + bi * 13}-1`,
         });
       }
     });

@@ -70,7 +70,7 @@ export async function loadPortfolioData(
       ),
       sel(
         'fixed_deposits',
-        'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4',
+        'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4, fd_ref',
       ),
       sel(
         'mf_positions',

@@ -155,7 +155,10 @@ function Row({
         <UpdatedCell asOf={r.asOf} source={r.source} />
       </td>
       <td className="notes">
-        {fd?.refLast4 && <span className="chip tiny">FD no. …{fd.refLast4}</span>} {note}
+        {fd?.refLast4 && (
+          <span className="chip tiny fdno">FD no. {fd.ref ?? `…${fd.refLast4}`}</span>
+        )}{' '}
+        {note}
       </td>
       <td className="editcol">
         <EditButton id={r.assetId} name={r.code} className="onlywide" />

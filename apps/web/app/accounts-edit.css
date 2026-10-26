@@ -111,6 +111,9 @@ table.aeg-table.wide {
 .aeg-table .aeg-with button {
   font-size: 0.7rem;
 }
+.aeg-table .c-ref {
+  min-width: 11.5rem;
+}
 .aeg-table .c-d4 {
   width: 76px;
 }

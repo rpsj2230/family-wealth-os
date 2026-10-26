@@ -102,7 +102,7 @@ export function rowProblems(r: EditRow): string[] {
   if (r.last4 && !d4.test(r.last4)) out.push('last four digits: 1 to 4 letters or digits');
   if (r.linkedLast4 && !d4.test(r.linkedLast4))
     out.push('linked account digits: 1 to 4 letters or digits');
-  if (r.fdRefLast4 && !d4.test(r.fdRefLast4))
+  if (r.fdRefLast4 && !/^[A-Za-z0-9-]{1,40}$/.test(r.fdRefLast4))
     out.push('deposit number digits: 1 to 4 letters or digits');
   if (r.kind === 'fd') {
     const rate = Number(String(r.fdRate).replace('%', ''));
@@ -207,7 +207,7 @@ export function gridBanks(
               f?.bank_maturity_amount !== null && f?.bank_maturity_amount !== undefined
                 ? String(f.bank_maturity_amount)
                 : '',
-            fdRefLast4: f?.fd_ref_last4 ?? '',
+            fdRefLast4: f?.fd_ref ?? f?.fd_ref_last4 ?? '',
           },
         ];
       }),

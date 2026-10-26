@@ -182,9 +182,9 @@ export function AddAccountSheet({
                   placeholder: 'worked out',
                 })}
               {fd &&
-                input('refLast4', 'Deposit number (last four)', {
-                  placeholder: '5076',
-                  maxLength: 4,
+                input('refLast4', 'Deposit number', {
+                  placeholder: '300017790142-1',
+                  maxLength: 40,
                 })}
               <label className="check qe-wide">
                 <input

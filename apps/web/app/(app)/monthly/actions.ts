@@ -114,17 +114,30 @@ export async function addBankItem(i: AddItemInput): Promise<SaveResult> {
     )
       return { ok: false, message: 'Enter a start date and a later maturity date.' };
     const mat = num(i.maturityAmount);
+    const refFull = (i.refLast4 ?? '').trim();
+    if (refFull && !/^[A-Za-z0-9-]{1,40}$/.test(refFull))
+      return { ok: false, message: 'The deposit number: letters, digits and dashes only.' };
+    const refLast4 =
+      refFull.length > 4
+        ? refFull.split('-')[0]!.replace(/\D/g, '').slice(-4) || refFull.slice(-4)
+        : refFull;
     Object.assign(p, {
       principal,
       rate: Math.round(rate * 1e4) / 1e6,
       bookedOn: i.bookedOn,
       maturityOn: i.maturityOn,
       ...(mat ? { maturityAmount: mat } : {}),
-      refLast4: i.refLast4 || null,
+      refLast4: refLast4 || null,
     });
   }
   const { error } = await supabase.rpc('add_bank_item', { p_household: householdId, p });
   if (error) return { ok: false, message: 'That could not be added; nothing was saved.' };
+  const whole = (i.refLast4 ?? '').trim();
+  if (i.type === 'fixed_deposit' && whole.length >= 4 && p.refLast4)
+    await supabase.rpc('set_fd_numbers', {
+      p_household: householdId,
+      p_rows: [{ institutionId: i.institutionId, last4: p.refLast4, fdRef: whole }],
+    });
   revalidatePath('/monthly');
   revalidatePath('/accounts');
   revalidatePath('/');

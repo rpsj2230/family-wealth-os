@@ -2573,3 +2573,8 @@ details.bankdet {
   line-height: 1.4;
   font: inherit;
 }
+
+.chip.fdno {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

@@ -280,7 +280,7 @@ export function AccountEditGrid({
                     <th className="c-date">Matures</th>
                     <th className="c-amt">Invested</th>
                     {wide && <th className="c-amt">At maturity</th>}
-                    {wide && <th className="c-d4">Deposit no.</th>}
+                    {wide && <th className="c-ref">Deposit no.</th>}
                     <th className="c-notes">Notes</th>
                     <th className="c-status">Status</th>
                   </tr>
@@ -444,8 +444,8 @@ export function AccountEditGrid({
                             ))}
                           {wide &&
                             (fd ? (
-                              col(r, 'fdRefLast4', 'Deposit number last four', 'c-d4', {
-                                placeholder: '5076',
+                              col(r, 'fdRefLast4', 'Deposit number', 'c-ref', {
+                                placeholder: '300017790142-1',
                               })
                             ) : (
                               <td className="na" />

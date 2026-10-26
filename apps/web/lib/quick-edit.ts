@@ -315,7 +315,7 @@ export function addProblems(d: AddDraft): string[] {
       out.push('enter a start date and a later maturity date');
     if (d.maturityAmount.trim() !== '' && !(parseAmount(d.maturityAmount) ?? 0))
       out.push('the amount at maturity must be a plain number');
-    if (d.refLast4 && !d4.test(d.refLast4))
+    if (d.refLast4 && !/^[A-Za-z0-9-]{1,40}$/.test(d.refLast4))
       out.push('the deposit number: up to 4 letters or numbers');
   }
   return out;

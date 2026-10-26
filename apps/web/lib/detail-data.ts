@@ -261,6 +261,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
           bank_maturity_amount:
             fd.bank_maturity_amount === null ? null : Number(fd.bank_maturity_amount),
           fd_ref_last4: fd.fd_ref_last4 ?? null,
+          fd_ref: fd.fd_ref ?? null,
         }
       : null,
     position: position

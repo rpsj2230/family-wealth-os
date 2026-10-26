@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { importCasPdf, importFundCsv, type FundCsvFund } from '@fwos/data';
 import {
+  fdNumbersFromPlan,
   parseTxnCsv,
   planWorkbook,
   type ImportException,
@@ -59,6 +60,13 @@ function summarize(plan: ImportPlan) {
   };
 }
 
+/** Deposit numbers are kept in full (account numbers and PANs are not): matched to each deposit by bank and last four digits. */
+async function storeFdNumbers(db: SupabaseClient, householdId: string, plan: ImportPlan) {
+  const rows = fdNumbersFromPlan(plan);
+  for (let i = 0; i < rows.length; i += 200)
+    await db.rpc('set_fd_numbers', { p_household: householdId, p_rows: rows.slice(i, i + 200) });
+}
+
 export async function previewImport(_prev: ImportState, formData: FormData): Promise<ImportState> {
   await loadContext();
   const f = await readFile(formData);
@@ -105,6 +113,7 @@ export async function commitImport(_prev: ImportState, formData: FormData): Prom
   }
   // keep the sheet's order, labels and links for the records just created
   await supabase.rpc('sync_workbook_layout', { p_household: householdId, p_plan: plan });
+  await storeFdNumbers(supabase as unknown as SupabaseClient, householdId, plan);
   await recordSnapshot(supabase, householdId, 'import');
   revalidatePath('/');
   return {
@@ -136,6 +145,7 @@ export async function syncLayout(_prev: ImportState, formData: FormData): Promis
   });
   if (error)
     return { stage: 'error', message: 'The layout could not be applied; nothing was changed.' };
+  await storeFdNumbers(supabase as unknown as SupabaseClient, householdId, plan);
   const r = data as { matched: number; unmatched: string[] };
   revalidatePath('/accounts');
   revalidatePath('/monthly');

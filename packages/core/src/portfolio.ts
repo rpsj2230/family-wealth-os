@@ -76,6 +76,8 @@ export interface FdRow {
   compounding: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | 'simple';
   bank_maturity_amount: number | null;
   fd_ref_last4?: string | null;
+  /** the full deposit number, when it has been entered */
+  fd_ref?: string | null;
 }
 
 export interface PortfolioDefaults {

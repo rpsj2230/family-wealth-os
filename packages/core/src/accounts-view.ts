@@ -157,6 +157,8 @@ export interface BankRow {
     maturityAmount: number;
     maturityAmountFromBank: boolean;
     refLast4: string | null;
+    /** the full deposit number, when it has been entered */
+    ref: string | null;
     /** code of the savings account it is linked to, found by the last four digits */
     linkedTo: string | null;
     needsConfirmation: boolean;
@@ -322,6 +324,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         maturityAmount,
         maturityAmountFromBank: fd.bank_maturity_amount !== null,
         refLast4: fd.fd_ref_last4 ?? null,
+        ref: fd.fd_ref ?? null,
         linkedTo: null,
         needsConfirmation:
           a.status === 'matured_unconfirmed' || (a.status === 'active' && daysLeft < 0),

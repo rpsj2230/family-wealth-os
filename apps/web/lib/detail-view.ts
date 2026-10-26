@@ -65,6 +65,7 @@ export interface AssetViewInput {
     compounding: 'monthly' | 'quarterly' | 'half_yearly' | 'yearly' | 'simple';
     bank_maturity_amount: number | null;
     fd_ref_last4: string | null;
+    fd_ref?: string | null;
   } | null;
   position: {
     fund_name: string;
@@ -473,7 +474,8 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         note: `${inr(accrued - fd.principal)} of interest so far`,
       },
     );
-    if (fd.fd_ref_last4) facts.push({ label: 'Deposit number', value: `…${fd.fd_ref_last4}` });
+    if (fd.fd_ref_last4)
+      facts.push({ label: 'Deposit number', value: fd.fd_ref ?? `…${fd.fd_ref_last4}` });
     if (i.linked)
       facts.push({
         label: 'Linked savings account',

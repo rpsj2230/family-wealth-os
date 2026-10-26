@@ -531,9 +531,9 @@ function Panel({
           maxLength: 4,
         });
       case 'fdRefLast4':
-        return text('fdRefLast4', 'Deposit number (last four)', {
-          placeholder: '5076',
-          maxLength: 4,
+        return text('fdRefLast4', 'Deposit number', {
+          placeholder: '300017790142-1',
+          maxLength: 40,
         });
       case 'holderName':
         return text('holderName', 'Held by');

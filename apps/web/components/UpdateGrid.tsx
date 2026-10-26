@@ -272,7 +272,7 @@ export function UpdateGrid({
             <EditButton id={r.assetId} name={r.code} />
           </div>
           {fd.linkedTo && <div className="sub">↳ {fd.linkedTo}</div>}
-          {fd.refLast4 && <div className="sub">FD no. …{fd.refLast4}</div>}
+          {fd.refLast4 && <div className="sub">FD no. {fd.ref ?? `…${fd.refLast4}`}</div>}
           {errors[r.assetId] && (
             <div className="small fail" role="alert">
               {errors[r.assetId]}

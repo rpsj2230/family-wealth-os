@@ -296,3 +296,23 @@ describe.skipIf(!realFile || !existsSync(realFile))('real workbook control total
     expect(p.controlTotals.fdPrincipal).toBe(19_179_860);
   });
 });
+
+describe('deposit numbers are kept whole (account numbers are not)', () => {
+  it('lists each deposit number with its bank and last four digits, for matching in the database', async () => {
+    const { fdNumbersFromPlan } = await import('../src/workbook');
+    const plan = {
+      institutions: [{ key: 'i1', name: 'Sample Bank', kind: 'bank' }],
+      assets: [
+        { key: 'fd:1', institutionKey: 'i1' },
+        { key: 'fd:2', institutionKey: 'i1' },
+      ],
+      fixedDeposits: [
+        { assetKey: 'fd:1', ref: '300017790142-1', refLast4: '0142' },
+        { assetKey: 'fd:2', refLast4: '9999' },
+      ],
+    } as unknown as Parameters<typeof fdNumbersFromPlan>[0];
+    expect(fdNumbersFromPlan(plan)).toEqual([
+      { bank: 'Sample Bank', last4: '0142', fdRef: '300017790142-1' },
+    ]);
+  });
+});
