@@ -121,6 +121,30 @@ export interface AppConfig {
     navGapDays: number;
     /** a fund is flagged as lagging or leading when its return differs from the household's by more than this (0.05 = 5 points) */
     outlierPoints: number;
+    /** the yearly return assumed to be free of risk (a short government bill), for the Sharpe and Sortino ratios */
+    riskFreeRate: number;
+    /** months of returns behind volatility, Sharpe and Sortino, and the fewest that make them worth showing */
+    riskMonths: number;
+    riskMinMonths: number;
+    /** holding windows, in years, for rolling returns, and the fewest windows worth summarising */
+    rollingYears: number[];
+    rollingMinWindows: number;
+    /** the AMFI scheme code of the index fund used as the benchmark proxy ('' = none) */
+    benchmarkCode: string;
+    /** the horizons of "if you carry on like this", the highest yearly return it may assume and the band around it */
+    projectionYears: number[];
+    projectionCap: number;
+    projectionSpread: number;
+    /** the ages, in months, where the "how old are the units" buckets end */
+    ageBucketsMonths: number[];
+    /** transaction lines shown before "Show more", the next instalments listed, and the funds named as movers */
+    ledgerPageSize: number;
+    upcomingSips: number;
+    moversShown: number;
+    /** weeks of weekly profit and loss kept, buckets shown in the profit and loss chart, and funds in a fund-against-fund comparison */
+    weeksShown: number;
+    plRows: number;
+    compareFunds: number;
   };
 }
 
@@ -183,12 +207,43 @@ export const DEFAULT_CONFIG: AppConfig = {
     maxSlices: 7,
     navGapDays: 10,
     outlierPoints: 0.05,
+    riskFreeRate: 0.06,
+    riskMonths: 36,
+    riskMinMonths: 24,
+    rollingYears: [1, 3],
+    rollingMinWindows: 12,
+    benchmarkCode: '120716',
+    projectionYears: [1, 3, 5, 10],
+    projectionCap: 0.2,
+    projectionSpread: 0.03,
+    ageBucketsMonths: [3, 12, 36],
+    ledgerPageSize: 100,
+    upcomingSips: 5,
+    moversShown: 3,
+    weeksShown: 26,
+    plRows: 24,
+    compareFunds: 4,
   },
 };
 
 const num = (v: unknown, d: number, lo: number, hi: number) =>
   typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? v : d;
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
+/** A saved list of whole numbers in a range: duplicates dropped, sorted, at most `max` kept; the default when nothing valid is saved. */
+const ints = (v: unknown, d: number[], lo: number, hi: number, max: number): number[] => {
+  const list = Array.isArray(v)
+    ? [
+        ...new Set(
+          v.filter(
+            (x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi,
+          ),
+        ),
+      ]
+        .sort((a, b) => a - b)
+        .slice(0, max)
+    : [];
+  return list.length > 0 ? list : d;
+};
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
@@ -328,6 +383,25 @@ export function configFromJson(raw: unknown): AppConfig {
       maxSlices: Math.round(num(fun.maxSlices, d.funds.maxSlices, 2, 7)),
       navGapDays: Math.round(num(fun.navGapDays, d.funds.navGapDays, 1, 60)),
       outlierPoints: num(fun.outlierPoints, d.funds.outlierPoints, 0, 1),
+      riskFreeRate: num(fun.riskFreeRate, d.funds.riskFreeRate, 0, 0.3),
+      riskMonths: Math.round(num(fun.riskMonths, d.funds.riskMonths, 6, 120)),
+      riskMinMonths: Math.round(num(fun.riskMinMonths, d.funds.riskMinMonths, 6, 120)),
+      rollingYears: ints(fun.rollingYears, d.funds.rollingYears, 1, 20, 4),
+      rollingMinWindows: Math.round(num(fun.rollingMinWindows, d.funds.rollingMinWindows, 1, 600)),
+      benchmarkCode:
+        typeof fun.benchmarkCode === 'string' && /^\d{0,10}$/.test(fun.benchmarkCode.trim())
+          ? fun.benchmarkCode.trim()
+          : d.funds.benchmarkCode,
+      projectionYears: ints(fun.projectionYears, d.funds.projectionYears, 1, 40, 6),
+      projectionCap: num(fun.projectionCap, d.funds.projectionCap, 0, 0.4),
+      projectionSpread: num(fun.projectionSpread, d.funds.projectionSpread, 0, 0.2),
+      ageBucketsMonths: ints(fun.ageBucketsMonths, d.funds.ageBucketsMonths, 1, 600, 6),
+      ledgerPageSize: Math.round(num(fun.ledgerPageSize, d.funds.ledgerPageSize, 10, 2000)),
+      upcomingSips: Math.round(num(fun.upcomingSips, d.funds.upcomingSips, 1, 30)),
+      moversShown: Math.round(num(fun.moversShown, d.funds.moversShown, 1, 10)),
+      weeksShown: Math.round(num(fun.weeksShown, d.funds.weeksShown, 4, 104)),
+      plRows: Math.round(num(fun.plRows, d.funds.plRows, 4, 120)),
+      compareFunds: Math.round(num(fun.compareFunds, d.funds.compareFunds, 2, 8)),
     },
   };
 }

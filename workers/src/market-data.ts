@@ -4,6 +4,7 @@
  * Runs in GitHub Actions with the project URL and the service-role key (a GitHub secret; it never reaches the browser).
  */
 import { createClient } from '@supabase/supabase-js';
+import { configFromJson, DEFAULT_CONFIG } from '@fwos/core';
 import { parseNavHint, refreshMarketData, type MarketIo, type MarketStore } from '@fwos/ingest';
 
 const url = process.env.SUPABASE_URL;
@@ -43,6 +44,19 @@ const store: MarketStore = {
       'held codes',
     );
     return rows.map((r) => r.amfi_code as string);
+  },
+  async benchmarkCodes() {
+    // the index fund each household compares its funds with (Settings keeps it in the saved configuration)
+    const rows = must(
+      await db.from('household_config').select('config'),
+      'household configuration',
+    );
+    const codes = rows.map(
+      (r) => configFromJson((r as { config: unknown }).config).funds.benchmarkCode,
+    );
+    return [
+      ...new Set((rows.length > 0 ? codes : [DEFAULT_CONFIG.funds.benchmarkCode]).filter(Boolean)),
+    ];
   },
   async navCount(code) {
     const r = await db

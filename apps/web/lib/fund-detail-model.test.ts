@@ -25,7 +25,7 @@ describe('buildFundDetail on the sample funds', () => {
     expect(d.avgCostBasis).toBe('statement');
     expect(d.avgCost).toBeGreaterThan(100);
     expect(d.nav.buys.length).toBeGreaterThan(40);
-    expect(d.nav.sells).toHaveLength(1);
+    expect(d.nav.sells).toHaveLength(2); // a switch out and a sale
     expect(d.nav.line.length).toBeLessThanOrEqual(100);
     expect(d.holding?.basis).toBe('statement');
     expect(d.holding!.longValue + d.holding!.shortValue).toBeCloseTo(s.row.value, 0);

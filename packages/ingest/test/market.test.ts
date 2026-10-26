@@ -29,6 +29,7 @@ function amfiText(n: number) {
 function fakeStore(
   over: Partial<{
     held: string[];
+    benchmarks: string[];
     navCounts: Record<string, number>;
     currencies: string[];
     fxCount: number;
@@ -37,6 +38,7 @@ function fakeStore(
   const calls = { schemes: [] as SchemeRow[], navs: [] as NavRow[], fx: [] as FxRow[] };
   const store: MarketStore = {
     heldCodes: async () => over.held ?? [],
+    benchmarkCodes: async () => over.benchmarks ?? [],
     navCount: async (c) => over.navCounts?.[c] ?? 0,
     currencies: async () => over.currencies ?? [],
     fxCount: async () => over.fxCount ?? 0,
@@ -94,6 +96,27 @@ describe('refreshMarketData', () => {
     expect(calls.navs.map((n) => n.amfi_code)).toEqual(['100001', '100002']);
     expect(calls.navs[0]).toMatchObject({ nav_date: '2026-10-23', source: 'amfi' });
     expect(rep.warnings).toEqual([]);
+  });
+
+  it('also fetches the benchmark index fund, held or not, and its history once', async () => {
+    const hist = {
+      data: [
+        { date: '22-10-2026', nav: '10.1' },
+        { date: '21-10-2026', nav: '10.0' },
+      ],
+    };
+    const { store, calls } = fakeStore({
+      held: ['100001'],
+      benchmarks: ['100002', '100001'],
+      navCounts: { '100001': 99 },
+    });
+    const rep = await refreshMarketData(store, io({ json: () => hist }), '2026-10-26');
+    expect(rep.heldCodes).toBe(2);
+    expect(calls.navs.filter((n) => n.source === 'amfi').map((n) => n.amfi_code)).toEqual([
+      '100001',
+      '100002',
+    ]);
+    expect(rep.historyRows).toBe(2);
   });
 
   it('back-fills history once for a newly held scheme, and not again afterwards', async () => {

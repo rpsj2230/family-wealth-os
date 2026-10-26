@@ -30,25 +30,15 @@ test('sample deposit: facts, value chart, interest by year and the activity log'
   await noSideways(page);
 });
 
-test('sample fund: ledger, lots, sales, recorded values and a price chart', async ({ page }) => {
+test('sample fund: headline, figures, graphs and every tab', async ({ page }) => {
   await page.goto('/demo/asset?kind=fund');
-  await expect(page.getByRole('region', { name: 'Key facts' })).toContainText(
-    'Return a year (XIRR)',
-  );
-  await expect(page.getByRole('region', { name: 'Key facts' })).toContainText('Education fund');
-  await expect(page.getByRole('region', { name: 'Transactions' })).toContainText('SIP instalment');
-  await expect(page.getByRole('region', { name: 'Units still held (oldest first)' })).toBeVisible();
-  await expect(
-    page.getByRole('region', { name: 'Sales and the purchases they used' }),
-  ).toContainText('Sale');
-  const recorded = page.getByRole('region', { name: 'Recorded values' });
-  await expect(recorded).toContainText('Replaced');
-  // the fund page adds its own figures and graphs
+  const hero = page.getByRole('region', { name: 'This fund at a glance' });
+  await expect(hero).toContainText('Value now');
+  await expect(hero).toContainText('Return a year (XIRR)');
+  await expect(hero).toContainText('Profit or loss');
+  // overview: the figures and the graphs
   await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText(
     'Average cost per unit',
-  );
-  await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText(
-    'Return a year (XIRR)',
   );
   await expect(
     page.getByRole('img', { name: /price per unit with purchases and average cost/ }),
@@ -56,12 +46,83 @@ test('sample fund: ledger, lots, sales, recorded values and a price chart', asyn
   await expect(page.getByRole('img', { name: /value against money put in/ })).toBeVisible();
   await expect(page.getByRole('img', { name: /units held after each transaction/ })).toBeVisible();
   await expect(page.getByRole('list', { name: /monthly investment by month/ })).toBeVisible();
-  await expect(page.getByText('instalment made').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'How much is long-term' })).toBeVisible();
+  await noSideways(page);
+
+  const tabs = page.getByRole('navigation', { name: 'Sections' });
+  // lots and gains: purchases still held with their age, sales with the gain they booked
+  await tabs.getByRole('link', { name: 'Lots and gains' }).click();
+  await expect(page.getByRole('heading', { name: 'Units still held' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Gains booked by selling' })).toBeVisible();
+  await expect(page.getByText('Switch out').first()).toBeVisible();
+  await noSideways(page);
+
+  // records: details, recorded values and the activity log
+  await tabs.getByRole('link', { name: 'Records' }).click();
+  await expect(page.getByRole('region', { name: 'Key facts' })).toContainText('Education fund');
+  await expect(page.getByRole('region', { name: 'Recorded values' })).toContainText('Replaced');
   await expect(page.getByRole('region', { name: 'Activity log' })).toContainText(
     'Fund position updated',
   );
   await noSideways(page);
+});
+
+test('sample fund: the returns tab shows the periods, the benchmark, years, months, risk and rolling returns', async ({
+  page,
+}) => {
+  await page.goto('/demo/asset?kind=fund&tab=returns');
+  await expect(page.getByRole('heading', { name: 'Return over each period' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: /Benchmark \(proxy\)/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Month by month' })).toBeVisible();
+  await expect(page.getByRole('table', { name: /Return in each month/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Fall from the highest price' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Risk' })).toBeVisible();
+  await expect(page.getByText('Sharpe ratio')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Rolling returns' })).toBeVisible();
+  await expect(page.getByText(/category average and the expense ratio/)).toBeVisible();
+  // financial or calendar years
+  await page.getByRole('link', { name: 'Calendar', exact: true }).click();
+  await expect(page).toHaveURL(/heat=calendar/);
+  await expect(page.getByRole('table', { name: /by calendar year/ })).toBeVisible();
+  await noSideways(page);
+});
+
+test('sample fund: every transaction can be filtered, searched, sorted and exported', async ({
+  page,
+}) => {
+  await page.goto('/demo/asset?kind=fund&tab=transactions');
+  const lines = page.getByText(/of 56 lines/);
+  await expect(lines).toBeVisible();
+  await page.getByRole('button', { name: 'Sales', exact: true }).click();
+  await expect(page.getByText(/^1 of 56 lines/)).toBeVisible();
+  await expect(page.getByText('booked').first()).toBeVisible();
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await page.getByLabel('Year').selectOption('2024-25');
+  await expect(page.getByText(/of 56 lines/)).toBeVisible();
+  await page.getByLabel('Year').selectOption('all');
+  await page.getByLabel('Search the transactions').fill('dividend');
+  await expect(page.getByText(/^2 of 56 lines/)).toBeVisible();
+  await page.getByRole('button', { name: 'Clear' }).click();
+  await page.getByLabel('Sort by').selectOption('amount');
+  await expect(page.getByRole('columnheader', { name: /Amount/ })).toHaveAttribute(
+    'aria-sort',
+    /ascending|descending/,
+  );
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  expect((await download).suggestedFilename()).toMatch(/^transactions-.*\.csv$/);
+  await noSideways(page);
+});
+
+test('sample fund: the edit panel opens from the fund page', async ({ page }) => {
+  await page.goto('/demo/asset?kind=fund');
+  await page.getByRole('button', { name: 'Edit Sample Flexi Cap Fund' }).click();
+  const panel = page.getByRole('dialog');
+  await expect(panel.getByRole('heading', { name: 'Sample Flexi Cap Fund' })).toBeVisible();
+  await panel.getByLabel(/SIP a month/).fill('30000');
+  await expect(panel.getByText('Changed: SIP.')).toBeVisible();
+  await panel.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(panel.getByRole('status')).toContainText('nothing is saved');
 });
 
 test('sample fund: the range switch changes the graphs', async ({ page }) => {

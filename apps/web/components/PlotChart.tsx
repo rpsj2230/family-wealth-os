@@ -24,6 +24,8 @@ export interface PlotSeries {
   colour: string;
   /** a faint area down to the baseline (the axis then starts at zero) */
   area?: boolean;
+  /** fill towards this value instead of the bottom of the chart (for a line that only falls, such as a drawdown) */
+  areaBase?: number;
   dashed?: boolean;
   /** held flat until the next change, for counts such as units */
   step?: boolean;
@@ -41,7 +43,7 @@ export interface PlotRef {
   label: string;
   colour: string;
 }
-export type PlotUnit = 'inr' | 'pct' | 'nav' | 'units';
+export type PlotUnit = 'inr' | 'pct' | 'nav' | 'units' | 'index';
 
 const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
 const DAY = 86_400_000;
@@ -53,7 +55,9 @@ const fmtAxis = (unit: PlotUnit, v: number) =>
       ? `${(v * 100).toFixed(Math.abs(v) < 0.1 ? 1 : 0)}%`
       : unit === 'nav'
         ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: v < 100 ? 1 : 0 })}`
-        : v.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        : unit === 'index'
+          ? v.toFixed(0)
+          : v.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const fmtFull = (unit: PlotUnit, v: number) =>
   unit === 'inr'
     ? `${v < 0 ? '−' : ''}₹${Math.abs(Math.round(v)).toLocaleString('en-IN')}`
@@ -61,7 +65,9 @@ const fmtFull = (unit: PlotUnit, v: number) =>
       ? `${v < 0 ? '−' : '+'}${Math.abs(v * 100).toFixed(1)}%`
       : unit === 'nav'
         ? `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
-        : v.toLocaleString('en-IN', { maximumFractionDigits: 3 });
+        : unit === 'index'
+          ? v.toFixed(1)
+          : v.toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
 const longDate = dayMonthYear;
 
@@ -278,7 +284,7 @@ export function PlotChart({
           .map((s) => (
             <polygon
               key={`${s.key}-a`}
-              points={`${X(s.points[0]!.date)},${Y(m.lo)} ${pathOf(s)} ${X(s.points[s.points.length - 1]!.date)},${Y(m.lo)}`}
+              points={`${X(s.points[0]!.date)},${Y(s.areaBase ?? m.lo)} ${pathOf(s)} ${X(s.points[s.points.length - 1]!.date)},${Y(s.areaBase ?? m.lo)}`}
               fill={s.colour}
               opacity="0.14"
             />

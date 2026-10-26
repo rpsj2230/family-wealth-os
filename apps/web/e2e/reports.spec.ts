@@ -74,6 +74,28 @@ test.describe('Reports (public sample)', () => {
     await noOverflow(page);
   });
 
+  test('funds can be grouped by goal, with a total per goal and a "No goal" group', async ({
+    page,
+  }) => {
+    await page.goto('/demo/reports?tab=funds');
+    const group = page.getByRole('navigation', { name: 'Group funds by' });
+    await expect(group.getByRole('link')).toHaveText([
+      'Fund',
+      'Person',
+      'Kind of fund',
+      'Fund house',
+      'Goal',
+      'Start date',
+    ]);
+    await group.getByRole('link', { name: 'Goal', exact: true }).click();
+    await expect(page).toHaveURL(/fb=goal/);
+    const table = page.getByRole('table', { name: /Funds by goal/ });
+    await expect(table.getByRole('row', { name: /Education fund/ })).toBeVisible();
+    await expect(table.getByRole('row', { name: /No goal/ })).toBeVisible();
+    await expect(table.getByRole('row', { name: /Grand total/ })).toBeVisible();
+    await noOverflow(page);
+  });
+
   test('each report downloads as a CSV file', async ({ page }) => {
     await page.goto('/demo/reports');
     const download = page.waitForEvent('download');

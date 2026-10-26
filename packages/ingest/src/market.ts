@@ -43,6 +43,8 @@ export interface MarketStore {
   unmatchedPositions?(): Promise<UnmatchedPosition[]>;
   setAmfiCode?(assetId: string, code: string): Promise<void>;
   heldCodes(): Promise<string[]>;
+  /** the index fund used as the benchmark proxy, set in the household's configuration; its prices are fetched like a held fund's */
+  benchmarkCodes?(): Promise<string[]>;
   navCount(code: string): Promise<number>;
   currencies(): Promise<string[]>;
   fxCount(currency: string): Promise<number>;
@@ -156,7 +158,9 @@ export async function refreshMarketData(
   }
 
   // 2. latest NAV for held schemes
-  const held = [...new Set(await store.heldCodes())];
+  const held = [
+    ...new Set([...(await store.heldCodes()), ...((await store.benchmarkCodes?.()) ?? [])]),
+  ];
   report.heldCodes = held.length;
   const byCode = new Map(all.map((s) => [s.code, s]));
   const latest: NavRow[] = [];

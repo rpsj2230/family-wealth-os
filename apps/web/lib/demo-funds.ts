@@ -11,10 +11,14 @@ import {
   fundCategory,
   fundSeries,
   fundTaxClass,
+  flowsOfFund,
   lastNavMove,
   moveAmount,
   monthEnds,
+  perfDates,
   returnsFor,
+  trailingTable,
+  type IndexPoint,
   type AppConfig,
   type FundForReturns,
   type FundRangeKey,
@@ -52,8 +56,11 @@ interface Spec {
   phase: number;
   lumps: [string, number][];
   sip?: { monthly: number; start: string; stopAfter?: string; skip?: string[] };
-  /** units sold on a date */
-  sells?: [string, number][];
+  /** units sold on a date, with the kind of line when it is not a plain sale */
+  sells?: [string, number, CasTxn['kind']?][];
+  /** other lines in units of money: a switch in, dividends reinvested, bonus units */
+  extras?: [string, CasTxn['kind'], number][];
+  plan?: 'direct' | 'regular';
   /** no fund statement: only the amount put in and the start date are known */
   plain?: boolean;
   goal?: string;
@@ -77,7 +84,15 @@ const SPECS: Spec[] = [
       ['2024-03-12', 150_000],
     ],
     sip: { monthly: 25_000, start: '2022-07-05', skip: ['2025-08', '2026-03'] },
-    sells: [['2025-12-10', 400]],
+    sells: [
+      ['2025-06-12', 150, 'switch_out'],
+      ['2025-12-10', 400],
+    ],
+    extras: [
+      ['2023-03-20', 'dividend_reinvest', 4_200],
+      ['2024-03-20', 'dividend_reinvest', 5_100],
+    ],
+    plan: 'direct',
     goal: 'g1',
   },
   {
@@ -94,6 +109,24 @@ const SPECS: Spec[] = [
     phase: 1.7,
     lumps: [['2024-02-05', 100_000]],
     sip: { monthly: 15_000, start: '2024-03-05' },
+    extras: [['2025-06-12', 'switch_in', 0]],
+    plan: 'regular',
+  },
+  {
+    id: 'f8',
+    owner: 'p1',
+    name: 'Sample Tax Saver Fund (ELSS)',
+    amfi: '120509',
+    category: 'Equity Scheme - ELSS',
+    amc: 'Sample Mutual Fund',
+    folio: '4568',
+    base: 80,
+    drift: 0.13,
+    amp: 0.08,
+    phase: 1.1,
+    lumps: [['2021-07-12', 100_000]],
+    sip: { monthly: 5_000, start: '2021-08-05' },
+    plan: 'direct',
   },
   {
     id: 'f5',
@@ -174,6 +207,10 @@ const SPECS: Spec[] = [
   },
 ];
 
+/** the money a switch moves from the flexi cap fund to the small cap fund: the units sold times that day's price */
+const SWITCH_UNITS = 150;
+const SWITCH_ON = '2025-06-12';
+
 const T0 = Date.parse('2021-01-01T00:00:00Z');
 const DAY = 86_400_000;
 const navOn = (s: Spec, d: string) => {
@@ -191,7 +228,25 @@ const navOn = (s: Spec, d: string) => {
   );
 };
 
+SPECS[1]!.extras![0]![2] = Math.round(SWITCH_UNITS * navOn(SPECS[0]!, SWITCH_ON) * 100) / 100;
+
 const NAV_FROM = '2021-05-31';
+
+/** The sample benchmark: an invented index fund, drawn from the same kind of recipe as the funds. */
+const BENCH: Spec = {
+  id: 'bench',
+  owner: '',
+  name: 'Sample Nifty 50 Index Fund',
+  amfi: '120716',
+  category: null,
+  amc: '',
+  folio: '',
+  base: 100,
+  drift: 0.11,
+  amp: 0.05,
+  phase: 0.6,
+  lumps: [],
+};
 const dailyNavs = (s: Spec): NavPoint[] => {
   const out: NavPoint[] = [];
   for (let d = NAV_FROM; d <= DEMO_TODAY; d = addDaysIso(d, 1)) {
@@ -217,6 +272,7 @@ function recipe(s: Spec): CasTxn[] {
     });
   };
   for (const [d, a] of s.lumps) buy(d, 'purchase', a);
+  for (const [d, kind, a] of s.extras ?? []) buy(d, kind, a);
   if (s.sip) {
     for (
       let d = s.sip.start;
@@ -229,11 +285,11 @@ function recipe(s: Spec): CasTxn[] {
       if (!s.sip.skip?.includes(d.slice(0, 7))) buy(d, 'sip', s.sip.monthly);
     }
   }
-  for (const [d, units] of s.sells ?? []) {
+  for (const [d, units, kind] of s.sells ?? []) {
     const nav = navOn(s, d);
     rows.push({
       date: d,
-      kind: 'redeem',
+      kind: kind ?? 'redeem',
       description: '',
       amount: -Math.round(units * nav * 100) / 100,
       units: -units,
@@ -329,6 +385,26 @@ function buildRow(
     nav: t.nav,
     balance: t.balance,
   }));
+  const navLine: IndexPoint[] = navs.map((n) => ({ date: n.date, value: n.nav }));
+  const fl = flowsOfFund({
+    txns: txns.map((t) => ({
+      date: t.date,
+      units: t.units,
+      amount: Math.abs(t.amount),
+      nav: t.nav,
+      balance: t.balance,
+    })),
+    plan: { invested, startedOn, sipMonthly, sipStopped },
+    today: DEMO_TODAY,
+  });
+  const perf = startedOn
+    ? fundSeries(
+        hist,
+        DEMO_TODAY,
+        cur,
+        perfDates(history[0]?.date ?? startedOn, DEMO_TODAY, config.weeksShown),
+      )
+    : [];
   const row: FundRow = {
     assetId: s.id,
     ownerId: s.owner,
@@ -361,6 +437,21 @@ function buildRow(
     category: fundCategory(s.name, cat),
     amc: amcLabel(s.amc),
     taxClass: fundTaxClass(s.name, cat).class,
+    label: null,
+    status: 'active',
+    exitLoadPct: s.id === 'f2' ? 0.01 : null,
+    exitLoadDays: s.id === 'f2' ? 365 : null,
+    plan: s.plan ?? 'unknown',
+    navReturns:
+      navLine.length >= 2
+        ? trailingTable(navLine, DEMO_TODAY, {
+            gapDays: config.navGapDays,
+            annualiseAfterMonths: config.annualiseAfterMonths,
+          })
+        : [],
+    perf,
+    flows: fl.flows,
+    flowsEstimated: fl.estimated,
     hasStatement: !hidden,
     txns: stat,
     lots,
@@ -437,9 +528,20 @@ export function demoView(who: string | null, range: FundRangeKey): InvestmentVie
     },
     holdingMonths: DEMO_HOLDING_MONTHS,
     config,
+    benchmark: demoBenchmark(),
     goals: DEMO_GOALS,
   };
 }
+
+/** The sample benchmark: an invented index fund's prices. */
+export const demoBenchmark = () => ({
+  code: BENCH.amfi!,
+  name: BENCH.name,
+  navs: dailyNavs(BENCH).map((n) => ({ date: n.date, value: n.nav })),
+});
+
+/** The ids of the sample funds. */
+export const DEMO_FUND_IDS = SPECS.map((s) => s.id);
 
 /** One sample fund with its price history, for the fund page. */
 export function demoFund(id: string, range: FundRangeKey) {

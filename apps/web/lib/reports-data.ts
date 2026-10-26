@@ -49,33 +49,33 @@ export function reportFds(lines: FdLine[], fdRows: FdRow[], ownerId: string | nu
 
 /** The funds of the Investments view in the shape the summaries need, for one person or everyone. */
 export function reportFunds(view: InvestmentView, ownerId: string | null): ReportFund[] {
+  const goalName = new Map(view.goals.map((g) => [g.id, g.name]));
   return view.groups
     .filter((g) => !ownerId || g.ownerId === ownerId)
     .flatMap((g) =>
-      g.funds.map(
-        (f): ReportFund => ({
-          id: f.assetId,
-          name: f.name,
-          owner: g.name,
-          category: f.category.label,
-          amc: f.amc,
-          value: f.value,
-          invested: f.invested,
-          units: f.units,
-          startedOn: f.startedOn,
-          xirr: f.xirr,
-          sipMonthly: f.sipMonthly,
-          sipStopped: f.sipStopped,
-          txns: f.txns.map((t) => ({
-            date: t.date,
-            kind: t.kind,
-            units: t.units,
-            amount: t.amount,
-          })),
-          lots: f.lots.map((l) => ({ acquiredOn: l.acquiredOn, units: l.units, cost: l.cost })),
-          hasStatement: f.hasStatement,
-        }),
-      ),
+      g.funds.map((f): ReportFund => ({
+        id: f.assetId,
+        name: f.name,
+        owner: g.name,
+        category: f.category.label,
+        amc: f.amc,
+        value: f.value,
+        invested: f.invested,
+        units: f.units,
+        startedOn: f.startedOn,
+        goals: f.goalIds.map((id) => goalName.get(id) ?? 'A goal'),
+        xirr: f.xirr,
+        sipMonthly: f.sipMonthly,
+        sipStopped: f.sipStopped,
+        txns: f.txns.map((t) => ({
+          date: t.date,
+          kind: t.kind,
+          units: t.units,
+          amount: t.amount,
+        })),
+        lots: f.lots.map((l) => ({ acquiredOn: l.acquiredOn, units: l.units, cost: l.cost })),
+        hasStatement: f.hasStatement,
+      })),
     );
 }
 

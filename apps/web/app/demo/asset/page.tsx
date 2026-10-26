@@ -4,9 +4,21 @@ import { DEFAULT_CONFIG, parseRange, personStyles, type NavPoint } from '@fwos/c
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
+import { niceDate } from '@/lib/dates';
+import { formatInr } from '@fwos/core';
 import { FundDetailPanel } from '@/components/FundDetailPanel';
 import { HistoryLine } from '@/components/HistoryLine';
-import { DEMO_HOLDING_MONTHS, DEMO_TODAY, demoFund } from '@/lib/demo-funds';
+import {
+  DEMO_FUND_IDS,
+  DEMO_HOLDING_MONTHS,
+  DEMO_TODAY,
+  demoBenchmark,
+  demoFund,
+  demoView,
+} from '@/lib/demo-funds';
+import { fundEditRows } from '@/lib/invest-ledger';
+import { FundEditProvider } from '@/components/invest/FundEdit';
+import { FundPage, parseFundTab } from '@/components/invest/FundPage';
 import { buildFundDetail, NAV_POINTS } from '@/lib/fund-detail-model';
 import type { FundRow } from '@/lib/investments';
 import {
@@ -199,12 +211,21 @@ const audit: AuditIn[] = [
 export default async function DemoAsset({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; range?: string }>;
+  searchParams: Promise<{
+    kind?: string;
+    range?: string;
+    id?: string;
+    tab?: string;
+    heat?: string;
+    edit?: string;
+  }>;
 }) {
-  const { kind, range: rangeParam } = await searchParams;
-  const fund = kind === 'fund';
-  const range = parseRange(rangeParam);
-  const sample = demoFund('f1', range);
+  const sp = await searchParams;
+  const fund = sp.kind === 'fund';
+  const range = parseRange(sp.range);
+  const fundId = sp.id && DEMO_FUND_IDS.includes(sp.id) ? sp.id : 'f1';
+  const sample = demoFund(fundId, range);
+  const bench = demoBenchmark();
   const detail = buildFundDetail({
     fund: sample.row,
     navs: sample.navs,
@@ -213,6 +234,7 @@ export default async function DemoAsset({
     holdingMonths: DEMO_HOLDING_MONTHS,
     config: DEFAULT_CONFIG.funds,
     maxPoints: NAV_POINTS,
+    benchmark: bench,
   });
   const view = buildAssetView(fund ? fundInput(sample.row, sample.navs) : fdInput());
   const activity = buildActivity({
@@ -233,8 +255,8 @@ export default async function DemoAsset({
           },
         ],
   });
-  return (
-    <main className="content">
+  const notice = (
+    <>
       <p>
         <Link href="/login">← Sign in</Link>
       </p>
@@ -242,8 +264,75 @@ export default async function DemoAsset({
         Invented data. See another sample: <Link href="/demo/asset">Fixed deposit</Link> ·{' '}
         <Link href="/demo/asset?kind=fund">Mutual fund</Link>
       </p>
+    </>
+  );
+  if (fund) {
+    const all = demoView(null, 'all');
+    const owner = PEOPLE[sample.row.ownerId]!;
+    const base = '/demo/asset';
+    const keep = { kind: 'fund', id: fundId };
+    return (
+      <main className="content">
+        {notice}
+        <FundEditProvider
+          rows={fundEditRows(all)}
+          owners={all.groups.map((g) => ({ id: g.ownerId, name: g.name }))}
+          goals={all.goals}
+          styles={PEOPLE}
+          today={DEMO_TODAY}
+          linkBase={{ match: '/demo/investments?tab=match', demo: true }}
+          initialOpen={sp.edit ?? null}
+        >
+          <DetailHeader
+            crumbs={[{ label: 'Investments', href: '/demo/investments' }, { label: view.title }]}
+            title={sample.row.name}
+            subtitle={`Mutual fund · held by ${owner.name}`}
+            person={owner}
+            headline={formatInr(sample.row.value)}
+            headlineNote={`as of ${niceDate(DEMO_TODAY)}`}
+          />
+          <FundPage
+            fund={sample.row}
+            detail={detail}
+            tab={parseFundTab(sp.tab)}
+            heat={sp.heat === 'calendar' ? 'calendar' : 'financial'}
+            base={base}
+            keep={keep}
+            today={DEMO_TODAY}
+            demo
+            holdingMonths={DEMO_HOLDING_MONTHS}
+            config={DEFAULT_CONFIG.funds}
+            colour={owner.colour}
+            overview={
+              <FundDetailPanel
+                fund={sample.row}
+                detail={detail}
+                base={`/demo/asset?kind=fund&id=${fundId}`}
+                links={{
+                  update: '/demo/investments?tab=update',
+                  match: '/demo/investments?tab=match',
+                }}
+                holdingMonths={DEMO_HOLDING_MONTHS}
+                colour={owner.colour}
+              />
+            }
+            records={
+              <>
+                <AssetFacts facts={view.facts} />
+                <DetailTables tables={view.tables.filter((t) => t.title === 'Recorded values')} />
+                <ActivityLog items={activity} />
+              </>
+            }
+          />
+        </FundEditProvider>
+      </main>
+    );
+  }
+  return (
+    <main className="content">
+      {notice}
       <DetailHeader
-        crumbs={[{ label: fund ? 'Investments' : 'Accounts' }, { label: view.title }]}
+        crumbs={[{ label: 'Accounts' }, { label: view.title }]}
         title={view.title}
         subtitle={view.subtitle}
         person={PEOPLE.p1!}
@@ -251,24 +340,12 @@ export default async function DemoAsset({
         {...(view.headlineNote ? { headlineNote: view.headlineNote } : {})}
       />
       <AssetFacts facts={view.facts} />
-      {view.charts
-        .filter((c) => !(fund && c.label === 'NAV'))
-        .map((c) => (
-          <section className="detailsection" key={c.title} aria-label={c.title}>
-            <h2>{c.title}</h2>
-            <HistoryLine points={c.points} label={c.label} money={c.money} />
-          </section>
-        ))}
-      {fund && (
-        <FundDetailPanel
-          fund={sample.row}
-          detail={detail}
-          base="/demo/asset?kind=fund"
-          links={{ update: '/demo/investments?tab=update', match: '/demo/investments?tab=match' }}
-          holdingMonths={DEMO_HOLDING_MONTHS}
-          colour={PEOPLE.p1!.colour}
-        />
-      )}
+      {view.charts.map((c) => (
+        <section className="detailsection" key={c.title} aria-label={c.title}>
+          <h2>{c.title}</h2>
+          <HistoryLine points={c.points} label={c.label} money={c.money} />
+        </section>
+      ))}
       <DetailTables tables={view.tables} />
       <ActivityLog items={activity} />
     </main>

@@ -7,6 +7,7 @@ import {
   fdSummary,
   fundAge,
   fundFlow,
+  FUND_BY,
   fundSummary,
   periodOf,
   sipTable,
@@ -205,6 +206,28 @@ describe('fundSummary', () => {
     const s = fundSummary(FUNDS, 'start', 'month');
     expect(s.rows.map((r) => r.group)).toEqual(['Jan 2025', 'Feb 2025']);
     expect(s.chart).toHaveLength(2);
+  });
+  it('groups by goal with a total per goal, split funds and "No goal" last', () => {
+    const list = [
+      fund({ id: 'A', goals: ['Education'], value: 120_000, invested: 100_000 }),
+      fund({ id: 'B', goals: ['Education'], value: 30_000, invested: 20_000 }),
+      fund({ id: 'C', goals: ['Home'], value: 500_000, invested: 400_000 }),
+      fund({ id: 'D', goals: ['Home', 'Education'], value: 50_000, invested: 50_000 }),
+      fund({ id: 'E', value: 900_000, invested: 800_000 }),
+      fund({ id: 'F', goals: [], value: 10_000, invested: 10_000 }),
+    ];
+    const t = fundSummary(list, 'goal');
+    expect(t.title).toBe('Funds by goal');
+    expect(t.rows.map((r) => r.group)).toEqual([
+      'Home',
+      'Education',
+      'Split between goals',
+      'No goal',
+    ]);
+    expect(t.rows[1]).toMatchObject({ count: 2, invested: 120_000, value: 150_000, gain: 30_000 });
+    expect(t.rows[3]).toMatchObject({ count: 2, value: 910_000 });
+    expect(t.total).toMatchObject({ value: 1_610_000, invested: 1_380_000 });
+    expect(FUND_BY.map((b) => b.label)).toContain('Goal');
   });
   it('keeps a fund with no fund house or start date visible', () => {
     const t = fundSummary([fund({ id: 'C', amc: null, startedOn: null })], 'amc');

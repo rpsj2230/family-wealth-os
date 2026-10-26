@@ -16,17 +16,21 @@ import './fundviz.css';
 
 /** The time-range switch: links, so each range has an address and works without scripts. */
 export function RangeSwitch({
-  base,
+  base = '',
   current,
   keep,
   label = 'Show',
+  hrefOf,
 }: {
-  base: string;
+  base?: string;
   current: FundRangeKey;
-  keep?: Record<string, string>;
+  keep?: Record<string, string> | undefined;
   label?: string;
+  /** builds each link itself, when the page keeps more in its address than a range */
+  hrefOf?: (key: FundRangeKey) => string;
 }) {
   const href = (key: FundRangeKey) => {
+    if (hrefOf) return hrefOf(key);
     const q = new URLSearchParams(keep);
     q.set('range', key);
     return `${base}${base.includes('?') ? '&' : '?'}${q.toString()}`;
@@ -53,7 +57,7 @@ export interface Stat {
   label: string;
   value: ReactNode;
   note?: ReactNode;
-  tone?: 'gain' | 'fail' | null;
+  tone?: 'gain' | 'fail' | '' | null | undefined;
 }
 
 /** A tidy grid of labelled figures, each with one line saying what it is or where it comes from. */
