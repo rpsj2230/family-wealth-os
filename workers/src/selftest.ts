@@ -9,7 +9,13 @@
  */
 import { ImapFlow } from 'imapflow';
 import { createClient } from '@supabase/supabase-js';
-import { buildAiRequest, parseAiResponse, probeModels, resolveWorkingModel } from '@fwos/ingest';
+import {
+  aiErrorHint,
+  buildAiRequest,
+  parseAiResponse,
+  probeModels,
+  resolveWorkingModel,
+} from '@fwos/ingest';
 
 const need = (n: string) => {
   const v = process.env[n];
