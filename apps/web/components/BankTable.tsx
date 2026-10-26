@@ -126,11 +126,17 @@ export function BankTable({
   styles,
   updateBase = '/monthly',
   soonDays = DEFAULT_CONFIG.reminders.maturitySoonDays,
+  notes,
+  saveNote,
 }: {
   blocks: BankBlock[];
   styles: Record<string, PersonStyle>;
   updateBase?: string;
   soonDays?: number;
+  /** notes about the whole bank, by bank id */
+  notes?: Record<string, string>;
+  /** server action that saves a bank note; without it the note is shown but not editable */
+  saveNote?: (f: FormData) => Promise<void>;
 }) {
   return (
     <>
@@ -159,6 +165,32 @@ export function BankTable({
               Update
             </Link>
           </header>
+          {(notes?.[b.key] || saveNote) && (
+            <div className="banknote small">
+              {notes?.[b.key] ? (
+                <span>{notes[b.key]}</span>
+              ) : (
+                <span className="muted">No bank note.</span>
+              )}
+              {saveNote && (
+                <details>
+                  <summary>{notes?.[b.key] ? 'Edit note' : 'Add a note'}</summary>
+                  <form action={saveNote} className="row">
+                    <input type="hidden" name="id" value={b.key} />
+                    <input
+                      name="note"
+                      defaultValue={notes?.[b.key] ?? ''}
+                      maxLength={500}
+                      placeholder="e.g. AMB 10,000 · no debit card · lounge card"
+                      aria-label={`Note about ${b.name}`}
+                      style={{ flex: 1, minWidth: 220 }}
+                    />
+                    <button className="btn compact">Save</button>
+                  </form>
+                </details>
+              )}
+            </div>
+          )}
           <div className="xlwrap">
             <table className="xl">
               <thead>

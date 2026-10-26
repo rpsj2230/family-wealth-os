@@ -1385,3 +1385,15 @@ fieldset.urgency legend {
   padding: 0;
   margin-bottom: 4px;
 }
+
+.banknote {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.banknote details {
+  margin-left: auto;
+}

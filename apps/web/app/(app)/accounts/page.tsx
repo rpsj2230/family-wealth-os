@@ -12,6 +12,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 
+import { saveBankNote } from './actions';
+
 export const dynamic = 'force-dynamic';
 
 export default async function AccountsPage({
@@ -25,13 +27,16 @@ export default async function AccountsPage({
   const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, settings] =
     await Promise.all([
       loadPortfolio(supabase),
-      supabase.from('institutions').select('id, name'),
+      supabase.from('institutions').select('id, name, notes'),
       loadSettings(supabase as unknown as SupabaseClient),
     ]);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = p && styles[p] ? p : null;
   const names = Object.fromEntries(
     (inst.data ?? []).map((i) => [i.id as string, i.name as string]),
+  );
+  const notes = Object.fromEntries(
+    (inst.data ?? []).filter((i) => i.notes).map((i) => [i.id as string, i.notes as string]),
   );
   const all = buildBankBlocks({
     assets: assetRows,
@@ -87,6 +92,8 @@ export default async function AccountsPage({
         blocks={blocks}
         styles={styles}
         soonDays={settings.config.reminders.maturitySoonDays}
+        notes={notes}
+        saveNote={saveBankNote}
       />
     </>
   );
