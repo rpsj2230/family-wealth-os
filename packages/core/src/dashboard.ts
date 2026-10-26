@@ -43,6 +43,9 @@ export function toShares(
   return out;
 }
 
+/** The upper edge, in days from today, of each step of the ladder after "now". */
+export const LADDER_DAYS = { d30: 30, d90: 90, d180: 180, y1: 365 } as const;
+
 export interface LadderItem {
   name: string;
   on: string;
@@ -66,9 +69,9 @@ export function liquidityLadder(input: {
 }): (LadderStep & { cumulative: number })[] {
   const steps: LadderStep[] = [
     { key: 'now', label: 'In accounts now', amount: input.cashNow, items: [] },
-    { key: 'd30', label: 'Deposits maturing in 30 days', amount: 0, items: [] },
-    { key: 'd90', label: '31–90 days', amount: 0, items: [] },
-    { key: 'd180', label: '91–180 days', amount: 0, items: [] },
+    { key: 'd30', label: `Deposits maturing in ${LADDER_DAYS.d30} days`, amount: 0, items: [] },
+    { key: 'd90', label: `${LADDER_DAYS.d30 + 1}–${LADDER_DAYS.d90} days`, amount: 0, items: [] },
+    { key: 'd180', label: `${LADDER_DAYS.d90 + 1}–${LADDER_DAYS.d180} days`, amount: 0, items: [] },
     { key: 'y1', label: '6–12 months', amount: 0, items: [] },
     { key: 'later', label: 'Beyond a year', amount: 0, items: [] },
   ];
@@ -77,7 +80,17 @@ export function liquidityLadder(input: {
     const left = daysBetween(input.today, d.maturityOn);
     const step =
       steps[
-        left <= 0 ? 0 : left <= 30 ? 1 : left <= 90 ? 2 : left <= 180 ? 3 : left <= 365 ? 4 : 5
+        left <= 0
+          ? 0
+          : left <= LADDER_DAYS.d30
+            ? 1
+            : left <= LADDER_DAYS.d90
+              ? 2
+              : left <= LADDER_DAYS.d180
+                ? 3
+                : left <= LADDER_DAYS.y1
+                  ? 4
+                  : 5
       ]!;
     step.amount += d.amount;
     step.items.push({ name: d.name, on: d.maturityOn, amount: d.amount });

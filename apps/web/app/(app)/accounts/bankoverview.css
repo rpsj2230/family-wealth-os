@@ -1,5 +1,7 @@
-/* The money-in-banks overview on Accounts. Colours are tokens so dark mode is a change of values, not of rules. */
-.bv {
+/* The money-in-banks overview on Accounts. Colours are tokens so dark mode is a change of values, not of rules.
+   The tokens are also set on .hm (Home), whose cards use the same signed figures and split bars. */
+.bv,
+.hm {
   --bv-cash: #0c8f7c;
   --bv-fd: #4f46e5;
   --bv-others: #c77a10;
@@ -14,7 +16,8 @@
   --bv-hero-b: rgba(12, 143, 124, 0.08);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .bv {
+  :root:not([data-theme='light']) .bv,
+  :root:not([data-theme='light']) .hm {
     --bv-cash: #3fd0b8;
     --bv-fd: #8b93ff;
     --bv-others: #f0b45a;
@@ -29,7 +32,8 @@
     --bv-hero-b: rgba(63, 208, 184, 0.1);
   }
 }
-:root[data-theme='dark'] .bv {
+:root[data-theme='dark'] .bv,
+:root[data-theme='dark'] .hm {
   --bv-cash: #3fd0b8;
   --bv-fd: #8b93ff;
   --bv-others: #f0b45a;

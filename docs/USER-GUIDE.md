@@ -6,8 +6,24 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 
 - **Verified** is the last balance you entered or an official statement showed, with its date.
 - **Estimated today** is the verified figure moved forward: fixed deposits by their own interest terms, savings at an assumed rate, mutual funds by the latest published NAV, Singapore dollars by the latest exchange rate. Each figure is labelled _calculated_, _estimated_ or _carried forward_.
-- An asset with no value is listed but never counted as zero. Insurance cover and matured deposits you have not confirmed are never counted in net worth.
+- An asset with no value is listed but never counted as zero. Insurance cover is never counted in net worth, and nor is a deposit marked as matured and unconfirmed. A deposit past its date that is still listed as running is counted at its maturity amount until you say where the money went; Accounts and Deposits leave it out of their bank figures and Home says so under the banks card.
 - Money you have lent is shown as owed, not as cash.
+
+## Home
+
+The first page answers, from the top down:
+
+1. **What are we worth?** The big number is net worth in lakhs and crores with the exact rupees under it. Beside it, **How much is verified** shows the share of that value that was recorded recently and confirmed, or worked out from a deposit's own terms (the rest is older, or imported and not yet confirmed). Beneath the number are three changes, each with an arrow and a word: **Today** (an estimate: interest earned since yesterday at each rate plus the move in fund prices), the **last 30 days** and **this financial year** (from 1 April). The last two compare today with the net worth saved each day, so money you added or took out is part of them. The 30 days is a setting.
+2. **Needs you** lists what needs a person, late things first (matured deposits to confirm, loans past their date, overdue tasks and policy dates), then things with a date coming (deposits maturing soon, tasks and policies due, money above the deposit-insurance limit, bank e-mails to review), then housekeeping (balances out of date, holdings with no value). Every line says how many and links to where it is dealt with.
+3. **Coming up** puts deposits (grouped by day), policy dates, tasks, repayments and the end of the financial year on one timeline. How far ahead it looks is a setting (120 days).
+4. **What changed** shows the biggest moves since the comparison day, by kind of holding and by person. A move includes money you added, a deposit that matured and interest and price changes.
+5. **Net worth over time**: choose 1M, 3M, 6M, 1Y or All (each is a link, so the back button works). It shows the change over that stretch and over the same length of time before it, a dotted line for "if the last year's pace continues" (a straight extension, not a forecast), and, for banks and funds, how much was put in against how much it has grown. Property, shares and money lent have no recorded cost and are left out of that split.
+6. **Where the money is** by kind of holding, by person (each name links to Accounts for that person), and by NRE or NRO and currency when you have more than one.
+7. **How fast can I get at it?** First what arrives with nothing sold (accounts now, then each deposit as it matures), then, for each window set under "When I need money", the most that could be in the bank at no cost and with sales and early breaks included, before tax and penalties. **I need money** shows the cost of each way.
+8. **In banks**, **Fixed deposits** and **Mutual funds** are short versions of Accounts, Deposits and Investments and use the same figures. Deposits also show the interest added this financial year and what the running deposits add over the next 12 months if held to maturity. Funds show value, gain, annual return (XIRR), today's move, best and weakest, and a note on which funds have a statement on file (a **~** marks a return worked out from the plan you entered).
+9. **Goals** and **What to watch** (deposit insurance, the largest bank, the largest kind of holding, late loans).
+
+**How these figures are worked out** (under the top box) explains each figure and lists the latest recorded values. In Settings > Money rules > Reminders you can change what "this month" means, how far ahead Coming up looks, and the share at which a bank is flagged.
 
 ## Monthly routine (about 5 minutes)
 

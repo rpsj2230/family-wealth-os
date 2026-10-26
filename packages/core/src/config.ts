@@ -127,6 +127,15 @@ export interface AppConfig {
     /** days kept clear before 31 March: an order after the cut-off or on a holiday is priced on the next working day */
     orderBufferDays: number;
   };
+  /** what Home compares and flags */
+  home: {
+    /** the "this month" change on Home compares with the value this many days ago */
+    changeDays: number;
+    /** Coming up on Home looks this many days ahead */
+    upcomingDays: number;
+    /** Home flags a bank that holds more than this share of the money kept in banks (0.4 = 40%) */
+    bankShareWatch: number;
+  };
   /** how the mutual-fund statistics and graphs are cut */
   funds: {
     /** an annual figure (CAGR, XIRR over time) is shown only after money has been invested this many months */
@@ -208,6 +217,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     stampDutyPct: 0.00005,
     orderBufferDays: 6,
   },
+  home: { changeDays: 30, upcomingDays: 120, bankShareWatch: 0.4 },
   funds: {
     annualiseAfterMonths: 12,
     concentrationTop: 3,
@@ -249,6 +259,7 @@ export function configFromJson(raw: unknown): AppConfig {
   const liq = obj(r.liquidity);
   const ref = obj(r.refunds);
   const fun = obj(r.funds);
+  const hom = obj(r.home);
   const days = Array.isArray(dep.maturityAlertDays)
     ? [
         ...new Set(
@@ -370,6 +381,11 @@ export function configFromJson(raw: unknown): AppConfig {
       sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
       stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
       orderBufferDays: Math.round(num(har.orderBufferDays, d.harvest.orderBufferDays, 0, 60)),
+    },
+    home: {
+      changeDays: Math.round(num(hom.changeDays, d.home.changeDays, 7, 365)),
+      upcomingDays: Math.round(num(hom.upcomingDays, d.home.upcomingDays, 7, 730)),
+      bankShareWatch: num(hom.bankShareWatch, d.home.bankShareWatch, 0.05, 1),
     },
     funds: {
       annualiseAfterMonths: Math.round(
