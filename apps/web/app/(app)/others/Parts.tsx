@@ -88,17 +88,11 @@ export function OthersKpis({
           href: '/others?tab=lent',
         },
         {
-          label: 'Policies',
-          value: policies.length,
-          sub: 'information only, never net worth',
-          href: '/others?tab=policies',
-        },
-        {
           label: 'Renewal or end soon',
           value: soon.length,
           sub: next?.d.on
             ? `next: ${policyKindLabel(next.p.kind)}, ${niceDate(next.d.on)}`
-            : `reminded ${policyDays} days ahead`,
+            : `${policies.length} polic${policies.length === 1 ? 'y' : 'ies'} · reminded ${policyDays} days ahead`,
           tone: soon.length > 0 ? 'warn' : undefined,
           href: '/others?tab=policies',
         },

@@ -39,6 +39,9 @@ export default async function BankPersonPage({
             <Link className="btn compact" href="/accounts/edit">
               Edit details
             </Link>
+            <Link className="btn compact" href="/deposits">
+              Deposits
+            </Link>
           </>
         }
       />

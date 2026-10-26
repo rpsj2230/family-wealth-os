@@ -29,6 +29,8 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
   const isFund = d.type === 'mutual_fund' || d.type === 'stock';
   const isBankLike =
     d.type === 'bank_account' || d.type === 'fixed_deposit' || d.type === 'third_party_held';
+  const isLoan = d.type === 'receivable';
+  const isDeposit = d.type === 'fixed_deposit';
   const crumbs: Crumb[] = isFund
     ? [{ label: 'Investments', href: '/investments' }]
     : isBankLike
@@ -36,7 +38,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
           { label: 'Accounts', href: '/accounts' },
           ...(d.bank ? [{ label: d.bank.name, href: `/bank/${d.bank.id}` }] : []),
         ]
-      : [{ label: 'Lent, policies, property', href: '/others' }];
+      : [
+          { label: 'Lent, policies, property', href: '/others' },
+          {
+            label: isLoan ? 'Money lent' : 'Property and other',
+            href: isLoan ? '/others?tab=lent' : '/others?tab=property',
+          },
+        ];
   crumbs.push({ label: d.view.title });
   return (
     <>
@@ -54,9 +62,28 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
                 Edit details
               </Link>
             )}
-            <Link className="btn compact" href="/monthly">
-              Update balance
-            </Link>
+            {isDeposit && (
+              <Link className="btn compact" href="/deposits?tab=maturities">
+                All maturities
+              </Link>
+            )}
+            {d.type === 'mutual_fund' ? (
+              <Link className="btn compact" href="/investments?tab=update">
+                Update units and price
+              </Link>
+            ) : isLoan ? (
+              <Link className="btn compact" href="/others?tab=lent">
+                Record a repayment
+              </Link>
+            ) : isBankLike || d.type === 'stock' ? (
+              <Link className="btn compact" href="/monthly">
+                Update balance
+              </Link>
+            ) : (
+              <Link className="btn compact" href="/others?tab=property">
+                Record a new value
+              </Link>
+            )}
           </>
         }
       />
@@ -94,7 +121,13 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
               : 'Units not recorded yet'}
             {fundView.f.nav !== null ? ` × price ${fundView.f.nav}` : ''}
             {fundView.f.value ? ` = ${formatInr(Math.round(fundView.f.value))}` : ''}.{' '}
-            <Link href="/investments/update">Update units and price</Link>
+            <Link href="/investments?tab=update">Update units and price</Link>
+            {!fundView.f.amfiCode && (
+              <>
+                {' · '}
+                <Link href="/investments?tab=match">Match this fund to follow its daily price</Link>
+              </>
+            )}
           </p>
           <FundChart
             history={fundView.f.history}

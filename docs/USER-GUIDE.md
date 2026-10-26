@@ -18,11 +18,11 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 
 ## Fixed deposits
 
-**Deposits** lists every deposit with its bank, owner, rate, maturity date and the amount at maturity. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account under **Correct tags and details** (Joint with; Swap names reverses the order); until then a joint account is grouped under its first name.
+**Deposits** has three tabs: Deposits (every deposit with its bank, owner, rate, maturity date and the amount at maturity), Maturities (what to confirm, what matures soon, a calendar) and Insurance cover. A matured deposit stays out of net worth until you say where the money went. The insured-limit view shows, per bank, each ownership name as written against the ₹5 lakh deposit insurance limit: Rupash, Ragini, Rupash & Ragini and Ragini & Rupash are four different names, each insured separately (so up to ₹20 lakh at one bank), and the order of the names matters. Set the second name of each joint account under **Correct tags and details** (Joint with; Swap names reverses the order); until then a joint account is grouped under its first name.
 
 ## Mutual funds and goals
 
-- **Funds** matches each fund in your sheet to the official scheme list once; you confirm the match.
+- **Investments, Match funds** matches each fund in your sheet to the official scheme list once; you confirm the match. (The old Funds address still works and opens this tab.) **Investments, Update funds** is the monthly entry of units and prices.
 - **Goals** lets you assign holdings to goals (education, marriage and so on). An asset can be split across goals but never above 100%. A goal shows its projected funding under the inflation and return you set.
 
 ## Can I retire now?
@@ -43,7 +43,7 @@ It never says "safe". A range of outcomes (market ups and downs) is shown next t
 
 ## Money lent and policies
 
-**Others** records loans (add one, record repayments, set an expected date) and insurance policies (renewal, end date, nominee, where the documents are). Renewals and end dates appear in the daily summary 45 days ahead.
+**Lent, policies, property** has three tabs: Money lent (add a loan, record repayments, set an expected date), Policies (add a policy; renewal, end date, nominee, where the documents are) and Property and other (property, NPS, ULIP with their latest value and date). Renewals and end dates appear in the daily summary 45 days ahead.
 
 ## Daily summary
 
@@ -105,7 +105,7 @@ in for a number of days, or only when you release it. Release or lock it again w
 
 ## Changing the order
 
-Accounts → **Change the order** lists your banks and, inside each, its rows. Drag a bank or a row, or use the arrow buttons (they work from the keyboard), then press **Save this order**. Accounts and the monthly update follow the new order from then on. Uploading your workbook again with "Apply the sheet layout" sets the order back to the sheet's.
+Accounts → **Manage** → **Change the order** lists your banks and, inside each, its rows. Drag a bank or a row, or use the arrow buttons (they work from the keyboard), then press **Save this order**. Accounts and the monthly update follow the new order from then on. Uploading your workbook again with "Apply the sheet layout" sets the order back to the sheet's.
 
 ## Form 26AS and the AIS
 

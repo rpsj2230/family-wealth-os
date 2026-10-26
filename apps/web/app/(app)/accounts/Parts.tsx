@@ -38,13 +38,12 @@ export function AccountsKpis({ s, month }: { s: AccountsSummary; month: string }
               <span className="muted"> / {s.banks}</span>
             </>
           ),
-          sub: s.oldestUpdate ? `oldest balance ${niceDate(s.oldestUpdate)}` : 'no balance yet',
-          href: '/monthly',
-        },
-        {
-          label: 'Needs you',
-          value: s.needsYou,
-          sub: s.needsYou === 0 ? 'nothing waiting' : 'old balances or deposits to confirm',
+          sub:
+            s.needsYou > 0
+              ? `${s.needsYou} need you: old balances or deposits to confirm`
+              : s.oldestUpdate
+                ? `nothing waiting · oldest balance ${niceDate(s.oldestUpdate)}`
+                : 'no balance yet',
           tone: s.needsYou > 0 ? 'warn' : undefined,
           href: '/monthly',
         },

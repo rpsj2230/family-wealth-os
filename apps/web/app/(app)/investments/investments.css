@@ -9,8 +9,14 @@
   min-width: 0;
 }
 .fundspark {
-  flex: none;
+  display: block;
+  margin-top: 2px;
   opacity: 0.85;
+}
+@media (min-width: 720px) {
+  table.funds td:first-child {
+    min-width: 230px;
+  }
 }
 .exitform {
   display: flex;
@@ -27,4 +33,11 @@
 }
 .nobullet .taskrow {
   align-items: flex-start;
+}
+/* the fund table scrolls inside its card instead of widening the page */
+.fundswrap {
+  contain: inline-size;
+}
+table.funds .goaltag select {
+  min-width: 120px;
 }

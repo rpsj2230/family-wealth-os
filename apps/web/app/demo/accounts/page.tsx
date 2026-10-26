@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { filterBlocksByOwner, formatInr, formatInrCompact } from '@fwos/core';
-import { ListingTools } from '@/components/ListingTools';
+import { filterBlocksByOwner, formatInrCompact } from '@fwos/core';
+import { AccountsKpis, ForeignCard, ManageCards } from '@/app/(app)/accounts/Parts';
 import { BankTable } from '@/components/BankTable';
-import { BottomNav, Sidebar } from '@/components/AppNav';
+import { DemoShell } from '@/components/DemoShell';
+import { ListingTools } from '@/components/ListingTools';
+import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
+import { Tabs } from '@/components/Tabs';
+import { summariseBlocks, type ForeignLine } from '@/lib/accounts-summary';
 import { demoModel } from '@/lib/demo-fixture';
 
 export const metadata: Metadata = {
@@ -12,42 +16,83 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-async function noSignOut() {
-  'use server';
-}
+const FOREIGN: ForeignLine[] = [
+  {
+    assetId: 'sg1',
+    ownerId: 'p1',
+    name: 'Sample Singapore savings',
+    currency: 'SGD',
+    amount: 4_200,
+    asOf: '2026-10-12',
+    rate: 63.412,
+    rateDate: '2026-10-25',
+    inr: 266_330,
+  },
+];
 
 export default async function DemoAccounts({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string }>;
 }) {
-  const { p } = await searchParams;
+  const { p, tab: rawTab } = await searchParams;
+  const tab = rawTab === 'manage' ? 'manage' : 'banks';
   const { blocks, styles, portfolio } = demoModel();
   const who = p && styles[p] ? p : null;
   const shown = who ? filterBlocksByOwner(blocks, who) : blocks;
+  const summary = summariseBlocks(shown);
   const totals = Object.fromEntries(
     Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
   );
+  const rows = blocks.flatMap((b) => b.sections.flatMap((s) => s.rows));
+  const assumed = rows.filter((r) => r.kindInferred).length;
   return (
-    <div className="shell">
-      <Sidebar email="sample@example.com" signOut={noSignOut} />
-      <div>
-        <header className="topbar">
-          <Link href="/login" className="brand">
-            <span>Family Wealth OS</span>
-          </Link>
-        </header>
-        <main className="content">
-          <p className="notice warn" role="note">
-            Sample with invented names and amounts. <Link href="/login">Sign in</Link> to see your
-            own.
-          </p>
-          <h1>Accounts</h1>
-          <p className="muted">
-            Banks in your sheet&apos;s order; each person&apos;s savings and deposits with rate,
-            dates, amount at maturity and today&apos;s value. {formatInr(portfolio.netWorth.total)}{' '}
-            across {shown.length} banks.
-          </p>
+    <DemoShell>
+      <PageHead
+        title="Accounts"
+        subtitle="Every bank in your sheet's order, with each person's savings and deposits. Open a bank for its history."
+        pills={[
+          summary.needsYou > 0
+            ? { label: `${summary.needsYou} need you`, tone: 'warn' }
+            : { label: 'Nothing waiting', tone: 'ok' },
+          {
+            label: `${summary.banksDone} of ${summary.banks} banks updated in October`,
+            tone: 'info',
+          },
+        ]}
+        actions={
+          <>
+            <Link className="btn primary" href="/demo/monthly">
+              Update balances
+            </Link>
+            <Link className="btn" href="/demo/accounts?tab=manage">
+              Manage
+            </Link>
+          </>
+        }
+      />
+      <AccountsKpis s={summary} month="October" />
+      <Tabs
+        base="/demo/accounts"
+        current={tab}
+        tabs={[
+          { key: 'banks', label: 'Banks' },
+          { key: 'manage', label: 'Manage', badge: assumed },
+        ]}
+      />
+      {tab === 'manage' ? (
+        <ManageCards
+          sample
+          base="/demo/accounts"
+          facts={{
+            assumedTypes: assumed,
+            notesToMove: 3,
+            banks: blocks.length,
+            accounts: rows.length,
+          }}
+        />
+      ) : (
+        <>
           <PersonFilter
             people={Object.values(styles)}
             basePath="/demo/accounts"
@@ -57,9 +102,9 @@ export default async function DemoAccounts({
           <ListingTools name="accounts">
             <BankTable blocks={shown} styles={styles} updateBase="/demo/bank" />
           </ListingTools>
-        </main>
-      </div>
-      <BottomNav />
-    </div>
+          <ForeignCard lines={FOREIGN} styles={styles} />
+        </>
+      )}
+    </DemoShell>
   );
 }

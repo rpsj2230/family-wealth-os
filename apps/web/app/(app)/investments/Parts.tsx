@@ -35,7 +35,6 @@ export function InvestKpis({
   title?: string;
 }) {
   const h = view.household;
-  const running = view.groups.flatMap((g) => g.funds).filter((f) => f.sipMonthly && !f.sipStopped);
   return (
     <KpiStrip
       label={title ?? 'Mutual funds at a glance'}
@@ -43,7 +42,7 @@ export function InvestKpis({
         {
           label: 'Value now',
           value: formatInrCompact(h.value),
-          sub: `${rupee(h.value)} · ${formatInrCompact(h.invested)} put in`,
+          sub: `${formatInrCompact(h.invested)} put in · SIP ${formatInrCompact(h.sipMonthly)} a month`,
           main: true,
         },
         {
@@ -60,11 +59,6 @@ export function InvestKpis({
               ? 'annual return not available'
               : `${pct(h.xirr, 1)} a year (XIRR)${h.xirrEstimated ? ', estimated' : ''}`,
           tone: h.gain >= 0 ? 'gain' : 'fail',
-        },
-        {
-          label: 'SIP a month',
-          value: formatInrCompact(h.sipMonthly),
-          sub: `${running.length} fund${running.length === 1 ? '' : 's'} with a running SIP`,
         },
         {
           label: 'Without a live price',
@@ -110,10 +104,10 @@ function FundRowView({ f, view }: { f: FundRow; view: InvestmentView }) {
                 </>
               )}
             </div>
+            <span className="fundspark">
+              <Sparkline points={f.history.map((x) => x.value)} label={`${f.name} value`} />
+            </span>
           </div>
-          <span className="fundspark">
-            <Sparkline points={f.history.map((x) => x.value)} label={`${f.name} value`} />
-          </span>
         </div>
       </td>
       <td data-label="Goal">
@@ -202,26 +196,28 @@ export function FundsTab({
             </div>
             <InvestHeadline t={g.totals} />
           </header>
-          <table className="tbl lines responsive funds">
-            <thead>
-              <tr>
-                <th>Fund</th>
-                <th>Goal</th>
-                <th className="num">Invested</th>
-                <th className="num">Value today</th>
-                <th className="num">Today</th>
-                <th className="num">Gain</th>
-                <th className="num">XIRR</th>
-                <th className="num">SIP</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {g.funds.map((f) => (
-                <FundRowView key={f.assetId} f={f} view={view} />
-              ))}
-            </tbody>
-          </table>
+          <div className="xlwrap fundswrap">
+            <table className="tbl lines responsive funds">
+              <thead>
+                <tr>
+                  <th>Fund</th>
+                  <th>Goal</th>
+                  <th className="num">Invested</th>
+                  <th className="num">Value today</th>
+                  <th className="num">Today</th>
+                  <th className="num">Gain</th>
+                  <th className="num">XIRR</th>
+                  <th className="num">SIP</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.funds.map((f) => (
+                  <FundRowView key={f.assetId} f={f} view={view} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ))}
       {view.household.xirrEstimated && (

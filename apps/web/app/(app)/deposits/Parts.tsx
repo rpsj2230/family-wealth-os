@@ -69,24 +69,19 @@ export function DepositKpis({
         {
           label: 'Fixed deposits today',
           value: formatInrCompact(s.runningValue),
-          sub: `${s.runningCount} running · ${formatInrCompact(s.runningPrincipal)} put in`,
+          sub: `${s.runningCount} running · ${formatInrCompact(s.runningPrincipal)} put in${s.averageRate === null ? '' : ` · ${(s.averageRate * 100).toFixed(2)}% on average`}`,
           main: true,
-        },
-        {
-          label: 'Average rate',
-          value: s.averageRate === null ? '–' : `${(s.averageRate * 100).toFixed(2)}%`,
-          sub: 'weighted by amount',
         },
         {
           label: `Matures in ${windowDays} days`,
           value: s.soon.length,
-          sub: s.soon.length > 0 ? `${formatInrCompact(s.soonTotal)} coming back` : 'nothing soon',
+          sub:
+            s.soon.length > 0
+              ? `${formatInrCompact(s.soonTotal)} coming back${s.next ? ` · next ${niceDate(s.next.maturityOn)}` : ''}`
+              : s.next
+                ? `next: ${niceDate(s.next.maturityOn)}, ${s.next.bank}`
+                : 'no running deposit',
           href: '/deposits?tab=maturities',
-        },
-        {
-          label: 'Next to mature',
-          value: s.next ? niceDate(s.next.maturityOn) : '–',
-          sub: s.next ? `${s.next.bank} · ${daysPhrase(s.next.daysLeft)}` : 'no running deposit',
         },
         {
           label: 'To confirm',
@@ -191,16 +186,16 @@ export function RegisterTab({
                 <td className="num" data-label="At maturity">
                   {f.bankMaturity === null ? (
                     <>
-                      –<div className="muted small">bank figure not entered</div>
+                      –<div className="muted small wrapnote">bank figure not entered</div>
                     </>
                   ) : (
                     <>
                       {rupee(f.bankMaturity)}
-                      <div className="muted small">bank figure</div>
+                      <div className="muted small wrapnote">bank figure</div>
                     </>
                   )}
                   {check !== null && (
-                    <div className="fail small">
+                    <div className="fail small wrapnote">
                       Our calculation differs by {Math.abs(check).toFixed(2)}%.{' '}
                       <Link href={links.edit}>Check the rate and dates</Link>
                     </div>

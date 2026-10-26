@@ -18,3 +18,14 @@
 .calmonth ul {
   margin: 8px 0 0;
 }
+
+/* a note under a figure may wrap even though numbers do not */
+.tbl td .wrapnote {
+  white-space: normal;
+}
+@media (min-width: 720px) {
+  .tbl td .wrapnote {
+    margin-left: auto;
+    max-width: 22ch;
+  }
+}
