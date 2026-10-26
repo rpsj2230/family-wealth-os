@@ -1,12 +1,26 @@
 import { holdingsFromAssets, settingsFromJson, withPeople } from '@fwos/core';
+import { PageHead } from '@/components/PageHead';
 import { RetireClient } from '@/components/RetireClient';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { savePlanSettings } from './actions';
 
+const niceDate = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
 export const dynamic = 'force-dynamic';
 
-export default async function RetirePage() {
+export default async function RetirePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
   const [{ today, portfolio }, settingsRow, sips, peopleRows] = await Promise.all([
@@ -28,12 +42,16 @@ export default async function RetirePage() {
       : 1;
   return (
     <>
-      <h1>Can I retire now?</h1>
-      <p className="muted">
-        An honest answer from your own numbers and the assumptions below, not a promise. It uses
-        your actual holdings, your SIPs, your spending, inflation and how long the plan has to last.
-      </p>
+      <PageHead
+        title="Can I retire now?"
+        subtitle="An honest answer from your own holdings, SIPs and spending, not a promise. Change an assumption below and watch the answer move."
+        pills={[
+          { label: `values as of ${niceDate(today.toISOString().slice(0, 10))}`, tone: 'info' },
+        ]}
+      />
       <RetireClient
+        tab={tab}
+        base="/retire"
         initial={withPeople(settingsFromJson(settingsRow.data?.settings), peopleRows.data ?? [])}
         holdings={holdings}
         sipMonthly={sipMonthly}

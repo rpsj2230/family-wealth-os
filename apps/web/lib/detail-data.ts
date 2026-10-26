@@ -638,6 +638,7 @@ export async function loadTaskDetail(id: string) {
   if (inst) facts.push({ label: 'About the bank', value: inst.name, href: `/bank/${inst.id}` });
   return {
     title: task.title,
+    task: { id: task.id, status: task.status, dueOn: task.due_on },
     facts,
     activity: buildActivity({
       audit: audit.filter((r) => r.table_name === 'tasks' && r.row_id === id),

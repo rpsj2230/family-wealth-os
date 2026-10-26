@@ -6,6 +6,17 @@ import { loadContext } from '@/lib/data';
 
 const uuid = /^[0-9a-f-]{36}$/;
 
+const KINDS = ['education', 'marriage', 'retirement', 'emergency', 'property', 'other'];
+const money = (v: FormDataEntryValue | null) => {
+  const n = Number(String(v ?? '').replace(/[₹,\s]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const isoDate = (v: FormDataEntryValue | null) => {
+  const d = String(v ?? '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+};
+
+/** A new goal: a name and a kind are enough; a target and a date can be given now or later. */
 export async function createGoal(formData: FormData) {
   const name = String(formData.get('name') ?? '')
     .trim()
@@ -16,28 +27,42 @@ export async function createGoal(formData: FormData) {
   await supabase.from('goals').insert({
     household_id: householdId,
     name,
-    kind: ['education', 'marriage', 'retirement', 'emergency', 'property', 'other'].includes(kind)
-      ? kind
-      : 'other',
+    kind: KINDS.includes(kind) ? kind : 'other',
+    target_amount: money(formData.get('target')),
+    target_date: isoDate(formData.get('date')),
   });
   revalidatePath('/goals');
 }
 
+/** Changes a goal's target and assumptions; the name and kind too, when they are sent. */
 export async function updateGoal(formData: FormData) {
   const id = String(formData.get('id') ?? '');
   if (!uuid.test(id)) return;
-  const amount = Number(String(formData.get('target') ?? '').replace(/[₹,\s]/g, ''));
-  const date = String(formData.get('date') ?? '');
-  const infl = Number(String(formData.get('inflation') ?? '').replace(/[%\s]/g, ''));
+  const inflRaw = String(formData.get('inflation') ?? '').trim();
+  const infl = Number(inflRaw.replace(/[%\s]/g, ''));
+  const patch: Record<string, unknown> = {
+    target_amount: money(formData.get('target')),
+    target_date: isoDate(formData.get('date')),
+    inflation_rate:
+      inflRaw !== '' && Number.isFinite(infl) && infl >= 0 && infl < 50 ? infl / 100 : null,
+  };
+  const name = String(formData.get('name') ?? '')
+    .trim()
+    .slice(0, 80);
+  if (name) patch.name = name;
+  const kind = String(formData.get('kind') ?? '');
+  if (KINDS.includes(kind)) patch.kind = kind;
   const { supabase } = await loadContext();
-  await supabase
-    .from('goals')
-    .update({
-      target_amount: Number.isFinite(amount) && amount > 0 ? amount : null,
-      target_date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
-      inflation_rate: Number.isFinite(infl) && infl >= 0 && infl < 50 ? infl / 100 : null,
-    })
-    .eq('id', id);
+  await supabase.from('goals').update(patch).eq('id', id);
+  revalidatePath('/goals');
+}
+
+/** Removes a goal and, with it, the earmarks on it. The holdings themselves are untouched. */
+export async function deleteGoal(formData: FormData) {
+  const id = String(formData.get('id') ?? '');
+  if (!uuid.test(id)) return;
+  const { supabase } = await loadContext();
+  await supabase.from('goals').delete().eq('id', id);
   revalidatePath('/goals');
 }
 

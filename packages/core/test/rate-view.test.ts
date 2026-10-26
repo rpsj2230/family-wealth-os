@@ -11,6 +11,7 @@ import {
   parseView,
   reasonLabel,
   slabLadder,
+  slabShort,
   slotText,
   sourceStatus,
   withRunAge,
@@ -76,6 +77,16 @@ describe('slabLadder', () => {
     expect(
       slabLadder([{ rate: 0.001, balanceFrom: null, balanceTo: null }], 0.09)[0]!.heightPct,
     ).toBe(10);
+  });
+});
+
+describe('slabShort', () => {
+  it('writes a slab in a few characters', () => {
+    expect(slabShort({ balanceFrom: null, balanceTo: 100_000 })).toBe('≤1L');
+    expect(slabShort({ balanceFrom: 100_000, balanceTo: 500_000 })).toBe('1L–5L');
+    expect(slabShort({ balanceFrom: 5_000_000, balanceTo: null })).toBe('>50L');
+    expect(slabShort({ balanceFrom: 10_000_000, balanceTo: null })).toBe('>1Cr');
+    expect(slabShort({ balanceFrom: 0, balanceTo: null })).toBe('any');
   });
 });
 

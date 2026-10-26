@@ -3,13 +3,13 @@ import {
   compareHoldings,
   formatInr,
   offerAge,
-  parseAmount,
   placeNewMoney,
   type PersonStyle,
   type RateHolding,
   type RateOffer,
   type RatePrefs,
 } from '@fwos/core';
+import { readAmount } from '@/lib/read-amount';
 import { PageHead } from '@/components/PageHead';
 import { ParamTabs } from '@/components/ParamTabs';
 import { InsuranceRoom, PlanResult, PlannerForm, Suggestions } from './Parts';
@@ -19,15 +19,6 @@ export const NM_TABS = ['place', 'better', 'room'] as const;
 export type NmTab = (typeof NM_TABS)[number];
 export const parseNmTab = (s: string | undefined): NmTab =>
   (NM_TABS as readonly string[]).includes(s ?? '') ? (s as NmTab) : 'place';
-
-/** "2500000", "₹25,00,000" and "25 lakh" all read as an amount; anything else is no amount. */
-export function readAmount(s: string | undefined): number {
-  const raw = String(s ?? '').trim();
-  if (!raw) return 0;
-  const plain = Number(raw.replace(/[₹,\s]/g, ''));
-  if (Number.isFinite(plain) && plain > 0) return Math.round(plain);
-  return parseAmount(raw) ?? 0;
-}
 
 /**
  * New money: where a sum should go, which of today's holdings could earn more, and how much deposit-insurance room is left at each

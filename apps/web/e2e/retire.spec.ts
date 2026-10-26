@@ -44,9 +44,10 @@ test.describe('Can I retire now? (public sample page)', () => {
   });
 
   test('on-demand tools: effect of changes and range of outcomes', async ({ page }) => {
-    await page.goto('/demo/retire');
+    await page.goto('/demo/retire?tab=compare');
     await page.getByRole('button', { name: 'Show the effect of common changes' }).click();
     await expect(page.getByText('Invest ₹10,000 more per month')).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('link', { name: 'Range of outcomes' }).click();
     await page.getByRole('button', { name: 'Run the simulation' }).click();
     await expect(page.getByText(/of paths last the whole plan/)).toBeVisible({ timeout: 20_000 });
   });

@@ -1,0 +1,173 @@
+/* I need money: the question, the answer as numbered steps. */
+
+.rz-need {
+  display: grid;
+  gap: 14px;
+}
+.rz-kind {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.rz-kind legend {
+  font-size: 0.86rem;
+  font-weight: 500;
+  padding: 0;
+  margin-bottom: 6px;
+}
+.rz-kind label {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+.rz-kind input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.rz-kind .rz-opt {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--card);
+}
+.rz-kind .rz-opt b {
+  display: block;
+}
+.rz-kind .rz-opt span {
+  font-size: 0.84rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.rz-kind input:checked + .rz-opt {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.rz-kind input:focus-visible + .rz-opt {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.rz-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.rz-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+/* numbered steps */
+.rz-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.rz-step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--card);
+}
+.rz-n {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 700;
+}
+.rz-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+.rz-top b {
+  font-size: 1.02rem;
+}
+.rz-do {
+  margin: 6px 0 0;
+}
+.rz-note {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.rz-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px 14px;
+  margin: 12px 0 0;
+}
+.rz-facts div {
+  min-width: 0;
+}
+.rz-facts dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.rz-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rz-when {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 16px 0 8px;
+}
+.rz-when h3 {
+  margin: 0;
+}
+.rz-ladder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.rz-rung {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--card);
+  min-width: 0;
+}
+.rz-rung .k {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.rz-rung .v {
+  font-size: 1.25rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.rz-rung.short .v {
+  color: var(--fail);
+}
+.rz-foot {
+  margin: 12px 0 0;
+}
+@media (max-width: 480px) {
+  .rz-step {
+    grid-template-columns: 1fr;
+  }
+}

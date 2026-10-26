@@ -22,6 +22,11 @@ test('every private page redirects to login', async ({ request }) => {
     '/tasks',
     '/emergency',
     '/raise',
+    '/rates',
+    '/rates/some-bank',
+    '/new-money',
+    '/goals',
+    '/tasks/00000000-0000-4000-8000-000000000000',
     '/tax/filing',
     '/more',
   ]) {

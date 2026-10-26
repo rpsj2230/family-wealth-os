@@ -4,19 +4,43 @@ import { revalidatePath } from 'next/cache';
 import { parseTaskLines } from '@/lib/task-lines';
 import { loadContext } from '@/lib/data';
 
+const uuid = /^[0-9a-f-]{36}$/;
+
 export async function addTask(formData: FormData) {
   const title = String(formData.get('title') ?? '')
     .trim()
     .slice(0, 200);
   const due = String(formData.get('due') ?? '');
+  const inst = String(formData.get('institution') ?? '');
   const { supabase, householdId } = await loadContext();
   if (!householdId || !title) return;
   await supabase.from('tasks').insert({
     household_id: householdId,
     title,
     due_on: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
+    institution_id: uuid.test(inst) ? inst : null,
   });
   revalidatePath('/tasks');
+}
+
+/** Changes a task's wording or its date (an empty date clears it). */
+export async function updateTask(formData: FormData) {
+  const id = String(formData.get('id') ?? '');
+  if (!uuid.test(id)) return;
+  const title = String(formData.get('title') ?? '')
+    .trim()
+    .slice(0, 200);
+  const due = String(formData.get('due') ?? '');
+  const { supabase } = await loadContext();
+  await supabase
+    .from('tasks')
+    .update({
+      ...(title ? { title } : {}),
+      due_on: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
+    })
+    .eq('id', id);
+  revalidatePath('/tasks');
+  revalidatePath(`/tasks/${id}`);
 }
 
 export async function setTaskStatus(formData: FormData) {
@@ -29,6 +53,7 @@ export async function setTaskStatus(formData: FormData) {
     .update({ status, done_at: status === 'done' ? new Date().toISOString() : null })
     .eq('id', id);
   revalidatePath('/tasks');
+  revalidatePath(`/tasks/${id}`);
 }
 
 /** Adds many dated tasks at once: one per line, starting with the date. Nothing is added if any line cannot be read. */

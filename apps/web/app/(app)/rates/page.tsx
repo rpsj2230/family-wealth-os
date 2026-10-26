@@ -22,6 +22,7 @@ import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
 import { loadContext } from '@/lib/data';
 import { loadBoardOffers, loadRateEvents, loadRateSources } from '@/lib/rates-view';
+import { plannerRedirect } from '@/lib/rates-redirect';
 import { slugify } from '@/lib/slug';
 import { AddOffer } from './AddOffer';
 import { BoardToolbar, RateBoard } from './Board';
@@ -42,20 +43,14 @@ HDFC - Saving [3%-50Lk], NRE FD[6.5% - 3Yrs]`;
 
 const TABS = ['banks', 'best', 'add'] as const;
 type Tab = (typeof TABS)[number];
-/** The new-money planner used to live on this page; its addresses keep working. */
-const PLANNER_KEYS = ['amount', 'who', 'tenure', 'liquid', 'joint', 'with'] as const;
-
 export default async function RatesPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  if (PLANNER_KEYS.some((k) => sp[k] !== undefined)) {
-    const q = new URLSearchParams();
-    for (const k of [...PLANNER_KEYS, 'kind'] as const) if (sp[k]) q.set(k, sp[k]!);
-    redirect(`/new-money?${q.toString()}`);
-  }
+  const moved = plannerRedirect(sp);
+  if (moved) redirect(moved);
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
   const db = supabase as unknown as SupabaseClient;
