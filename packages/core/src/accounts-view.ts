@@ -38,6 +38,70 @@ export function personStyles(owners: { id: string; name: string }[]): Record<str
   return out;
 }
 
+export interface BankStyle {
+  /** the bank's colour: well known banks keep their own, others get a stable one from their name */
+  colour: string;
+  /** two letters for a badge: "YB", "ID" */
+  abbr: string;
+}
+
+// Brand colours, darkened a little so white text stays readable. First match wins.
+const BANK_BRANDS: [RegExp, string][] = [
+  [/hdfc/i, '#004c8f'],
+  [/icici/i, '#b3441f'],
+  [/axis/i, '#97144d'],
+  [/\bsbi\b|state bank/i, '#1c4f9c'],
+  [/kotak/i, '#c8102e'],
+  [/yes/i, '#0b62a8'],
+  [/idfc/i, '#9c1d26'],
+  [/indus/i, '#7a1f3d'],
+  [/\brbl\b/i, '#233a8c'],
+  [/\bau\b|small finance/i, '#c2540a'],
+  [/federal/i, '#0a5ea8'],
+  [/equitas/i, '#b5252b'],
+  [/jana/i, '#00798f'],
+  [/esaf/i, '#2b7a33'],
+  [/standard chartered|scb/i, '#0a7a5a'],
+  [/dbs/i, '#d62b2b'],
+  [/ocbc/i, '#c1272d'],
+  [/uob/i, '#1b3d8f'],
+];
+const BANK_PALETTE = [
+  '#0b6e4f',
+  '#7a3e9d',
+  '#b5651d',
+  '#1d6fa5',
+  '#a3263f',
+  '#2e7d32',
+  '#5b5fc7',
+  '#c2410c',
+  '#00838f',
+  '#8a6d00',
+  '#ad1457',
+  '#455a64',
+  '#6a1b9a',
+  '#00695c',
+  '#9a3412',
+  '#3f6212',
+];
+
+/** The same bank always gets the same colour and letters, on every screen. */
+export function bankStyle(name: string): BankStyle {
+  const brand = BANK_BRANDS.find(([re]) => re.test(name));
+  let h = 2166136261;
+  for (const ch of name.toLowerCase()) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const words = name
+    .replace(/\b(bank|ltd|limited|of|the|and)\b/gi, ' ')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+  const abbr =
+    (words.length >= 2
+      ? words[0]![0]! + words[1]![0]!
+      : (words[0] ?? name).replace(/[^A-Za-z0-9]/g, '').slice(0, 2)
+    ).toUpperCase() || '??';
+  return { colour: brand ? brand[1] : BANK_PALETTE[h % BANK_PALETTE.length]!, abbr };
+}
+
 export type SourceTag = { label: string; kind: 'auto' | 'manual' | 'calc' | 'import' | 'none' };
 
 const SHORT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });

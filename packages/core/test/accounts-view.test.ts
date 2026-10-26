@@ -302,3 +302,16 @@ describe('helpers', () => {
     expect(s.c!.initial).toBe('A');
   });
 });
+
+describe('bankStyle', () => {
+  it('gives known banks their own colour and any bank a stable one', async () => {
+    const { bankStyle } = await import('../src/accounts-view');
+    expect(bankStyle('HDFC Bank').colour).toBe('#004c8f');
+    expect(bankStyle('Yes Bank').abbr).toBe('YE');
+    expect(bankStyle('Sample Jan Bank')).toEqual(bankStyle('Sample Jan Bank'));
+    expect(bankStyle('Some Local Co-op').colour).toMatch(/^#[0-9a-f]{6}$/);
+    expect(bankStyle('IDFC First').abbr).toBe('IF');
+    expect(bankStyle('IDFC').abbr).toBe('ID');
+    expect(bankStyle('RBL Bank').abbr).toBe('RB');
+  });
+});

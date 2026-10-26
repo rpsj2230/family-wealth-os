@@ -1,11 +1,14 @@
 import Link from 'next/link';
 import {
   DEFAULT_CONFIG,
+  bankStyle,
   formatInr,
   type BankBlock,
   type BankRow,
   type PersonStyle,
 } from '@fwos/core';
+import { AccordionControls } from './AccordionControls';
+import { BankBadge } from './BankBadge';
 import { PersonBadge } from './Person';
 import { slugify } from '@/lib/slug';
 
@@ -34,29 +37,35 @@ function Row({ r, soonDays }: { r: BankRow; soonDays: number }) {
   return (
     <tr className={`xlrow ${r.status !== 'active' ? 'dim' : ''}`}>
       <td className="code">
-        <span className={`kind ${r.kind}`}>{r.code}</span>
-        {r.kindInferred && (
-          <span
-            className="muted small"
-            title="Not written on the row; taken from the savings account"
+        <div className="codeline">
+          <Link
+            className={`kind ${r.kind}`}
+            href={`/asset/${r.assetId}`}
+            title="Open the history of this account"
           >
-            {' '}
-            (NRE/NRO assumed)
-          </span>
-        )}
-        {fd?.linkedTo && <div className="small muted">↳ linked to {fd.linkedTo}</div>}
-        {r.kind === 'cash' && <div className="small src">{r.source.label}</div>}
-        {r.kind === 'held' && r.holderName && (
-          <div className="small muted">held by {r.holderName}</div>
-        )}
+            {r.code}
+          </Link>
+          {r.kindInferred && (
+            <Link
+              className="pill assumed"
+              href="/accounts/edit"
+              title="The type (NRE or NRO) is not recorded on this row and is taken from the savings account. Click to correct it."
+            >
+              type assumed
+            </Link>
+          )}
+        </div>
+        {fd?.linkedTo && <div className="sub">↳ linked to {fd.linkedTo}</div>}
+        {r.kind === 'cash' && <div className="sub">{r.source.label}</div>}
+        {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
       </td>
-      <td className="num">{fd ? pctText(fd.rate) : ''}</td>
-      <td className="num nowrap">{fd ? fmtDate(fd.bookedOn) : ''}</td>
-      <td className="num nowrap">
+      <td className="mid">{fd ? pctText(fd.rate) : ''}</td>
+      <td className="mid nowrap">{fd ? fmtDate(fd.bookedOn) : ''}</td>
+      <td className="mid nowrap">
         {fd ? fmtDate(fd.maturityOn) : ''}
-        {fd && fd.needsConfirmation && <div className="small fail">matured</div>}
+        {fd && fd.needsConfirmation && <span className="pill bad">matured</span>}
         {fd && !fd.needsConfirmation && fd.daysLeft >= 0 && fd.daysLeft <= soonDays && (
-          <div className="small warnText">{fd.daysLeft}d left</div>
+          <span className="pill soon">{fd.daysLeft}d left</span>
         )}
       </td>
       <td className="num">
@@ -140,89 +149,106 @@ export function BankTable({
 }) {
   return (
     <>
+      <AccordionControls />
       {blocks.map((b) => (
         <section
           className="card xlbank"
           key={b.key}
           id={slugify(b.name)}
           aria-labelledby={`h-${b.key}`}
+          style={{ ['--bank' as string]: bankStyle(b.name).colour }}
         >
-          <header className="xlhead">
-            <h2 id={`h-${b.key}`}>{b.name}</h2>
-            <span className="tot">
-              <b className="num big">{formatInr(Math.round(b.totals.current))}</b>
-            </span>
-            {b.needsYou > 0 ? (
-              <span className="pill warn">
-                {b.needsYou} need{b.needsYou === 1 ? 's' : ''} you
+          <details open className="bankdet">
+            <summary className="xlhead">
+              <BankBadge name={b.name} />
+              <h2 id={`h-${b.key}`}>
+                {b.key === '__none' ? b.name : <Link href={`/bank/${b.key}`}>{b.name}</Link>}
+              </h2>
+              <span className="tot">
+                <b className="num big">{formatInr(Math.round(b.totals.current))}</b>
               </span>
-            ) : b.doneThisMonth ? (
-              <span className="pill ok">Updated this month</span>
-            ) : (
-              <span className="pill">Not updated this month</span>
-            )}
-            <Link className="btn compact" href={`${updateBase}/${slugify(b.name)}`}>
-              Update
-            </Link>
-          </header>
-          {(notes?.[b.key] || saveNote) && (
-            <div className="banknote small">
-              {notes?.[b.key] ? (
-                <span>{notes[b.key]}</span>
+              {b.needsYou > 0 ? (
+                <span className="pill warn">
+                  {b.needsYou} need{b.needsYou === 1 ? 's' : ''} you
+                </span>
+              ) : b.doneThisMonth ? (
+                <span className="pill ok">Updated this month</span>
               ) : (
-                <span className="muted">No bank note.</span>
+                <span className="pill">Not updated this month</span>
               )}
-              {saveNote && (
-                <details>
-                  <summary>{notes?.[b.key] ? 'Edit note' : 'Add a note'}</summary>
-                  <form action={saveNote} className="row">
-                    <input type="hidden" name="id" value={b.key} />
-                    <input
-                      name="note"
-                      defaultValue={notes?.[b.key] ?? ''}
-                      maxLength={500}
-                      placeholder="e.g. AMB 10,000 · no debit card · lounge card"
-                      aria-label={`Note about ${b.name}`}
-                      style={{ flex: 1, minWidth: 220 }}
-                    />
-                    <button className="btn compact">Save</button>
-                  </form>
-                </details>
-              )}
-            </div>
-          )}
-          <div className="xlwrap">
-            <table className="xl">
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th className="num">Rate</th>
-                  <th className="num">Start</th>
-                  <th className="num">Maturity</th>
-                  <th className="num">Invested / balance</th>
-                  <th className="num">At maturity</th>
-                  <th className="num">Current value</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              {b.sections.map((sct) => (
-                <tbody
-                  key={sct.ownerId}
-                  style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
-                >
-                  <tr className="secthead">
-                    <th colSpan={8}>
-                      <PersonBadge p={styles[sct.ownerId]} name size={18} />
-                      <Tot t={sct.totals} />
-                    </th>
+              <Link className="btn compact" href={`${updateBase}/${slugify(b.name)}`}>
+                Update
+              </Link>
+            </summary>
+            {(notes?.[b.key] || saveNote) && (
+              <div className="banknote small">
+                {notes?.[b.key] ? (
+                  <span>{notes[b.key]}</span>
+                ) : (
+                  <span className="muted">No bank note.</span>
+                )}
+                {saveNote && (
+                  <details>
+                    <summary>{notes?.[b.key] ? 'Edit note' : 'Add a note'}</summary>
+                    <form action={saveNote} className="row">
+                      <input type="hidden" name="id" value={b.key} />
+                      <input
+                        name="note"
+                        defaultValue={notes?.[b.key] ?? ''}
+                        maxLength={500}
+                        placeholder="e.g. AMB 10,000 · no debit card · lounge card"
+                        aria-label={`Note about ${b.name}`}
+                        style={{ flex: 1, minWidth: 220 }}
+                      />
+                      <button className="btn compact">Save</button>
+                    </form>
+                  </details>
+                )}
+              </div>
+            )}
+            <div className="xlwrap">
+              <table className="xl">
+                <colgroup>
+                  <col style={{ width: '25%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '15%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th className="mid">Rate</th>
+                    <th className="mid">Start</th>
+                    <th className="mid">Maturity</th>
+                    <th className="num">Invested / balance</th>
+                    <th className="num">At maturity</th>
+                    <th className="num">Current value</th>
+                    <th>Notes</th>
                   </tr>
-                  {sct.rows.map((r) => (
-                    <Row key={r.assetId} r={r} soonDays={soonDays} />
-                  ))}
-                </tbody>
-              ))}
-            </table>
-          </div>
+                </thead>
+                {b.sections.map((sct) => (
+                  <tbody
+                    key={sct.ownerId}
+                    style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
+                  >
+                    <tr className="secthead">
+                      <th colSpan={8}>
+                        <PersonBadge p={styles[sct.ownerId]} name size={18} />
+                        <Tot t={sct.totals} />
+                      </th>
+                    </tr>
+                    {sct.rows.map((r) => (
+                      <Row key={r.assetId} r={r} soonDays={soonDays} />
+                    ))}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          </details>
         </section>
       ))}
     </>

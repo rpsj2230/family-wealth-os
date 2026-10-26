@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { contributionSeries, returnsFor, type FundForReturns } from '../src/performance';
+import {
+  approximateFlows,
+  contributionSeries,
+  lastNavMove,
+  moveAmount,
+  returnsFor,
+  type FundForReturns,
+} from '../src/performance';
 
 const fund = (o: Partial<FundForReturns> = {}): FundForReturns => ({
   assetId: 'a',
@@ -62,5 +69,87 @@ describe('contributionSeries', () => {
       { month: '2024-01', cumulative: 1500 },
       { month: '2024-03', cumulative: 1100 },
     ]);
+  });
+});
+
+describe('estimates without a statement', () => {
+  it('spreads a SIP fund over its instalments and a lump-sum fund over one purchase', () => {
+    const sip = approximateFlows(
+      { invested: 120_000, startedOn: '2025-10-26', sipMonthly: 10_000, sipStopped: false },
+      '2026-10-26',
+    );
+    expect(sip.length).toBe(13);
+    expect(sip.reduce((a, f) => a + f.amount, 0)).toBeCloseTo(120_000);
+    expect(
+      approximateFlows(
+        { invested: 50_000, startedOn: '2024-01-01', sipMonthly: null, sipStopped: false },
+        '2026-10-26',
+      ),
+    ).toEqual([{ date: '2024-01-01', units: 1, amount: 50_000 }]);
+    expect(
+      approximateFlows(
+        { invested: 0, startedOn: '2024-01-01', sipMonthly: null, sipStopped: false },
+        '2026-10-26',
+      ),
+    ).toEqual([]);
+    expect(
+      approximateFlows(
+        { invested: 5, startedOn: null, sipMonthly: null, sipStopped: false },
+        '2026-10-26',
+      ),
+    ).toEqual([]);
+  });
+  it('gives an estimated return and counts the estimated funds', () => {
+    const r = returnsFor(
+      [
+        fund({
+          txns: [],
+          value: 121_000,
+          plan: { invested: 100_000, startedOn: '2024-10-26', sipMonthly: null, sipStopped: false },
+        }),
+      ],
+      '2026-10-26',
+    );
+    expect(r.xirr).toBeCloseTo(0.1, 2);
+    expect(r.estimatedFunds).toBe(1);
+  });
+  it('prefers real transactions over the plan', () => {
+    const r = returnsFor(
+      [
+        fund({
+          plan: { invested: 1, startedOn: '2000-01-01', sipMonthly: null, sipStopped: false },
+        }),
+      ],
+      '2026-10-26',
+    );
+    expect(r.estimatedFunds).toBe(0);
+  });
+});
+
+describe('price moves', () => {
+  it('reads the move between the last two prices', () => {
+    expect(
+      lastNavMove([
+        { date: '2026-10-22', nav: 100 },
+        { date: '2026-10-23', nav: 101 },
+      ]),
+    ).toMatchObject({ from: '2026-10-22', to: '2026-10-23' });
+    expect(
+      lastNavMove([
+        { date: '2026-10-22', nav: 100 },
+        { date: '2026-10-23', nav: 101 },
+      ])!.pct,
+    ).toBeCloseTo(0.01);
+    expect(lastNavMove([{ date: '2026-10-23', nav: 100 }])).toBeNull();
+    expect(
+      lastNavMove([
+        { date: '2026-10-23', nav: 100 },
+        { date: '2026-10-23', nav: 101 },
+      ]),
+    ).toBeNull();
+  });
+  it('turns it into rupees', () => {
+    expect(moveAmount(101_000, 0.01)).toBeCloseTo(1000);
+    expect(moveAmount(99_000, -0.01)).toBeCloseTo(-1000);
   });
 });

@@ -1,3 +1,4 @@
+import { ListingTools } from '@/components/ListingTools';
 import { coreTokens, matchFund, type AmfiScheme } from '@fwos/ingest';
 import { formatInr } from '@fwos/core';
 import { loadContext } from '@/lib/data';
@@ -72,103 +73,105 @@ export default async function FundsPage() {
   return (
     <>
       <h1>Match your funds</h1>
-      <p className="muted">
-        To move each fund with the market, I need to know which official scheme it is. Check each
-        suggestion (scheme name, Direct or Regular) and confirm. Once confirmed, today&apos;s value
-        is estimated from the change in the fund&apos;s NAV since you last recorded its value.
-        Estimates are labelled as such until a fund statement gives exact units.
-      </p>
-      {!haveList && (
-        <p className="notice warn">
-          The official scheme list has not been loaded yet. It is fetched by the daily market-data
-          job (GitHub → Actions → &ldquo;Refresh market data&rdquo;); this page fills in after its
-          first run.
+      <ListingTools name="funds">
+        <p className="muted">
+          To move each fund with the market, I need to know which official scheme it is. Check each
+          suggestion (scheme name, Direct or Regular) and confirm. Once confirmed, today&apos;s
+          value is estimated from the change in the fund&apos;s NAV since you last recorded its
+          value. Estimates are labelled as such until a fund statement gives exact units.
         </p>
-      )}
-      <section className="card">
-        <table className="tbl responsive">
-          <thead>
-            <tr>
-              <th>Your fund</th>
-              <th className="num">Last value</th>
-              <th>Matched scheme</th>
-            </tr>
-          </thead>
-          <tbody>
-            {funds.map((f) => {
-              const id = f.asset_id as string;
-              const v = lastValue.get(id);
-              const sug = suggestions.get(id);
-              return (
-                <tr key={id} className={f.sip_stopped ? 'dim' : ''}>
-                  <td data-label="Your fund">
-                    <strong>{f.fund_name as string}</strong>
-                    <br />
-                    <span className="muted small">
-                      {ownerName.get(ownerOf.get(id) ?? '') ?? ''} ·{' '}
-                      {f.sip_stopped
-                        ? 'SIP stopped'
-                        : f.sip_monthly
-                          ? `SIP ${formatInr(Number(f.sip_monthly))}/month`
-                          : 'no SIP'}
-                      {f.nav_hint ? ` · sheet note NAV ${f.nav_hint as string}` : ''}
-                    </span>
-                  </td>
-                  <td className="num" data-label="Last value">
-                    {v ? formatInr(v.amount) : '—'}
-                    <br />
-                    <span className="muted small">{v?.as_of ?? ''}</span>
-                  </td>
-                  <td data-label="Matched scheme">
-                    {f.amfi_code ? (
-                      <form action={clearMatch} className="taskrow">
-                        <input type="hidden" name="asset" value={id} />
-                        <span>Confirmed: scheme {f.amfi_code as string}</span>
-                        <button className="btn compact ghost">Change</button>
-                      </form>
-                    ) : sug && sug.candidates.length > 0 ? (
-                      <ul className="list nobullet">
-                        {sug.candidates.slice(0, 3).map((c) => (
-                          <li key={c.scheme.code}>
-                            <form action={confirmMatch} className="taskrow">
-                              <input type="hidden" name="asset" value={id} />
-                              <input type="hidden" name="code" value={c.scheme.code} />
-                              <span>
-                                {c.scheme.name}{' '}
-                                <span className="muted small">
-                                  ({c.scheme.plan}, {c.scheme.amc})
-                                </span>
-                                {c.navGap !== null ? (
-                                  <span className="muted small">
-                                    {' '}
-                                    · NAV differs {(c.navGap * 100).toFixed(0)}% from your note
-                                  </span>
-                                ) : null}
-                              </span>
-                              <button className="btn compact">
-                                {sug.confidence === 'confident' && c === sug.candidates[0]
-                                  ? 'Confirm'
-                                  : 'Use this'}
-                              </button>
-                            </form>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : haveList ? (
-                      <span className="muted">
-                        No automatic match. This fund&apos;s name may not match the official list;
-                        leave it as is for now.
+        {!haveList && (
+          <p className="notice warn">
+            The official scheme list has not been loaded yet. It is fetched by the daily market-data
+            job (GitHub → Actions → &ldquo;Refresh market data&rdquo;); this page fills in after its
+            first run.
+          </p>
+        )}
+        <section className="card">
+          <table className="tbl responsive">
+            <thead>
+              <tr>
+                <th>Your fund</th>
+                <th className="num">Last value</th>
+                <th>Matched scheme</th>
+              </tr>
+            </thead>
+            <tbody>
+              {funds.map((f) => {
+                const id = f.asset_id as string;
+                const v = lastValue.get(id);
+                const sug = suggestions.get(id);
+                return (
+                  <tr key={id} className={f.sip_stopped ? 'dim' : ''}>
+                    <td data-label="Your fund">
+                      <strong>{f.fund_name as string}</strong>
+                      <br />
+                      <span className="muted small">
+                        {ownerName.get(ownerOf.get(id) ?? '') ?? ''} ·{' '}
+                        {f.sip_stopped
+                          ? 'SIP stopped'
+                          : f.sip_monthly
+                            ? `SIP ${formatInr(Number(f.sip_monthly))}/month`
+                            : 'no SIP'}
+                        {f.nav_hint ? ` · sheet note NAV ${f.nav_hint as string}` : ''}
                       </span>
-                    ) : (
-                      <span className="muted">Waiting for the scheme list</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
+                    </td>
+                    <td className="num" data-label="Last value">
+                      {v ? formatInr(v.amount) : '—'}
+                      <br />
+                      <span className="muted small">{v?.as_of ?? ''}</span>
+                    </td>
+                    <td data-label="Matched scheme">
+                      {f.amfi_code ? (
+                        <form action={clearMatch} className="taskrow">
+                          <input type="hidden" name="asset" value={id} />
+                          <span>Confirmed: scheme {f.amfi_code as string}</span>
+                          <button className="btn compact ghost">Change</button>
+                        </form>
+                      ) : sug && sug.candidates.length > 0 ? (
+                        <ul className="list nobullet">
+                          {sug.candidates.slice(0, 3).map((c) => (
+                            <li key={c.scheme.code}>
+                              <form action={confirmMatch} className="taskrow">
+                                <input type="hidden" name="asset" value={id} />
+                                <input type="hidden" name="code" value={c.scheme.code} />
+                                <span>
+                                  {c.scheme.name}{' '}
+                                  <span className="muted small">
+                                    ({c.scheme.plan}, {c.scheme.amc})
+                                  </span>
+                                  {c.navGap !== null ? (
+                                    <span className="muted small">
+                                      {' '}
+                                      · NAV differs {(c.navGap * 100).toFixed(0)}% from your note
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <button className="btn compact">
+                                  {sug.confidence === 'confident' && c === sug.candidates[0]
+                                    ? 'Confirm'
+                                    : 'Use this'}
+                                </button>
+                              </form>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : haveList ? (
+                        <span className="muted">
+                          No automatic match. This fund&apos;s name may not match the official list;
+                          leave it as is for now.
+                        </span>
+                      ) : (
+                        <span className="muted">Waiting for the scheme list</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      </ListingTools>
     </>
   );
 }

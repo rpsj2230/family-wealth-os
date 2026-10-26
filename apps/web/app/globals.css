@@ -1464,3 +1464,309 @@ fieldset.urgency legend {
     animation: none;
   }
 }
+
+/* ---- search, filter, sort and export on listings ---- */
+.listtools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 10px;
+}
+.listtools .lt-search {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 320px;
+}
+.listtools select {
+  max-width: 200px;
+}
+.listfilters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 10px;
+}
+.listfilters label {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+}
+.listfilters p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.listing thead th[data-sortable] {
+  cursor: pointer;
+  user-select: none;
+}
+.listing thead th[aria-sort='ascending']::after {
+  content: ' ▲';
+  font-size: 0.7em;
+}
+.listing thead th[aria-sort='descending']::after {
+  content: ' ▼';
+  font-size: 0.7em;
+}
+.listing thead th[data-sortable]:hover {
+  text-decoration: underline;
+}
+
+/* ---- accounts table, tidied: fixed columns, centred dates, numbers on the right, one baseline ---- */
+table.xl {
+  table-layout: fixed;
+  min-width: 940px;
+}
+.xl th,
+.xl td {
+  padding: 7px 10px;
+  vertical-align: middle;
+}
+.xl thead th.num {
+  text-align: right;
+}
+.xl thead th.mid,
+.xl td.mid {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.xl .code {
+  min-width: 0;
+  white-space: normal;
+}
+.xl .codeline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+.xl .kind {
+  color: var(--text, inherit);
+  font-variant-numeric: tabular-nums;
+}
+.xl .kind.fd::before,
+.xl .kind.cash::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--primary, #4f46e5);
+  content: '';
+}
+.xl .kind.cash::before {
+  background: var(--ok, #16a34a);
+}
+.xl .sub {
+  margin-top: 1px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.25;
+}
+.xl .notes {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.76rem;
+}
+.xl td .pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.xl td .pill.soon {
+  background: color-mix(in srgb, #d97706 14%, transparent);
+  color: #92400e;
+}
+.xl td .pill.bad {
+  background: color-mix(in srgb, #dc2626 14%, transparent);
+  color: #991b1b;
+}
+.xl td .pill.assumed {
+  margin-left: 0;
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #92400e;
+  text-decoration: none;
+  font-weight: 500;
+}
+.xl tbody tr.xlrow:nth-child(odd) td {
+  background: color-mix(in srgb, var(--muted) 3%, transparent);
+}
+.xl .secthead th {
+  max-width: none;
+}
+
+/* ---- every other listing: breathing room, steady numerals, aligned headings ---- */
+.tbl th,
+.tbl td {
+  padding: 9px 10px;
+  vertical-align: middle;
+}
+.tbl th:first-child,
+.tbl td:first-child {
+  padding-left: 0;
+}
+.tbl td,
+.tbl th.num {
+  font-variant-numeric: tabular-nums;
+}
+.tbl thead th.num {
+  text-align: right;
+}
+.tbl tbody tr:hover td {
+  background: color-mix(in srgb, var(--primary, #4f46e5) 5%, transparent);
+}
+.tbl td .small,
+.tbl td .muted.small {
+  line-height: 1.3;
+}
+
+/* ---- investments headline figures (also on the dashboard) ---- */
+dl.invhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  margin: 6px 0 0;
+}
+dl.invhead > div {
+  min-width: 110px;
+}
+dl.invhead dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0;
+}
+dl.invhead dd {
+  margin: 0;
+}
+dl.invhead dd.num {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+dl.invhead.big dd.num {
+  font-size: 1.5rem;
+}
+dl.invhead dd.sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+dl.invhead dd.sub.gain,
+dl.invhead dd.num.gain {
+  color: var(--ok, #15803d);
+}
+dl.invhead dd.sub.fail,
+dl.invhead dd.num.fail {
+  color: var(--bad, #b91c1c);
+}
+.panlabel {
+  font-weight: 600;
+  margin-left: 4px;
+}
+.goaltag {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.goaltag select {
+  max-width: 150px;
+  font-size: 0.8rem;
+  padding: 2px 4px;
+}
+a.fundlink {
+  font-weight: 600;
+  text-decoration: none;
+}
+a.fundlink:hover {
+  text-decoration: underline;
+}
+
+/* ---- bank identity: every bank has its own colour and letters ---- */
+.bankbadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.xlbank {
+  border-left: 6px solid var(--bank, var(--border));
+}
+.xlbank .xlhead {
+  background: color-mix(in srgb, var(--bank, var(--muted)) 11%, var(--card));
+  border-bottom: 2px solid color-mix(in srgb, var(--bank, var(--muted)) 55%, transparent);
+}
+.xlbank .xlhead h2 {
+  color: color-mix(in srgb, var(--bank, var(--text)) 78%, var(--text));
+  font-size: 1.05rem;
+}
+.xlbank .xlhead h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+.xlbank .xlhead h2 a:hover {
+  text-decoration: underline;
+}
+.xlbank thead th {
+  background: color-mix(in srgb, var(--bank, var(--muted)) 5%, var(--card));
+}
+.xlbank .secthead th {
+  border-left-width: 5px;
+}
+
+/* ---- a bank can be closed: the header is the handle ---- */
+details.bankdet > summary.xlhead {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+details.bankdet > summary.xlhead::-webkit-details-marker {
+  display: none;
+}
+details.bankdet > summary.xlhead::before {
+  content: '▾';
+  font-size: 0.9rem;
+  color: var(--muted);
+  transition: transform 0.15s;
+  width: 1em;
+}
+details.bankdet:not([open]) > summary.xlhead::before {
+  transform: rotate(-90deg);
+}
+details.bankdet:not([open]) > summary.xlhead {
+  border-bottom: 0;
+}
+details.bankdet > summary.xlhead a,
+details.bankdet > summary.xlhead button {
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  details.bankdet > summary.xlhead::before {
+    transition: none;
+  }
+}
+
+.xl a.kind {
+  text-decoration: none;
+  color: inherit;
+}
+.xl a.kind:hover {
+  text-decoration: underline;
+}

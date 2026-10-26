@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { filterBlocksByOwner, formatInr, formatInrCompact } from '@fwos/core';
+import { ListingTools } from '@/components/ListingTools';
 import { BankTable } from '@/components/BankTable';
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PersonFilter } from '@/components/Person';
@@ -53,7 +54,9 @@ export default async function DemoAccounts({
             current={who}
             totals={totals}
           />
-          <BankTable blocks={shown} styles={styles} updateBase="/demo/bank" />
+          <ListingTools name="accounts">
+            <BankTable blocks={shown} styles={styles} updateBase="/demo/bank" />
+          </ListingTools>
         </main>
       </div>
       <BottomNav />

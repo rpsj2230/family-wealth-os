@@ -1,3 +1,4 @@
+import { ListingTools } from '@/components/ListingTools';
 import Link from 'next/link';
 import {
   buildBankBlocks,
@@ -64,38 +65,41 @@ export default async function AccountsPage({
   return (
     <>
       <h1>Accounts</h1>
-      <p className="muted small">
-        Banks in your sheet&apos;s order. Current value of a deposit is worked out from its rate and
-        start date, and equals the full amount on the maturity date. Today&apos;s wealth uses these
-        current values. <Link href="/accounts/reorder">Change the order</Link>
-      </p>
-      <PersonFilter
-        people={Object.values(styles)}
-        basePath="/accounts"
-        current={who}
-        totals={totals}
-      />
-      <div className="card summary">
-        <span>
-          Banks total <b className="num">{formatInr(Math.round(total))}</b>
-        </span>
-        <span>
-          FDs invested <b className="num">{formatInr(Math.round(fd.inv))}</b>
-        </span>
-        <span>
-          FDs at maturity <b className="num">{formatInr(Math.round(fd.mat))}</b>
-        </span>
-        <span>
-          FDs today <b className="num">{formatInr(Math.round(fd.cur))}</b>
-        </span>
-      </div>
-      <BankTable
-        blocks={blocks}
-        styles={styles}
-        soonDays={settings.config.reminders.maturitySoonDays}
-        notes={notes}
-        saveNote={saveBankNote}
-      />
+      <ListingTools name="accounts">
+        <p className="muted small">
+          Banks in your sheet&apos;s order. Current value of a deposit is worked out from its rate
+          and start date, and equals the full amount on the maturity date. Today&apos;s wealth uses
+          these current values. <Link href="/accounts/reorder">Change the order</Link> ·{' '}
+          <Link href="/accounts/edit">Correct tags and details</Link>
+        </p>
+        <PersonFilter
+          people={Object.values(styles)}
+          basePath="/accounts"
+          current={who}
+          totals={totals}
+        />
+        <div className="card summary">
+          <span>
+            Banks total <b className="num">{formatInr(Math.round(total))}</b>
+          </span>
+          <span>
+            FDs invested <b className="num">{formatInr(Math.round(fd.inv))}</b>
+          </span>
+          <span>
+            FDs at maturity <b className="num">{formatInr(Math.round(fd.mat))}</b>
+          </span>
+          <span>
+            FDs today <b className="num">{formatInr(Math.round(fd.cur))}</b>
+          </span>
+        </div>
+        <BankTable
+          blocks={blocks}
+          styles={styles}
+          soonDays={settings.config.reminders.maturitySoonDays}
+          notes={notes}
+          saveNote={saveBankNote}
+        />
+      </ListingTools>
     </>
   );
 }

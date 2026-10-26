@@ -5,6 +5,7 @@
  */
 import {
   buildPortfolio,
+  lastNavMove,
   type AssetRow,
   type FdRow,
   type ObservationRow,
@@ -22,6 +23,8 @@ export interface LoadedPortfolio {
   ownerName: Map<string, string>;
   portfolio: Portfolio;
   marketDates: { navLatest: string | null; fx: Record<string, { rate: number; date: string }> };
+  /** how each fund's price moved between its last two prices, by asset */
+  fundDay: Record<string, { pct: number; from: string; to: string }>;
 }
 
 export const todayDate = () => new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
@@ -103,6 +106,7 @@ export async function loadPortfolioData(
     freshnessDays: config.estimates.freshnessDays,
   };
   const marketDates: LoadedPortfolio['marketDates'] = { navLatest: null, fx: {} };
+  const fundDay: LoadedPortfolio['fundDay'] = {};
   try {
     const codes = [...new Set(assetRows.map((a) => a.amfi_code).filter((c): c is string => !!c))];
     const earliest = obsRows.reduce<string>(
@@ -151,6 +155,10 @@ export async function loadPortfolioData(
     }
     await fxP;
     market.fxToday = fx;
+    for (const a of assetRows) {
+      const move = a.amfi_code && market.navs ? lastNavMove(market.navs[a.amfi_code] ?? []) : null;
+      if (move) fundDay[a.id] = move;
+    }
   } catch {
     // market data is optional
   }
@@ -162,6 +170,7 @@ export async function loadPortfolioData(
     ownerName,
     portfolio: buildPortfolio(assetRows, obsRows, fdRows, today, market),
     marketDates,
+    fundDay,
   };
 }
 export * from './digest-input';

@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useMemo, useState, useTransition, type ClipboardEvent, type KeyboardEvent } from 'react';
-import { formatInr, type BankBlock, type BankRow, type PersonStyle } from '@fwos/core';
+import { bankStyle, formatInr, type BankBlock, type BankRow, type PersonStyle } from '@fwos/core';
 import { addBankItem, saveMonthly } from '@/app/(app)/monthly/actions';
+import { AccordionControls } from './AccordionControls';
+import { BankBadge } from './BankBadge';
 import { PersonBadge } from './Person';
 import { cleanNote, fmtDate, pctText } from './BankTable';
 import { buildGridChanges, type GridEdit, type GridRowInfo } from '@/lib/update-grid';
@@ -124,190 +126,199 @@ export function UpdateGrid({
         </span>
       </div>
 
+      <AccordionControls />
       {blocks.map((b) => (
-        <section className="card xlbank" key={b.key} id={slugify(b.name)}>
-          <header className="xlhead">
-            <h2>{b.name}</h2>
-            <span className="tot">
-              <b className="num big">{money(b.totals.current)}</b>
-            </span>
-            {b.needsYou > 0 ? (
-              <span className="pill warn">{b.needsYou} need you</span>
-            ) : b.doneThisMonth ? (
-              <span className="pill ok">Updated this month</span>
-            ) : (
-              <span className="pill">Not updated this month</span>
-            )}
-          </header>
-          <div className="xlwrap">
-            <table className="xl upd">
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th className="num">Rate</th>
-                  <th className="num">Maturity</th>
-                  <th className="num">Invested / balance</th>
-                  <th className="num">At maturity</th>
-                  <th className="num">Current value</th>
-                  <th className="num">New balance · status</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              {b.sections.map((sct) => (
-                <tbody
-                  key={sct.ownerId}
-                  style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
-                >
-                  <tr className="secthead">
-                    <th colSpan={8}>
-                      <PersonBadge p={styles[sct.ownerId]} name size={18} />
-                    </th>
+        <section
+          className="card xlbank"
+          key={b.key}
+          id={slugify(b.name)}
+          style={{ ['--bank' as string]: bankStyle(b.name).colour }}
+        >
+          <details open className="bankdet">
+            <summary className="xlhead">
+              <BankBadge name={b.name} />
+              <h2>{b.name}</h2>
+              <span className="tot">
+                <b className="num big">{money(b.totals.current)}</b>
+              </span>
+              {b.needsYou > 0 ? (
+                <span className="pill warn">{b.needsYou} need you</span>
+              ) : b.doneThisMonth ? (
+                <span className="pill ok">Updated this month</span>
+              ) : (
+                <span className="pill">Not updated this month</span>
+              )}
+            </summary>
+            <div className="xlwrap">
+              <table className="xl upd">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th className="num">Rate</th>
+                    <th className="num">Maturity</th>
+                    <th className="num">Invested / balance</th>
+                    <th className="num">At maturity</th>
+                    <th className="num">Current value</th>
+                    <th className="num">New balance · status</th>
+                    <th>Notes</th>
                   </tr>
-                  {sct.rows.map((r) => {
-                    const e = edits[r.assetId] ?? {};
-                    const fd = r.fd;
-                    return (
-                      <tr key={r.assetId} className="xlrow">
-                        <td className="code">
-                          <span className={`kind ${r.kind}`}>{r.code}</span>
-                          {fd?.linkedTo && <div className="small muted">↳ {fd.linkedTo}</div>}
-                          {errors[r.assetId] && (
-                            <div className="small fail" role="alert">
-                              {errors[r.assetId]}
-                            </div>
-                          )}
-                        </td>
-                        <td className="num">
-                          {fd && terms ? (
-                            <input
-                              className="mini"
-                              inputMode="decimal"
-                              aria-label={`Rate for ${r.code}`}
-                              defaultValue={String(Math.round(fd.rate * 1e6) / 1e4)}
-                              onChange={(ev) => set(r.assetId, { fdRate: ev.target.value })}
-                            />
-                          ) : fd ? (
-                            pctText(fd.rate)
-                          ) : (
-                            ''
-                          )}
-                        </td>
-                        <td className="num nowrap">
-                          {fd ? fmtDate(fd.maturityOn) : ''}
-                          {fd?.needsConfirmation && <div className="small fail">matured</div>}
-                        </td>
-                        <td className="num">{fd ? money(fd.principal) : money(r.recorded)}</td>
-                        <td className="num">
-                          {fd && terms ? (
-                            <input
-                              className="mini wide"
-                              inputMode="decimal"
-                              aria-label={`Maturity amount for ${r.code}`}
-                              defaultValue={String(Math.round(fd.maturityAmount))}
-                              onChange={(ev) =>
-                                set(r.assetId, { fdMaturityAmount: ev.target.value })
-                              }
-                            />
-                          ) : fd ? (
-                            money(fd.maturityAmount)
-                          ) : (
-                            ''
-                          )}
-                        </td>
-                        <td className="num cur">{money(r.current)}</td>
-                        <td className="num">
-                          {fd ? (
-                            <select
-                              className="mini"
-                              aria-label={`Status of ${r.code}`}
-                              value={
-                                e.status ??
-                                (fd.needsConfirmation ? 'matured_unconfirmed' : r.status)
-                              }
-                              onChange={(ev) => set(r.assetId, { status: ev.target.value })}
-                            >
-                              {fd.needsConfirmation && (
-                                <option value="matured_unconfirmed">
-                                  Matured: say where it went
-                                </option>
-                              )}
-                              {FD_STATUS.map(([v, l]) => (
-                                <option key={v} value={v}>
-                                  {l}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="balbox">
+                </thead>
+                {b.sections.map((sct) => (
+                  <tbody
+                    key={sct.ownerId}
+                    style={{ ['--person' as string]: styles[sct.ownerId]?.colour }}
+                  >
+                    <tr className="secthead">
+                      <th colSpan={8}>
+                        <PersonBadge p={styles[sct.ownerId]} name size={18} />
+                      </th>
+                    </tr>
+                    {sct.rows.map((r) => {
+                      const e = edits[r.assetId] ?? {};
+                      const fd = r.fd;
+                      return (
+                        <tr key={r.assetId} className="xlrow">
+                          <td className="code">
+                            <span className={`kind ${r.kind}`}>{r.code}</span>
+                            {fd?.linkedTo && <div className="small muted">↳ {fd.linkedTo}</div>}
+                            {errors[r.assetId] && (
+                              <div className="small fail" role="alert">
+                                {errors[r.assetId]}
+                              </div>
+                            )}
+                          </td>
+                          <td className="num">
+                            {fd && terms ? (
+                              <input
+                                className="mini"
+                                inputMode="decimal"
+                                aria-label={`Rate for ${r.code}`}
+                                defaultValue={String(Math.round(fd.rate * 1e6) / 1e4)}
+                                onChange={(ev) => set(r.assetId, { fdRate: ev.target.value })}
+                              />
+                            ) : fd ? (
+                              pctText(fd.rate)
+                            ) : (
+                              ''
+                            )}
+                          </td>
+                          <td className="num nowrap">
+                            {fd ? fmtDate(fd.maturityOn) : ''}
+                            {fd?.needsConfirmation && <div className="small fail">matured</div>}
+                          </td>
+                          <td className="num">{fd ? money(fd.principal) : money(r.recorded)}</td>
+                          <td className="num">
+                            {fd && terms ? (
                               <input
                                 className="mini wide"
-                                data-bal
-                                data-id={r.assetId}
                                 inputMode="decimal"
-                                aria-label={`New balance for ${b.name} ${styles[sct.ownerId]?.name} ${r.code}`}
-                                placeholder={
-                                  r.recorded === null ? '' : String(Math.round(r.recorded))
+                                aria-label={`Maturity amount for ${r.code}`}
+                                defaultValue={String(Math.round(fd.maturityAmount))}
+                                onChange={(ev) =>
+                                  set(r.assetId, { fdMaturityAmount: ev.target.value })
                                 }
-                                value={e.amount ?? ''}
-                                onChange={(ev) => set(r.assetId, { amount: ev.target.value })}
-                                onKeyDown={onKey}
-                                onPaste={(ev) => onPaste(ev, r.assetId)}
                               />
-                              {r.currency !== 'INR' && (
+                            ) : fd ? (
+                              money(fd.maturityAmount)
+                            ) : (
+                              ''
+                            )}
+                          </td>
+                          <td className="num cur">{money(r.current)}</td>
+                          <td className="num">
+                            {fd ? (
+                              <select
+                                className="mini"
+                                aria-label={`Status of ${r.code}`}
+                                value={
+                                  e.status ??
+                                  (fd.needsConfirmation ? 'matured_unconfirmed' : r.status)
+                                }
+                                onChange={(ev) => set(r.assetId, { status: ev.target.value })}
+                              >
+                                {fd.needsConfirmation && (
+                                  <option value="matured_unconfirmed">
+                                    Matured: say where it went
+                                  </option>
+                                )}
+                                {FD_STATUS.map(([v, l]) => (
+                                  <option key={v} value={v}>
+                                    {l}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="balbox">
                                 <input
-                                  className="mini"
+                                  className="mini wide"
+                                  data-bal
+                                  data-id={r.assetId}
                                   inputMode="decimal"
-                                  aria-label={`${r.currency} to INR rate`}
+                                  aria-label={`New balance for ${b.name} ${styles[sct.ownerId]?.name} ${r.code}`}
                                   placeholder={
-                                    fxHint[r.currency]
-                                      ? `×${fxHint[r.currency]}`
-                                      : `${r.currency}→INR`
+                                    r.recorded === null ? '' : String(Math.round(r.recorded))
                                   }
-                                  value={e.fx ?? ''}
-                                  onChange={(ev) => set(r.assetId, { fx: ev.target.value })}
+                                  value={e.amount ?? ''}
+                                  onChange={(ev) => set(r.assetId, { amount: ev.target.value })}
+                                  onKeyDown={onKey}
+                                  onPaste={(ev) => onPaste(ev, r.assetId)}
                                 />
-                              )}
-                            </span>
-                          )}
-                        </td>
-                        <td className="notes">
-                          <input
-                            className="mini note"
-                            aria-label={`Notes for ${r.code}`}
-                            defaultValue={fd ? cleanNote(r.notes) : (r.notes ?? '')}
-                            placeholder={
-                              fd?.refLast4
-                                ? `FD no. …${fd.refLast4}`
-                                : 'AMB, debit card, lounge card…'
-                            }
-                            onChange={(ev) =>
-                              set(r.assetId, {
-                                notes: fd
-                                  ? [
-                                      r.notes?.match(/FD\s*Number\s*:\s*[^\s,]*/i)?.[0],
-                                      ev.target.value,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(' · ')
-                                  : ev.target.value,
-                              })
-                            }
-                          />
+                                {r.currency !== 'INR' && (
+                                  <input
+                                    className="mini"
+                                    inputMode="decimal"
+                                    aria-label={`${r.currency} to INR rate`}
+                                    placeholder={
+                                      fxHint[r.currency]
+                                        ? `×${fxHint[r.currency]}`
+                                        : `${r.currency}→INR`
+                                    }
+                                    value={e.fx ?? ''}
+                                    onChange={(ev) => set(r.assetId, { fx: ev.target.value })}
+                                  />
+                                )}
+                              </span>
+                            )}
+                          </td>
+                          <td className="notes">
+                            <input
+                              className="mini note"
+                              aria-label={`Notes for ${r.code}`}
+                              defaultValue={fd ? cleanNote(r.notes) : (r.notes ?? '')}
+                              placeholder={
+                                fd?.refLast4
+                                  ? `FD no. …${fd.refLast4}`
+                                  : 'AMB, debit card, lounge card…'
+                              }
+                              onChange={(ev) =>
+                                set(r.assetId, {
+                                  notes: fd
+                                    ? [
+                                        r.notes?.match(/FD\s*Number\s*:\s*[^\s,]*/i)?.[0],
+                                        ev.target.value,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(' · ')
+                                    : ev.target.value,
+                                })
+                              }
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {institutions && b.key !== '__none' && (
+                      <tr>
+                        <td colSpan={8} className="addcell">
+                          <AddItem ownerId={sct.ownerId} institutionId={b.key} />
                         </td>
                       </tr>
-                    );
-                  })}
-                  {institutions && b.key !== '__none' && (
-                    <tr>
-                      <td colSpan={8} className="addcell">
-                        <AddItem ownerId={sct.ownerId} institutionId={b.key} />
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              ))}
-            </table>
-          </div>
+                    )}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          </details>
         </section>
       ))}
 

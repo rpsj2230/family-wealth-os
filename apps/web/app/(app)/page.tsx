@@ -14,6 +14,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { InvestHeadline, pct, rupees, tone } from '@/components/InvestHeadline';
+import { loadInvestmentView } from '@/lib/investments';
 import { addMember, createHousehold } from './actions';
 import { HistoryChart } from './HistoryChart';
 import { SnapshotBeacon } from './SnapshotBeacon';
@@ -79,18 +81,21 @@ export default async function Dashboard({
     );
   }
 
+  const loadedP = loadPortfolio(supabase);
   const [
     { today, assetRows, obsRows, fdRows, ownerName: nameOf, portfolio: p },
     tasks,
     recv,
     pays,
     snaps,
+    inv,
   ] = await Promise.all([
-    loadPortfolio(supabase),
+    loadedP,
     supabase.from('tasks').select('id, status').eq('status', 'open'),
     supabase.from('receivables').select('asset_id, counterparty, lent, expected_on'),
     supabase.from('receivable_payments').select('asset_id, amount, paid_on'),
     supabase.from('snapshots').select('taken_on, total').order('taken_on', { ascending: true }),
+    loadedP.then((l) => loadInvestmentView(supabase, l)),
   ]);
 
   if (assetRows.length === 0) {
@@ -225,6 +230,58 @@ export default async function Dashboard({
           )}
         </div>
       </section>
+
+      {inv.household.funds > 0 && (
+        <section className="card" aria-label="Mutual funds">
+          <div className="row" style={{ alignItems: 'baseline' }}>
+            <h2 style={{ marginRight: 'auto' }}>Mutual funds</h2>
+            <Link href="/investments">All funds and goals</Link>
+          </div>
+          <InvestHeadline t={inv.household} big />
+          <table className="tbl lines responsive" style={{ marginTop: 10 }}>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th className="num">Value</th>
+                <th className="num">Today</th>
+                <th className="num">Total gain</th>
+                <th className="num">XIRR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inv.groups.map((g) => (
+                <tr key={g.ownerId}>
+                  <td data-label="Person">
+                    <PersonBadge p={styles[g.ownerId]} name size={18} />
+                    {g.panLast4 && <span className="muted small"> PAN ••••{g.panLast4}</span>}
+                  </td>
+                  <td className="num" data-label="Value">
+                    {formatInr(Math.round(g.totals.value))}
+                  </td>
+                  <td
+                    className={`num ${tone(g.totals.dayPct === null ? null : g.totals.dayAmount)}`}
+                    data-label="Today"
+                  >
+                    {g.totals.dayPct === null ? '–' : rupees(g.totals.dayAmount)}
+                    {g.totals.dayPct !== null && (
+                      <div className="small">{pct(g.totals.dayPct)}</div>
+                    )}
+                  </td>
+                  <td className={`num ${tone(g.totals.gain)}`} data-label="Total gain">
+                    {rupees(g.totals.gain)}
+                  </td>
+                  <td className={`num ${tone(g.totals.xirr)}`} data-label="XIRR">
+                    {g.totals.xirr === null ? '–' : pct(g.totals.xirr, 1)}
+                    {g.totals.xirr !== null && g.totals.xirrEstimated && (
+                      <span className="muted"> ~</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <div className="statgrid">
         {(
