@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { personStyles } from '@fwos/core';
+import { DEFAULT_CONFIG, parseRange, personStyles, type NavPoint } from '@fwos/core';
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
+import { FundDetailPanel } from '@/components/FundDetailPanel';
 import { HistoryLine } from '@/components/HistoryLine';
+import { DEMO_HOLDING_MONTHS, DEMO_TODAY, demoFund } from '@/lib/demo-funds';
+import { buildFundDetail, NAV_POINTS } from '@/lib/fund-detail-model';
+import type { FundRow } from '@/lib/investments';
 import {
   buildActivity,
   buildAssetView,
@@ -71,11 +75,7 @@ function fdInput(): AssetViewInput {
   };
 }
 
-function fundInput(): AssetViewInput {
-  const months = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(Date.UTC(2025, 10 + i, 26));
-    return d.toISOString().slice(0, 10);
-  });
+function fundInput(f: FundRow, navs: NavPoint[]): AssetViewInput {
   return {
     ...common,
     asset: {
@@ -93,7 +93,7 @@ function fundInput(): AssetViewInput {
       holder_name: null,
     },
     bankName: null,
-    current: { amount: 640_000, basis: 'estimated', ageDays: 3, asOf: '2026-10-23' },
+    current: { amount: f.value, basis: 'estimated', ageDays: 3, asOf: '2026-10-23' },
     observations: [
       {
         id: 'o1',
@@ -134,54 +134,25 @@ function fundInput(): AssetViewInput {
     ],
     position: {
       fund_name: 'Sample Flexi Cap Fund - Direct Plan - Growth',
-      invested: 420_000,
-      started_on: '2022-04-01',
-      sip_monthly: 10_000,
-      sip_stopped: false,
-      folio_last4: '4567',
+      invested: f.invested,
+      started_on: f.startedOn,
+      sip_monthly: f.sipMonthly,
+      sip_stopped: f.sipStopped,
+      folio_last4: f.folioLast4,
       isin: 'INF000A01AB1',
       amfi_code: '120503',
       plan_type: 'direct',
     },
-    txns: [
-      {
-        txn_on: '2022-04-01',
-        kind: 'purchase',
-        amount: 200_000,
-        units: 2000,
-        nav: 100,
-        balance_units: 2000,
-        description: null,
-      },
-      {
-        txn_on: '2023-04-05',
-        kind: 'sip',
-        amount: 10_000,
-        units: 80,
-        nav: 125,
-        balance_units: 2080,
-        description: null,
-      },
-      {
-        txn_on: '2024-04-05',
-        kind: 'sip',
-        amount: 10_000,
-        units: 66.667,
-        nav: 150,
-        balance_units: 2146.667,
-        description: null,
-      },
-      {
-        txn_on: '2025-12-10',
-        kind: 'redeem',
-        amount: -60_000,
-        units: -350,
-        nav: 171.43,
-        balance_units: 1796.667,
-        description: null,
-      },
-    ],
-    navs: months.map((d, i) => ({ nav_date: d, nav: 150 + i * 3.1 + (i % 3) * 2 })),
+    txns: f.txns.map((t) => ({
+      txn_on: t.date,
+      kind: t.kind,
+      amount: t.amount,
+      units: t.units,
+      nav: t.nav ?? null,
+      balance_units: t.balance ?? null,
+      description: null,
+    })),
+    navs: navs.filter((n) => n.date >= '2025-10-26').map((n) => ({ nav_date: n.date, nav: n.nav })),
     goalNames: ['Education fund'],
   };
 }
@@ -228,11 +199,22 @@ const audit: AuditIn[] = [
 export default async function DemoAsset({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string }>;
+  searchParams: Promise<{ kind?: string; range?: string }>;
 }) {
-  const { kind } = await searchParams;
+  const { kind, range: rangeParam } = await searchParams;
   const fund = kind === 'fund';
-  const view = buildAssetView(fund ? fundInput() : fdInput());
+  const range = parseRange(rangeParam);
+  const sample = demoFund('f1', range);
+  const detail = buildFundDetail({
+    fund: sample.row,
+    navs: sample.navs,
+    today: DEMO_TODAY,
+    range,
+    holdingMonths: DEMO_HOLDING_MONTHS,
+    config: DEFAULT_CONFIG.funds,
+    maxPoints: NAV_POINTS,
+  });
+  const view = buildAssetView(fund ? fundInput(sample.row, sample.navs) : fdInput());
   const activity = buildActivity({
     viewerId: 'me',
     audit: audit.filter((a) =>
@@ -269,12 +251,24 @@ export default async function DemoAsset({
         {...(view.headlineNote ? { headlineNote: view.headlineNote } : {})}
       />
       <AssetFacts facts={view.facts} />
-      {view.charts.map((c) => (
-        <section className="detailsection" key={c.title} aria-label={c.title}>
-          <h2>{c.title}</h2>
-          <HistoryLine points={c.points} label={c.label} money={c.money} />
-        </section>
-      ))}
+      {view.charts
+        .filter((c) => !(fund && c.label === 'NAV'))
+        .map((c) => (
+          <section className="detailsection" key={c.title} aria-label={c.title}>
+            <h2>{c.title}</h2>
+            <HistoryLine points={c.points} label={c.label} money={c.money} />
+          </section>
+        ))}
+      {fund && (
+        <FundDetailPanel
+          fund={sample.row}
+          detail={detail}
+          base="/demo/asset?kind=fund"
+          links={{ update: '/demo/investments?tab=update', match: '/demo/investments?tab=match' }}
+          holdingMonths={DEMO_HOLDING_MONTHS}
+          colour={PEOPLE.p1!.colour}
+        />
+      )}
       <DetailTables tables={view.tables} />
       <ActivityLog items={activity} />
     </main>

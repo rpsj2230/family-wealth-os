@@ -2,32 +2,27 @@ import Link from 'next/link';
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader, type Crumb } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
+import { FundDetailPanel } from '@/components/FundDetailPanel';
 import { HistoryLine } from '@/components/HistoryLine';
-import { FundChart } from '@/components/FundChart';
 import { EditButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
-import { loadContext } from '@/lib/data';
 import { loadAssetDetail } from '@/lib/detail-data';
-import { loadInvestmentView } from '@/lib/investments';
-import { formatInr } from '@fwos/core';
+import { loadFundDetail } from '@/lib/fund-detail-data';
+import { parseRange } from '@fwos/core';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AssetPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ range?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
   const d = await loadAssetDetail(id);
-  const fundView =
-    d.type === 'mutual_fund'
-      ? await (async () => {
-          const { supabase } = await loadContext();
-          const v = await loadInvestmentView(supabase);
-          for (const g of v.groups) {
-            const f = g.funds.find((x) => x.assetId === id);
-            if (f) return { f, today: v.today };
-          }
-          return null;
-        })()
-      : null;
+  const fundView = d.type === 'mutual_fund' ? await loadFundDetail(id, parseRange(sp.range)) : null;
   const isFund = d.type === 'mutual_fund' || d.type === 'stock';
   const isBankLike =
     d.type === 'bank_account' || d.type === 'fixed_deposit' || d.type === 'third_party_held';
@@ -111,36 +106,23 @@ export default async function AssetPage({ params }: { params: Promise<{ id: stri
       )}
       <AssetFacts facts={d.view.facts} />
       {fundView && (
-        <section className="detailsection" aria-label="Fund progress">
-          <h2>How this fund has progressed</h2>
-          <p className="muted small">
-            {fundView.f.units !== null
-              ? `${fundView.f.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units`
-              : 'Units not recorded yet'}
-            {fundView.f.nav !== null ? ` × price ${fundView.f.nav}` : ''}
-            {fundView.f.value ? ` = ${formatInr(Math.round(fundView.f.value))}` : ''}.{' '}
-            <Link href="/investments?tab=update">Update units and price</Link>
-            {!fundView.f.amfiCode && (
-              <>
-                {' · '}
-                <Link href="/investments?tab=match">Match this fund to follow its daily price</Link>
-              </>
-            )}
-          </p>
-          <FundChart
-            history={fundView.f.history}
-            today={fundView.today}
-            caption={`${fundView.f.name}: value against money put in`}
-            height={200}
-          />
-        </section>
+        <FundDetailPanel
+          fund={fundView.fund}
+          detail={fundView.detail}
+          base={`/asset/${id}`}
+          links={{ update: '/investments?tab=update', match: '/investments?tab=match' }}
+          holdingMonths={fundView.holdingMonths}
+          {...(d.person ? { colour: d.person.colour } : {})}
+        />
       )}
-      {d.view.charts.map((c) => (
-        <section className="detailsection" key={c.title} aria-label={c.title}>
-          <h2>{c.title}</h2>
-          <HistoryLine points={c.points} label={c.label} money={c.money} />
-        </section>
-      ))}
+      {d.view.charts
+        .filter((c) => !(fundView && c.label === 'NAV'))
+        .map((c) => (
+          <section className="detailsection" key={c.title} aria-label={c.title}>
+            <h2>{c.title}</h2>
+            <HistoryLine points={c.points} label={c.label} money={c.money} />
+          </section>
+        ))}
       {d.view.related.length > 0 && (
         <section className="detailsection" aria-label="Other accounts at this bank">
           <h2>Other accounts of {d.person?.name ?? 'this person'} at this bank</h2>

@@ -69,3 +69,63 @@ table.funds td.amount .small {
 table.funds td.upd {
   white-space: nowrap;
 }
+.kindchip {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+/* statistics and graph cards on the Breakdown and Growth tabs */
+.insightgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+.insightgrid > .card,
+.card.wide {
+  margin: 0;
+}
+.card.wide {
+  margin-bottom: 14px;
+}
+.cardnote {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 70ch;
+}
+.personline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+table.cmp th,
+table.cmp td {
+  white-space: nowrap;
+}
+
+/* six headline tiles in one row on wide screens */
+@media (min-width: 1100px) {
+  .kpis.kpis-six {
+    grid-template-columns: 1.5fr repeat(5, 1fr);
+  }
+  .kpis.kpis-six .kpi.main {
+    grid-column: span 1;
+  }
+  .kpis.kpis-six .kpi.main .kpi-value {
+    font-size: 1.8rem;
+  }
+}
+/* comparison tables scroll inside their card on a phone instead of stacking every cell */
+.cmpwrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.cmpwrap table.cmp {
+  min-width: 620px;
+}

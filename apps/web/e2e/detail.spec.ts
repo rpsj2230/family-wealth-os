@@ -43,10 +43,35 @@ test('sample fund: ledger, lots, sales, recorded values and a price chart', asyn
   ).toContainText('Sale');
   const recorded = page.getByRole('region', { name: 'Recorded values' });
   await expect(recorded).toContainText('Replaced');
-  await expect(page.getByRole('img', { name: /NAV from/ })).toBeVisible();
+  // the fund page adds its own figures and graphs
+  await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText(
+    'Average cost per unit',
+  );
+  await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText(
+    'Return a year (XIRR)',
+  );
+  await expect(
+    page.getByRole('img', { name: /price per unit with purchases and average cost/ }),
+  ).toBeVisible();
+  await expect(page.getByRole('img', { name: /value against money put in/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /units held after each transaction/ })).toBeVisible();
+  await expect(page.getByRole('list', { name: /monthly investment by month/ })).toBeVisible();
+  await expect(page.getByText('instalment made').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How much is long-term' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Activity log' })).toContainText(
     'Fund position updated',
   );
+  await noSideways(page);
+});
+
+test('sample fund: the range switch changes the graphs', async ({ page }) => {
+  await page.goto('/demo/asset?kind=fund');
+  await page
+    .getByRole('navigation', { name: 'Time range' })
+    .getByRole('link', { name: '6M' })
+    .click();
+  await expect(page).toHaveURL(/range=6m/);
+  await expect(page.getByRole('img', { name: /last 6 months/ }).first()).toBeVisible();
   await noSideways(page);
 });
 

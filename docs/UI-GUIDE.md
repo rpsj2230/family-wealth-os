@@ -9,11 +9,11 @@ say where each figure came from, and make the next action obvious. Follow this w
    only filled button (`btn primary`).
 2. Optional KPI strip (`.kpis` / `.kpi` / `.kpi.main`): at most six tiles, the first one the headline. See the dashboard.
 3. `Tabs` (components/Tabs.tsx) when a page has more than one job. Tabs are links (`?tab=`), so each view has an address and the back
-   button works. Four tabs at most, named by what the person does ("Gain harvest", not "Module 1").
+   button works. Four tabs at most, named by what the person does ("Gain harvest", not "Module 1"). Investments has five, one more because statistics (Breakdown) and graphs (Growth) are different jobs from entering and matching funds.
 4. Cards (`.card`, `.personcard` for a person's block, `.pickcard` in a `.cardgrid` for things to act on). One idea per card.
 5. Detail the person does not need every time goes in `<details className="disclose">`.
 6. `Meter` (components/Meter.tsx) for "used / planned / free" shares. `Sparkline`, `Donut`, `BarList`, `TrendChart` (components/charts.tsx,
-   TrendChart.tsx) for charts: plain SVG, a text legend with amounts, never colour alone.
+   TrendChart.tsx) for charts: plain SVG, a text legend with amounts, never colour alone. Fund graphs (components/PlotChart.tsx, FundViz.tsx) add hover/touch/keyboard read-outs, a table view, the palette tokens `--viz-1..8` (light and dark) and a time-range switch that is a link (`?range=`), so the server draws every range. Label data as *statement* or *estimated*; draw nothing the data does not support.
 
 ## Rules
 

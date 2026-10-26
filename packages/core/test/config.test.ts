@@ -8,6 +8,23 @@ import {
 } from '../src/config';
 import { RULES } from '../src/tax';
 
+describe('fund statistics settings', () => {
+  it('start at the built-in numbers, accept saved ones and clamp nonsense', () => {
+    expect(configFromJson({}).funds).toEqual(DEFAULT_CONFIG.funds);
+    expect(
+      configFromJson({ funds: { concentrationTop: 5, calendarMonths: 12 } }).funds,
+    ).toMatchObject({
+      concentrationTop: 5,
+      calendarMonths: 12,
+      annualiseAfterMonths: DEFAULT_CONFIG.funds.annualiseAfterMonths,
+    });
+    expect(configFromJson({ funds: { maxSlices: 99, concentrationTop: -3 } }).funds).toMatchObject({
+      maxSlices: DEFAULT_CONFIG.funds.maxSlices,
+      concentrationTop: DEFAULT_CONFIG.funds.concentrationTop,
+    });
+  });
+});
+
 describe('configFromJson', () => {
   it('uses the defaults for anything missing and ignores junk', () => {
     expect(configFromJson(null)).toEqual(DEFAULT_CONFIG);
