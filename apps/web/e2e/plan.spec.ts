@@ -69,7 +69,7 @@ test.describe('One bank’s rates (public sample)', () => {
   }) => {
     await page.goto('/demo/rates/sample-jan-bank');
     await expect(page.getByRole('heading', { name: 'Savings, by balance' })).toBeVisible();
-    const fromPage = page.locator('li', { hasText: 'NRE deposit, 2 yr' }).first();
+    const fromPage = page.locator('ul.rt-rows > li', { hasText: 'NRE deposit, 2 yr' }).first();
     const save = fromPage.getByRole('button', { name: 'Save' });
     await expect(save).toBeDisabled();
     await fromPage.getByLabel(/Rate in percent/).fill('7.5');
@@ -79,7 +79,7 @@ test.describe('One bank’s rates (public sample)', () => {
       fromPage.getByRole('option', { name: 'It was the senior-citizen rate' }),
     ).toBeAttached();
     // a figure you typed yourself does not ask
-    const mine = page.locator('li', { hasText: 'NRE deposit, 3 yr' }).first();
+    const mine = page.locator('ul.rt-rows > li', { hasText: 'NRE deposit, 3 yr' }).first();
     await mine.getByLabel(/Rate in percent/).fill('7.7');
     await expect(mine.getByText(/Why is the page.s figure wrong/)).toHaveCount(0);
     await noSideScroll(page);

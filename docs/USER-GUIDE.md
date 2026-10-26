@@ -23,11 +23,11 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 ## Mutual funds and goals
 
 - **Funds** matches each fund in your sheet to the official scheme list once; you confirm the match.
-- **Goals** lets you assign holdings to goals (education, marriage and so on). An asset can be split across goals but never above 100%. A goal shows its projected funding under the inflation and return you set.
+- **Goals** has one progress card per goal: how much of the cost is set aside today, how much the projection covers, the extra to put in each month, and the funds set aside for it. Add a goal with just a name; set a target and date later under *Edit this goal*. The second tab, *Money not set aside*, lists each holding with the share no goal claims, so you can set it aside in one step. A holding can be split across goals but never above 100%.
 
 ## Can I retire now?
 
-Open **Retire**. Enter spending, retirement age, expected return and inflation. The result is one of:
+Open **Retire**. The verdict stays at the top while you work in the tabs below it: *Your inputs* (about you, spending and saving, market assumptions; Save keeps them), *Compare* (three scenarios, retirement ages, the effect of common changes), *Range of outcomes* and *Corpus and method*. The result is one of:
 
 - **Meets the plan** under your assumptions,
 - **Shortfall**, with the size of the gap and what would close it (spend less, retire later, save more),
@@ -120,3 +120,15 @@ Tax filing papers → "What the tax department holds". Download **Form 26AS** fr
 ## Correct tags and details
 
 Accounts → **Correct tags and details** is one grid of every account and deposit, bank by bank in your sheet's order. Fix the type (NRE, NRO, FCNR, savings, resident, joint, other), the joint flag, last four digits, the savings account a deposit is linked to, label, note, person, bank and status, and a deposit's rate, dates, amount invested, amount at maturity and number. Changed rows are marked; nothing is saved until you press **Save all** (or **Discard**). Tick rows (or a whole bank) to set a type, mark joint or move them to another bank in one step. **Suggest types for empty rows** fills the blanks from the linked savings account, or from the one type a person has at that bank, and highlights them for you to check before saving. Balances are not here: they change only through the monthly update.
+
+## Rates, and where to put new money
+
+**Rates** is only about rates. Each bank has a card: its best savings rate and best NRE deposit rate, the savings rate by balance drawn as steps, how the rates last moved, and a **Where from** line that says whether each rate was typed or pasted by you or read from the bank's page (which page, which date). Show *Banks I use* or *All banks on file*, and sort by highest deposit, highest savings, name or oldest check; the choice is in the address. The weekly refresh runs on Monday; if it could not read a bank's page, the card says why (no AI key, the bank refused, the address has changed, the page needs a browser) and what to do.
+
+Open a bank to change its rates in place: edit the figure and press Save. If you change a figure the bank page gave, pick why it was wrong; the refresh checks the page again next time, takes the rate back when the page agrees with you, and otherwise saves a rule (shown under *How it is read*, with an on and off switch, and you can write your own). *History and log* shows the best rates over time and every change with the old and new figure, who made it and why. Paste your notes or add a rate under *Add or import*.
+
+**New money** is where an amount is placed. Type an amount (25 lakh or 2500000), the account type and whose money; it is spread over the banks that pay most after tax, never above the insurance limit per person per bank. The other tabs show which of your holdings could earn more elsewhere and how much insurance room is left at each bank.
+
+## Tasks
+
+**Tasks** are grouped as overdue, due in the next 7 days, later and no date. Tick the circle when a task is done; *Not needed* drops it. Each task links to the account, bank or page it concerns. Finished and dropped tasks are on the second tab, with a way back.
