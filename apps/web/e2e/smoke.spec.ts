@@ -206,14 +206,14 @@ test('sample hard need: step by step with bank, account code and the date it all
   await expect(page.getByText(/Sample .* Bank · (Cash|FD)-/).first()).toBeVisible();
 });
 
-test('the sample tax harvest page shows the allowance, the instalment calendar and the checklist', async ({
+test('the sample tax harvest page shows the headline, the sell list and the checklist', async ({
   page,
 }) => {
   await page.goto('/demo/tax-harvest');
   await expect(page.getByRole('heading', { name: 'Tax', level: 1 })).toBeVisible();
-  await expect(page.getByText('When more units become ready')).toBeVisible();
-  await expect(page.getByText('Redeem by units, not by amount.')).toBeVisible();
-  await expect(page.getByText('Every fund, and why it is or is not in the plan')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sell this' }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Do not sell yet/ }).first()).toBeVisible();
+  await expect(page.getByText(/pick units, not amount/)).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );

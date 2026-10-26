@@ -13,7 +13,7 @@
 import { DEFAULT_CONFIG, effectiveRules, type AppConfig } from './config';
 import { fyOf, RULES, type TaxRuleSet } from './tax';
 import { fundTaxClass, type FundTaxClass } from './fund-class';
-import { lotLadder, lotStatus, type LotLadder, type LotTranche } from './harvest-lots';
+import { addDaysIso, lotLadder, lotStatus, type LotLadder, type LotTranche } from './harvest-lots';
 
 export interface HarvestPosition {
   assetId: string;
@@ -57,6 +57,42 @@ export interface HarvestPick {
   frictionCost: number;
   /** the lots behind this sale are estimated from the SIP plan, not read from a fund statement */
   lotsEstimated: boolean;
+  /**
+   * Where the units come from: `statement` (purchases read from a fund statement or transaction export, exact),
+   * `estimated_lots` (purchases worked out from the SIP plan and prices), or `total_only` (only the total invested and the
+   * first purchase date are known, so the units and the gain are proportional estimates).
+   */
+  basis: PickBasis;
+  /** the purchases the units come from, oldest first, with the share of each that is sold; empty for `total_only` */
+  lots: PickLot[];
+  /** the units the fund holds in all, when known */
+  unitsHeld: number | null;
+  /** the first purchase date and the total cost, for a `total_only` pick */
+  startedOn: string | null;
+  /** securities transaction tax on the sale and stamp duty on the purchase, rounded; together they are `frictionCost` */
+  stt: number;
+  stampDuty: number;
+  /** the exit-load rule used for this fund, and what it would cost on these units (0 when they are all past the window) */
+  exitLoad: { pct: number; days: number } | null;
+  exitLoadCost: number;
+}
+
+export type PickBasis = 'statement' | 'estimated_lots' | 'total_only';
+
+/** One purchase and the part of it that a pick sells. */
+export interface PickLot {
+  acquiredOn: string;
+  /** units sold from this purchase; less than the whole purchase when `partial` */
+  units: number;
+  unitsInLot: number;
+  cost: number;
+  value: number;
+  gain: number;
+  /** first day a sale of this purchase is long-term */
+  longTermOn: string;
+  /** first day this purchase has no exit load */
+  loadFreeOn: string;
+  partial: boolean;
 }
 
 export type FundStatus =
@@ -77,6 +113,11 @@ export interface FundView {
   ladder: LotLadder | null;
   /** the next few days on which more units become ready */
   nextReady: LotTranche[];
+  /** this fund's exit-load rule (its own or the household default), null when it has none */
+  exitLoad: { pct: number; days: number } | null;
+  /** first purchase date, and whether a monthly investment is running */
+  startedOn: string | null;
+  sipActive: boolean;
 }
 
 export interface PersonHarvest {
@@ -109,6 +150,19 @@ export interface HarvestPlan {
   rulesVerified: boolean;
   plans: PersonHarvest[];
   assumptions: string[];
+}
+
+/** units are stated to three decimals, rounded down so a sale never asks for more than the lots hold */
+const floorUnits = (n: number) => Math.floor(n * 1000 + 1e-6) / 1000;
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+interface PrefixLot {
+  value: number;
+  gain: number;
+  units: number;
+  acquiredOn: string;
+  longTermOn: string;
+  loadFreeOn: string;
 }
 
 const addMonths = (iso: string, m: number) => {
@@ -173,6 +227,11 @@ export function planHarvest(
         lockInMonths: p.lockInMonths ?? 0,
       };
     };
+    /** the latest first-purchase date from which no exit load applies any more */
+    const exitFreeSince = (p: HarvestPosition) => {
+      const ex = p.exitLoad ?? exitDef;
+      return ex && ex.days > 0 ? addDaysIso(today, -(ex.days + 1)) : today;
+    };
     const ladders = new Map<string, LotLadder>();
     const withLots = mine
       .filter((p) => p.lots && p.lots.length > 0 && (p.taxClass ?? 'equity') === 'equity')
@@ -190,12 +249,19 @@ export function planHarvest(
             fmv2018PerUnit: p.fmv2018 ?? null,
           }),
         );
-        const prefix: { value: number; gain: number; units: number }[] = [];
+        const prefix: PrefixLot[] = [];
         for (const l of [...p.lots!].sort((a, b) => a.acquiredOn.localeCompare(b.acquiredOn))) {
           if (l.cost === null) break;
           const st = lotStatus(l, unitValue, rl, p.fmv2018 ?? null);
           if (st.readyOn > today) break;
-          prefix.push({ value: st.value, gain: st.gain ?? 0, units: l.units });
+          prefix.push({
+            value: st.value,
+            gain: st.gain ?? 0,
+            units: l.units,
+            acquiredOn: l.acquiredOn,
+            longTermOn: st.longTermOn,
+            loadFreeOn: st.loadFreeOn,
+          });
         }
         const gain = prefix.reduce((a, l) => a + l.gain, 0);
         return { p, prefix, gain, value: prefix.reduce((a, l) => a + l.value, 0) };
@@ -207,7 +273,7 @@ export function planHarvest(
         ...x.p,
         gain: x.gain,
         ratio: x.value > 0 ? x.gain / x.value : 0,
-        prefix: x.prefix as { value: number; gain: number; units: number }[] | null,
+        prefix: x.prefix as PrefixLot[] | null,
         eligibleValue: x.value,
       })),
       ...mine
@@ -219,6 +285,8 @@ export function planHarvest(
             !(cfg.skipActiveSip && p.sipActive) &&
             p.startedOn !== null &&
             p.startedOn <= longSince &&
+            // the exit-load window must have ended on the first purchase too (it is checked per purchase when the lots are known)
+            p.startedOn <= exitFreeSince(p) &&
             p.invested > 0 &&
             p.value > p.invested,
         )
@@ -226,7 +294,7 @@ export function planHarvest(
           ...p,
           gain: p.value - p.invested,
           ratio: (p.value - p.invested) / p.value,
-          prefix: null as { value: number; gain: number; units: number }[] | null,
+          prefix: null as PrefixLot[] | null,
           eligibleValue: p.value,
         })),
     ]
@@ -235,17 +303,26 @@ export function planHarvest(
     const friction = (amount: number) =>
       Math.round(amount * cfg.sttPct + amount * cfg.stampDutyPct);
     const unitsFor = (nav: number | null | undefined, amount: number) =>
-      nav && nav > 0 ? Math.floor((amount / nav) * 1000) / 1000 : null;
+      nav && nav > 0 ? floorUnits(amount / nav) : null;
+    const costsOf = (sell: number) => ({
+      frictionCost: friction(sell),
+      stt: Math.round(sell * cfg.sttPct),
+      stampDuty: Math.round(sell * cfg.stampDutyPct),
+    });
     const picks: HarvestPick[] = [];
+    /** funds that would be sold from totals only but have no price, so the units to sell cannot be stated */
+    const unpriced = new Set<string>();
     let left = room;
     for (const p of eligible) {
       if (left < 1) break;
+      const ex = p.exitLoad ?? exitDef;
       if (p.prefix) {
         // sell the oldest lots in order; the last lot only in part
         let sell = 0;
         let gain = 0;
         let soldUnits = 0;
         let full = true;
+        const taken: { l: PrefixLot; f: number }[] = [];
         for (const l of p.prefix) {
           if (left - gain < 1) {
             full = false;
@@ -255,16 +332,38 @@ export function planHarvest(
             sell += l.value;
             gain += l.gain;
             soldUnits += l.units;
+            taken.push({ l, f: 1 });
           } else {
             const f = l.gain > 0 ? (left - gain) / l.gain : 0;
             sell += l.value * f;
             gain += l.gain * f;
             soldUnits += l.units * f;
+            taken.push({ l, f });
             full = false;
             break;
           }
         }
+        // a sale below the smallest worth suggesting is dropped and does not use up any of the allowance
         if (sell >= cfg.minSellAmount) {
+          const total = floorUnits(soldUnits);
+          let used = 0;
+          const lots: PickLot[] = taken.map(({ l, f }, i) => {
+            const last = i === taken.length - 1;
+            const u = last ? round3(Math.max(0, total - used)) : round3(l.units * f);
+            used += u;
+            return {
+              acquiredOn: l.acquiredOn,
+              units: u,
+              unitsInLot: l.units,
+              cost: (l.value - l.gain) * f,
+              value: l.value * f,
+              gain: l.gain * f,
+              longTermOn: l.longTermOn,
+              loadFreeOn: l.loadFreeOn,
+              partial: f < 1,
+            };
+          });
+          const estimated = !!p.lots?.some((x) => x.estimated);
           picks.push({
             assetId: p.assetId,
             fund: p.fund,
@@ -272,43 +371,48 @@ export function planHarvest(
             estimatedGain: Math.round(gain),
             fullExit: full && p.eligibleValue >= p.value - 1,
             buyBackAmount: Math.floor(sell),
-            units: Math.floor(soldUnits * 1000) / 1000,
-            frictionCost: friction(sell),
-            lotsEstimated: !!p.lots?.some((x) => x.estimated),
+            units: total,
+            ...costsOf(sell),
+            lotsEstimated: estimated,
+            basis: estimated ? 'estimated_lots' : 'statement',
+            lots,
+            unitsHeld: p.lots!.reduce((a, l) => a + l.units, 0),
+            startedOn: null,
+            exitLoad: ex,
+            exitLoadCost: Math.round(
+              lots.reduce((a, l) => a + (ex && l.loadFreeOn > today ? l.value * ex.pct : 0), 0),
+            ),
           });
+          left -= gain;
         }
-        left -= gain;
         continue;
       }
-      if (p.gain <= left) {
-        picks.push({
-          assetId: p.assetId,
-          fund: p.fund,
-          sellAmount: Math.round(p.value),
-          estimatedGain: Math.round(p.gain),
-          fullExit: true,
-          buyBackAmount: Math.round(p.value),
-          units: unitsFor(p.nav, p.value),
-          frictionCost: friction(p.value),
-          lotsEstimated: false,
-        });
-        left -= p.gain;
-      } else {
-        const sell = Math.floor(left / p.ratio);
-        if (sell >= cfg.minSellAmount)
-          picks.push({
-            assetId: p.assetId,
-            fund: p.fund,
-            sellAmount: sell,
-            estimatedGain: Math.round(left),
-            fullExit: false,
-            buyBackAmount: sell,
-            units: unitsFor(p.nav, sell),
-            frictionCost: friction(sell),
-            lotsEstimated: false,
-          });
-        left = 0;
+      // only the total invested and the first purchase date are known: the units come from the latest price
+      if (!(p.nav && p.nav > 0)) {
+        unpriced.add(p.assetId);
+        continue;
       }
+      const whole = p.gain <= left;
+      const sell = whole ? Math.round(p.value) : Math.floor(left / p.ratio);
+      if (!whole && sell < cfg.minSellAmount) continue;
+      picks.push({
+        assetId: p.assetId,
+        fund: p.fund,
+        sellAmount: sell,
+        estimatedGain: Math.round(whole ? p.gain : left),
+        fullExit: whole,
+        buyBackAmount: sell,
+        units: unitsFor(p.nav, sell),
+        ...costsOf(sell),
+        lotsEstimated: true,
+        basis: 'total_only',
+        lots: [],
+        unitsHeld: unitsFor(p.nav, p.value),
+        startedOn: p.startedOn,
+        exitLoad: ex,
+        exitLoadCost: 0,
+      });
+      left = whole ? left - p.gain : 0;
     }
     if (eligible.length === 0)
       notes.push(
@@ -321,7 +425,9 @@ export function planHarvest(
       notes.push('Part of this year’s allowance is already used.');
     const totalGain = picks.reduce((s, p) => s + p.estimatedGain, 0);
     const pickedIds = new Set(picks.map((x) => x.assetId));
-    const readyIds = new Set(withLots.map((x) => x.p.assetId));
+    const readyIds = new Set(
+      eligible.filter((x) => !unpriced.has(x.assetId)).map((x) => x.assetId),
+    );
     const funds: FundView[] = mine.map((p) => {
       const cls = fundTaxClass(p.fund);
       const klass = p.taxClass ?? cls.class;
@@ -336,6 +442,9 @@ export function planHarvest(
         lotsEstimated: estimated,
         ladder,
         nextReady: ladder ? ladder.upcoming.slice(0, 6) : [],
+        exitLoad: p.exitLoad ?? exitDef,
+        startedOn: p.startedOn,
+        sipActive: p.sipActive,
       };
       if (klass !== 'equity')
         return {
@@ -381,6 +490,13 @@ export function planHarvest(
           reason:
             'The units that are ready are at a loss: nothing to harvest as a gain (see loss harvesting).',
         };
+      if (unpriced.has(p.assetId))
+        return {
+          ...base,
+          status: 'no_lots' as const,
+          reason:
+            'The latest price is not known, so the units to sell cannot be worked out. Update the fund’s price on Investments.',
+        };
       if (!ladder && p.value <= p.invested)
         return { ...base, status: 'no_gain' as const, reason: 'Not in profit.' };
       if (!ladder && (p.startedOn === null || p.startedOn > longSince))
@@ -390,6 +506,12 @@ export function planHarvest(
           reason: p.startedOn
             ? `Started ${p.startedOn}; not yet past the long-term period.`
             : 'No start date is known.',
+        };
+      if (!ladder && p.startedOn !== null && p.startedOn > exitFreeSince(p))
+        return {
+          ...base,
+          status: 'waiting' as const,
+          reason: `Started ${p.startedOn}; the exit-load window has not ended.`,
         };
       if (!ladder && cfg.skipActiveSip && p.sipActive)
         return {

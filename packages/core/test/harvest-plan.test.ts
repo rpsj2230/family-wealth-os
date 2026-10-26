@@ -14,6 +14,7 @@ const pos = (o: Partial<HarvestPosition> & { assetId: string }): HarvestPosition
   invested: 200_000,
   startedOn: '2020-01-01',
   sipActive: false,
+  nav: 100,
   ...o,
 });
 const TODAY = '2026-10-26';
@@ -206,5 +207,129 @@ describe('planHarvest with purchase lots from a fund statement', () => {
       TODAY,
     );
     expect(plan.plans[0]!.picks).toHaveLength(0);
+  });
+});
+
+describe('planHarvest: units, exit load and short-term units are never mishandled', () => {
+  const cfg = DEFAULT_CONFIG.harvest;
+
+  it('never offers a sale without exact units: a fund with no price is left out and keeps the allowance for the others', () => {
+    const plan = planHarvest(
+      [
+        pos({
+          assetId: 'noprice',
+          fund: 'No price',
+          taxClass: 'equity',
+          value: 200_000,
+          invested: 100_000,
+          nav: null,
+        }),
+        pos({ assetId: 'ok', fund: 'Priced', value: 160_000, invested: 100_000 }),
+      ],
+      TODAY,
+    );
+    const p = plan.plans[0]!;
+    expect(p.picks.map((x) => x.assetId)).toEqual(['ok']);
+    expect(p.picks.every((x) => x.units !== null && x.units > 0)).toBe(true);
+    const f = p.funds.find((x) => x.assetId === 'noprice')!;
+    expect(f.status).toBe('no_lots');
+    expect(f.reason).toContain('price');
+  });
+
+  it('does not count a sale below the smallest worth suggesting against the allowance', () => {
+    const lots = [{ acquiredOn: '2023-01-01', units: 10, cost: 9_900 }]; // ₹100 gain at ₹1,000 a unit
+    const plan = planHarvest(
+      [
+        pos({ assetId: 'tiny', fund: 'Tiny', value: 10_000, invested: 9_900, lots, nav: 1000 }),
+        pos({ assetId: 'big', fund: 'Big', value: 400_000, invested: 100_000 }),
+      ],
+      TODAY,
+      { config: { ...cfg, minSellAmount: 50_000 } },
+    );
+    const p = plan.plans[0]!;
+    expect(p.picks.map((x) => x.assetId)).toEqual(['big']);
+    // the whole allowance went to the fund that was actually suggested
+    expect(p.picks[0]!.estimatedGain).toBeGreaterThan(124_000);
+  });
+
+  it('holds back a fund whose first purchase is still inside a long exit-load window (no lots known)', () => {
+    const p = pos({
+      assetId: 'x',
+      taxClass: 'equity',
+      value: 150_000,
+      invested: 100_000,
+      startedOn: '2025-02-01',
+    });
+    const rule = { ...cfg, exitLoadDays: 730 };
+    const held = planHarvest([p], TODAY, { config: rule }).plans[0]!;
+    expect(held.picks).toHaveLength(0);
+    expect(held.funds[0]!.status).toBe('waiting');
+    expect(held.funds[0]!.reason).toContain('exit-load');
+    // a fund with its own shorter load is fine
+    const own = planHarvest([{ ...p, exitLoad: { pct: 0.01, days: 30 } }], TODAY, {
+      config: rule,
+    }).plans[0]!;
+    expect(own.picks).toHaveLength(1);
+    expect(own.picks[0]!.exitLoad).toEqual({ pct: 0.01, days: 30 });
+    expect(own.picks[0]!.basis).toBe('total_only');
+    expect(own.picks[0]!.lotsEstimated).toBe(true);
+  });
+
+  it('sells only long-term lots past the exit-load window, never short-term units, and reports each lot', () => {
+    const lots = [
+      { acquiredOn: '2024-01-10', units: 100.1, cost: 5_000 },
+      { acquiredOn: '2025-06-10', units: 100.2, cost: 8_000 }, // past 12 months, but inside a 600-day window
+      { acquiredOn: '2026-05-10', units: 100.3, cost: 9_000 }, // short-term
+    ];
+    const position = pos({
+      assetId: 'l',
+      value: 300.6 * 100,
+      invested: 22_000,
+      lots,
+      nav: 100,
+      sipActive: true,
+    });
+    const strict = planHarvest([position], TODAY, { config: { ...cfg, exitLoadDays: 600 } });
+    const pick = strict.plans[0]!.picks[0]!;
+    expect(pick.lots.map((l) => l.acquiredOn)).toEqual(['2024-01-10']);
+    expect(pick.units).toBe(100.1);
+    expect(pick.exitLoadCost).toBe(0);
+    expect(pick.basis).toBe('statement');
+    const normal = planHarvest([position], TODAY).plans[0]!.picks[0]!;
+    expect(normal.lots.map((l) => l.acquiredOn)).toEqual(['2024-01-10', '2025-06-10']);
+    expect(normal.lots.every((l) => l.longTermOn <= TODAY && l.loadFreeOn <= TODAY)).toBe(true);
+    // the lot units add up to the units to sell, to three decimals
+    expect(Math.round(normal.lots.reduce((a, l) => a + l.units, 0) * 1000) / 1000).toBe(
+      normal.units,
+    );
+    expect(normal.units).toBe(200.3);
+    expect(normal.lots.reduce((a, l) => a + l.gain, 0)).toBeCloseTo(normal.estimatedGain, 0);
+  });
+
+  it('does not lose a thousandth of a unit to floating-point sums', () => {
+    const lots = Array.from({ length: 3 }, (_, i) => ({
+      acquiredOn: `2023-0${i + 1}-05`,
+      units: 0.1 + i * 0.1, // 0.1, 0.2, 0.30000000000000004 in floating point
+      cost: 1_000,
+    }));
+    const position = pos({
+      assetId: 'f',
+      value: 0.6 * 100_000,
+      invested: 3_000,
+      lots,
+      nav: 100_000,
+    });
+    const pick = planHarvest([position], TODAY).plans[0]!.picks[0]!;
+    expect(pick.units).toBe(0.6);
+  });
+
+  it('marks purchases worked out from the SIP plan as estimated', () => {
+    const lots = [{ acquiredOn: '2023-01-01', units: 100, cost: 5_000, estimated: true }];
+    const pick = planHarvest(
+      [pos({ assetId: 'e', value: 10_000, invested: 5_000, lots, nav: 100 })],
+      TODAY,
+    ).plans[0]!.picks[0]!;
+    expect(pick.basis).toBe('estimated_lots');
+    expect(pick.lotsEstimated).toBe(true);
   });
 });

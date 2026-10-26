@@ -1,377 +1,394 @@
 import Link from 'next/link';
 import {
   formatInr,
-  type FundView,
-  type HarvestPlan,
-  type PersonHarvest,
-  type PersonLossHarvest,
+  formatUnits,
+  shortDate,
+  type HarvestView,
+  type LossRow,
+  type NotNowRow,
   type PersonStyle,
+  type PersonView,
+  type SellRow,
+  type WorkingLot,
 } from '@fwos/core';
-import { Meter } from '@/components/Meter';
 import { PersonBadge } from '@/components/Person';
+import { CopyUnits } from './CopyUnits';
+import './tax.css';
 
-export const niceDate = (iso: string) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-const signed = (n: number) => `${n < 0 ? '−' : ''}${formatInr(Math.abs(Math.round(n)))}`;
-const units = (n: number | null) =>
-  n === null ? '–' : n.toLocaleString('en-IN', { maximumFractionDigits: 3 });
-const STATUS: Record<FundView['status'], string> = {
-  picked: 'In this plan',
-  ready_not_needed: 'Ready, allowance used',
-  waiting: 'Waiting',
-  no_gain: 'No gain',
-  no_lots: 'Needs history',
-  excluded: 'Not harvestable',
-};
+export const niceDate = shortDate;
+const inr = (n: number) => formatInr(Math.round(n));
+const signed = (n: number) => `${n < 0 ? '−' : ''}${inr(Math.abs(n))}`;
 
-/** Every unit of a fund that turns ready later, soonest first, for one person: the instalment calendar. */
-function calendarRows(funds: FundView[]) {
-  const rows = funds.flatMap((f) =>
-    (f.ladder?.upcoming ?? []).map((t) => ({
-      ...t,
-      fund: f.fund,
-      assetId: f.assetId,
-      estimated: f.lotsEstimated,
-    })),
-  );
-  rows.sort((a, b) => a.on.localeCompare(b.on) || a.fund.localeCompare(b.fund));
-  let cum = 0;
-  return rows.map((r) => ({ ...r, cumulative: (cum += r.gain) }));
-}
-
-export function HarvestCard({
-  pp,
-  person,
-  today,
-}: {
-  pp: PersonHarvest;
-  person: PersonStyle | undefined;
-  today: string;
-}) {
-  const calendar = calendarRows(pp.funds).slice(0, 14);
+/** Used / this plan / still free, as one bar with the amounts written out underneath. */
+function AllowanceMeter({ m }: { m: PersonView['meter'] }) {
+  const base = Math.max(m.allowance, m.used + m.plan + m.free, 1);
+  const w = (n: number) => `${(Math.max(0, n) / base) * 100}%`;
   return (
-    <section className="card personcard" style={{ ['--person' as string]: person?.colour }}>
-      <header className="sectionhead" style={{ marginTop: 0 }}>
-        <h2>
-          <PersonBadge p={person} name size={26} />
-        </h2>
-        <div className="small muted">
-          Allowance {formatInr(pp.exemption)} a year, lost on 31 March if unused
-        </div>
-      </header>
-      <Meter
-        total={pp.exemption}
-        format={(n) => formatInr(Math.round(n))}
-        parts={[
-          { label: 'Already used this year', value: pp.alreadyUsed, colour: '#94a3b8' },
-          { label: 'In this plan', value: pp.totalGain, colour: 'var(--primary, #4f46e5)' },
-          { label: 'Still free', value: Math.max(0, pp.room - pp.totalGain), colour: '#d1d5db' },
-        ]}
-      />
-
-      {pp.picks.length > 0 ? (
-        <>
-          <div className="sectionhead">
-            <h3 style={{ margin: 0 }}>Do this</h3>
-            <span className="small muted">
-              Redeem by units, oldest units first (the fund house does this on its own)
-            </span>
-          </div>
-          <div className="cardgrid">
-            {pp.picks.map((x) => (
-              <article className="pickcard" key={x.assetId}>
-                <h3>
-                  <Link href={`/asset/${x.assetId}`}>{x.fund}</Link>
-                </h3>
-                <div className="small muted">
-                  {x.fullExit ? 'Sell everything, then buy it back' : 'Sell part, then buy it back'}
-                </div>
-                <dl>
-                  <dt>Units to redeem</dt>
-                  <dd>
-                    <b>{x.fullExit ? 'All units' : units(x.units)}</b>
-                  </dd>
-                  <dt>Worth about</dt>
-                  <dd>{formatInr(x.sellAmount)}</dd>
-                  <dt>Tax-free gain booked</dt>
-                  <dd className="gain">+{formatInr(x.estimatedGain)}</dd>
-                  <dt>Buy back</dt>
-                  <dd>{formatInr(x.buyBackAmount)}</dd>
-                  <dt>Stamp duty and transaction tax</dt>
-                  <dd>{formatInr(x.frictionCost)}</dd>
-                </dl>
-                <div className="chips2">
-                  {x.lotsEstimated && (
-                    <span
-                      className="pill warn"
-                      title="The purchase dates are worked out from the SIP plan, not read from a fund statement"
-                    >
-                      lots estimated
-                    </span>
-                  )}
-                  <span className="pill">no exit load: units are past the window</span>
-                </div>
-              </article>
-            ))}
-          </div>
-          <p className="small muted" style={{ marginTop: 10 }}>
-            Tax avoided later on these gains, if you would otherwise have sold them: about{' '}
-            {formatInr(pp.futureTaxMayBeAvoided)}.
-            {pp.tdsWithheld > 0 &&
-              ` As a non-resident the fund house will withhold about ${formatInr(pp.tdsWithheld)}; all of it comes back when you file, because these gains stay inside the allowance.`}
-          </p>
-        </>
-      ) : (
-        <p className="callout" style={{ marginTop: 12 }}>
-          {pp.notes[0] ?? 'Nothing qualifies right now.'} See below for when more units turn ready.
-        </p>
-      )}
-
-      <div className="sectionhead">
-        <h3 style={{ margin: 0 }}>When more units become ready</h3>
-        <span className="small muted">Each SIP instalment has its own one-year clock</span>
+    <div className="tx-meter">
+      <div
+        className="tx-bar"
+        role="img"
+        aria-label={`Free allowance ${inr(m.allowance)}: used ${inr(m.used)}, this plan ${inr(m.plan)}, still free ${inr(m.free)}`}
+      >
+        <span className="tx-seg used" style={{ width: w(m.used) }} />
+        <span className="tx-seg plan" style={{ width: w(m.plan) }} />
+        <span className="tx-seg free" style={{ width: w(m.free) }} />
       </div>
-      {calendar.length === 0 ? (
-        <p className="muted small">
-          No unit is waiting: everything held is either ready now or not eligible.
-        </p>
-      ) : (
-        <div className="xlwrap">
-          <table className="tbl lines responsive">
-            <thead>
-              <tr>
-                <th>Ready from</th>
-                <th>Fund</th>
-                <th className="num">Instalments</th>
-                <th className="num">Units</th>
-                <th className="num">Gain then</th>
-                <th className="num">Gain ready by then</th>
-              </tr>
-            </thead>
-            <tbody>
-              {calendar.map((r, i) => (
-                <tr key={`${r.assetId}${r.on}${i}`}>
-                  <td data-label="Ready from">
-                    {niceDate(r.on)}
-                    <div className="small muted">{r.daysAway} days</div>
-                  </td>
-                  <td data-label="Fund">
-                    {r.fund}
-                    {r.estimated && <span className="pill warn"> est.</span>}
-                  </td>
-                  <td className="num" data-label="Instalments">
-                    {r.lots}
-                  </td>
-                  <td className="num" data-label="Units">
-                    {units(r.units)}
-                  </td>
-                  <td className="num" data-label="Gain then">
-                    {signed(r.gain)}
-                  </td>
-                  <td className="num" data-label="Gain ready by then">
-                    {signed(r.cumulative)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <details className="disclose">
-        <summary>Every fund, and why it is or is not in the plan</summary>
-        <div className="xlwrap">
-          <table className="tbl lines responsive">
-            <thead>
-              <tr>
-                <th>Fund</th>
-                <th>Status</th>
-                <th className="num">Ready now</th>
-                <th className="num">Waiting</th>
-                <th>Why</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pp.funds.map((f) => (
-                <tr key={f.assetId}>
-                  <td data-label="Fund">
-                    <Link href={`/asset/${f.assetId}`}>{f.fund}</Link>
-                    <div className="small muted">
-                      {f.className}
-                      {f.classGuess ? ' (from the name)' : ''}
-                      {f.ladder?.firstPurchase
-                        ? ` · first bought ${niceDate(f.ladder.firstPurchase)}`
-                        : ''}
-                    </div>
-                  </td>
-                  <td data-label="Status">
-                    <span className={`status ${f.status}`}>{STATUS[f.status]}</span>
-                  </td>
-                  <td className="num" data-label="Ready now">
-                    {f.ladder && f.ladder.ready.lots > 0 ? (
-                      <>
-                        {units(f.ladder.ready.units)} units
-                        <div className="small gain">
-                          +{formatInr(Math.round(f.ladder.ready.gain))}
-                        </div>
-                      </>
-                    ) : (
-                      '–'
-                    )}
-                  </td>
-                  <td className="num" data-label="Waiting">
-                    {f.ladder && f.ladder.waiting.lots > 0 ? (
-                      <>
-                        {f.ladder.waiting.lots} lots
-                        <div className="small muted">next {niceDate(f.ladder.upcoming[0]!.on)}</div>
-                      </>
-                    ) : (
-                      '–'
-                    )}
-                  </td>
-                  <td className="small" data-label="Why">
-                    {f.reason}
-                    {f.lotsEstimated && (
-                      <div className="muted">
-                        Lots are estimated from the SIP plan; import the fund statement for exact
-                        ones.
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
-      <p className="small muted">Valid as of {niceDate(today)}. Nothing is sold for you.</p>
-    </section>
+      <ul className="tx-legend small">
+        <li>
+          <i className="tx-sw used" aria-hidden="true" />
+          Used this year <b className="num">{inr(m.used)}</b>
+        </li>
+        <li>
+          <i className="tx-sw plan" aria-hidden="true" />
+          This plan <b className="num">{inr(m.plan)}</b>
+        </li>
+        <li>
+          <i className="tx-sw free" aria-hidden="true" />
+          Still free <b className="num">{inr(m.free)}</b>
+        </li>
+      </ul>
+    </div>
   );
 }
 
-export function LossCard({
-  pl,
-  person,
-}: {
-  pl: PersonLossHarvest;
-  person: PersonStyle | undefined;
-}) {
+function Chips({ checks }: { checks: SellRow['checks'] }) {
   return (
-    <section className="card personcard" style={{ ['--person' as string]: person?.colour }}>
-      <header className="sectionhead" style={{ marginTop: 0 }}>
-        <h2>
-          <PersonBadge p={person} name size={26} />
-        </h2>
-        <div className="small muted">
-          Gains booked this year: short-term {formatInr(pl.stcgYtd)} · long-term{' '}
-          {formatInr(pl.ltcgYtd)}
-        </div>
-      </header>
-      {pl.candidates.length === 0 ? (
-        <p className="empty">
-          No fund is in a net loss on its oldest units, so there is no loss to book.
+    <ul className="tx-checks">
+      {checks.map((c) => (
+        <li key={c.text} className={`tx-chk ${c.tone}`}>
+          <span aria-hidden="true">{c.tone === 'ok' ? '✓' : '⚠'}</span>
+          <span className="sr-only">{c.tone === 'ok' ? 'Good: ' : 'Check: '}</span>
+          <span>{c.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Lot by lot, oldest first: when each purchase was made, what it cost, what it is worth, the gain. */
+function LotsTable({ lots, gainLabel }: { lots: WorkingLot[]; gainLabel: string }) {
+  return (
+    <table className="tbl lines responsive tx-lots">
+      <thead>
+        <tr>
+          <th>Bought on</th>
+          <th className="num">Units sold</th>
+          <th className="num">Cost</th>
+          <th className="num">Worth now</th>
+          <th className="num">{gainLabel}</th>
+          <th>Term</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lots.map((l) => (
+          <tr key={l.acquiredOn + l.units}>
+            <td data-label="Bought on">
+              {l.acquiredOn < '1000' ? 'Before the statement' : shortDate(l.acquiredOn)}
+            </td>
+            <td className="num" data-label="Units sold">
+              {formatUnits(l.units)}
+              {l.partial && <div className="small muted">part of {formatUnits(l.unitsInLot)}</div>}
+            </td>
+            <td className="num" data-label="Cost">
+              {inr(l.cost)}
+            </td>
+            <td className="num" data-label="Worth now">
+              {inr(l.value)}
+            </td>
+            <td className={`num ${l.gain < 0 ? 'fail' : 'gain'}`} data-label={gainLabel}>
+              {signed(l.gain)}
+            </td>
+            <td data-label="Term">{l.longTerm ? 'Long-term' : 'Short-term'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SellWorkingBlock({ r }: { r: SellRow }) {
+  const w = r.working;
+  return (
+    <details className="disclose tx-working">
+      <summary>Show the working</summary>
+      <p className="small">
+        <span className={`pill ${w.exact ? 'ok' : 'warn'}`}>{w.exact ? 'Exact' : 'Estimated'}</span>{' '}
+        {w.basisLabel} The fund house sells the oldest units first.
+      </p>
+      {w.lots.length > 0 && <LotsTable lots={w.lots} gainLabel="Gain" />}
+      <dl className="tx-facts small">
+        <dt>Total cost of these units</dt>
+        <dd>{inr(w.totals.cost)}</dd>
+        <dt>Worth now</dt>
+        <dd>{inr(w.totals.value)}</dd>
+        <dt>Long-term gain (inside the free allowance)</dt>
+        <dd className="gain">{inr(w.longTermGain)}</dd>
+        <dt>Short-term gain</dt>
+        <dd>{inr(w.shortTermGain)}</dd>
+        <dt>Amount to put back into the fund afterwards</dt>
+        <dd>{inr(w.buyBack)}</dd>
+        <dt>Transaction tax (STT) on the sale</dt>
+        <dd>{inr(w.costs.stt)}</dd>
+        <dt>Stamp duty</dt>
+        <dd>{inr(w.costs.stampDuty)}</dd>
+        <dt>Exit load</dt>
+        <dd>{w.costs.exitLoad > 0 ? inr(w.costs.exitLoad) : 'none'}</dd>
+      </dl>
+      {w.notes.map((n) => (
+        <p key={n} className="small muted">
+          {n}
         </p>
-      ) : (
-        <>
-          <div className="cardgrid">
-            {pl.candidates.map((c) => (
-              <article className="pickcard" key={c.assetId}>
-                <h3>
-                  <Link href={`/asset/${c.assetId}`}>{c.fund}</Link>
-                </h3>
-                <div className="small muted">
-                  Sells the oldest {c.lots} lot{c.lots === 1 ? '' : 's'}: {units(c.units)} units
-                </div>
-                <dl>
-                  <dt>Proceeds</dt>
-                  <dd>{formatInr(c.proceeds)}</dd>
-                  <dt>Short-term loss</dt>
-                  <dd className="fail">{c.shortLoss > 0 ? `−${formatInr(c.shortLoss)}` : '–'}</dd>
-                  <dt>Long-term loss</dt>
-                  <dd className="fail">{c.longLoss > 0 ? `−${formatInr(c.longLoss)}` : '–'}</dd>
-                  <dt>Exit load on recent units</dt>
-                  <dd>{c.exitLoad > 0 ? formatInr(c.exitLoad) : 'none'}</dd>
-                </dl>
-                {c.lotsEstimated && (
-                  <div className="chips2">
-                    <span className="pill warn">lots estimated</span>
-                  </div>
-                )}
-              </article>
-            ))}
-          </div>
-          <div className="callout" style={{ marginTop: 12 }}>
-            <b>
-              Saves about {formatInr(pl.taxSavedNow)} this year
-              {pl.carryForward > 0
-                ? `; ${formatInr(pl.carryForward)} would be carried forward`
-                : ''}
-              .
-            </b>
-            <div className="small">
-              Losses are set off before the tax-free allowance. A short-term loss meets short-term
-              gains first, then long-term gains; a long-term loss meets long-term gains only.
+      ))}
+    </details>
+  );
+}
+
+/** The one list a person acts from. */
+function SellList({ rows }: { rows: SellRow[] }) {
+  return (
+    <ul className="tx-list" aria-label="Funds to sell">
+      <li className="tx-cols" aria-hidden="true">
+        <span>Fund</span>
+        <span>Units to sell</span>
+        <span className="r">Worth about</span>
+        <span className="r">Gain you lock in tax-free</span>
+        <span>Checks</span>
+      </li>
+      {rows.map((r) => (
+        <li key={r.assetId} className="tx-item">
+          <div className="tx-row">
+            <div className="tx-c tx-fund">
+              <Link href={`/asset/${r.assetId}`}>{r.fund}</Link>
+              <div className="small muted">{r.scope}</div>
+            </div>
+            <div className="tx-c">
+              <span className="tx-lab">Units to sell</span>
+              <CopyUnits units={r.unitsText} fund={r.fund} />
+            </div>
+            <div className="tx-c r">
+              <span className="tx-lab">Worth about</span>
+              <span className="num">{inr(r.worth)}</span>
+            </div>
+            <div className="tx-c r">
+              <span className="tx-lab">Gain you lock in tax-free</span>
+              <span className="num gain">+{inr(r.gain)}</span>
+            </div>
+            <div className="tx-c tx-chkcell">
+              <span className="tx-lab">Checks</span>
+              <Chips checks={r.checks} />
             </div>
           </div>
-          {pl.notes.map((n) => (
-            <p key={n} className="small muted">
-              {n}
+          <SellWorkingBlock r={r} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NotNowList({ rows }: { rows: NotNowRow[] }) {
+  return (
+    <ul className="tx-notnow">
+      {rows.map((r) => (
+        <li key={r.assetId} className="tx-nn">
+          <div className="tx-nn-name">
+            <Link href={`/asset/${r.assetId}`}>{r.fund}</Link>
+            {r.estimated && <span className="pill warn">estimated lots</span>}
+          </div>
+          <div className="tx-nn-body">
+            <p>{r.reason}</p>
+            {r.dates.length > 0 && (
+              <ul className="tx-dates">
+                {r.dates.map((d) => (
+                  <li key={d.text}>
+                    {d.text} <b>{shortDate(d.on)}</b>
+                  </li>
+                ))}
+                {r.okOn && (
+                  <li>
+                    Fine to sell from <b>{shortDate(r.okOn)}</b>
+                  </li>
+                )}
+              </ul>
+            )}
+            {r.dates.length === 0 && r.okOn && (
+              <p className="small">
+                Fine to sell from <b>{shortDate(r.okOn)}</b>
+              </p>
+            )}
+            {r.later.length > 1 && (
+              <details className="disclose tx-working">
+                <summary>Show every date</summary>
+                <table className="tbl lines responsive">
+                  <thead>
+                    <tr>
+                      <th>Ready from</th>
+                      <th className="num">Purchases</th>
+                      <th className="num">Units</th>
+                      <th className="num">Gain then</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.later.map((t) => (
+                      <tr key={t.on}>
+                        <td data-label="Ready from">{shortDate(t.on)}</td>
+                        <td className="num" data-label="Purchases">
+                          {t.lots}
+                        </td>
+                        <td className="num" data-label="Units">
+                          {formatUnits(t.units)}
+                        </td>
+                        <td className="num" data-label="Gain then">
+                          {signed(t.gain)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function LossList({ rows }: { rows: LossRow[] }) {
+  return (
+    <ul className="tx-notnow">
+      {rows.map((r) => (
+        <li key={r.assetId} className="tx-nn">
+          <div className="tx-nn-name">
+            <Link href={`/asset/${r.assetId}`}>{r.fund}</Link>
+            {r.estimated && <span className="pill warn">estimated lots</span>}
+          </div>
+          <div className="tx-nn-body">
+            <p>{r.sentence}</p>
+            <p className="small muted">
+              {r.scope}. Short-term loss {inr(r.shortLoss)}, long-term loss {inr(r.longLoss)}.
             </p>
-          ))}
+            <details className="disclose tx-working">
+              <summary>Show the working</summary>
+              <LotsTable lots={r.lots} gainLabel="Gain or loss" />
+            </details>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function PersonHarvest({ pv, person }: { pv: PersonView; person: PersonStyle | undefined }) {
+  return (
+    <section
+      className="card personcard tx-person"
+      style={{ ['--person' as string]: person?.colour }}
+      aria-label={`Tax harvest for ${pv.name}`}
+    >
+      <header className="tx-head">
+        <h2>
+          <PersonBadge p={person} name size={26} />
+        </h2>
+        <span className="small muted">Free allowance {inr(pv.meter.allowance)} a year</span>
+      </header>
+      <p className="tx-headline">{pv.headline}</p>
+      <p className="tx-sub muted">{pv.sub}</p>
+      <AllowanceMeter m={pv.meter} />
+
+      {pv.sell.length > 0 && (
+        <>
+          <h3 className="tx-h">Sell this</h3>
+          <SellList rows={pv.sell} />
+          {pv.working.length > 0 && (
+            <details className="disclose tx-working">
+              <summary>Show the working for {pv.name}</summary>
+              <ul className="list small">
+                {pv.working.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </>
+      )}
+
+      {pv.notNow.length > 0 && (
+        <>
+          <h3 className="tx-h">
+            Do not sell yet <span className="tx-count">{pv.notNow.length}</span>
+          </h3>
+          <NotNowList rows={pv.notNow} />
+        </>
+      )}
+
+      <h3 className="tx-h" id={`losses-${pv.ownerId}`}>
+        Losses you can book{' '}
+        {pv.losses.rows.length > 0 && <span className="tx-count">{pv.losses.rows.length}</span>}
+      </h3>
+      {pv.losses.rows.length === 0 ? (
+        <p className="small muted">{pv.losses.summary}</p>
+      ) : (
+        <>
+          <p className="tx-lossnote">{pv.losses.summary}</p>
+          <LossList rows={pv.losses.rows} />
+          <details className="disclose tx-working">
+            <summary>Show the working for losses</summary>
+            <ul className="list small">
+              {pv.losses.working.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </details>
+        </>
+      )}
+
+      {pv.leftOut.length > 0 && (
+        <details className="disclose tx-working">
+          <summary>
+            {pv.leftOut.length} fund{pv.leftOut.length === 1 ? '' : 's'} left out (not
+            equity-oriented)
+          </summary>
+          <ul className="list small">
+            {pv.leftOut.map((f) => (
+              <li key={f.assetId}>
+                <Link href={`/asset/${f.assetId}`}>{f.fund}</Link>: {f.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );
 }
 
-/** What to check at the redemption screen, with this year's dates filled in. */
-export function Checklist({ plan, today }: { plan: HarvestPlan; today: string }) {
-  const deadline = new Date(`${plan.deadline}T00:00:00Z`);
-  // keep clear of the last working days: orders after the cut-off count on the next day, and a holiday can push it past 31 March
-  const safe = new Date(deadline.getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
+/** What to do on the platform, in five short lines, with this year's dates filled in. */
+export function Checklist({ view }: { view: HarvestView }) {
   return (
-    <section className="card">
-      <h2>Before you press sell</h2>
+    <section className="card tx-check" aria-labelledby="tx-check-h">
+      <h2 id="tx-check-h">On the platform</h2>
       <ol className="stepper">
-        <li>
-          <b>Redeem by units, not by amount.</b> The plan shows the units. The fund house sells your
-          oldest units first, which are the long-term ones, so the gain is what is planned.
-        </li>
-        <li>
-          <b>Place the order well before {niceDate(safe)}.</b> The last day is{' '}
-          {niceDate(plan.deadline)}, but an order after the 3 pm cut-off, or on a holiday, is priced
-          on the next working day and may fall into the next financial year ({niceDate(today)} is
-          today).
-        </li>
-        <li>
-          <b>Buy first, then sell, to stay invested.</b> Buying the same fund first adds new units
-          at the end of the queue, so the sale still uses the old units. If you sell first, buy back
-          the same day; the proceeds arrive in a day or two, so use other money for the purchase.
-        </li>
-        <li>
-          <b>The new units start fresh clocks.</b> Their one-year clock for long-term gain and their
-          exit-load window start on the day they are bought. Do not plan to sell them within a year.
-        </li>
-        <li>
-          <b>Equity-oriented funds only.</b> International, gold, debt and unclear hybrid funds are
-          left out because the allowance does not apply to them. ELSS units are locked for 3 years,
-          and buying back starts a new lock-in.
-        </li>
-        <li>
-          <b>Keep the contract notes.</b> They show the units sold, the price and any tax withheld.
-          You will need them for the refund and for schedule 112A in your return.
-        </li>
-        <li>
-          <b>Count other gains.</b> The allowance covers all listed shares and equity funds
-          together. The plan only sees your mutual funds, so reduce the amount if you booked gains
-          on shares or ETFs this year.
-        </li>
+        {view.checklist.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
       </ol>
     </section>
+  );
+}
+
+/** One small footnote at the very bottom: what the sales will cost. */
+export function CostsNote({ view }: { view: HarvestView }) {
+  return (
+    <details className="tx-costs small">
+      <summary>
+        Costs to expect: stamp duty, STT, exit load <b className="num">{inr(view.costs.total)}</b>
+      </summary>
+      <ul className="list">
+        <li>Stamp duty: {inr(view.costs.stampDuty)}</li>
+        <li>Securities transaction tax (STT): {inr(view.costs.stt)}</li>
+        <li>Exit load: {view.costs.exitLoad > 0 ? inr(view.costs.exitLoad) : 'none'}</li>
+      </ul>
+      <p className="muted">These come from the rates in Settings. Nothing is sold for you.</p>
+    </details>
   );
 }

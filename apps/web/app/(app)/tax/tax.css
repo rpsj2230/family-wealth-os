@@ -1,0 +1,352 @@
+/* Tax: the harvest page. A person's headline, the allowance bar, one list to sell from, and small sections for the rest. */
+.tx-person {
+  padding: 20px 22px 14px;
+}
+.tx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+}
+.tx-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.tx-headline {
+  margin: 14px 0 4px;
+  font-size: 1.3rem;
+  line-height: 1.3;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  max-width: 46ch;
+  text-wrap: balance;
+}
+.tx-sub {
+  margin: 0 0 14px;
+  max-width: 70ch;
+}
+
+/* allowance meter */
+.tx-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--soft);
+  border: 1px solid var(--border);
+}
+.tx-seg {
+  display: block;
+  height: 100%;
+}
+.tx-seg.used,
+.tx-sw.used {
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+.tx-seg.plan,
+.tx-sw.plan {
+  background: var(--person, var(--primary));
+}
+.tx-seg.free,
+.tx-sw.free {
+  background: var(--soft);
+}
+.tx-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.tx-sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+  border: 1px solid var(--border);
+}
+
+/* section headings inside a person's card */
+.tx-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 26px 0 10px;
+  font-size: 1rem;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.tx-count {
+  font-size: 0.74rem;
+  font-weight: 600;
+  min-width: 22px;
+  text-align: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* the sell list: a grid on wide screens, a stack of cards on a phone */
+.tx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tx-cols,
+.tx-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.35fr) minmax(150px, 0.95fr) 120px 140px minmax(
+      250px,
+      1.8fr
+    );
+  gap: 8px 18px;
+  align-items: start;
+}
+.tx-cols {
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  padding: 0 4px 8px;
+}
+.tx-cols .r,
+.tx-c.r {
+  text-align: right;
+}
+.tx-item {
+  border-top: 1px solid var(--border);
+  padding: 14px 4px 6px;
+}
+.tx-c {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.tx-fund a {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tx-lab {
+  display: none;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.tx-unitsbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tx-units {
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+  user-select: all;
+}
+.tx-copy {
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--primary);
+  cursor: pointer;
+}
+.tx-copy:hover {
+  border-color: var(--primary);
+}
+.tx-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.tx-chk {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 6px;
+  align-items: start;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+.tx-chk > span:first-child {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.tx-chk.ok > span:first-child {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.tx-chk.warn > span:first-child {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.tx-chk.warn > span:last-child {
+  color: var(--warn-fg);
+}
+
+/* disclosure blocks */
+.tx-working {
+  margin-top: 8px;
+}
+.tx-working > summary {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.tx-working[open] > summary {
+  color: var(--fg);
+}
+.tx-working .list {
+  margin: 6px 0 4px;
+}
+.tx-lots {
+  margin: 8px 0;
+}
+.tx-facts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 18px;
+  max-width: 520px;
+  margin: 10px 0;
+}
+.tx-facts dt {
+  color: var(--muted);
+}
+.tx-facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* do not sell yet, and losses */
+.tx-notnow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.tx-nn {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.9fr) 3fr;
+  gap: 4px 18px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--border);
+}
+.tx-nn:first-child {
+  border-top: 0;
+}
+.tx-nn-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tx-nn-name .pill {
+  display: block;
+  width: fit-content;
+  margin-top: 4px;
+  font-weight: 400;
+}
+.tx-nn-body p {
+  margin: 0 0 4px;
+  font-size: 0.92rem;
+}
+.tx-nn-body p.small {
+  font-size: 0.84rem;
+}
+.tx-dates {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.tx-dates b {
+  color: var(--fg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tx-check .stepper {
+  gap: 12px;
+}
+.tx-costs {
+  margin: 4px 2px 24px;
+  color: var(--muted);
+}
+.tx-costs > summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.tx-costs .list {
+  margin: 4px 0;
+}
+
+/* phone and small tablet: each fund becomes a card */
+@media (max-width: 979px) {
+  .tx-cols {
+    display: none;
+  }
+  .tx-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+  }
+  .tx-fund,
+  .tx-chkcell,
+  .tx-row > .tx-c:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+  .tx-unitsbox {
+    flex-wrap: nowrap;
+  }
+  .tx-c.r {
+    text-align: left;
+  }
+  .tx-lab {
+    display: block;
+  }
+  .tx-item {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 14px 8px;
+    margin: 0 0 10px;
+    background: var(--card);
+  }
+  .tx-units {
+    font-size: 1.3rem;
+  }
+  .tx-nn {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 719px) {
+  .tx-person {
+    padding: 16px 14px 10px;
+  }
+  .tx-headline {
+    font-size: 1.15rem;
+  }
+}
+.tx-lossnote {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+.tx-check .stepper li {
+  font-size: 0.95rem;
+}
