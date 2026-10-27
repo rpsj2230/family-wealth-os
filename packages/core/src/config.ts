@@ -162,6 +162,17 @@ export interface AppConfig {
     /** Home flags a bank that holds more than this share of the money kept in banks (0.4 = 40%) */
     bankShareWatch: number;
   };
+  /** what the daily summary e-mail shows */
+  digest: {
+    /** a goal whose projection beats its cost by more than this share is "ahead" rather than "on track" (0.1 = 10%) */
+    aheadMargin: number;
+    /** the most items listed under "Needs you" */
+    needsYouMax: number;
+    /** the most movers and maturities listed under "What changed" */
+    changesMax: number;
+    /** possible market paths run for the retirement success chance in the e-mail; 0 leaves the chance out */
+    monteCarloRuns: number;
+  };
   /** how the mutual-fund statistics and graphs are cut */
   funds: {
     /** the date from which the transactions of every fund should be on file (ISO date): a person whose earliest transaction is later is asked for an earlier statement */
@@ -306,6 +317,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     ],
   },
   home: { changeDays: 30, upcomingDays: 120, bankShareWatch: 0.4 },
+  digest: { aheadMargin: 0.1, needsYouMax: 5, changesMax: 3, monteCarloRuns: 2000 },
   funds: {
     historyFrom: '2021-01-01',
     unitTolerance: 0.001,
@@ -407,6 +419,7 @@ export function configFromJson(raw: unknown): AppConfig {
   const ref = obj(r.refunds);
   const fun = obj(r.funds);
   const hom = obj(r.home);
+  const dig = obj(r.digest);
   const aiSec = obj(r.ai);
   const sheet = obj(r.sheetSync);
   const days = Array.isArray(dep.maturityAlertDays)
@@ -569,6 +582,12 @@ export function configFromJson(raw: unknown): AppConfig {
       changeDays: Math.round(num(hom.changeDays, d.home.changeDays, 7, 365)),
       upcomingDays: Math.round(num(hom.upcomingDays, d.home.upcomingDays, 7, 730)),
       bankShareWatch: num(hom.bankShareWatch, d.home.bankShareWatch, 0.05, 1),
+    },
+    digest: {
+      aheadMargin: num(dig.aheadMargin, d.digest.aheadMargin, 0, 1),
+      needsYouMax: Math.round(num(dig.needsYouMax, d.digest.needsYouMax, 1, 10)),
+      changesMax: Math.round(num(dig.changesMax, d.digest.changesMax, 1, 8)),
+      monteCarloRuns: Math.round(num(dig.monteCarloRuns, d.digest.monteCarloRuns, 0, 5000)),
     },
     funds: {
       historyFrom: isoDate(fun.historyFrom, d.funds.historyFrom),

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import {
   addRateSource,
@@ -14,11 +15,15 @@ import { Field, SaveRow, Tick, useForm } from './fields';
 export function DigestForm({
   enabled,
   includeRetirement,
+  includeGoals,
   extra,
+  previewHref,
 }: {
   enabled: boolean;
   includeRetirement: boolean;
+  includeGoals: boolean;
   extra: string[];
+  previewHref: string;
 }) {
   const { res, act, pending } = useForm(saveDigestSettings);
   return (
@@ -28,6 +33,12 @@ export function DigestForm({
         label="Send the daily summary by e-mail"
         hint="At 08:30 Singapore time, to everyone who can sign in to this household."
         defaultChecked={enabled}
+      />
+      <Tick
+        name="include_goals"
+        label="Include the goals view"
+        hint="Each goal with how far it is and whether the current pace reaches it."
+        defaultChecked={includeGoals}
       />
       <Tick
         name="include_retirement"
@@ -42,6 +53,10 @@ export function DigestForm({
         <input name="extra" defaultValue={extra.join(', ')} placeholder="parent@example.com" />
       </Field>
       <SaveRow label="Save e-mail settings" pending={pending} res={res} />
+      <p className="muted small">
+        <Link href={previewHref}>Preview today’s e-mail</Link> shows it as it would arrive, on a
+        phone and on a laptop.
+      </p>
     </form>
   );
 }

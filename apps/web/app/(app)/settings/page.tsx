@@ -157,7 +157,7 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
   const [digest, integ, log] = await Promise.all([
     db
       .from('digest_settings')
-      .select('enabled, extra_recipients, include_retirement')
+      .select('enabled, extra_recipients, include_retirement, include_goals')
       .maybeSingle(),
     db.from('integration_settings').select('telegram_set, telegram_chat_ids').maybeSingle(),
     db
@@ -170,6 +170,7 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
     enabled: boolean;
     extra_recipients: string[];
     include_retirement: boolean;
+    include_goals: boolean | null;
   } | null;
   const t = integ.data as { telegram_set: boolean; telegram_chat_ids: string | null } | null;
   const deliveries: DeliveryRow[] = (log.data ?? []).map((r) => ({
@@ -185,6 +186,7 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
         enabled: d?.enabled ?? false,
         extra: d?.extra_recipients ?? [],
         includeRetirement: d?.include_retirement ?? true,
+        includeGoals: d?.include_goals ?? true,
       }}
       telegram={{ isSet: !!t?.telegram_set, chatIds: t?.telegram_chat_ids ?? '' }}
       deliveries={deliveries}

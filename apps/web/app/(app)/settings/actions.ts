@@ -43,6 +43,7 @@ export async function saveDigestSettings(_p: FormResult | null, f: FormData): Pr
   if (!householdId) return { ok: false, message: 'Create your household first.' };
   const enabled = f.get('enabled') === 'on';
   const includeRetirement = f.get('include_retirement') === 'on';
+  const includeGoals = f.get('include_goals') === 'on';
   const typed = String(f.get('extra') ?? '')
     .split(/[\s,;]+/)
     .map((e) => e.trim().toLowerCase())
@@ -59,6 +60,7 @@ export async function saveDigestSettings(_p: FormResult | null, f: FormData): Pr
     enabled,
     extra_recipients: [...new Set(extra)],
     include_retirement: includeRetirement,
+    include_goals: includeGoals,
     updated_at: new Date().toISOString(),
   });
   if (error) return { ok: false, message: 'That could not be saved.' };

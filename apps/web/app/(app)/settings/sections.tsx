@@ -301,10 +301,13 @@ export function NotificationsSection({
   digest,
   telegram,
   deliveries,
+  previewHref = '/settings/notifications/preview',
 }: {
-  digest: { enabled: boolean; extra: string[]; includeRetirement: boolean };
+  digest: { enabled: boolean; extra: string[]; includeRetirement: boolean; includeGoals: boolean };
   telegram: { isSet: boolean; chatIds: string };
   deliveries: DeliveryRow[];
+  /** where the e-mail preview is (the public sample has its own) */
+  previewHref?: string;
 }) {
   return (
     <>
@@ -333,13 +336,16 @@ export function NotificationsSection({
       <section className="card" id="digest" aria-labelledby="digest-h">
         <h3 id="digest-h">Daily summary e-mail</h3>
         <p className="muted small">
-          Estimated net worth, what changed, what needs attention, and how old each input is. Mail
-          is sent from your own Gmail account, set up once (see the setup notes).
+          Net worth with today’s change and profit, where the money sits, how far each goal and your
+          retirement are from where they should be, and what needs you. Mail is sent from your own
+          Gmail account, set up once (see the setup notes).
         </p>
         <DigestForm
           enabled={digest.enabled}
           includeRetirement={digest.includeRetirement}
+          includeGoals={digest.includeGoals}
           extra={digest.extra}
+          previewHref={previewHref}
         />
       </section>
 
