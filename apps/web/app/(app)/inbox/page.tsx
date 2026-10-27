@@ -28,7 +28,7 @@ export default async function InboxPage({
     supabase
       .from('inbox_messages')
       .select(
-        'id, message_id, received_on, from_domain, subject, outcome, reason, reading, asset_id, resolved_at',
+        'id, message_id, received_on, from_domain, subject, outcome, reason, reading, asset_id, resolved_at, body_text',
       )
       .order('created_at', { ascending: false })
       .limit(300),
@@ -84,6 +84,7 @@ export default async function InboxPage({
     assetId: (m.asset_id as string | null) ?? null,
     resolvedAt: (m.resolved_at as string | null) ?? null,
     recordedByYou: recordedBy.has((m.message_id as string).slice(0, 200)),
+    bodyText: (m.body_text as string | null) ?? null,
   }));
   const settings = cfg.data as { ai_key_set?: boolean; inbox_label?: string } | null;
   const emailCard = auto.cards.find((c) => c.key === 'email');

@@ -12,6 +12,7 @@ import {
 import { AutomationCards } from '@/components/AutomationCards';
 import { ListingTools } from '@/components/ListingTools';
 import { Tabs } from '@/components/Tabs';
+import { EntryTools } from './EntryTools';
 import { ReviewCard, RestoreButton } from './Parts';
 import '@/components/datain.css';
 
@@ -220,6 +221,7 @@ function MessageList({
               <p className="why small">{e.why}</p>
               {q === 'dismissed' && <RestoreButton id={m.id} demo={demo} />}
               {q === 'problem' && <p className="next small">{e.next}</p>}
+              <EntryTools entry={m} demo={demo} />
             </li>
           );
         })}

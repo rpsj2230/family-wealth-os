@@ -11,6 +11,7 @@ import {
   type InboxEntry,
 } from '@fwos/core';
 import { applyReading, dismissMessage, restoreMessage, type InboxResult } from './actions';
+import { EntryTools } from './EntryTools';
 import '@/components/datain.css';
 
 const demoNote: InboxResult = {
@@ -106,6 +107,14 @@ export function ReviewCard({
                 </option>
               ))}
             </select>
+            <input
+              name="amount"
+              inputMode="decimal"
+              defaultValue={r.amount}
+              aria-label="Balance read from this message (change it if it is wrong)"
+              className="numinput"
+              style={{ width: '9.5rem', textAlign: 'right' }}
+            />
             <button className="btn primary" disabled={busy}>
               {applying ? 'Recording…' : sure ? 'Apply to this account' : 'Apply'}
             </button>
@@ -120,6 +129,7 @@ export function ReviewCard({
           Ignore
         </button>
       </form>
+      <EntryTools entry={entry} demo={demo} />
       {r && ranked.length === 0 && (
         <p className="small fail">
           You have no account in {r.currency}. Add one in the Monthly update first.

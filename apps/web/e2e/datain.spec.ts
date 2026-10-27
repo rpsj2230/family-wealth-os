@@ -121,6 +121,29 @@ test.describe('Bank emails (public sample)', () => {
     await noOverflow(page);
   });
 
+  test('a recorded balance shows the email with the number marked, and the number can be corrected', async ({
+    page,
+  }) => {
+    await page.goto('/demo/inbox?tab=recorded');
+    const card = page.locator('li', { hasText: 'account ending 1134' });
+    await card.getByText('Show the email').click();
+    await expect(card.getByTestId('read-number')).toHaveText('2,22,400.00');
+    await expect(card.getByLabel('Balance read from this email')).toHaveValue('222400');
+    await card.getByRole('button', { name: 'Save number' }).click();
+    await expect(card.getByRole('alert').filter({ hasText: /sample/ })).toBeVisible();
+    await noOverflow(page);
+  });
+
+  test('a skipped email can be read again by the AI', async ({ page }) => {
+    await page.goto('/demo/inbox?tab=skipped');
+    const card = page.locator('li', { hasText: 'Our new savings rates are here' });
+    await card.getByRole('button', { name: 'Read again' }).click();
+    await expect(card.getByRole('alert').filter({ hasText: /sample/ })).toBeVisible();
+    await card.getByText('Show the email').click();
+    await expect(card.getByText('Festive offers')).toBeVisible();
+    await noOverflow(page);
+  });
+
   test('recorded messages and the automation tab', async ({ page }) => {
     await page.goto('/demo/inbox?tab=recorded');
     await expect(page.getByText(/recorded by itself/).first()).toBeVisible();
@@ -183,7 +206,7 @@ test.describe('Import (public sample)', () => {
     ).toHaveAttribute('aria-pressed', 'true'); // a workbook was imported before, so the safe choice comes first
     await expect(page.getByText('Family finances 2026.xlsx').first()).toBeVisible();
     await choice.getByRole('button', { name: 'Import balances and deposits' }).click();
-    await expect(page.getByRole('button', { name: /^Preview/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Preview \(nothing/ })).toBeVisible();
     await noOverflow(page);
   });
 

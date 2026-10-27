@@ -1,0 +1,67 @@
+.entry-tools {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.entry-tools details > summary {
+  cursor: pointer;
+  color: var(--primary);
+  width: fit-content;
+}
+.ok-note {
+  color: var(--ok-fg);
+  margin: 0;
+}
+.numberfix label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.numberfix .numinput {
+  width: 9.5rem;
+  max-width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mailcopy {
+  margin: 8px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--soft);
+  overflow: hidden;
+}
+.mailcopy figcaption {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+  background: var(--card);
+}
+.mailcopy figcaption b {
+  display: inline-block;
+  min-width: 4.5rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.mailbody {
+  margin: 0;
+  padding: 12px;
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.mailbody mark {
+  background: #fde68a;
+  color: #1f2937;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-weight: 700;
+  outline: 2px solid #f59e0b;
+}

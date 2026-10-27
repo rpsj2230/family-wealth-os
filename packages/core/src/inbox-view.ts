@@ -12,6 +12,8 @@ export interface InboxReading {
   currency: string;
   asOf: string;
   source: 'rule' | 'ai';
+  /** the number was corrected by you after it was read */
+  editedByYou?: boolean;
 }
 
 export interface InboxEntry {
@@ -26,6 +28,8 @@ export interface InboxEntry {
   resolvedAt: string | null;
   /** a balance was recorded from this message after you chose an account */
   recordedByYou: boolean;
+  /** the kept copy of the email text; null for a message logged before copies were kept */
+  bodyText?: string | null;
 }
 
 /** review: waiting for you. recorded: a balance or statement was taken in. skipped: nothing to record. problem: the reader failed. dismissed: you ignored it. */
@@ -37,6 +41,38 @@ export function queueOf(m: InboxEntry): InboxQueue {
   if (m.outcome === 'error') return 'problem';
   if (!m.resolvedAt) return 'review';
   return m.recordedByYou ? 'recorded' : 'dismissed';
+}
+
+/** Whether the AI can be asked to read this message again: anything that did not end in a recorded balance. */
+export function canReadAgain(m: InboxEntry): boolean {
+  return queueOf(m) !== 'recorded' || !m.reading;
+}
+
+export interface TextPart {
+  text: string;
+  /** this part is the number that was read */
+  hit: boolean;
+}
+
+/**
+ * Splits the email text so the number that was read can be shown marked, like a highlighter on the original. Every figure in the
+ * text is compared by value, so "1,23,456.78", "123456.78" and "INR 123,456.78" are all found.
+ */
+export function markAmount(text: string, amount: number | null): TextPart[] {
+  if (amount === null || !text) return [{ text, hit: false }];
+  const parts: TextPart[] = [];
+  const figure = /\d[\d,]*(?:\.\d+)?/g;
+  let at = 0;
+  for (const m of text.matchAll(figure)) {
+    const raw = m[0].replace(/,+$/, '');
+    const value = Number(raw.replace(/,/g, ''));
+    if (!Number.isFinite(value) || Math.abs(value - amount) > 0.005) continue;
+    if (m.index > at) parts.push({ text: text.slice(at, m.index), hit: false });
+    parts.push({ text: raw, hit: true });
+    at = m.index + raw.length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), hit: false });
+  return parts.length > 0 ? parts : [{ text, hit: false }];
 }
 
 /** Why a message that recorded nothing was set aside, for the filter chips on the Skipped tab. */
@@ -86,9 +122,11 @@ export function explainEntry(m: InboxEntry): Explained {
     if (r)
       return {
         headline: found ?? 'Balance recorded',
-        why: m.recordedByYou
-          ? 'You applied this reading.'
-          : 'It came from the bank’s own address and matched exactly one account, so it was recorded by itself.',
+        why: r.editedByYou
+          ? 'You corrected this number after it was read.'
+          : m.recordedByYou
+            ? 'You applied this reading.'
+            : 'It came from the bank’s own address and matched exactly one account, so it was recorded by itself.',
         next: 'Nothing to do.',
       };
     return {
@@ -116,7 +154,7 @@ export function explainEntry(m: InboxEntry): Explained {
     return {
       headline: 'Not a balance email',
       why: 'No balance or statement was found in it, so nothing was recorded.',
-      next: 'Nothing to do. If a balance alert is wrongly skipped, record the balance in Monthly update.',
+      next: 'Nothing to do. If this email does have a balance, press Read again and the AI will read just this one.',
     };
   }
 

@@ -42,6 +42,16 @@ select t.assert(t.throws($q$select * from public.ai_credentials_for_test((select
 select t.assert(t.throws($q$select public.record_ai_test((select h from ictx), true, 'x')$q$), 'outsiders cannot record a test');
 select t.assert(t.throws($q$select public.save_integrations((select h from ictx), 'groq', 'abcdefghij', 'x')$q$), 'outsiders cannot save settings for this household');
 select t.assert((select count(*) from public.inbox_messages) = 0 and (select count(*) from public.integration_settings) = 0, 'outsiders see nothing');
+-- reading one email again: members save the result through a function that touches only the log row
+select t.as_user('00000000-0000-0000-0000-0000000000a8');
+select public.save_inbox_result((select id from public.inbox_messages where message_id = 'm1'), 'applied', null, '{"amount": 7}', null, true);
+select t.assert((select outcome = 'applied' and (reading->>'amount') = '7' and resolved_at is not null and rescan_requested_at is null from public.inbox_messages where message_id = 'm1'), 'a member can save the result of reading a message again');
+select t.assert(t.throws($q$select public.save_inbox_result((select id from public.inbox_messages where message_id = 'm1'), 'bogus', null, null, null)$q$), 'an unknown outcome is refused');
+update public.inbox_messages set rescan_requested_at = now() where message_id = 'm1';
+select t.assert((select rescan_requested_at is not null from public.inbox_messages where message_id = 'm1'), 'a member can ask for a message to be read again');
+select t.assert(t.throws($q$update public.inbox_messages set body_text = 'edited' where message_id = 'm1'$q$), 'the kept copy of an email cannot be edited from the app');
+select t.as_user('00000000-0000-0000-0000-0000000000b8');
+select t.assert(t.throws($q$select public.save_inbox_result('00000000-0000-0000-0000-000000000001', 'applied', null, null, null)$q$), 'outsiders cannot save a result');
 select t.as_root();
 rollback;
 \echo 'ALL INBOX TESTS PASSED'

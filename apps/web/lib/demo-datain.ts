@@ -81,6 +81,8 @@ export function demoInbox(): InboxEntry[] {
       subject: 'Balance alert for your account ending 1134',
       reading: reading('Sample Esaf Bank', '1134', 222_400, '2026-10-22'),
       assetId: 's-es-p1',
+      bodyText:
+        'Dear Customer,\n\nThe available balance in your account ending ••••1134 is Rs. 2,22,400.00 as on 22-OCT-26.\n\nThank you for banking with us.',
     }),
     m({
       id: 'a2',
@@ -115,6 +117,7 @@ export function demoInbox(): InboxEntry[] {
       outcome: 'ignored',
       fromDomain: 'news.example',
       subject: 'Our new savings rates are here',
+      bodyText: 'Festive offers: savings rates up to 7.5%. Open an account today.',
     }),
     m({
       id: 'd1',

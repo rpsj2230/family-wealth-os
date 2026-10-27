@@ -22,6 +22,7 @@ import {
   type KnownAccount,
 } from './bank-email';
 import { looksLikeCas } from './cas';
+import { emailExcerpt } from './email-excerpt';
 import { senderAddress, unwrapForward } from './forwarded';
 import { looksLikeTaxFile } from './taxfiles';
 
@@ -32,6 +33,11 @@ export interface InboxMessage {
   text: string;
   receivedOn: string; // YYYY-MM-DD
   attachments: { filename: string; content: Uint8Array }[];
+  /**
+   * You asked for this one to be read again: it is read even if it was seen before, the AI looks at it whether or not it mentions a
+   * balance, the sender is taken as the bank's, and a reading is applied at once (you can correct the number afterwards).
+   */
+  reread?: boolean;
 }
 
 export interface InboxRow {
@@ -43,6 +49,8 @@ export interface InboxRow {
   reason: string | null;
   reading: BalanceReading | null;
   assetId: string | null;
+  /** the kept copy of the email text (see email-excerpt.ts) */
+  bodyText: string;
 }
 
 export interface InboxIo {
@@ -107,7 +115,7 @@ export async function runInbox(
   for (const m of messages) {
     report.seen++;
     try {
-      if (await io.alreadySeen(m.messageId)) {
+      if (!m.reread && (await io.alreadySeen(m.messageId))) {
         report.skipped++;
         continue;
       }
@@ -121,6 +129,7 @@ export async function runInbox(
         receivedOn: m.receivedOn,
         fromDomain: domain,
         subject: m.subject.slice(0, 300),
+        bodyText: emailExcerpt(m.text),
       };
       const log = async (row: Omit<InboxRow, keyof typeof base>) => {
         await io.record({ ...base, ...row });
@@ -214,14 +223,16 @@ export async function runInbox(
           senderVerified: senderMatchesBank(domain, r.bank),
         }));
         if (readings.length === 0) note = 'the AI found no balance in the statement';
-      } else if (!mentionsBalance(m.subject, m.text)) {
+      } else if (!m.reread && !mentionsBalance(m.subject, m.text)) {
         await log({ outcome: 'ignored', reason: null, reading: null, assetId: null });
         continue;
       } else if (!cfg.ai) {
         // it looks like a balance alert in a format the rules do not know: say so instead of calling it "not a balance email"
         await log({
           outcome: 'needs_review',
-          reason: 'balance email in a format the rules do not know; add an AI key to read it',
+          reason: m.reread
+            ? 'add an AI key in Settings to read this email'
+            : 'balance email in a format the rules do not know; add an AI key to read it',
           reading: null,
           assetId: null,
         });
@@ -237,7 +248,7 @@ export async function runInbox(
         const json = await io.fetchJson(req.url, req.init);
         readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
           ...r,
-          senderVerified: senderMatchesBank(domain, r.bank),
+          senderVerified: m.reread || senderMatchesBank(domain, r.bank),
         }));
         if (readings.length === 0) {
           await log({
@@ -281,7 +292,8 @@ export async function runInbox(
           continue;
         }
         const latest = await io.latestObservation(match.assetId);
-        if (latest && r.asOf <= latest.asOf) {
+        // a re-read may replace a value of the same date (the one this email gave before); anything older is still not added
+        if (latest && (m.reread ? r.asOf < latest.asOf : r.asOf <= latest.asOf)) {
           await log({
             outcome: 'ignored',
             reason: `not newer than the value on record (${latest.asOf})`,
@@ -299,7 +311,7 @@ export async function runInbox(
           });
           continue;
         }
-        if (r.source === 'ai' && latest && latest.amount > 0) {
+        if (!m.reread && r.source === 'ai' && latest && latest.amount > 0) {
           const ratio = r.amount / latest.amount;
           if (ratio < 0.1 || ratio > 10) {
             await log({
@@ -327,6 +339,7 @@ export async function runInbox(
           reason: (e as Error).message.slice(0, 400),
           reading: null,
           assetId: null,
+          bodyText: emailExcerpt(m.text),
         });
       } catch {
         /* the log itself failed; the report above still carries the line */

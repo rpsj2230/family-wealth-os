@@ -343,3 +343,68 @@ describe('runInbox: bank alerts forwarded from your own mailbox', () => {
     expect(r.needsReview).toBe(1);
   });
 });
+
+describe('runInbox: an email you ask to be read again', () => {
+  const odd = (o: Partial<InboxMessage> = {}) =>
+    msg({
+      messageId: 'r1',
+      from: 'alerts@hdfcbank.bank.in',
+      subject: 'Your account',
+      text: 'Hello. The funds in your savings ending 7240 stand at INR 12,345.67 today.',
+      reread: true,
+      ...o,
+    });
+  const answer = (amount: number, asOf = '2026-10-26') => ({
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({
+            readings: [{ bank: 'HDFC', last4: '7240', amount, currency: 'INR', asOf }],
+          }),
+        },
+      },
+    ],
+  });
+  const cfg = { today: '2026-10-26', ai: { provider: 'groq' as const, key: 'k' } };
+
+  it('reads it even when it was seen before, applies the number at once and keeps a copy of the text', async () => {
+    const { io, rows, applied } = fakeIo({ fetchJson: async () => answer(12345.67) });
+    await io.record({ ...rows, messageId: 'r1' } as unknown as InboxRow);
+    const r = await runInbox([odd()], io, cfg);
+    expect(r.applied).toBe(1);
+    expect(applied[0]!.reading.amount).toBe(12345.67);
+    expect(rows.at(-1)!.bodyText).toContain('12,345.67');
+  });
+  it('does not need the email to say "balance", and does not hold back an amount far from the current value', async () => {
+    const { io, applied } = fakeIo({ fetchJson: async () => answer(500000) });
+    const r = await runInbox([odd()], io, cfg);
+    expect(r.applied).toBe(1);
+    expect(applied[0]!.reading.amount).toBe(500000);
+  });
+  it('does not add a value older than the one on record', async () => {
+    const { io, applied, rows } = fakeIo({ fetchJson: async () => answer(1, '2026-08-01') });
+    await runInbox([odd()], io, cfg);
+    expect(applied).toHaveLength(0);
+    expect(rows.at(-1)).toMatchObject({ outcome: 'ignored' });
+  });
+  it('lets a value of the same date replace the earlier one', async () => {
+    const { io, applied } = fakeIo(
+      { fetchJson: async () => answer(7, '2026-10-26') },
+      { amount: 9, asOf: '2026-10-26' },
+    );
+    const r = await runInbox([odd()], io, cfg);
+    expect(r.applied).toBe(1);
+    expect(applied[0]!.reading.amount).toBe(7);
+  });
+  it('says what to do when there is no AI key', async () => {
+    const { io, rows } = fakeIo();
+    await runInbox([odd()], io, { today: '2026-10-26', ai: null });
+    expect(rows.at(-1)!.reason).toContain('add an AI key');
+  });
+  it('a message that is not marked for re-reading is still skipped once seen', async () => {
+    const { io } = fakeIo({ fetchJson: async () => answer(1) });
+    await io.record({ messageId: 'r1' } as unknown as InboxRow);
+    const r = await runInbox([odd({ reread: false })], io, cfg);
+    expect(r.skipped).toBe(1);
+  });
+});

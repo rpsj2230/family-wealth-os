@@ -1,14 +1,28 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { formatInr, longDate } from '@fwos/core';
+import { formatInr, longDate, readingAmount, type InboxReading } from '@fwos/core';
+import {
+  aiErrorHint,
+  prepareAi,
+  runInbox,
+  type InboxIo,
+  type InboxRow,
+  type KnownAccount,
+} from '@fwos/ingest';
 import { loadContext } from '@/lib/data';
+import { parseAmount, recordBalance } from './record';
 
 const uuid = /^[0-9a-f-]{36}$/;
 
 export interface InboxResult {
   ok: boolean | null;
   message: string;
+  /** after reading a message again or correcting its number: what is recorded now */
+  amount?: number;
+  asOf?: string;
+  /** a balance is now recorded from this message, on an account */
+  recorded?: boolean;
 }
 
 // the inbox itself is not refreshed here: the card on screen keeps showing what happened (and offers Undo) until you leave the page
@@ -30,7 +44,7 @@ export async function applyReading(
   if (!householdId) return { ok: false, message: 'Create your household first.' };
   const { data: msg } = await supabase
     .from('inbox_messages')
-    .select('id, reading, message_id, resolved_at')
+    .select('id, reading, reason, message_id, resolved_at')
     .eq('id', id)
     .maybeSingle();
   const r = msg?.reading as {
@@ -57,48 +71,45 @@ export async function applyReading(
       ok: false,
       message: `That account is in ${a.currency as string} but the balance is in ${r.currency}. Choose another account.`,
     };
-  let fx: number | null = null;
-  if (r.currency !== 'INR') {
-    const { data: f } = await supabase
-      .from('fx_rates')
-      .select('inr_per_unit')
-      .eq('currency', r.currency)
-      .lte('rate_date', r.asOf)
-      .order('rate_date', { ascending: false })
-      .limit(1);
-    fx = f?.[0] ? Number(f[0].inr_per_unit) : null;
-    if (!fx)
-      return {
-        ok: false,
-        message: `No ${r.currency} exchange rate is stored yet. Run “Refresh market data” on GitHub, then try again.`,
-      };
-  }
-  const { error } = await supabase.from('observations').insert({
-    household_id: householdId,
-    asset_id: asset,
-    kind: 'balance',
-    amount: Number(r.amount),
+  // you may have corrected the number before applying it
+  const typed = parseAmount(formData.get('amount'));
+  const amount = typed !== null && typed !== Number(r.amount) ? typed : Number(r.amount);
+  const edited = amount !== Number(r.amount);
+  const saved = await recordBalance(supabase, {
+    householdId,
+    assetId: asset,
+    amount,
     currency: r.currency,
-    fx_rate: fx,
-    as_of: r.asOf,
-    received_at: new Date().toISOString(),
+    asOf: r.asOf,
+    messageId: String(msg.message_id),
     source: 'email',
-    source_ref: String(msg.message_id).slice(0, 200),
     confidence: 'manual_confirmed',
-    note: 'Confirmed by you from the bank-email inbox',
+    note: edited
+      ? 'Number corrected by you in the bank-email inbox'
+      : 'Confirmed by you from the bank-email inbox',
   });
-  if (error)
-    return { ok: false, message: 'The balance could not be saved, so nothing was changed.' };
+  if (!saved.ok) return { ok: false, message: saved.message };
+  if (edited)
+    await supabase.rpc('save_inbox_result', {
+      p_id: id,
+      p_outcome: 'needs_review',
+      p_reason: msg.reason ?? null,
+      p_reading: { ...(msg.reading as object), amount, editedByYou: true },
+      p_asset: asset,
+      p_resolved: false,
+    });
   await supabase
     .from('inbox_messages')
     .update({ resolved_at: new Date().toISOString() })
     .eq('id', id);
   refresh();
-  const shown =
-    r.currency === 'INR' ? formatInr(Number(r.amount)) : `${r.currency} ${Number(r.amount)}`;
+  const shown = r.currency === 'INR' ? formatInr(amount) : `${r.currency} ${amount}`;
   return {
     ok: true,
     message: `Recorded ${shown} as of ${longDate(r.asOf)} on ${a.nickname as string}.`,
+    amount,
+    asOf: r.asOf,
+    recorded: true,
   };
 }
 
@@ -134,4 +145,247 @@ export async function restoreMessage(
   if (error) return { ok: false, message: 'It could not be put back; please try again.' };
   refresh();
   return { ok: true, message: 'Put back in the review queue.' };
+}
+
+const AI_LIMITS = { listMs: 12_000, callMs: 15_000, tries: 3 };
+
+/**
+ * Asks the AI to read this one email again (rules first, then the AI whether or not the email says "balance"), and records the
+ * number at once when it finds one that belongs to a single account. Nothing waits for you: the email and the number are shown
+ * side by side afterwards, and Save number replaces a wrong one. An email logged before copies were kept is queued for the next
+ * mailbox run instead.
+ */
+export async function readAgain(_p: InboxResult | null, formData: FormData): Promise<InboxResult> {
+  const id = String(formData.get('id') ?? '');
+  if (!uuid.test(id)) return { ok: false, message: 'That message could not be found.' };
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const { data: msg } = await supabase
+    .from('inbox_messages')
+    .select('id, message_id, received_on, from_domain, subject, body_text')
+    .eq('id', id)
+    .maybeSingle();
+  if (!msg) return { ok: false, message: 'That message could not be found.' };
+
+  if (!msg.body_text) {
+    const { error } = await supabase
+      .from('inbox_messages')
+      .update({ rescan_requested_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) return { ok: false, message: 'It could not be queued; please try again.' };
+    return {
+      ok: true,
+      message:
+        'This email was logged before the app kept a copy, so it will be fetched from Gmail again and read by the AI at the next mailbox run (every 3 hours, or press Run workflow on “Read bank emails” in GitHub Actions). Its result will appear here.',
+    };
+  }
+
+  const { data: cred, error: credError } = await supabase.rpc('ai_credentials_for_test', {
+    p_household: householdId,
+  });
+  const key = (
+    cred as { provider: Parameters<typeof prepareAi>[0]; api_key: string }[] | null
+  )?.[0];
+  if (credError) return { ok: false, message: 'The saved AI key could not be read.' };
+  if (!key)
+    return {
+      ok: false,
+      message: 'No AI key is saved. Add one in Settings (Bank e-mails and AI), then try again.',
+    };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const rt = await prepareAi(key.provider, key.api_key, AI_LIMITS);
+  let last: InboxRow | null = null;
+  let accountName = '';
+  const io: InboxIo = {
+    async accounts() {
+      const [assets, inst] = await Promise.all([
+        supabase
+          .from('assets')
+          .select('id, nickname, type, currency, identifier_last4, institution_id')
+          .in('type', ['bank_account', 'third_party_held']),
+        supabase.from('institutions').select('id, name'),
+      ]);
+      const bank = new Map((inst.data ?? []).map((i) => [i.id as string, i.name as string]));
+      return (assets.data ?? []).map((a): KnownAccount => {
+        return {
+          assetId: a.id as string,
+          institution: bank.get(a.institution_id as string) ?? '',
+          last4: (a.identifier_last4 as string | null) ?? null,
+          currency: a.currency as string,
+          type: a.type as string,
+        };
+      });
+    },
+    async latestObservation(assetId) {
+      const { data } = await supabase
+        .from('observations')
+        .select('amount, as_of')
+        .eq('asset_id', assetId)
+        .is('superseded_by', null)
+        .order('as_of', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+      return data?.[0] ? { amount: Number(data[0].amount), asOf: data[0].as_of as string } : null;
+    },
+    alreadySeen: async () => false,
+    async record(row) {
+      last = row;
+    },
+    async apply({ assetId, reading, messageId, source }) {
+      const res = await recordBalance(supabase, {
+        householdId,
+        assetId,
+        amount: reading.amount,
+        currency: reading.currency,
+        asOf: reading.asOf,
+        messageId,
+        source,
+        confidence: reading.source === 'rule' ? 'verified' : 'imported_unverified',
+        note: 'Read again from the bank email; correct the number in the inbox if it is wrong',
+      });
+      if (!res.ok) throw new Error(res.message);
+      const { data: a } = await supabase
+        .from('assets')
+        .select('nickname')
+        .eq('id', assetId)
+        .maybeSingle();
+      accountName = (a?.nickname as string | undefined) ?? '';
+    },
+    async fetchJson(url, init) {
+      const res = await rt.call(url, init as unknown as Record<string, unknown>);
+      if (!res.ok) {
+        const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
+        const hint = aiErrorHint(key.provider, res.status, body);
+        throw new Error(`AI service answered ${res.status}: ${body}${hint ? ` — ${hint}` : ''}`);
+      }
+      return res.json();
+    },
+    async pdfText() {
+      throw new Error('attachments are not read here');
+    },
+  };
+
+  try {
+    await runInbox(
+      [
+        {
+          messageId: String(msg.message_id),
+          from: `alerts@${(msg.from_domain as string | null) || 'unknown.invalid'}`,
+          subject: (msg.subject as string | null) ?? '',
+          text: String(msg.body_text),
+          receivedOn: (msg.received_on as string | null) ?? today,
+          attachments: [],
+          reread: true,
+        },
+      ],
+      io,
+      {
+        today,
+        ai: { provider: key.provider, key: key.api_key, ...(rt.model ? { model: rt.model } : {}) },
+      },
+    );
+  } catch (e) {
+    return { ok: false, message: `It could not be read again: ${(e as Error).message}` };
+  }
+  const row = last as InboxRow | null;
+  if (!row) return { ok: false, message: 'Nothing came back from the reader; please try again.' };
+  if (row.outcome === 'error')
+    return { ok: false, message: `It could not be read again: ${row.reason ?? 'unknown error'}` };
+
+  await supabase.rpc('save_inbox_result', {
+    p_id: id,
+    p_outcome: row.outcome,
+    p_reason: row.reason,
+    p_reading: row.reading,
+    p_asset: row.assetId,
+    p_resolved: row.outcome !== 'needs_review',
+  });
+  refresh();
+  const rd = row.reading as InboxReading | null;
+  if (row.outcome === 'applied' && rd)
+    return {
+      ok: true,
+      recorded: true,
+      amount: rd.amount,
+      asOf: rd.asOf,
+      message: `Read ${readingAmount(rd)} as of ${longDate(rd.asOf)} and recorded it${accountName ? ` on ${accountName}` : ''}. Check it against the email below; if it is wrong, type the right number and press Save number.`,
+    };
+  if (rd)
+    return {
+      ok: true,
+      recorded: false,
+      amount: rd.amount,
+      asOf: rd.asOf,
+      message: `Read ${readingAmount(rd)} as of ${longDate(rd.asOf)}, but it was not recorded: ${row.reason ?? 'it needs you'}. It is now under “Needs your review”.`,
+    };
+  return {
+    ok: true,
+    recorded: false,
+    message: `The AI found no balance in this email${row.reason && !/no balance/.test(row.reason) ? ` (${row.reason})` : ''}. If you can see one in the email below, record it in Monthly update.`,
+  };
+}
+
+/**
+ * You looked at the email and the number is wrong: record the right one. The earlier number is kept in the history, marked as
+ * replaced, and the corrected one counts from now on.
+ */
+export async function saveNumber(_p: InboxResult | null, formData: FormData): Promise<InboxResult> {
+  const id = String(formData.get('id') ?? '');
+  if (!uuid.test(id)) return { ok: false, message: 'That message could not be found.' };
+  const amount = parseAmount(formData.get('amount'));
+  if (amount === null)
+    return { ok: false, message: 'Type the balance as a plain number, for example 123456.78.' };
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const { data: msg } = await supabase
+    .from('inbox_messages')
+    .select('id, message_id, reading, reason, asset_id')
+    .eq('id', id)
+    .maybeSingle();
+  const r = msg?.reading as InboxReading | null;
+  if (!msg || !r) return { ok: false, message: 'No balance was read from this message.' };
+  if (!msg.asset_id)
+    return {
+      ok: false,
+      message: 'Choose the account first: use “Needs your review” for this message.',
+    };
+  if (amount === Number(r.amount))
+    return { ok: true, message: 'That is the number already recorded.', amount, recorded: true };
+  const saved = await recordBalance(supabase, {
+    householdId,
+    assetId: msg.asset_id as string,
+    amount,
+    currency: r.currency,
+    asOf: r.asOf,
+    messageId: String(msg.message_id),
+    source: 'email',
+    confidence: 'manual_confirmed',
+    note: 'Number corrected by you in the bank-email inbox',
+  });
+  if (!saved.ok) return { ok: false, message: saved.message };
+  const { error } = await supabase.rpc('save_inbox_result', {
+    p_id: id,
+    p_outcome: 'applied',
+    p_reason: msg.reason ?? null,
+    p_reading: { ...r, amount, editedByYou: true },
+    p_asset: msg.asset_id,
+    p_resolved: true,
+  });
+  refresh();
+  if (error)
+    return {
+      ok: true,
+      amount,
+      asOf: r.asOf,
+      recorded: true,
+      message: `Recorded ${readingAmount({ ...r, amount })}, but the inbox line could not be updated.`,
+    };
+  return {
+    ok: true,
+    recorded: true,
+    amount,
+    asOf: r.asOf,
+    message: `Updated to ${readingAmount({ ...r, amount })} as of ${longDate(r.asOf)}. The earlier ${readingAmount(r)} stays in the history as replaced.`,
+  };
 }

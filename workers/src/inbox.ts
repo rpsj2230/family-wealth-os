@@ -140,6 +140,8 @@ async function main() {
             reason: row.reason,
             reading: row.reading,
             asset_id: row.assetId,
+            body_text: row.bodyText,
+            rescan_requested_at: null,
           },
           { onConflict: 'household_id,message_id' },
         ),
@@ -327,6 +329,18 @@ async function main() {
     const u = await db.auth.admin.getUserById(m.user_id as string);
     if (u.data.user?.email) trustedForwarders.add(u.data.user.email.toLowerCase());
   }
+  // messages you pressed "Read again" on (they had no kept copy): read once more, even though they were seen before
+  const again = new Set(
+    must(
+      await db
+        .from('inbox_messages')
+        .select('message_id')
+        .eq('household_id', hh)
+        .not('rescan_requested_at', 'is', null),
+      'read-again requests',
+    ).map((r) => r.message_id as string),
+  );
+  for (const m of messages) if (again.has(m.messageId)) m.reread = true;
   const report = await runInbox(messages, io, {
     today,
     ai,

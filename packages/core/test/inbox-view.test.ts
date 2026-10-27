@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canReadAgain,
   certainAccount,
+  markAmount,
   explainEntry,
   queueOf,
   rankAccounts,
@@ -107,5 +109,27 @@ describe('accounts for a reading', () => {
     expect(certainAccount(reading, null, accounts)).toBeNull();
     expect(certainAccount(reading, 'y', accounts)?.id).toBe('y');
     expect(certainAccount(reading, 'z', accounts)).toBeNull();
+  });
+});
+
+describe('read again and the marked number', () => {
+  it('offers Read again for everything that did not end as a recorded balance', () => {
+    expect(canReadAgain(msg({ outcome: 'ignored', reading: null }))).toBe(true);
+    expect(canReadAgain(msg({ outcome: 'error', reading: null }))).toBe(true);
+    expect(canReadAgain(msg({ outcome: 'needs_review' }))).toBe(true);
+    expect(canReadAgain(msg({ outcome: 'applied' }))).toBe(false);
+    expect(canReadAgain(msg({ outcome: 'applied', reading: null }))).toBe(true);
+  });
+  it('marks the figure that was read, whatever the grouping of its digits', () => {
+    const t = 'Balance is INR 1,23,456.78 as on 25-OCT-26 (ref 7240).';
+    const parts = markAmount(t, 123456.78);
+    expect(parts.filter((p) => p.hit).map((p) => p.text)).toEqual(['1,23,456.78']);
+    expect(parts.map((p) => p.text).join('')).toBe(t);
+    expect(markAmount('Rs 123456.78.', 123456.78).filter((p) => p.hit)[0]!.text).toBe('123456.78');
+  });
+  it('marks nothing when the figure is not in the text, and handles no amount', () => {
+    expect(markAmount('nothing here 12', 99).some((p) => p.hit)).toBe(false);
+    expect(markAmount('abc', null)).toEqual([{ text: 'abc', hit: false }]);
+    expect(markAmount('', 5)).toEqual([{ text: '', hit: false }]);
   });
 });
