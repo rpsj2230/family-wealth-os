@@ -615,7 +615,9 @@ export function judgeSip(c: SipContext): SipChange | null {
       ],
       verdict: 'sip_stopped',
       basis: read.last,
-      why: `A SIP of ${inr(cur)} ran until ${longDate(read.last!)}; the next instalment was due ${longDate(st.nextDue)} and none came.`,
+      why: c.cancelled
+        ? `A SIP of ${inr(cur)} ran until ${longDate(read.last!)}. The statement says it was cancelled${c.cancelled.on ? ` on ${longDate(c.cancelled.on)}` : ''}, so no further instalment is made.`
+        : `A SIP of ${inr(cur)} ran until ${longDate(read.last!)}; the next instalment was due ${longDate(st.nextDue)} and none came.`,
     });
   }
 
