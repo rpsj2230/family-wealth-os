@@ -39,6 +39,8 @@ export interface CasScheme {
   transactions: CasTxn[];
   /** only the closing position is known (a holdings statement) */
   holdingsOnly: boolean;
+  /** the scheme's transaction table says its SIP was cancelled or terminated (and on which date, when it says) */
+  sipCancelled?: { on: string | null } | null;
 }
 
 export interface CasStatement {
@@ -143,6 +145,17 @@ function parseSchemeBody(
     });
   }
   const digits = folio.replace(/[^0-9A-Za-z]/g, '');
+  // only the transaction table is read: the notes after the closing balance are general terms, not this scheme's history
+  const closeAt = t.search(/Closing Unit Balance/i);
+  const cancel = new RegExp(
+    String.raw`(?:SIP|Systematic\s+Investment)[^.]{0,60}?\b(?:cancel(?:l)?ed|terminated|discontinued|ceased)\b`,
+    'i',
+  ).exec(closeAt > 0 ? t.slice(0, closeAt) : '');
+  const cancelDate = cancel
+    ? new RegExp(DATE).exec(
+        t.slice(Math.max(0, cancel.index - 40), cancel.index + cancel[0].length + 40),
+      )
+    : null;
   return {
     amc,
     folio,
@@ -157,6 +170,7 @@ function parseSchemeBody(
     marketValue: mv,
     transactions: txns,
     holdingsOnly: false,
+    ...(cancel ? { sipCancelled: { on: cancelDate ? casDate(cancelDate[0]) : null } } : {}),
   };
 }
 

@@ -142,7 +142,7 @@ export function FundDetailPanel({
       note: sip.stopped
         ? 'stopped'
         : sip.active
-          ? `${sip.monthsRunning === null ? '' : `running ${monthsText(sip.monthsRunning)}`}${sip.nextOn ? `${sip.monthsRunning === null ? '' : ' · '}next ${niceDate(sip.nextOn)}${sip.basis === 'statement' ? '' : ' (expected)'}` : ''}`
+          ? `${sip.monthsRunning === null ? '' : `running ${monthsText(sip.monthsRunning)}`}${sip.nextOn ? `${sip.monthsRunning === null ? '' : ' · '}next ${niceDate(sip.nextOn)}${sip.basis === 'statement' ? '' : ' (expected; not verified by a statement)'}` : ''}`
           : undefined,
     },
     {

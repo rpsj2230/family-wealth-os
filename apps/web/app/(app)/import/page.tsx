@@ -3,7 +3,7 @@ import { PageHead } from '@/components/PageHead';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
 import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
-import { IMPORT_TABS, ImportHub, type ImportData, type ImportTab } from './Hub';
+import { IMPORT_TABS, ImportHub, changeRecord, type ImportData, type ImportTab } from './Hub';
 
 export const dynamic = 'force-dynamic';
 // the Google Sheet preview and sync wait for Google
@@ -29,7 +29,9 @@ export default async function ImportPage({
       .limit(1),
     supabase
       .from('cas_imports')
-      .select('id, owner_id, source_ref, schemes, transactions, outcome, detail, created_at')
+      .select(
+        'id, owner_id, source_ref, schemes, transactions, outcome, detail, changes, created_at',
+      )
       .order('created_at', { ascending: false })
       .limit(10),
     supabase
@@ -71,6 +73,7 @@ export default async function ImportPage({
       transactions: Number(c.transactions ?? 0),
       outcome: c.outcome as 'imported' | 'partial' | 'failed',
       detail: (c.detail as string | null) ?? null,
+      changes: changeRecord(c.changes),
       fromEmail: !/^(upload|csv):/.test(String(c.source_ref ?? '')),
     })),
     tax: (tax.data ?? []).map((t) => ({

@@ -1,9 +1,11 @@
 import Link from 'next/link';
-import { longDate, type AutomationCard } from '@fwos/core';
+import { changeLines, longDate, type AutomationCard, type StoredChange } from '@fwos/core';
 import { AutomationCards } from '@/components/AutomationCards';
 import { Tabs } from '@/components/Tabs';
 import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
+import { FundChanges } from '@/components/FundChanges';
+import type { PersonPreview } from '@/lib/fund-import';
 import { ImportDoor } from './ImportDoor';
 import { plainCountName } from '@/lib/import-detect';
 import type { SyncView } from '@fwos/ingest';
@@ -34,6 +36,8 @@ export interface ImportData {
     transactions: number;
     outcome: 'imported' | 'partial' | 'failed';
     detail: string | null;
+    /** what the import changed, kept with it (statements imported before this was kept have none) */
+    changes: { summary: string; notes: string[]; items: StoredChange[] } | null;
     fromEmail: boolean;
   }[];
   tax: {
@@ -46,6 +50,18 @@ export interface ImportData {
   email: AutomationCard | null;
   /** the Google Sheet connection and its last sync */
   sheet: SheetSyncInfo;
+}
+
+/** Reads the change list kept with an import (stored as JSON), or nothing for an older import. */
+export function changeRecord(raw: unknown): ImportData['cas'][number]['changes'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as { summary?: unknown; notes?: unknown; items?: unknown };
+  if (typeof r.summary !== 'string') return null;
+  return {
+    summary: r.summary,
+    notes: Array.isArray(r.notes) ? r.notes.filter((n): n is string => typeof n === 'string') : [],
+    items: Array.isArray(r.items) ? (r.items as StoredChange[]) : [],
+  };
 }
 
 const OUTCOME = {
@@ -61,6 +77,7 @@ export function ImportHub({
   data,
   demo = false,
   demoSync,
+  demoChanges,
 }: {
   base: string;
   tab: ImportTab;
@@ -68,6 +85,8 @@ export function ImportHub({
   demo?: boolean;
   /** the public sample's stand-in for Google: the preview it shows */
   demoSync?: SyncView;
+  /** the public sample's invented preview of a fund statement */
+  demoChanges?: PersonPreview[];
 }) {
   const casReview = data.cas.filter((c) => c.outcome !== 'imported');
   const taxReview = data.tax.filter((t) => t.readBy === 'ai');
@@ -247,6 +266,23 @@ export function ImportHub({
               <FundCsvForm owners={data.owners} />
             </fieldset>
           </section>
+          {demo && demoChanges && (
+            <section className="card" style={{ gridColumn: '1 / -1' }}>
+              <h2>What a preview looks like (sample)</h2>
+              <p className="muted small">
+                After you choose the file, the app compares it with what you already have and lists
+                only what is new or changed. Everything starts ticked; untick what is wrong. Nothing
+                is written until you press the button.
+              </p>
+              <FundChanges people={demoChanges} owners={data.owners} />
+              <div className="fc-actions">
+                <button type="button" className="btn primary" disabled>
+                  Apply the selected changes
+                </button>
+                <span className="muted small">Not available in the sample.</span>
+              </div>
+            </section>
+          )}
         </div>
       )}
 
@@ -298,6 +334,23 @@ export function ImportHub({
               <CasForm owners={data.owners} />
             </fieldset>
           </section>
+          {demo && demoChanges && (
+            <section className="card" style={{ gridColumn: '1 / -1' }}>
+              <h2>What a preview looks like (sample)</h2>
+              <p className="muted small">
+                After you choose the file, the app compares it with what you already have and lists
+                only what is new or changed. Everything starts ticked; untick what is wrong. Nothing
+                is written until you press the button.
+              </p>
+              <FundChanges people={demoChanges} owners={data.owners} />
+              <div className="fc-actions">
+                <button type="button" className="btn primary" disabled>
+                  Apply the selected changes
+                </button>
+                <span className="muted small">Not available in the sample.</span>
+              </div>
+            </section>
+          )}
           <section className="card" style={{ gridColumn: '1 / -1' }}>
             <h2>Recent statements</h2>
             {data.cas.length === 0 ? (
@@ -332,8 +385,31 @@ export function ImportHub({
                         <span className={`statuspill ${OUTCOME[c.outcome].tone}`}>
                           {OUTCOME[c.outcome].text}
                         </span>
-                        {c.outcome !== 'imported' && c.detail && (
-                          <div className="small">{c.detail}</div>
+                        {c.changes ? (
+                          <div className="small">
+                            <strong>{c.changes.summary}</strong>
+                            {c.changes.items.length + c.changes.notes.length > 0 && (
+                              <details className="recent-changes">
+                                <summary>What changed</summary>
+                                <ul className="list small">
+                                  {changeLines(c.changes.items).map((l) => (
+                                    <li key={l}>{l}</li>
+                                  ))}
+                                  {c.changes.notes.map((l) => (
+                                    <li key={l} className="muted">
+                                      {l}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                            {c.outcome !== 'imported' && c.detail && (
+                              <div className="muted">{c.detail.split('\n').slice(1).join(' ')}</div>
+                            )}
+                          </div>
+                        ) : (
+                          c.outcome !== 'imported' &&
+                          c.detail && <div className="small">{c.detail}</div>
                         )}
                       </td>
                     </tr>

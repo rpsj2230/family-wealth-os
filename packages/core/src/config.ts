@@ -33,8 +33,8 @@ export interface AppConfig {
     interestTdsRate: number;
     /** add instalments of active SIPs since the last recorded value to a fund's estimate */
     includeSip: boolean;
-    /** a fund statement shows a SIP as stopped when its last instalment is more than this many days before the statement ends */
-    sipStoppedAfterDays: number;
+    /** a fund statement or transactions file shows a SIP (new, resumed or changed) only when at least this many similar instalments came in a row, one cadence apart */
+    sipMinInstalments: number;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -221,7 +221,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     savingsRate: 0.03,
     interestTdsRate: 0,
     includeSip: true,
-    sipStoppedAfterDays: 45,
+    sipMinInstalments: 3,
   },
   inbox: { trustedForwarders: [] },
   rates: {
@@ -425,8 +425,8 @@ export function configFromJson(raw: unknown): AppConfig {
       savingsRate: num(est.savingsRate, d.estimates.savingsRate, 0, 0.5),
       interestTdsRate: num(est.interestTdsRate, d.estimates.interestTdsRate, 0, 0.5),
       includeSip: bool(est.includeSip, d.estimates.includeSip),
-      sipStoppedAfterDays: Math.round(
-        num(est.sipStoppedAfterDays, d.estimates.sipStoppedAfterDays, 20, 400),
+      sipMinInstalments: Math.round(
+        num(est.sipMinInstalments, d.estimates.sipMinInstalments, 2, 12),
       ),
     },
     inbox: {

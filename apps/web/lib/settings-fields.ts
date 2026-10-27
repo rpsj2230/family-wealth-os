@@ -191,12 +191,12 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'days',
       },
       {
-        name: 'sipStopped',
-        label: 'A SIP is shown as stopped when no instalment has come for',
-        hint: 'Read from a fund statement: when the last instalment on it is older than this at the date the statement ends, the SIP is marked stopped, dated from that last instalment. Monthly SIPs: a little over a month, 45 by default.',
+        name: 'sipMinInstalments',
+        label: 'A SIP is recognised after this many instalments in a row',
+        hint: 'Read from a fund statement or transactions file: a new, resumed or changed SIP is proposed only when at least this many similar instalments came one after the other, a regular gap apart. Whether a SIP has stopped is not a setting: it is judged from the SIP’s own pattern (its usual gap and how late it has been before). Raise this if one-off purchases are mistaken for a SIP.',
         kind: 'int',
-        path: ['estimates', 'sipStoppedAfterDays'],
-        unit: 'days',
+        path: ['estimates', 'sipMinInstalments'],
+        unit: 'instalments',
       },
       {
         name: 'savingsRate',

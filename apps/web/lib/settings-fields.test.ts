@@ -81,7 +81,7 @@ describe('settings fields', () => {
       group('estimates'),
       form({
         freshness: '40',
-        sipStopped: '60',
+        sipMinInstalments: '3',
         savingsRate: '3.5',
         tdsRate: '0',
         includeSip: 'on',
@@ -92,7 +92,7 @@ describe('settings fields', () => {
       raw: {
         estimates: {
           freshnessDays: 40,
-          sipStoppedAfterDays: 60,
+          sipMinInstalments: 3,
           savingsRate: 0.035,
           interestTdsRate: 0,
           includeSip: true,

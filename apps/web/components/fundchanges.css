@@ -1,0 +1,226 @@
+/* What a fund statement or file would change: person sections, compact rows with chips, a tick for each fund and each SIP verdict. */
+.fc {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.fc-person {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--fc-colour, var(--border));
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+  background: var(--card);
+}
+.fc-person h3 {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+.fc-period {
+  margin: 4px 0 8px;
+}
+.fc-list,
+.fc-quiet ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fc-row {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+  min-width: 0;
+}
+.fc-row:first-child {
+  border-top: 0;
+}
+.fc-row.off .fc-name,
+.fc-row.off .fc-nums,
+.fc-row.off .fc-lines summary {
+  opacity: 0.55;
+}
+.fc-head {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: start;
+}
+.fc-head input[type='checkbox'],
+.fc-sip input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--primary);
+}
+.fc-nobox {
+  display: block;
+  width: 20px;
+}
+.fc-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.fc-head .fc-chips {
+  grid-column: 2;
+}
+.fc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.fc-chip {
+  display: inline-block;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 1px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+}
+.fc-chip.ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.fc-chip.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.fc-chip.bad {
+  background: var(--bad-bg);
+  color: var(--fail);
+}
+.fc-chip.info {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.fc-why,
+.fc-note {
+  margin: 4px 0 0 32px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.fc-note {
+  font-size: 0.8rem;
+}
+.fc-person > .fc-note {
+  margin-left: 0;
+}
+.fc-nums {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 4px 14px;
+  margin: 6px 0 0 32px;
+  min-width: 0;
+}
+.fc-nums div {
+  min-width: 0;
+}
+.fc-nums dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.fc-nums dd {
+  margin: 0;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fc-before {
+  color: var(--muted);
+}
+.fc-lines {
+  margin: 6px 0 0 32px;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.fc-lines summary {
+  cursor: pointer;
+}
+.fc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+.fc-table th,
+.fc-table td {
+  padding: 3px 6px 3px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  vertical-align: top;
+}
+.fc-table th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+.fc-table .num {
+  text-align: right;
+}
+.fc-sip {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--soft);
+  min-width: 0;
+}
+.fc-sip.off .fc-sipbody {
+  opacity: 0.55;
+}
+.fc-sip .fc-why {
+  margin-left: 0;
+}
+.fc-sipbody {
+  min-width: 0;
+}
+.fc-sipbody label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+.fc-quiet {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+.fc-quiet summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.fc-quiet li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.fc-applied ul {
+  margin: 6px 0 0;
+}
+.fc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-top: 4px;
+}
+@media (min-width: 720px) {
+  .fc-head {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+  }
+  .fc-head .fc-chips {
+    grid-column: 3;
+    justify-content: flex-end;
+  }
+}

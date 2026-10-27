@@ -1,21 +1,14 @@
 'use client';
 
-import { startTransition, useActionState, useState } from 'react';
+import { startTransition, useActionState, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { formatInr } from '@fwos/core';
 import { FilePicker } from '@/components/FilePicker';
+import { AppliedChanges, FundChanges } from '@/components/FundChanges';
+import type { CasState, FundCsvState } from '@/lib/fund-import';
+import { appendSelection, type FundSelection } from '@/lib/fund-import-select';
 import { guessOwner, plainCountName } from '@/lib/import-detect';
-import {
-  commitFundCsv,
-  commitImport,
-  importCas,
-  previewFundCsv,
-  previewImport,
-  syncLayout,
-  type CasState,
-  type FundCsvState,
-  type ImportState,
-} from './actions';
+import { commitImport, previewImport, syncLayout, type ImportState } from './actions';
+import { commitFundCsv, importCas, previewCas, previewFundCsv } from './fund-actions';
 
 const idle: ImportState = { stage: 'idle' };
 const SEV: Record<string, string> = {
@@ -149,6 +142,19 @@ export function SyncLayoutForm({ today, file }: { today: string; file?: File | n
   );
 }
 
+const casIdle: CasState = { stage: 'idle' };
+
+/** The file and the choices of a fund-statement form: held here (not in a native form), so a preview does not empty them. */
+function useSelectionState() {
+  const [sel, setSel] = useState<FundSelection>({ seen: [], take: [], count: 0 });
+  return [sel, setSel] as const;
+}
+
+/**
+ * A fund statement (CAS) uploaded by hand, in two steps: "Preview changes" reads the statement and shows what it would change
+ * compared with what is on file (nothing is written, and the password is used once and never saved), then "Apply the selected
+ * changes" writes only the items left ticked.
+ */
 export function CasForm({
   owners,
   file,
@@ -158,18 +164,58 @@ export function CasForm({
   file?: File | null;
   defaultOwner?: string;
 }) {
-  const [res, act, pending] = useActionState<CasState | null, FormData>(importCas, null);
+  const [pdf, setPdf] = useState<File | null>(file ?? null);
+  const [owner, setOwner] = useState(defaultOwner || owners[0]?.id || '');
+  const [password, setPassword] = useState('');
+  const [preview, previewAct, previewing] = useActionState(previewCas, casIdle);
+  const [apply, applyAct, applying] = useActionState(importCas, casIdle);
+  const [done, setDone] = useState(false);
+  const [sel, setSel] = useSelectionState();
+  const shown = done && apply.stage !== 'idle' ? apply : preview;
+  const busy = previewing || applying;
+  const people = useMemo(
+    () => (shown.stage === 'previewed' && shown.person ? [shown.person] : []),
+    [shown],
+  );
+
+  const send = (act: (f: FormData) => void, withSelection: boolean) => {
+    const fd = new FormData();
+    if (pdf) fd.set('file', pdf);
+    fd.set('owner', owner);
+    fd.set('password', password);
+    if (withSelection) appendSelection(fd, sel);
+    startTransition(() => act(fd));
+  };
+
   return (
-    <form action={act} className="form" aria-busy={pending}>
-      <FilePicker
-        label="Fund statement (PDF) from CAMS, KFintech, MF Central or CDSL"
-        accept=".pdf"
-        file={file}
-      />
+    <div className="form" aria-busy={busy}>
+      {file ? (
+        <div className="filechip">
+          <span className="filechip-name">{file.name}</span>
+        </div>
+      ) : (
+        <label>
+          Fund statement (PDF) from CAMS, KFintech, MF Central or CDSL
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={(e) => {
+              setPdf(e.target.files?.[0] ?? null);
+              setDone(false);
+            }}
+          />
+        </label>
+      )}
       <div className="formgrid g3">
         <label>
           Whose statement
-          <select name="owner" required defaultValue={defaultOwner || undefined}>
+          <select
+            value={owner}
+            onChange={(e) => {
+              setOwner(e.target.value);
+              setDone(false);
+            }}
+          >
             {owners.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
@@ -180,40 +226,86 @@ export function CasForm({
         <label>
           PDF password (the one you chose when you requested it, or your PAN; used once, never
           saved)
-          <input name="password" type="password" autoComplete="off" required />
+          <input
+            type="password"
+            autoComplete="off"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </label>
       </div>
       <div className="row" style={{ alignItems: 'center' }}>
-        <button className="btn primary" disabled={pending}>
-          {pending ? 'Reading…' : 'Import statement'}
+        <button
+          type="button"
+          className="btn primary"
+          disabled={busy || !pdf || !owner}
+          onClick={() => {
+            setDone(false);
+            send(previewAct, false);
+          }}
+        >
+          {previewing ? 'Reading…' : 'Preview changes'}
         </button>
-        {res && (
-          <span className={res.ok ? 'ok small' : 'fail small'} role={res.ok ? 'status' : 'alert'}>
-            {res.message}
-          </span>
-        )}
+        <span className="muted small">Nothing is saved until you apply the changes.</span>
       </div>
-      {res?.lines && (
-        <ul className="list small">
-          {res.lines.map((l) => (
-            <li key={l}>{l}</li>
-          ))}
-        </ul>
+
+      {shown.stage === 'error' && (
+        <p className="notice warn" role="alert">
+          {shown.message}
+        </p>
       )}
-    </form>
+      {shown.stage === 'applied' && shown.applied && (
+        <>
+          <AppliedChanges {...shown.applied} />
+          <Link className="btn" href="/investments">
+            See the funds
+          </Link>
+        </>
+      )}
+      {shown.stage === 'previewed' && (
+        <>
+          <FundChanges people={people} owners={owners} disabled={busy} onSelection={setSel} />
+          {shown.warnings && shown.warnings.length > 0 && (
+            <ul className="list small">
+              {shown.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          {sel.seen.length > 0 && (
+            <div className="fc-actions">
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || sel.take.length === 0}
+                onClick={() => {
+                  setDone(true);
+                  send(applyAct, true);
+                }}
+              >
+                {applying
+                  ? 'Applying…'
+                  : sel.take.length === 0
+                    ? 'Nothing selected'
+                    : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
+              </button>
+              <span className="muted small">
+                Untick anything that is wrong. What you untick is left as it is.
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
-const FUND_STATUS = {
-  updated: { tone: 'ok', text: 'Updates a fund you have' },
-  added: { tone: 'warn', text: 'New fund' },
-  review: { tone: 'bad', text: 'Needs a look' },
-} as const;
 const csvIdle: FundCsvState = { stage: 'idle' };
 
 /**
  * Fund transactions from an investment app's CSV export. Files and the person chosen for each are held here (not in the form),
- * so the preview and the import both send the same files.
+ * so the preview and the import both send the same files. The preview shows what the files would change compared with what is on
+ * file; only the ticked items are written.
  */
 export function FundCsvForm({
   owners,
@@ -230,16 +322,18 @@ export function FundCsvForm({
   const [preview, previewAct, previewing] = useActionState(previewFundCsv, csvIdle);
   const [commit, commitAct, committing] = useActionState(commitFundCsv, csvIdle);
   const [done, setDone] = useState(false);
+  const [sel, setSel] = useSelectionState();
   const shown = done && commit.stage !== 'idle' ? commit : preview;
   const busy = previewing || committing;
   const ready = files.length > 0 && who.every(Boolean);
 
-  const send = (act: (f: FormData) => void) => {
+  const send = (act: (f: FormData) => void, withSelection: boolean) => {
     const fd = new FormData();
     files.forEach((f, i) => {
       fd.append('files', f);
       fd.set(`owner_${i}`, who[i] ?? '');
     });
+    if (withSelection) appendSelection(fd, sel);
     startTransition(() => act(fd));
   };
 
@@ -293,18 +387,19 @@ export function FundCsvForm({
           </tbody>
         </table>
       )}
-      <div className="row">
+      <div className="row" style={{ alignItems: 'center' }}>
         <button
           type="button"
-          className="btn"
+          className="btn primary"
           disabled={busy || !ready}
           onClick={() => {
             setDone(false);
-            send(previewAct);
+            send(previewAct, false);
           }}
         >
-          {previewing ? 'Reading…' : 'Preview (nothing is saved)'}
+          {previewing ? 'Reading…' : 'Preview changes'}
         </button>
+        <span className="muted small">Nothing is saved until you apply the changes.</span>
       </div>
 
       {shown.stage === 'error' && (
@@ -312,105 +407,45 @@ export function FundCsvForm({
           {shown.message}
         </p>
       )}
-      {(shown.stage === 'previewed' || shown.stage === 'committed') && (
+      {shown.stage === 'committed' && (
         <>
-          {shown.stage === 'committed' && (
-            <div className="notice ok" role="status">
-              <p>Imported. Units, amounts invested and values are updated for the funds below.</p>
-              <Link className="btn primary" href="/investments">
-                See the funds
-              </Link>
-            </div>
+          {shown.people?.map(
+            (p) => p.applied && <AppliedChanges key={p.ownerId} name={p.name} {...p.applied} />,
           )}
-          {shown.people?.map((p) => {
-            const held = p.funds.filter((x) => x.status !== 'review');
-            return (
-              <section key={p.name} className="csvperson">
-                <h3>
-                  {p.name}
-                  {p.files.length > 0 && (
-                    <span className="muted small"> · {p.files.join(', ')}</span>
-                  )}
-                </h3>
-                {p.funds.length > 0 && (
-                  <table className="tbl lines responsive">
-                    <thead>
-                      <tr>
-                        <th>Fund</th>
-                        <th>What happens</th>
-                        <th className="num">Lines (new)</th>
-                        <th className="num">Units</th>
-                        <th className="num">Invested</th>
-                        <th className="num">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {p.funds.map((x) => (
-                        <tr key={x.name}>
-                          <td data-label="Fund">{x.name}</td>
-                          <td data-label="What happens">
-                            <span className={`pill ${FUND_STATUS[x.status].tone}`}>
-                              {FUND_STATUS[x.status].text}
-                            </span>
-                          </td>
-                          <td className="num" data-label="Lines (new)">
-                            {x.transactions} ({x.newTransactions})
-                          </td>
-                          <td className="num" data-label="Units">
-                            {x.units === null ? '–' : x.units.toLocaleString('en-IN')}
-                          </td>
-                          <td className="num" data-label="Invested">
-                            {formatInr(x.invested)}
-                          </td>
-                          <td className="num" data-label="Value">
-                            {x.value === null ? '–' : formatInr(x.value)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <th colSpan={4}>Total ({held.length} funds)</th>
-                        <th className="num">
-                          {formatInr(held.reduce((a, x) => a + x.invested, 0))}
-                        </th>
-                        <th className="num">
-                          {formatInr(held.reduce((a, x) => a + (x.value ?? 0), 0))}
-                        </th>
-                      </tr>
-                    </tfoot>
-                  </table>
-                )}
-                {p.skipped > 0 && (
-                  <p className="muted small">
-                    {p.skipped} fund(s) fully sold before this financial year were not added.
-                  </p>
-                )}
-                {p.notes.length > 0 && (
-                  <ul className="list small">
-                    {p.notes.map((n) => (
-                      <li key={n}>{n}</li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            );
-          })}
-          {shown.stage === 'previewed' && (
-            <div className="row">
+          <Link className="btn" href="/investments">
+            See the funds
+          </Link>
+        </>
+      )}
+      {shown.stage === 'previewed' && shown.people && (
+        <>
+          <FundChanges people={shown.people} owners={owners} disabled={busy} onSelection={setSel} />
+          {shown.notes && shown.notes.length > 0 && (
+            <ul className="list small">
+              {shown.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          {sel.seen.length > 0 && (
+            <div className="fc-actions">
               <button
                 type="button"
                 className="btn primary"
-                disabled={busy}
+                disabled={busy || sel.take.length === 0}
                 onClick={() => {
                   setDone(true);
-                  send(commitAct);
+                  send(commitAct, true);
                 }}
               >
-                {committing ? 'Importing…' : 'Import these funds'}
+                {committing
+                  ? 'Applying…'
+                  : sel.take.length === 0
+                    ? 'Nothing selected'
+                    : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
               </button>
               <span className="muted small">
-                Saves the transactions, the units held, the amount invested and today&rsquo;s value.
+                Untick anything that is wrong. What you untick is left as it is.
               </span>
             </div>
           )}

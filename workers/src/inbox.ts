@@ -212,12 +212,12 @@ async function main() {
             .join(' ')
             .slice(0, 300),
         };
-      const n = ok.reduce((a, r) => a + (r.report?.matched ?? 0) + (r.report?.created ?? 0), 0);
-      const t = ok.reduce((a, r) => a + (r.report?.transactionsAdded ?? 0), 0);
       const review = ok.flatMap((r) => r.report?.needsReview ?? []);
+      // what changed, in one line (the full list is kept with the import: Import > Fund statement, recent statements)
+      const changed = ok.map((r) => r.summary).filter((x) => x.length > 0);
       return {
         outcome: review.length > 0 ? 'partial' : 'imported',
-        reason: `${n} funds updated, ${t} new transactions${review.length ? `; check: ${review.join(', ')}` : ''}`,
+        reason: `${changed.join(' | ')}${review.length ? `; check: ${review.join(', ')}` : ''}`,
       };
     },
     async taxImport(m) {

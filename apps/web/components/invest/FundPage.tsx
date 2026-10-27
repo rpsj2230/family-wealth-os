@@ -240,7 +240,7 @@ export function FundPage({
           value={f.sipMonthly ? (f.sipStopped ? 'Stopped' : inr(f.sipMonthly)) : 'None'}
           sub={
             d.sip.nextOn && d.sip.active
-              ? `next ${niceDate(d.sip.nextOn)}${d.sip.basis === 'statement' ? '' : ' (expected)'}`
+              ? `next ${niceDate(d.sip.nextOn)}${d.sip.basis === 'statement' ? '' : ' (expected; not verified by a statement)'}`
               : planWords[f.plan]
           }
         />

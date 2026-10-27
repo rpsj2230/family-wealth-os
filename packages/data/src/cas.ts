@@ -1,19 +1,21 @@
+import type { FundImportDiff, OnFileState } from '@fwos/core';
 import {
+  applyFundDiff,
   casPdfText,
   fundCsvToStatement,
   isPasswordError,
   parseCas,
-  runCasImport,
+  planCasImport,
   type CasFund,
   type CasIo,
   type CasReport,
-  type CasSave,
-  type CasScheme,
-  type CasTxn,
+  type CasStatement,
+  type PlanConfig,
+  type Selection,
   type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { pageAll } from './paging';
+import { loadFundStates, type FundPosition } from './fund-state';
 import { loadSettings } from './settings';
 import { syncSipEstimates } from './sip-estimates';
 
@@ -22,33 +24,10 @@ const must = <T>(r: { data: T | null; error: { message: string } | null }, what:
   return r.data as T;
 };
 
-/** The same line twice on one day is two lines: the reference carries an occurrence number. */
-function txnRows(hh: string, assetId: string, scheme: CasScheme, transactions: CasTxn[]) {
-  const seen = new Map<string, number>();
-  return transactions.map((t) => {
-    const base = `${t.date}|${t.kind}|${t.amount}|${t.units}|${scheme.folio}`;
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    return {
-      household_id: hh,
-      asset_id: assetId,
-      txn_on: t.date,
-      kind: t.kind,
-      amount: t.amount,
-      units: t.units,
-      nav: t.nav,
-      balance_units: t.balance,
-      description: t.description,
-      source: 'cas',
-      source_ref: `${base}|${n}`.slice(0, 200),
-    };
-  });
-}
-
 /** Reads and writes for the fund-statement importer. Works with a user client (RLS) or the service role. */
 export function casIo(db: SupabaseClient, hh: string): CasIo {
   return {
-    async funds(ownerId): Promise<CasFund[]> {
+    async funds(ownerId, ctx): Promise<CasFund[]> {
       const assets = must(
         await db
           .from('assets')
@@ -59,28 +38,35 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         'funds',
       ) as { id: string; nickname: string; status: string }[];
       if (assets.length === 0) return [];
+      const ids = assets.map((a) => a.id);
       const pos = must(
         await db
           .from('mf_positions')
-          .select('asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on')
+          .select(
+            'asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on, units, invested, sip_monthly, sip_stopped',
+          )
           .eq('household_id', hh)
-          .in(
-            'asset_id',
-            assets.map((a) => a.id),
-          ),
+          .in('asset_id', ids),
         'fund positions',
-      ) as {
-        asset_id: string;
+      ) as (FundPosition & {
         fund_name: string;
         amfi_code: string | null;
         isin: string | null;
         folio_last4: string | null;
         units_as_of: string | null;
         started_on: string | null;
-      }[];
+      })[];
       const byAsset = new Map(pos.map((p) => [p.asset_id, p]));
+      const states: Map<string, OnFileState> = await loadFundStates(
+        db,
+        hh,
+        ids,
+        pos,
+        ctx?.dates ?? [],
+      );
       return assets.map((a) => {
         const p = byAsset.get(a.id);
+        const state = states.get(a.id);
         return {
           assetId: a.id,
           name: p?.fund_name ?? a.nickname,
@@ -90,11 +76,33 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
           status: a.status,
           unitsAsOf: p?.units_as_of ?? null,
           startedOn: p?.started_on ?? null,
+          ...(state ? { state } : {}),
         };
       });
     },
+    async rememberIgnored({ assetId, verdict, basis }) {
+      must(
+        await db
+          .from('fund_import_ignores')
+          .upsert(
+            { household_id: hh, asset_id: assetId, verdict, basis: basis.slice(0, 120) },
+            { onConflict: 'asset_id,verdict,basis', ignoreDuplicates: true },
+          )
+          .select('id'),
+        'remember choice',
+      );
+    },
     async markSold({ assetId, asOf }) {
-      // closed, no units, SIP stopped from the statement date, a zero value on that date; the estimated SIP lines go with it
+      // closed, no units, the SIP stopped from the statement date (when one was running), a zero value on that date; the estimated lines go with it
+      const cur = must(
+        await db
+          .from('mf_positions')
+          .select('sip_monthly, sip_stopped')
+          .eq('asset_id', assetId)
+          .eq('household_id', hh)
+          .limit(1),
+        'current SIP',
+      ) as { sip_monthly: number | null; sip_stopped: boolean }[];
       must(
         await db
           .from('assets')
@@ -107,22 +115,21 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       must(
         await db
           .from('mf_positions')
-          .update({ units: 0, units_as_of: asOf, sip_stopped: true })
+          .update({ units: 0, units_as_of: asOf })
           .eq('asset_id', assetId)
           .eq('household_id', hh)
           .select('asset_id'),
         'zero units',
       );
-      must(
-        await db
-          .from('mf_sip_changes')
-          .upsert(
-            { household_id: hh, asset_id: assetId, effective_on: asOf, monthly: 0 },
-            { onConflict: 'asset_id,effective_on' },
-          )
-          .select('id'),
-        'stop SIP',
-      );
+      if (cur[0] && cur[0].sip_monthly && !cur[0].sip_stopped) {
+        const r = await db.rpc('apply_sip_change', {
+          p_household: hh,
+          p_asset: assetId,
+          p_monthly: 0,
+          p_effective_on: asOf,
+        });
+        if (r.error) throw new Error(`stop SIP: ${r.error.message}`);
+      }
       must(
         await db
           .from('mf_transactions')
@@ -211,8 +218,21 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       );
       return a.id;
     },
-    async save({ assetId, scheme, transactions, position, valuation, closed }) {
-      const rows = txnRows(hh, assetId, scheme, transactions);
+    async save({ assetId, transactions, position, valuation, closed, sip }) {
+      // only the lines that are not stored yet arrive here; each carries the reference it is stored under
+      const rows = transactions.map((t) => ({
+        household_id: hh,
+        asset_id: assetId,
+        txn_on: t.date,
+        kind: t.kind,
+        amount: t.amount,
+        units: t.units,
+        nav: t.nav,
+        balance_units: t.balance,
+        description: t.description,
+        source: 'cas',
+        source_ref: t.key,
+      }));
       let added = 0;
       for (let i = 0; i < rows.length; i += 200) {
         const r = must(
@@ -227,62 +247,51 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         ) as { id: string }[];
         added += r.length;
       }
-      const upd: Record<string, unknown> = {
-        invested: position.invested,
-        folio_last4: position.folioLast4,
-        cas_as_of: position.casAsOf,
-        provenance: 'cas',
-      };
+      // only the fields that are new or changed
+      const upd: Record<string, unknown> = {};
+      if (position.invested !== undefined) upd.invested = position.invested;
       if (position.startedOn) upd.started_on = position.startedOn;
+      if (position.folioLast4) upd.folio_last4 = position.folioLast4;
+      if (position.casAsOf) upd.cas_as_of = position.casAsOf;
       if (position.isin) upd.isin = position.isin;
       if (position.amfiCode) upd.amfi_code = position.amfiCode;
-      if (position.sipMonthly !== null) {
-        upd.sip_monthly = position.sipMonthly;
-        upd.sip_stopped = position.sipStopped ?? false;
-      }
-      const stoppedFrom =
-        position.sipStopped && position.sipLastOn
-          ? new Date(Date.parse(`${position.sipLastOn}T00:00:00Z`) + 86_400_000)
-              .toISOString()
-              .slice(0, 10)
-          : null;
-      must(
-        await db
-          .from('mf_positions')
-          .update(upd)
-          .eq('asset_id', assetId)
-          .eq('household_id', hh)
-          .select('asset_id'),
-        'update position',
-      );
-      // a SIP the statement shows as stopped stopped after its last instalment, not on the day the statement was read
-      if (stoppedFrom)
-        must(
-          await db
-            .from('mf_sip_changes')
-            .upsert(
-              { household_id: hh, asset_id: assetId, effective_on: stoppedFrom, monthly: 0 },
-              { onConflict: 'asset_id,effective_on' },
-            )
-            .select('id'),
-          'date the stop',
-        );
-      if (position.units !== null && position.casAsOf) {
+      if (position.units !== undefined && position.unitsAsOf) {
         // the units held on that date; a later hand-entered count is never replaced by an older statement
         const cur = must(
-          await db.from('mf_positions').select('units_as_of').eq('asset_id', assetId).limit(1),
+          await db
+            .from('mf_positions')
+            .select('units_as_of')
+            .eq('asset_id', assetId)
+            .eq('household_id', hh)
+            .limit(1),
           'current units',
         ) as { units_as_of: string | null }[];
-        if (!cur[0]?.units_as_of || cur[0].units_as_of <= position.casAsOf)
-          must(
-            await db
-              .from('mf_positions')
-              .update({ units: position.units, units_as_of: position.casAsOf })
-              .eq('asset_id', assetId)
-              .eq('household_id', hh)
-              .select('asset_id'),
-            'save units',
-          );
+        if (!cur[0]?.units_as_of || cur[0].units_as_of <= position.unitsAsOf) {
+          upd.units = position.units;
+          upd.units_as_of = position.unitsAsOf;
+        }
+      }
+      if (Object.keys(upd).length > 0) {
+        upd.provenance = 'cas';
+        must(
+          await db
+            .from('mf_positions')
+            .update(upd)
+            .eq('asset_id', assetId)
+            .eq('household_id', hh)
+            .select('asset_id'),
+          'update position',
+        );
+      }
+      // each SIP change takes effect on its own date, never on the day the statement was read
+      for (const c of sip) {
+        const r = await db.rpc('apply_sip_change', {
+          p_household: hh,
+          p_asset: assetId,
+          p_monthly: c.monthly,
+          p_effective_on: c.effectiveOn,
+        });
+        if (r.error) throw new Error(`record SIP: ${r.error.message}`);
       }
       if (closed)
         must(
@@ -295,34 +304,24 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
           'close fund',
         );
       if (valuation) {
-        const latest = must(
-          await db
-            .from('observations')
-            .select('as_of')
-            .eq('asset_id', assetId)
-            .is('superseded_by', null)
-            .order('as_of', { ascending: false })
-            .limit(1),
-          'latest value',
-        ) as { as_of: string }[];
-        if (valuation.amount >= 0 && position.units !== null)
+        if (valuation.snapshot && valuation.amount >= 0)
           must(
             await db.from('mf_snapshots').upsert(
               {
                 asset_id: assetId,
                 household_id: hh,
                 as_of: valuation.asOf,
-                units: position.units,
-                nav: scheme.nav && scheme.nav > 0 ? scheme.nav : null,
+                units: valuation.units,
+                nav: valuation.nav && valuation.nav > 0 ? valuation.nav : null,
                 value: valuation.amount,
-                invested: position.invested,
+                invested: valuation.invested,
                 source: 'cas',
               },
               { onConflict: 'asset_id,as_of' },
             ),
             'save snapshot',
           );
-        if (!latest[0] || valuation.asOf > latest[0].as_of)
+        if (valuation.observation)
           must(
             await db.from('observations').insert({
               household_id: hh,
@@ -346,45 +345,36 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
   };
 }
 
+/** The tolerances and thresholds of the comparison, from Settings. */
+async function planRules(db: SupabaseClient, hh: string): Promise<Partial<PlanConfig>> {
+  const c = (await loadSettings(db, hh)).config;
+  return {
+    sipMinInstalments: c.estimates.sipMinInstalments,
+    unitTolerance: c.funds.unitTolerance,
+    moneyTolerance: c.funds.moneyTolerance,
+  };
+}
+
 export interface CasPdfResult {
   outcome: 'imported' | 'partial' | 'failed';
   ownerId: string | null;
   report: CasReport | null;
   detail: string;
+  /** "2 funds updated: +5 transactions; 1 SIP stopped; 1 fund sold" */
+  summary: string;
 }
+
+type Candidate = { ownerId: string; passwords: string[]; panLast4: string | null };
+
+type Opened =
+  | { ok: true; stmt: CasStatement; ownerId: string }
+  | { ok: false; ownerId: string | null; detail: string };
 
 /**
  * Opens a fund statement with each candidate's passwords (the PAN, or the password chosen when the statement was requested)
- * until one fits, checks the statement belongs to that person, and imports it. No password or PAN is logged or returned. The statement is logged in `cas_imports` (once per source).
+ * until one fits, and checks the statement belongs to that person. No password or PAN is logged or returned.
  */
-export async function importCasPdf(
-  db: SupabaseClient,
-  hh: string,
-  pdf: Uint8Array,
-  candidates: { ownerId: string; passwords: string[]; panLast4: string | null }[],
-  opts: { sourceRef: string; today: string; receivedOn?: string },
-): Promise<CasPdfResult> {
-  const done = async (res: CasPdfResult): Promise<CasPdfResult> => {
-    await db.from('cas_imports').upsert(
-      {
-        household_id: hh,
-        owner_id: res.ownerId,
-        source_ref: opts.sourceRef.slice(0, 200),
-        received_on: opts.receivedOn ?? opts.today,
-        schemes: res.report
-          ? res.report.matched +
-            res.report.created +
-            res.report.skipped +
-            res.report.needsReview.length
-          : 0,
-        transactions: res.report?.transactionsAdded ?? 0,
-        outcome: res.outcome,
-        detail: res.detail.slice(0, 2000),
-      },
-      { onConflict: 'household_id,source_ref' },
-    );
-    return res;
-  };
+async function openStatement(pdf: Uint8Array, candidates: Candidate[]): Promise<Opened> {
   let text: string | null = null;
   let owner: string | null = null;
   let panLast4: string | null = null;
@@ -410,16 +400,15 @@ export async function importCasPdf(
       }
     }
   if (text === null)
-    return done({
-      outcome: 'failed',
+    return {
+      ok: false,
       ownerId: null,
-      report: null,
       detail: isPasswordError(lastError)
         ? candidates.some((c) => c.passwords.length > 0)
           ? 'The password did not open the statement. Use the password you chose when you requested it (CAMS and KFintech let you choose one; if you chose your PAN, type it in capital letters).'
           : 'The statement is password-protected: type its password (the one you chose when requesting it, or your PAN).'
         : `The PDF could not be read (${(lastError as Error | null)?.message ?? 'unknown error'}).`,
-    });
+    };
   const stmt = parseCas(text);
   if (owner === null) {
     const hit = candidates.filter(
@@ -431,150 +420,161 @@ export async function importCasPdf(
     }
   }
   if (owner === null)
-    return done({
-      outcome: 'failed',
+    return {
+      ok: false,
       ownerId: null,
-      report: null,
       detail:
         'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
-    });
+    };
   if (stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
-    return done({
-      outcome: 'failed',
+    return {
+      ok: false,
       ownerId: owner,
-      report: null,
       detail:
         'This statement belongs to a different person than the one chosen (the PAN on it does not match).',
-    });
+    };
   if (stmt.schemes.length === 0)
-    return done({
-      outcome: 'failed',
+    return {
+      ok: false,
       ownerId: owner,
-      report: null,
       detail: stmt.warnings.join(' ') || 'Nothing recognised.',
-    });
-  // a fund statement for the whole PAN lists everything held: a fund missing from it has been sold
-  const report = await runCasImport(owner, stmt, casIo(db, hh), {
-    today: opts.today,
-    complete: true,
-    sipStoppedAfterDays: (await loadSettings(db, hh)).config.estimates.sipStoppedAfterDays,
-  });
-  await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
-  const partial = report.needsReview.length > 0;
-  return done({
-    outcome: partial ? 'partial' : 'imported',
-    ownerId: owner,
-    report,
-    detail: [...report.lines, ...stmt.warnings].join('\n'),
-  });
+    };
+  return { ok: true, stmt, ownerId: owner };
 }
 
-export interface FundCsvFund {
-  name: string;
-  status: 'updated' | 'added' | 'review';
-  /** lines in the file for this fund / lines that are not stored yet */
-  transactions: number;
-  newTransactions: number;
-  units: number | null;
-  invested: number;
-  value: number | null;
+/** A fund statement that lists balances held with a depository only cannot show that a fund was sold, so it is not complete. */
+const isComplete = (stmt: CasStatement) => !stmt.schemes.some((s) => s.holdingsOnly);
+
+export type CasPreview =
+  | { ok: false; detail: string }
+  | {
+      ok: true;
+      ownerId: string;
+      diff: FundImportDiff;
+      warnings: string[];
+      periodFrom: string | null;
+      periodTo: string | null;
+    };
+
+/**
+ * What a statement would change, without writing anything: opens it (the password is used here and nowhere kept), reads what is on
+ * file and compares. A fund statement for the whole PAN lists everything held, so a fund missing from it has been sold.
+ */
+export async function previewCasPdf(
+  db: SupabaseClient,
+  hh: string,
+  pdf: Uint8Array,
+  candidates: Candidate[],
+  opts: { today: string },
+): Promise<CasPreview> {
+  const o = await openStatement(pdf, candidates);
+  if (!o.ok) return { ok: false, detail: o.detail };
+  const diff = await planCasImport(o.ownerId, o.stmt, casIo(db, hh), {
+    ...(await planRules(db, hh)),
+    today: opts.today,
+    complete: isComplete(o.stmt),
+  });
+  return {
+    ok: true,
+    ownerId: o.ownerId,
+    diff,
+    warnings: o.stmt.warnings,
+    periodFrom: o.stmt.periodFrom,
+    periodTo: o.stmt.periodTo,
+  };
+}
+
+/** What an import keeps with its log: the one-line summary, the remarks and the change list. */
+function changeRecord(report: CasReport, diffNotes: string[]) {
+  return { summary: report.summary, notes: diffNotes, items: report.changes };
+}
+
+/**
+ * Opens a fund statement, compares it with what is on file and writes only what is new or changed: all of it (the mailbox job), or
+ * only the items in `select` (the person's choice at the preview). The statement is logged in `cas_imports` (once per source) with
+ * the full list of changes.
+ */
+export async function importCasPdf(
+  db: SupabaseClient,
+  hh: string,
+  pdf: Uint8Array,
+  candidates: Candidate[],
+  opts: { sourceRef: string; today: string; receivedOn?: string; select?: Selection },
+): Promise<CasPdfResult> {
+  const done = async (
+    res: Omit<CasPdfResult, 'summary'> & { summary?: string },
+    changes: unknown = null,
+  ): Promise<CasPdfResult> => {
+    const out: CasPdfResult = { ...res, summary: res.summary ?? res.detail };
+    await db.from('cas_imports').upsert(
+      {
+        household_id: hh,
+        owner_id: res.ownerId,
+        source_ref: opts.sourceRef.slice(0, 200),
+        received_on: opts.receivedOn ?? opts.today,
+        schemes: res.report ? res.report.statementFunds : 0,
+        transactions: res.report?.transactionsAdded ?? 0,
+        outcome: res.outcome,
+        detail: res.detail.slice(0, 2000),
+        changes,
+      },
+      { onConflict: 'household_id,source_ref' },
+    );
+    return out;
+  };
+  const o = await openStatement(pdf, candidates);
+  if (!o.ok) return done({ outcome: 'failed', ownerId: o.ownerId, report: null, detail: o.detail });
+  const io = casIo(db, hh);
+  const diff = await planCasImport(o.ownerId, o.stmt, io, {
+    ...(await planRules(db, hh)),
+    today: opts.today,
+    complete: isComplete(o.stmt),
+  });
+  const report = await applyFundDiff(diff, io, opts.select ?? null);
+  await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
+  const partial = report.needsReview.length > 0;
+  return done(
+    {
+      outcome: partial ? 'partial' : 'imported',
+      ownerId: o.ownerId,
+      report,
+      summary: report.summary,
+      detail: [report.summary, ...report.lines, ...o.stmt.warnings].join('\n'),
+    },
+    changeRecord(report, diff.notes),
+  );
 }
 
 export interface FundCsvOwnerResult {
   ownerId: string;
-  report: CasReport;
-  funds: FundCsvFund[];
+  diff: FundImportDiff;
   /** lines of the file left out, and why */
   notes: string[];
+  /** set once the changes are applied */
+  report: CasReport | null;
 }
 
 /**
- * Applies fund-transaction lines (see `fundCsvToStatement`) for one person. With `dryRun` it reads the same data and applies
- * the same rules, but writes nothing, so the preview matches what the import will do.
+ * Compares fund-transaction lines (see `fundCsvToStatement`) for one person with what is on file. With `apply` it then writes only
+ * what is new or changed (all of it, or the items in `select`); without it nothing is written, so the preview is the same
+ * comparison the import acts on.
  */
 export async function importFundCsv(
   db: SupabaseClient,
   hh: string,
   ownerId: string,
   rows: TxnCsvRow[],
-  opts: { today: string; dryRun: boolean },
+  opts: { today: string; apply: boolean; select?: Selection },
 ): Promise<FundCsvOwnerResult> {
   const { statement, notes } = fundCsvToStatement(rows, opts.today);
-  const real = casIo(db, hh);
-  const funds: FundCsvFund[] = [];
-  const summarize = (
-    s: CasSave,
-    status: 'updated' | 'added',
-    newTransactions: number,
-  ): FundCsvFund => ({
-    name: s.scheme.name,
-    status,
-    transactions: s.transactions.length,
-    newTransactions,
-    units: s.position.units,
-    invested: s.position.invested,
-    value: s.valuation?.amount ?? null,
-  });
-  const created = new Set<string>();
-  let fake = 0;
-  const io: CasIo = {
-    funds: (o) => real.funds(o),
-    isinToAmfi: (isin) => real.isinToAmfi(isin),
-    async createFund(args) {
-      if (!opts.dryRun) {
-        const id = await real.createFund(args);
-        created.add(id);
-        return id;
-      }
-      const id = `new-${++fake}`;
-      created.add(id);
-      return id;
-    },
-    async save(args) {
-      let res: { added: number };
-      if (!opts.dryRun) res = await real.save(args);
-      else {
-        const wanted = txnRows(hh, args.assetId, args.scheme, args.transactions).map(
-          (r) => r.source_ref,
-        );
-        let have = new Set<string>();
-        if (!args.assetId.startsWith('new-')) {
-          // read in pages: the API returns at most 1,000 rows a request, and a preview that misses stored lines counts them as new
-          const r = await pageAll<{ source_ref: string }>((from, to) =>
-            db
-              .from('mf_transactions')
-              .select('source_ref')
-              .eq('household_id', hh)
-              .eq('asset_id', args.assetId)
-              .order('id')
-              .range(from, to),
-          );
-          have = new Set(r.map((x) => x.source_ref));
-        }
-        res = { added: wanted.filter((w) => !have.has(w)).length };
-      }
-      funds.push(summarize(args, created.has(args.assetId) ? 'added' : 'updated', res.added));
-      return res;
-    },
-  };
-  const report = await runCasImport(ownerId, statement, io, {
+  const io = casIo(db, hh);
+  const diff = await planCasImport(ownerId, statement, io, {
+    ...(await planRules(db, hh)),
     today: opts.today,
-    sipStoppedAfterDays: (await loadSettings(db, hh)).config.estimates.sipStoppedAfterDays,
+    source: 'file',
   });
-  for (const name of report.needsReview)
-    funds.push({
-      name,
-      status: 'review',
-      transactions: 0,
-      newTransactions: 0,
-      units: null,
-      invested: 0,
-      value: null,
-    });
-  return {
-    ownerId,
-    report,
-    funds: funds.sort((a, b) => a.name.localeCompare(b.name)),
-    notes: [...notes, ...statement.warnings],
-  };
+  const report = opts.apply ? await applyFundDiff(diff, io, opts.select ?? null) : null;
+  if (report)
+    await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
+  return { ownerId, diff, notes: [...notes, ...statement.warnings], report };
 }

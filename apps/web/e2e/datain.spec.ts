@@ -234,7 +234,7 @@ test.describe('Import (public sample)', () => {
     });
     await expect(page.getByRole('heading', { name: 'Fund statement', level: 2 })).toBeVisible();
     await expect(page.getByLabel('Whose statement')).toHaveValue('p2');
-    await expect(page.getByRole('button', { name: 'Import statement' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Preview changes' })).toBeVisible();
 
     await input.setInputFiles({
       name: 'Form26AS_2025-26.pdf',
@@ -257,9 +257,9 @@ test.describe('Import (public sample)', () => {
       buffer: Buffer.from('%PDF-1.7'),
     });
     await expect(page.getByText(/does not say which kind/)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Import statement' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Preview changes' })).toHaveCount(0);
     await page.getByLabel('What is this file?').selectOption('cas');
-    await expect(page.getByRole('button', { name: 'Import statement' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Preview changes' })).toBeVisible();
 
     await input.setInputFiles({
       name: 'holiday.png',

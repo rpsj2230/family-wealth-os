@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { demoAutomation } from '@/lib/demo-datain';
+import { demoFundPreview } from '@/lib/demo-fund-import';
 import { DEMO_SYNC_INFO, demoSyncView } from '@/lib/demo-sheet-sync';
 import { IMPORT_TABS, ImportHub, type ImportData, type ImportTab } from '@/app/(app)/import/Hub';
 
@@ -37,6 +38,11 @@ const DATA: ImportData = {
       transactions: 41,
       outcome: 'imported',
       detail: null,
+      changes: {
+        summary: '2 funds updated: +5 transactions; 1 SIP stopped; 1 fund sold',
+        notes: [],
+        items: [],
+      },
       fromEmail: true,
     },
     {
@@ -47,6 +53,7 @@ const DATA: ImportData = {
       transactions: 12,
       outcome: 'partial',
       detail: '3 funds updated, 12 new transactions; check: Sample Index Fund',
+      changes: null,
       fromEmail: false,
     },
     {
@@ -57,6 +64,7 @@ const DATA: ImportData = {
       transactions: 0,
       outcome: 'failed',
       detail: 'The PDF is password-protected and none of the saved passwords opened it.',
+      changes: null,
       fromEmail: true,
     },
   ],
@@ -96,7 +104,14 @@ export default async function DemoImport({
             title="Import"
             subtitle="Choose a file and the app works out what it is. Most of this arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
           />
-          <ImportHub base="/demo/import" tab={tab} data={DATA} demo demoSync={demoSyncView()} />
+          <ImportHub
+            base="/demo/import"
+            tab={tab}
+            data={DATA}
+            demo
+            demoSync={demoSyncView()}
+            demoChanges={demoFundPreview()}
+          />
         </main>
       </div>
       <BottomNav />

@@ -31,13 +31,30 @@ Opening Unit Balance: 0.000
 Closing Unit Balance: 0.000 NAV on 25-Oct-2026: INR 120.00 Total Cost Value: 0.00 Market Value on 25-Oct-2026: INR 0.00
 `;
 
+const SIP_TEXT = `01-Jan-2025 To 25-Oct-2026
+Folio No: 12345678 / 45 PAN: ABCDE1234F
+120503 - Sample Flexi Cap Fund - Direct Plan - Growth (Advisor: DIRECT) ISIN: INF000A01AB1 - Registrar : CAMS
+Opening Unit Balance: 0.000
+05-Oct-2025 Systematic Investment Purchase - Instalment No - 1 10,000.00 100.000 100.00 100.000
+05-Nov-2025 Systematic Investment Purchase - Instalment No - 2 10,000.00 100.000 100.00 200.000
+05-Dec-2025 Systematic Investment Purchase - Instalment No - 3 10,000.00 100.000 100.00 300.000
+05-Jan-2026 Systematic Investment Purchase - Instalment No - 4 10,000.00 100.000 100.00 400.000
+05-Feb-2026 Systematic Investment Purchase - Instalment No - 5 10,000.00 100.000 100.00 500.000
+05-Mar-2026 Systematic Investment Purchase - Instalment No - 6 10,000.00 100.000 100.00 600.000
+Closing Unit Balance: 600.000 NAV on 25-Oct-2026: INR 160.00 Total Cost Value: 60,000.00 Market Value on 25-Oct-2026: INR 96,000.00
+`;
+
 function fakeIo(funds: CasFund[], amfi: Record<string, string> = {}) {
   const saved: CasSave[] = [];
   const created: string[] = [];
   const sold: { assetId: string; asOf: string }[] = [];
+  const ignored: { assetId: string; verdict: string; basis: string }[] = [];
   const io: CasIo = {
     async markSold(a) {
       sold.push(a);
+    },
+    async rememberIgnored(a) {
+      ignored.push(a);
     },
     async funds() {
       return funds;
@@ -54,7 +71,7 @@ function fakeIo(funds: CasFund[], amfi: Record<string, string> = {}) {
       return { added: a.transactions.length };
     },
   };
-  return { io, saved, created, sold };
+  return { io, saved, created, sold, ignored };
 }
 
 describe('matchScheme', () => {
@@ -117,45 +134,74 @@ describe('runCasImport', () => {
     expect(a.position.amfiCode).toBe('120503');
     expect(a.position.casAsOf).toBe('2026-10-25');
     expect(a.position.units).toBeCloseTo(670.909, 3); // the units held on the statement date
-    expect(a.valuation).toEqual({ amount: 107345.44, asOf: '2026-10-25' });
+    expect(a.valuation).toMatchObject({ amount: 107345.44, asOf: '2026-10-25' });
     expect(r.transactionsAdded).toBe(4 + 2);
     const closed = saved.find((x) => x.assetId === 'new-1')!;
     expect(closed.closed).toBe(true);
-    expect(closed.valuation).toEqual({ amount: 0, asOf: '2026-10-25' });
+    expect(closed.valuation).toMatchObject({ amount: 0, asOf: '2026-10-25' });
     expect(closed.position.invested).toBe(0);
     expect(closed.position.units).toBe(0);
   });
-  it('reads a SIP and notices when it has stopped', async () => {
-    const { io, saved } = fakeIo([
-      {
-        assetId: 'f1',
-        name: 'Sample Flexi Cap Fund',
-        amfiCode: null,
-        isin: 'INF000A01AB1',
-        folioLast4: null,
-      },
-    ]);
-    await runCasImport('owner', stmt, io, { today: '2026-10-26' });
-    const p = saved.find((x) => x.assetId === 'f1')!.position;
-    expect(p.sipMonthly).toBe(10000);
-    expect(p.sipStopped).toBe(true); // last instalment was March 2026
-    expect(p.sipLastOn).toBe('2026-03-05');
+  const withSip = (extra: Partial<CasFund> = {}): CasFund => ({
+    assetId: 'f1',
+    name: 'Sample Flexi Cap Fund',
+    amfiCode: null,
+    isin: 'INF000A01AB1',
+    folioLast4: null,
+    ...extra,
+    state: {
+      units: null,
+      invested: null,
+      sipMonthly: 10_000,
+      sipStopped: false,
+      sipChanges: [],
+      lines: [],
+      latestValue: null,
+      snapshots: [],
+      ignored: [],
+      ...extra.state,
+    },
   });
-  it('takes the number of days after which a SIP counts as stopped from the setting', async () => {
-    const f: CasFund = {
-      assetId: 'f1',
-      name: 'Sample Flexi Cap Fund',
-      amfiCode: null,
-      isin: 'INF000A01AB1',
-      folioLast4: null,
-    };
-    // statement ends 25 Oct 2026; the last instalment was 5 Mar 2026, 234 days earlier
-    const a = fakeIo([f]);
-    await runCasImport('owner', stmt, a.io, { today: '2026-10-26', sipStoppedAfterDays: 300 });
-    expect(a.saved.find((x) => x.assetId === 'f1')!.position.sipStopped).toBe(false);
-    const b = fakeIo([f]);
-    await runCasImport('owner', stmt, b.io, { today: '2026-10-26', sipStoppedAfterDays: 200 });
-    expect(b.saved.find((x) => x.assetId === 'f1')!.position.sipStopped).toBe(true);
+  it('notices that a SIP on file has stopped, from its own pattern, and dates the stop from the first missed due date', async () => {
+    const sipStmt = parseCas(SIP_TEXT);
+    const { io, saved } = fakeIo([withSip()]);
+    const r = await runCasImport('owner', sipStmt, io, { today: '2026-10-26' });
+    const s = saved.find((x) => x.assetId === 'f1')!;
+    // last instalment 5 Mar 2026, a monthly SIP (31 days between instalments): the next was due 5 Apr and none came
+    expect(s.sip).toEqual([{ monthly: 0, effectiveOn: '2026-04-05' }]);
+    expect(r.summary).toContain('1 SIP stopped');
+  });
+  it('does not stop a SIP when the statement ends before the next due date', async () => {
+    const sipStmt = parseCas(
+      SIP_TEXT.replace('01-Jan-2025 To 25-Oct-2026', '01-Jan-2025 To 20-Mar-2026'),
+    );
+    const { io, saved } = fakeIo([withSip()]);
+    await runCasImport('owner', sipStmt, io, { today: '2026-03-21' });
+    expect(saved.find((x) => x.assetId === 'f1')!.sip).toEqual([]);
+  });
+  it('leaves a SIP on file alone when the statement has too few instalments to show its pattern', async () => {
+    const { io, saved } = fakeIo([withSip()]);
+    const r = await runCasImport('owner', stmt, io, { today: '2026-10-26' });
+    expect(saved.find((x) => x.assetId === 'f1')!.sip).toEqual([]);
+    expect(r.lines.join('\n')).toContain('not verified by a statement');
+  });
+  it('reads a cancellation the statement states as an explicit stop', async () => {
+    const cancelled = parseCas(
+      SIP_TEXT.replace(
+        '05-Mar-2026 Systematic',
+        'SIP cancelled on 20-Mar-2026 05-Mar-2026 Systematic',
+      ),
+    );
+    expect(cancelled.schemes[0]!.sipCancelled).toEqual({ on: '2026-03-20' });
+    const { io, saved } = fakeIo([withSip()]);
+    await runCasImport('owner', cancelled, io, { today: '2026-03-21' });
+    expect(saved.find((x) => x.assetId === 'f1')!.sip).toEqual([
+      { monthly: 0, effectiveOn: '2026-03-20' },
+    ]);
+  });
+  it('the general terms after the closing balance are not read as a cancellation', () => {
+    const t = parseCas(`${SIP_TEXT}Terms: a SIP can be cancelled at any time.`);
+    expect(t.schemes[0]!.sipCancelled).toBeUndefined();
   });
   it('leaves an ambiguous scheme for review and carries on', async () => {
     const dup = (id: string): CasFund => ({
@@ -237,6 +283,6 @@ describe('a fund missing from a complete statement', () => {
     const r = await runCasImport('owner', stmt, io, { today: '2026-10-26', complete: true });
     expect(r.needsReview.length).toBeGreaterThan(0);
     expect(sold).toEqual([]);
-    expect(r.lines.join('\n')).toContain('were not closed');
+    expect(r.lines.join('\n')).toContain('nothing was marked as sold');
   });
 });
