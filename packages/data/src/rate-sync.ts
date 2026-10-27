@@ -43,7 +43,7 @@ export interface RatesSaved {
  * typed is never overwritten, and a rate that was read wrongly before is noted so the reader is told next time. A rate read earlier
  * that is no longer on the pages is removed, but only for the products the pages that were read carry (a savings page that could not be
  * read never removes the savings rates). Rates once saved from a comparison website are read the same way as any other read rate, so
- * the bank's own figures replace them. Shared by the weekly job, the Sync page and the "paste the page" box.
+ * the bank's own figures replace them. Shared by the monthly job, the Sync page and the "paste the page" box.
  */
 export async function saveRatesRead(args: {
   db: SupabaseClient;
@@ -282,7 +282,7 @@ export interface SyncBankResult {
 }
 
 /**
- * Syncs one bank, the one way for the weekly job and the Sync page: reads the pages saved for the bank together with the bank's own
+ * Syncs one bank, the one way for the monthly job and the Sync page: reads the pages saved for the bank together with the bank's own
  * published documents, skips the AI when the text (with the corrections and the ceiling that go with it) is the same as when it was
  * last read, otherwise asks the AI keys in their order, and stores what was read. Rates you typed yourself are never overwritten. A
  * bank whose pages cannot be read keeps the rates on file and records why, in plain words. Every result is written to the bank's rows

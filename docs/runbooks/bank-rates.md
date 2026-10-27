@@ -1,4 +1,4 @@
-# Runbook: bank rates (weekly refresh and Sync bank rates)
+# Runbook: bank rates (monthly refresh and Sync bank rates)
 
 Rates are read only from a bank's own published pages. No comparison or aggregator website is read, and a bank that refuses an automated visit is reported plainly, never worked around.
 
@@ -6,7 +6,7 @@ Rates are read only from a bank's own published pages. No comparison or aggregat
 
 One function, `syncBankRates` (`packages/data/src/rate-sync.ts`), reads one bank. Two callers use it, so their behaviour cannot differ:
 
-- The weekly job `workers/src/rates.ts` (GitHub Actions workflow `rates.yml`, Mondays). It uses the service-role client and reads every enabled row of `rate_sources`, grouped by bank.
+- The monthly job `workers/src/rates.ts` (GitHub Actions workflow `rates.yml`, started daily; it reads the pages on the day set under Rates in Settings, the 30th by default, or the last day of a shorter month; a manual run always reads them). It uses the service-role client and reads every enabled row of `rate_sources`, grouped by bank.
 - The page **Sync bank rates** (`/rates/sync`, `apps/web/app/(app)/rates/sync/`). The browser calls the server action `syncBank` once per bank, one after the other, so each call stays within the page's `maxDuration` of 60 seconds (the same limit the Settings and Import pages already use; the Hobby plan limit was not re-verified against Vercel documentation, and 60 seconds is within every documented Hobby configuration). The action uses the signed-in member's client, so row level security applies and the service-role key never reaches Vercel. The AI keys are fetched through the member-only function `ai_keys_for_server`, as the Settings checks do.
 
 For each bank the function:
@@ -31,7 +31,7 @@ To add a bank: find its own interest-rate page or rate-sheet PDF, add an entry a
 
 The card on the Sync page says why and opens **Paste the page**. The person opens the bank's page in their own browser, expands every section (collapsed accordions are not copied), selects all, copies and pastes. The reader finds the rates in the text; they are saved marked "Pasted by you". The same box exists in Settings.
 
-A bank may answer the program from one network and refuse it from another (GitHub Actions for the weekly job, Vercel for the Sync page). The result recorded on the bank's rows shows which one the last run was.
+A bank may answer the program from one network and refuse it from another (GitHub Actions for the monthly job, Vercel for the Sync page). The result recorded on the bank's rows shows which one the last run was.
 
 ## Rates once saved from comparison websites
 

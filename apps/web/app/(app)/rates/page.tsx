@@ -224,7 +224,7 @@ export default async function RatesPage({
             <div className="rt-note bad" role="alert" style={{ marginBottom: 14 }}>
               <p>
                 <b>
-                  The weekly refresh could not read the rates of {unreadable.length} bank
+                  The monthly refresh could not read the rates of {unreadable.length} bank
                   {unreadable.length === 1 ? '' : 's'}:
                 </b>{' '}
                 {unreadable.map((c, i) => (

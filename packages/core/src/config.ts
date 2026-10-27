@@ -49,8 +49,10 @@ export interface AppConfig {
     trustedForwarders: string[];
   };
   rates: {
-    /** an offer not checked within this many days is shown as old */
+    /** an offer not checked within this many days is shown as old (rates are read once a month, so this is longer than a month) */
     staleDays: number;
+    /** the day of the month the bank rate pages are read; in a month without that day, the last day */
+    syncDay: number;
     /** only suggest a move when the after-tax rate is better by at least this much (0.0025 = 0.25 points) */
     minRateGap: number;
     /** only suggest a move worth at least this much extra interest a year */
@@ -237,7 +239,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   inbox: { trustedForwarders: [] },
   rates: {
-    staleDays: 30,
+    staleDays: 45,
+    syncDay: 30,
     minRateGap: 0.0025,
     minAnnualGain: 5000,
     nroTaxRate: 0.3,
@@ -460,6 +463,7 @@ export function configFromJson(raw: unknown): AppConfig {
     },
     rates: {
       staleDays: Math.round(num(rat.staleDays, d.rates.staleDays, 1, 365)),
+      syncDay: Math.round(num(rat.syncDay, d.rates.syncDay, 1, 31)),
       minRateGap: num(rat.minRateGap, d.rates.minRateGap, 0, 0.1),
       minAnnualGain: num(rat.minAnnualGain, d.rates.minAnnualGain, 0, 1e9),
       nroTaxRate: num(rat.nroTaxRate, d.rates.nroTaxRate, 0, 0.6),

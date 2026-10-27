@@ -484,13 +484,14 @@ export function ConnectionsSection({
         <h3 id="rates-h">Bank rate pages</h3>
         <p className="muted small">
           List the bank&apos;s own page where it publishes its rates. Rates are only ever read from
-          the bank&apos;s own pages, never from comparison websites. Every Monday the app reads them
-          (together with the bank&apos;s own rate sheets it already knows) with your AI keys, in the
-          order you set, and keeps the rates with the date it checked. A bank may have several
-          pages, for example savings on one and deposits on another: say which rates each carries.
-          Rates you type on the <Link href="/rates">Rates page</Link> are never overwritten. To
-          refresh now, open <Link href="/rates/sync">Sync bank rates</Link>. If a bank&apos;s page
-          cannot be read the app says so plainly and you can paste the page text instead.
+          the bank&apos;s own pages, never from comparison websites. Once a month (on the day set
+          under Rates in Settings) the app reads them (together with the bank&apos;s own rate sheets
+          it already knows) with your AI keys, in the order you set, and keeps the rates with the
+          date it checked. A bank may have several pages, for example savings on one and deposits on
+          another: say which rates each carries. Rates you type on the{' '}
+          <Link href="/rates">Rates page</Link> are never overwritten. To refresh now, open{' '}
+          <Link href="/rates/sync">Sync bank rates</Link>. If a bank&apos;s page cannot be read the
+          app says so plainly and you can paste the page text instead.
         </p>
         {!ai.keys.some((k) => k.enabled) && sources.length > 0 && (
           <p className="notice warn small">

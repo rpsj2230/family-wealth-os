@@ -26,13 +26,13 @@ test.describe('Rates board (public sample)', () => {
     await noSideScroll(page);
   });
 
-  test('says when the weekly refresh could not read a bank page, why, and what to do', async ({
+  test('says when the monthly refresh could not read a bank page, why, and what to do', async ({
     page,
   }) => {
     await page.goto('/demo/rates?view=all');
     const yes = page.locator('article.rt-card', { hasText: 'Sample Yes Bank' });
     await expect(yes.getByText(/refused the automatic read/)).toBeVisible();
-    await expect(yes.getByText(/copy the rates and paste them/)).toBeVisible();
+    await expect(yes.getByText(/select all, copy, and paste it into/)).toBeVisible();
   });
 
   test('sorting and filtering are links, so the choice is in the address', async ({ page }) => {
@@ -106,7 +106,7 @@ test.describe('One bank’s rates (public sample)', () => {
     const log = page.getByRole('table');
     await expect(log).toContainText('Corrected by you');
     await expect(log).toContainText('It was the senior-citizen rate');
-    await expect(log).toContainText('Weekly refresh');
+    await expect(log).toContainText('Monthly refresh');
     await noSideScroll(page);
 
     await page.getByRole('link', { name: /How it is read/ }).click();

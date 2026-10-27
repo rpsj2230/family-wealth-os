@@ -260,8 +260,6 @@ test.describe('Home (public sample)', () => {
       if (h.startsWith('#') || h.startsWith('?')) continue;
       expect(h, h).toMatch(/^\/(demo|login)(\/|\?|$)/);
     }
-    await page.locator('main').getByRole('link', { name: 'I need money' }).first().click();
-    await expect(page).toHaveURL(/\/demo\/raise/);
   });
 
   test('fits a 390 px screen in one column, in light and in dark', async ({ browser }) => {

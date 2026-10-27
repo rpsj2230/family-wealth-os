@@ -201,7 +201,7 @@ export const THIRD_PARTY_NOTE = 'Reference only';
 export const isThirdPartyNote = (note: string | null | undefined): boolean =>
   !!note && note.startsWith(THIRD_PARTY_NOTE);
 
-// ---- did the weekly refresh read the bank's page? -------------------------------------------------------------------
+// ---- did the monthly refresh read the bank's page? -------------------------------------------------------------------
 
 export interface RateSourceRow {
   bank: string;
@@ -265,7 +265,7 @@ export function sourceStatus(
       health: 'idle',
       headline: 'This rate page is switched off.',
       fix: {
-        text: 'Switch it on in Settings to read it every Monday.',
+        text: 'Switch it on in Settings to read it once a month.',
         href: '/settings#rates',
         hrefLabel: 'Open Settings',
       },
@@ -631,7 +631,7 @@ export function eventLine(e: RateEventRow): EventLine {
     oldRate: e.oldRate,
     newRate: e.newRate,
     dir,
-    who: e.source === 'manual' ? 'You' : 'Weekly refresh',
+    who: e.source === 'manual' ? 'You' : 'Monthly refresh',
     why: e.kind === 'corrected' || e.kind === 'confirmed' ? reasonLabel(e.reason) : null,
   };
 }

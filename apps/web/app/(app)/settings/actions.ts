@@ -649,7 +649,7 @@ export async function addRateSource(_p: FormResult | null, f: FormData): Promise
   revalidatePath('/rates/sync');
   return {
     ok: true,
-    message: 'Added. It is read at the next weekly refresh, or now on the Sync bank rates page.',
+    message: 'Added. It is read at the next monthly refresh, or now on the Sync bank rates page.',
   };
 }
 

@@ -419,6 +419,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
       },
       {
+        name: 'rateSyncDay',
+        label: 'Read the bank rate pages on day',
+        hint: 'Rates are read once a month, on this day (in a shorter month, on its last day). You can also sync at any time from Rates > Sync rates.',
+        kind: 'int',
+        path: ['rates', 'syncDay'],
+        unit: 'of the month',
+      },
+      {
         name: 'rateStale',
         label: 'A bank rate counts as old after',
         hint: 'Older rates are shown as old and not used for a suggestion without a warning.',

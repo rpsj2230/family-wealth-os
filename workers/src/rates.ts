@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 /**
- * Weekly: reads each bank's rate pages listed in Settings (and the bank's own published rate documents) with your AI keys and refreshes
+ * Monthly (on the day set in Settings): reads each bank's rate pages listed in Settings (and the bank's own published rate documents) with your AI keys and refreshes
  * the stored offers. The reading is the same function the Sync bank rates page uses (`syncBankRates` in @fwos/data), so the two cannot
  * differ. Offers you typed yourself are never overwritten. A bank whose pages cannot be read keeps its previous offers and the reason is
  * recorded in plain words, so nothing silently disappears. Rates are only ever read from the bank's own pages. The AI keys switched on
@@ -8,7 +8,7 @@
  * not asked again for the rest of the run.
  */
 import { createClient } from '@supabase/supabase-js';
-import { sameBank } from '@fwos/core';
+import { rateSyncDue, sameBank } from '@fwos/core';
 import {
   aiChainFor,
   heldBankNames,
@@ -53,6 +53,20 @@ async function main() {
     const household = h.id as string;
     // rates that apply only above the most you would put with one bank are not read
     const rateCfg = (await loadSettings(db, household)).config.rates;
+    // rates are read once a month, on the day set in Settings (the workflow starts daily and this ends the other days at once);
+    // a run started by hand is always due
+    if (
+      !rateSyncDue(
+        new Date().toISOString().slice(0, 10),
+        rateCfg.syncDay,
+        process.env.RATES_FORCE === '1',
+      )
+    ) {
+      console.log(
+        `Not the rate sync day (day ${rateCfg.syncDay} of the month, or the last day of a shorter month); nothing to do.`,
+      );
+      continue;
+    }
     // one chain for the whole run, so a key that is refused is skipped for every bank after it
     const ai = await aiChainFor(db, household, 'service', {
       limits: { callMs: 30_000, tries: 3 },

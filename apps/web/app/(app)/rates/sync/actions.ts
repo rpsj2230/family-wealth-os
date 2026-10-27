@@ -33,7 +33,7 @@ interface SourceRow {
 }
 
 /**
- * Syncs one bank now: the same function the weekly job runs (`syncBankRates`), through the signed-in member's own client, so row level
+ * Syncs one bank now: the same function the monthly job runs (`syncBankRates`), through the signed-in member's own client, so row level
  * security applies and the service role is never used here. The Sync page calls this once per bank, one after the other, so each call
  * stays inside the time the host allows for the page (see `maxDuration` in the page). The AI keys are fetched through the member-only
  * function the Settings checks use and never leave the server.

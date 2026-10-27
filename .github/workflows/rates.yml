@@ -1,8 +1,10 @@
 name: Refresh interest rates
-# Every Monday: reads the bank rate pages listed in Settings (Bank rate pages) with your AI keys (in their order) and refreshes the stored offers.
+# Once a month, on the day set in Settings (default the 30th; the last day of a shorter month): reads the bank rate pages listed in Settings (Bank rate pages)
+# with your AI keys (in their order) and refreshes the stored offers. The workflow starts daily and the job ends at once on any other day; a run started by hand
+# (Actions > Refresh interest rates > Run workflow) always reads the pages. Rates can also be synced at any time from Rates > Sync rates.
 on:
   schedule:
-    - cron: '40 21 * * 0'
+    - cron: '40 21 * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      RATES_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
       SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { rateSyncDue } from '../src/rates';
 import type { BoardOffer, RateEventRow } from '../src/rate-board';
 import {
   buildBoardCards,
@@ -373,7 +374,7 @@ describe('the change log and corrections', () => {
     });
     expect(c.what).toBe('NRE deposit, 2 yr');
     const a = eventLine(ev({ kind: 'added' }));
-    expect(a).toMatchObject({ dir: 'new', who: 'Weekly refresh', why: null });
+    expect(a).toMatchObject({ dir: 'new', who: 'Monthly refresh', why: null });
     expect(eventLine(ev({ kind: 'removed', newRate: null, oldRate: 0.08 })).dir).toBe('gone');
   });
   it('describes savings slabs', () => {
@@ -428,5 +429,20 @@ describe('the change log and corrections', () => {
   it('gives a readable label for unknown reasons too', () => {
     expect(reasonLabel(null)).toBe('No reason recorded');
     expect(reasonLabel('some_new_cause')).toBe('some new cause');
+  });
+});
+
+describe('the monthly rate sync day', () => {
+  it('is due on the set day, and on the last day of a month that is shorter', () => {
+    expect(rateSyncDue('2026-10-30', 30)).toBe(true);
+    expect(rateSyncDue('2026-10-29', 30)).toBe(false);
+    expect(rateSyncDue('2026-02-28', 30)).toBe(true);
+    expect(rateSyncDue('2026-02-27', 30)).toBe(false);
+    expect(rateSyncDue('2028-02-29', 30)).toBe(true);
+    expect(rateSyncDue('2026-04-30', 31)).toBe(true);
+    expect(rateSyncDue('2026-10-05', 5)).toBe(true);
+  });
+  it('is always due when started by hand', () => {
+    expect(rateSyncDue('2026-10-12', 30, true)).toBe(true);
   });
 });
