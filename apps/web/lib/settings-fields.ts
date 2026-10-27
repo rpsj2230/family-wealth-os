@@ -3,10 +3,20 @@
  * "what this changes", how the value is typed and where it lives in the saved configuration. The form, the save action and
  * the "still on built-in numbers" marker all read this, so they cannot drift apart. Pure: no database, no React.
  */
-import { DEFAULT_CONFIG, parsePriceLine, type AppConfig } from '@fwos/core';
+import { cleanSender, DEFAULT_CONFIG, parsePriceLine, type AppConfig } from '@fwos/core';
 
 export type FieldKind =
-  'int' | 'money' | 'pct' | 'pct4' | 'list' | 'emails' | 'lines' | 'check' | 'date' | 'decimal';
+  | 'int'
+  | 'money'
+  | 'pct'
+  | 'pct4'
+  | 'list'
+  | 'emails'
+  | 'lines'
+  | 'senders'
+  | 'check'
+  | 'date'
+  | 'decimal';
 
 export interface FieldSpec {
   name: string;
@@ -28,6 +38,7 @@ export type RuleGroup =
   | 'reminders'
   | 'estimates'
   | 'inbox'
+  | 'gmail'
   | 'ai'
   | 'rates'
   | 'refunds'
@@ -49,6 +60,7 @@ export const RULE_GROUPS: RuleGroup[] = [
   'reminders',
   'estimates',
   'inbox',
+  'gmail',
   'ai',
   'rates',
   'refunds',
@@ -62,6 +74,7 @@ export const GROUP_TITLE: Record<RuleGroup, string> = {
   reminders: 'Reminders',
   estimates: 'Estimated balances',
   inbox: 'Bank e-mail forwarding',
+  gmail: 'Gmail statements',
   ai: 'AI prices',
   rates: 'Interest-rate suggestions',
   refunds: 'Tax refunds on NRO interest',
@@ -277,6 +290,89 @@ export const CONFIG_GROUPS: GroupSpec[] = [
     ],
   },
   {
+    key: 'gmail',
+    id: 'gmail-statements',
+    title: 'Gmail statements',
+    purpose:
+      'The daily scan of your Gmail for fund statements from CAMS, KFintech, NSDL and CDSL: read only, no AI.',
+    fields: [
+      {
+        name: 'gmailEnabled',
+        label: 'Read my fund statements from Gmail',
+        hint: 'Switches the daily scan on or off. Off, the app does not open your Gmail for this at all.',
+        kind: 'check',
+        path: ['statementMail', 'enabled'],
+      },
+      {
+        name: 'gmailSenders',
+        label: 'Senders a statement may come from',
+        hint: 'One per line: a domain such as camsonline.com (it covers its sub-domains) or one full address. Only the address in the From line counts, never the name shown. Add a domain when a statement arrives from one that is not listed; a message from any other address is never opened.',
+        kind: 'senders',
+        path: ['statementMail', 'senders'],
+        unit: 'one domain or address per line',
+      },
+      {
+        name: 'gmailFirstDays',
+        label: 'First scan looks back',
+        hint: 'How far back the very first scan reads, so last year’s statements are picked up. Statements already read are skipped.',
+        kind: 'int',
+        path: ['statementMail', 'firstDays'],
+        unit: 'days',
+        min: 1,
+        max: 1500,
+      },
+      {
+        name: 'gmailRegularDays',
+        label: 'Every later scan looks back',
+        hint: 'A short window is enough once the first scan is done; a statement that arrives late is still caught.',
+        kind: 'int',
+        path: ['statementMail', 'regularDays'],
+        unit: 'days',
+        min: 1,
+        max: 400,
+      },
+      {
+        name: 'gmailMaxMb',
+        label: 'Largest PDF to download',
+        hint: 'A PDF bigger than this is not downloaded and is listed as not read.',
+        kind: 'int',
+        path: ['statementMail', 'maxMb'],
+        unit: 'MB',
+        min: 1,
+        max: 40,
+      },
+      {
+        name: 'gmailMaxPerRun',
+        label: 'Most statements read in one scan',
+        hint: 'The oldest are read first; the rest wait for the next scan.',
+        kind: 'int',
+        path: ['statementMail', 'maxPerRun'],
+        min: 1,
+        max: 200,
+      },
+      {
+        name: 'gmailGapHours',
+        label: 'Do not scan more often than every',
+        hint: 'The job starts several times a day; this keeps it to one scan a day. Pressing Scan now ignores it.',
+        kind: 'int',
+        path: ['statementMail', 'minGapHours'],
+        unit: 'hours',
+        min: 1,
+        max: 168,
+      },
+      {
+        name: 'gmailRequestDays',
+        label: 'A requested statement is late after',
+        hint: 'On Import > Fund statement, a statement you asked for that has not arrived after this many days is flagged and leaves a task.',
+        kind: 'int',
+        path: ['statementMail', 'requestWaitDays'],
+        unit: 'days',
+        min: 1,
+        max: 60,
+      },
+    ],
+  },
+  {
     key: 'ai',
     id: 'ai-prices',
     title: 'AI prices',
@@ -417,6 +513,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         kind: 'money',
         path: ['rates', 'maxAmount'],
         unit: '₹',
+      },
+      {
+        name: 'rateSyncDay',
+        label: 'Read the bank rate pages on day',
+        hint: 'Rates are read once a month, on this day (in a shorter month, on its last day). You can also sync at any time from Rates > Sync rates.',
+        kind: 'int',
+        path: ['rates', 'syncDay'],
+        unit: 'of the month',
       },
       {
         name: 'rateStale',
@@ -613,6 +717,7 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
     case 'emails':
       return Array.isArray(v) ? v.join(', ') : '';
     case 'lines':
+    case 'senders':
       return Array.isArray(v) ? v.join('\n') : '';
     case 'date':
     case 'decimal':
@@ -703,6 +808,20 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
       if (rows.length === 0 || rows.length > 40)
         return { ok: false, message: `${f.label}: between 1 and 40 lines.` };
       bucket[key] = rows;
+      continue;
+    }
+    if (f.kind === 'senders') {
+      const rows = (get(f.name) ?? '')
+        .split(/[\r\n,;]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const bad = rows.find((x) => !cleanSender(x));
+      if (bad)
+        return { ok: false, message: `${f.label}: “${bad}” is not a domain or an e-mail address.` };
+      const list = [...new Set(rows.map((x) => cleanSender(x)!))];
+      if (list.length === 0 || list.length > 40)
+        return { ok: false, message: `${f.label}: between 1 and 40 entries.` };
+      bucket[key] = list;
       continue;
     }
     if (f.kind === 'emails') {

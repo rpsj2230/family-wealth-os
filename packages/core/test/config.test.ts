@@ -205,3 +205,47 @@ describe('sheet sync settings', () => {
     expect(configFromJson({ harvest: { otherLongMonths: 36 } }).harvest.otherLongMonths).toBe(36);
   });
 });
+
+describe('Gmail statements settings', () => {
+  it('start at the built-in values, which are on and look back 400 days then 35', () => {
+    const c = configFromJson({}).statementMail;
+    expect(c).toEqual(DEFAULT_CONFIG.statementMail);
+    expect(c).toMatchObject({ enabled: true, firstDays: 400, regularDays: 35 });
+    expect(c.senders).toContain('camsonline.com');
+  });
+  it('keeps saved senders cleaned, drops what is neither a domain nor an address', () => {
+    const c = configFromJson({
+      statementMail: {
+        senders: [
+          '  @CAMSonline.com ',
+          '*.kfintech.com',
+          'not a domain',
+          'one@sender.example.test',
+          'camsonline.com',
+        ],
+      },
+    }).statementMail;
+    expect(c.senders).toEqual(['camsonline.com', 'kfintech.com', 'one@sender.example.test']);
+    expect(configFromJson({ statementMail: { senders: ['???'] } }).statementMail.senders).toEqual(
+      DEFAULT_CONFIG.statementMail.senders,
+    );
+  });
+  it('keeps numbers inside their range and the off switch', () => {
+    const c = configFromJson({
+      statementMail: {
+        enabled: false,
+        firstDays: 99999,
+        maxMb: 0,
+        maxPerRun: 5,
+        requestWaitDays: 3,
+      },
+    }).statementMail;
+    expect(c).toMatchObject({
+      enabled: false,
+      firstDays: 400,
+      maxMb: 15,
+      maxPerRun: 5,
+      requestWaitDays: 3,
+    });
+  });
+});

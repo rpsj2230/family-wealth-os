@@ -32,7 +32,7 @@ export const parseBankTab = (s: string | undefined): BankTab =>
   (BANK_TABS as readonly string[]).includes(s ?? '') ? (s as BankTab) : 'rates';
 
 /**
- * One bank's rates: edit them in place, see what moved and why, and see how the weekly refresh reads the bank's page.
+ * One bank's rates: edit them in place, see what moved and why, and see how the monthly refresh reads the bank's page.
  * Used by the signed-in page and by the public sample (which passes no actions, so nothing is stored).
  */
 export function BankView({
@@ -50,6 +50,7 @@ export function BankView({
   held,
   actions,
   toggleHint,
+  syncHref = '/rates/sync',
 }: {
   bank: string;
   offers: BoardOffer[];
@@ -66,6 +67,8 @@ export function BankView({
   held: number;
   actions?: RateRowActions | undefined;
   toggleHint?: ((f: FormData) => Promise<void>) | undefined;
+  /** the Sync bank rates page (the public sample has its own) */
+  syncHref?: string;
 }) {
   const sum = bankSummary(offers, events, bank);
   const diffs = pageDifferences(offers);
@@ -121,6 +124,9 @@ export function BankView({
             <a className="btn primary" href="#add">
               Add a rate
             </a>
+            <Link className="btn" href={syncHref}>
+              Sync rates
+            </Link>
             <Link className="btn ghost" href={`${backHref}?tab=add`}>
               Paste from notes
             </Link>
@@ -228,7 +234,7 @@ export function BankView({
           <section className="card" aria-labelledby="log-h">
             <h2 id="log-h">Every change</h2>
             <p className="muted small">
-              Newest first. “By” says whether you or the weekly refresh made the change; “Why” is
+              Newest first. “By” says whether you or the monthly refresh made the change; “Why” is
               the reason you gave when you corrected a figure the bank page had given.
             </p>
             <ListingTools name={`rate-log-${bank.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
@@ -286,7 +292,7 @@ export function BankView({
           <section className="card">
             <h2>Where each rate came from</h2>
             <p className="muted small">
-              “You” means typed, pasted or corrected by you; “Bank page” means read by the weekly
+              “You” means typed, pasted or corrected by you; “Bank page” means read by the monthly
               refresh from the page named.
             </p>
             <table className="tbl lines responsive">

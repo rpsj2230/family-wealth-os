@@ -59,7 +59,16 @@ export interface CasStatement {
   periodTo: string | null;
   schemes: CasScheme[];
   warnings: string[];
+  /**
+   * The statement speaks of demat (depository) holdings. A combined CAMS + KFintech statement can list funds held in demat form in a
+   * section this reader does not take apart, so a fund missing from it is not proof that it was sold.
+   */
+  dematMention?: boolean;
 }
+
+/** Any mention of "demat" other than the "Non-Demat" printed beside each folio's ISIN. */
+export const mentionsDemat = (text: string): boolean =>
+  /demat/i.test(text.replace(/non[-\s]?demat/gi, ' '));
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
@@ -344,6 +353,7 @@ export function parseCas(raw: string): CasStatement {
     periodTo: period ? casDate(period[2]!) : null,
     schemes,
     warnings,
+    dematMention: mentionsDemat(t),
   };
 }
 

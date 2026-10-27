@@ -62,12 +62,12 @@ export function rowModel(o: BoardOffer, today: string, staleDays: number): RateR
   };
 }
 
-/** Did the weekly refresh read this bank's page? What it said, and the way out. */
+/** Did the monthly refresh read this bank's page? What it said, and the way out. */
 export function SourcePanel({ status, bank }: { status: SourceStatus; bank: string }) {
   const tone = status.health === 'ok' ? 'ok' : status.health === 'idle' ? '' : status.health;
   return (
     <section className="card" aria-labelledby="src-h">
-      <h2 id="src-h">Does the weekly refresh read {bank}?</h2>
+      <h2 id="src-h">Does the monthly refresh read {bank}?</h2>
       <div className={`rt-note ${tone}`} role="status">
         <p>
           <b>{status.headline}</b>

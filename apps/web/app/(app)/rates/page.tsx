@@ -155,7 +155,10 @@ export default async function RatesPage({
         ]}
         actions={
           <>
-            <Link className="btn primary" href="/rates?tab=add">
+            <Link className="btn primary" href="/rates/sync">
+              Sync rates
+            </Link>
+            <Link className="btn" href="/rates?tab=add">
               Add or import rates
             </Link>
             <Link className="btn" href="/new-money">
@@ -221,7 +224,7 @@ export default async function RatesPage({
             <div className="rt-note bad" role="alert" style={{ marginBottom: 14 }}>
               <p>
                 <b>
-                  The weekly refresh could not read {unreadable.length} bank page
+                  The monthly refresh could not read the rates of {unreadable.length} bank
                   {unreadable.length === 1 ? '' : 's'}:
                 </b>{' '}
                 {unreadable.map((c, i) => (
@@ -230,8 +233,9 @@ export default async function RatesPage({
                     <Link href={`/rates/${slugify(c.bank)}?tab=reading`}>{c.bank}</Link>
                   </span>
                 ))}
-                . Each bank&apos;s card says why and what to do. Rates already on file are
-                unchanged.
+                . Each bank&apos;s card says why and what to do;{' '}
+                <Link href="/rates/sync">Sync rates</Link> lets you try again or paste the page.
+                Rates already on file are unchanged.
               </p>
             </div>
           )}
@@ -379,9 +383,11 @@ export default async function RatesPage({
             <AddOffer banks={bankNames} />
           </section>
           <p className="small muted">
-            Want rates to arrive by themselves? List each bank&apos;s rate page under{' '}
-            <Link href="/settings#rates">Settings, Rate pages</Link>. Each bank&apos;s page on this
-            site says whether it was read and why not.
+            Want rates to arrive by themselves? List each bank&apos;s own rate page under{' '}
+            <Link href="/settings#rates">Settings, Rate pages</Link>, then use{' '}
+            <Link href="/rates/sync">Sync rates</Link> to read them all. Each bank&apos;s page on
+            this site says whether it was read and why not. Rates are only ever read from the
+            bank&apos;s own pages, never from comparison websites.
           </p>
         </>
       )}

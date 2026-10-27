@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import {
   configFromJson,
   fyBoundsOf,
+  sameBank,
   LIQUIDITY_KINDS,
   parseContactLines,
   profileFromJson,
@@ -14,16 +15,19 @@ import {
   callAi,
   checkRateSource,
   isAiProvider,
+  isDocKind,
   parseRatesResponse,
   testAiChain,
   testAiConnection,
   type AiProvider,
+  type DocKind,
   type RateCheck,
 } from '@fwos/ingest';
 import {
   aiChainFor,
   loadSettings,
   loadStoredAiKeys,
+  productsOfKinds,
   recordAiTest,
   saveRatesRead,
 } from '@fwos/data';
@@ -262,16 +266,17 @@ export async function checkRatePage(sourceId: string): Promise<RateCheck> {
     steps: [{ ok: false, text }],
     found: 0,
     ms: 0,
+    docs: [],
   });
   if (!/^[0-9a-f-]{36}$/.test(sourceId)) return fail('Unknown page.');
   const { supabase, householdId } = await loadContext();
   if (!householdId) return fail('Create your household first.');
   const src = await supabase
     .from('rate_sources')
-    .select('bank, url')
+    .select('bank, url, kind')
     .eq('id', sourceId)
     .maybeSingle();
-  const row = src.data as { bank: string; url: string } | null;
+  const row = src.data as { bank: string; url: string; kind: string | null } | null;
   if (!row) return fail('This page is no longer in the list.');
   let ai;
   try {
@@ -285,7 +290,14 @@ export async function checkRatePage(sourceId: string): Promise<RateCheck> {
   // rates that apply only above the most you would put with one bank are left out
   const maxAmount = (await loadSettings(supabase as unknown as SupabaseClient)).config.rates
     .maxAmount;
-  return checkRateSource({ bank: row.bank, url: row.url, ai, pageMs: 12_000, maxAmount });
+  return checkRateSource({
+    bank: row.bank,
+    url: row.url,
+    kind: isDocKind(row.kind) ? row.kind : 'both',
+    ai,
+    pageMs: 12_000,
+    maxAmount,
+  });
 }
 
 export interface PasteResult {
@@ -294,17 +306,23 @@ export interface PasteResult {
 }
 
 /**
- * Reads rates from text you copied from the bank's page in your own browser (open the page, select all, copy, paste here). For banks
- * that do not let a program open their page. The AI finds the rates in the text and they are stored like a refreshed page; a rate you
- * typed yourself is never overwritten.
+ * Reads rates from text you copied from the bank's page in your own browser (open the page, expand every section, select all, copy,
+ * paste here). For pages a program cannot open. The AI finds the rates in the text and they are stored like a synced page, labelled as
+ * pasted by you; a rate you typed yourself is never overwritten. `kind` says which rates the text carries (savings, fixed deposits or
+ * both): a kind not in the text leaves the rates of the other kind on file.
  */
-export async function readPastedRatePage(sourceId: string, text: string): Promise<PasteResult> {
+export async function readPastedRatePage(
+  sourceId: string,
+  text: string,
+  kind: string = 'both',
+): Promise<PasteResult> {
   const fail = (message: string): PasteResult => ({ ok: false, message });
   if (!/^[0-9a-f-]{36}$/.test(sourceId)) return fail('Unknown page.');
+  const docKind: DocKind = isDocKind(kind) ? kind : 'both';
   const pasted = text.replace(/\s+/g, ' ').trim();
   if (pasted.length < 200)
     return fail(
-      'Paste the whole page: open it in your browser, press Ctrl+A (Cmd+A on a Mac), then Ctrl+C, and paste here. What was pasted is too short to hold a rate table.',
+      'Paste the whole page: open it in your browser, expand every section, press Ctrl+A (Cmd+A on a Mac), then Ctrl+C, and paste here. What was pasted is too short to hold a rate table.',
     );
   const { supabase, householdId } = await loadContext();
   if (!householdId) return fail('Create your household first.');
@@ -315,6 +333,11 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
     .maybeSingle();
   const row = src.data as { id: string; bank: string; url: string } | null;
   if (!row) return fail('This page is no longer in the list.');
+  // the bank's other saved pages carry the same result
+  const sameRows = await supabase.from('rate_sources').select('id, bank');
+  const ids = ((sameRows.data ?? []) as { id: string; bank: string }[])
+    .filter((r) => sameBank(r.bank, row.bank))
+    .map((r) => r.id);
   let ai;
   try {
     ai = await aiChainFor(supabase as unknown as SupabaseClient, householdId, 'member', {
@@ -328,13 +351,28 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
       'No AI key is switched on. Add one, or switch one on, under Bank emails and AI first.',
     );
   const today = new Date().toISOString().slice(0, 10);
-  const note = async (result: string) => {
+  const note = async (result: string, ok: boolean) => {
     await supabase
       .from('rate_sources')
-      .update({ last_run_on: today, last_result: result.slice(0, 300) })
-      .eq('id', row.id);
+      .update({
+        last_run_on: today,
+        last_result: result.slice(0, 300),
+        last_docs: [
+          {
+            url: row.url,
+            kind: docKind,
+            ok,
+            chars: pasted.length,
+            note: ok ? 'pasted by you' : 'pasted text not read',
+            via: null,
+            effectiveOn: null,
+          },
+        ],
+      })
+      .in('id', ids.length > 0 ? ids : [row.id]);
     revalidatePath('/settings');
     revalidatePath('/rates');
+    revalidatePath('/rates/sync');
   };
   try {
     const hints = await supabase
@@ -344,7 +382,12 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
       .eq('bank', row.bank)
       .limit(20);
     const hintTexts = ((hints.data ?? []) as { hint: string }[]).map((h) => h.hint);
-    const text = `### ${row.bank}: text pasted by the account holder from the bank's page\n${pasted.slice(0, 60_000)}`;
+    const kindWords = {
+      both: 'savings and fixed deposit rates',
+      savings: 'savings account rates only',
+      fd: 'fixed deposit rates only',
+    }[docKind];
+    const text = `### ${row.bank}: text pasted by the account holder from the bank's page [${kindWords}]\n${pasted.slice(0, 60_000)}`;
     const maxAmount = (await loadSettings(supabase as unknown as SupabaseClient)).config.rates
       .maxAmount;
     const res = await callAi(ai, {
@@ -360,28 +403,28 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
       // every key answered but found nothing: the pasted text is the problem, not the keys
       const msg =
         res.attempts.length > 0 && res.attempts.every((a) => a.status === 200)
-          ? 'No rates could be found in the pasted text. Check it is the page with the rate table.'
+          ? 'No rates could be found in the pasted text. Check it is the page with the rate table, with every section expanded before copying.'
           : res.reason;
-      await note(`pasted page not read: ${res.attempts.length > 0 ? res.brief : msg}`);
+      await note(`pasted page not read: ${res.attempts.length > 0 ? res.brief : msg}`, false);
       return fail(msg);
     }
     const read = res.value;
-    const summary = await saveRatesRead({
+    const saved = await saveRatesRead({
       db: supabase as unknown as SupabaseClient,
       household: householdId,
       bank: row.bank,
       read,
       heldNames: [],
       today,
-      thirdParty: false,
+      products: productsOfKinds([docKind]),
       sourceUrl: row.url,
       sourceNote: `Pasted by you from the bank's page on ${today}`,
     });
-    await note(`pasted by you: ${summary}`);
-    return { ok: true, message: `Saved: ${summary}. ${answeredBy(res)}.` };
+    await note(`pasted by you: ${saved.summary}`, true);
+    return { ok: true, message: `Saved: ${saved.summary}. ${answeredBy(res)}.` };
   } catch (e) {
     const msg = `Could not read the pasted page (${(e as Error).message}).`;
-    await note(`pasted page not read: ${msg}`);
+    await note(`pasted page not read: ${msg}`, false);
     return fail(msg);
   }
 }
@@ -596,12 +639,29 @@ export async function addRateSource(_p: FormResult | null, f: FormData): Promise
       ok: false,
       message: 'Enter the bank and the full address of its rate page, starting with https://',
     };
+  const asked = field(f, 'kind');
+  const kind: DocKind = isDocKind(asked) ? asked : 'both';
   const { error } = await supabase
     .from('rate_sources')
-    .insert({ household_id: householdId, bank, url });
+    .insert({ household_id: householdId, bank, url, kind });
   if (error) return { ok: false, message: 'That page is already listed, or could not be saved.' };
   revalidatePath('/settings');
-  return { ok: true, message: 'Added. It is read at the next weekly refresh.' };
+  revalidatePath('/rates/sync');
+  return {
+    ok: true,
+    message: 'Added. It is read at the next monthly refresh, or now on the Sync bank rates page.',
+  };
+}
+
+/** Says which rates a saved page carries: savings, fixed deposits or both. */
+export async function updateRateSourceKind(f: FormData): Promise<void> {
+  const id = field(f, 'id');
+  const kind = field(f, 'kind');
+  if (!uuid.test(id) || !isDocKind(kind)) return;
+  const { supabase } = await loadContext();
+  await supabase.from('rate_sources').update({ kind }).eq('id', id);
+  revalidatePath('/settings');
+  revalidatePath('/rates/sync');
 }
 
 export async function deleteRateSource(f: FormData): Promise<void> {
@@ -610,6 +670,7 @@ export async function deleteRateSource(f: FormData): Promise<void> {
   const { supabase } = await loadContext();
   await supabase.from('rate_sources').delete().eq('id', id);
   revalidatePath('/settings');
+  revalidatePath('/rates/sync');
 }
 
 /** When the read-only family login may open the handbook. */
