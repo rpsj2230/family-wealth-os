@@ -318,4 +318,20 @@ test.describe('Home (public sample)', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await noSideways(page);
   });
+
+  for (const w of [412, 810]) {
+    test(`the period tiles do not scroll sideways with a wide font at ${w}px`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ viewport: { width: w, height: 900 } });
+      const page = await context.newPage();
+      await page.goto('/demo/dashboard');
+      await page.addStyleTag({
+        content: '* { font-family: "DejaVu Sans", sans-serif !important; }',
+      });
+      await noSideways(page);
+      await expect(hero(page).getByText('holdings had a value then').first()).toBeVisible();
+      await context.close();
+    });
+  }
 });

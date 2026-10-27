@@ -124,6 +124,12 @@ test.describe('Import: history from all monthly tabs (public sample)', () => {
     // the account that started part-way and the closed one say so
     await expect(rows.filter({ hasText: 'Cash-NRO-2200' })).toContainText('Balances from Sep 2022');
     await expect(rows.filter({ hasText: 'Cash- NRE' })).toContainText('closed');
+    // the net-worth chart: how many month ends have a point, and the button that rebuilds the rest from the history
+    await expect(panel.getByTestId('cov-chart-summary')).toHaveText('9 of 64 months');
+    await expect(panel.getByTestId('cov-rebuild')).toContainText('6 rebuilt from history');
+    await panel.getByRole('button', { name: 'Rebuild the history chart' }).click();
+    await expect(panel.getByTestId('cov-rebuild-result')).toContainText('This is a sample');
+    await expect(panel.getByTestId('cov-rebuild-result')).toContainText('rebuilt from history');
     await noOverflow(page);
   });
 });
