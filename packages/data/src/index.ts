@@ -14,6 +14,7 @@ import {
   type Portfolio,
   type PortfolioDefaults,
 } from '@fwos/core';
+import { HIST_FUND_REF } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { pageAll } from './paging';
 import { loadSettings } from './settings';
@@ -69,15 +70,16 @@ export async function loadPortfolioData(
       pageAll<ObservationRow>((from, to) =>
         sel(
           'observations',
-          'id, asset_id, kind, amount, currency, fx_rate, as_of, confidence, source, created_at, superseded_by',
+          'id, asset_id, kind, amount, currency, fx_rate, as_of, confidence, source, created_at, superseded_by, source_ref',
         )
+          // a fund's value copied from the monthly sheet is kept only to check against; it is never a valuation
           .order('as_of', { ascending: true })
           .order('id')
           .range(from, to),
       ),
       sel(
         'fixed_deposits',
-        'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4, fd_ref',
+        'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4, fd_ref, ended_on, ended_estimated, start_estimated',
       ),
       sel(
         'mf_positions',
@@ -127,7 +129,10 @@ export async function loadPortfolioData(
         },
       ]),
   );
-  const obsRows = obsRowsRead;
+  // a fund's value copied from the monthly sheet is kept only to check against: it is never a valuation
+  const obsRows = obsRowsRead.filter(
+    (o) => !((o as { source_ref?: string | null }).source_ref ?? '').startsWith(HIST_FUND_REF),
+  );
   // a savings account with no rate of its own earns what the rate list says for its bank, kind and balance slab
   const bankName = new Map(
     ((institutions.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [
@@ -288,3 +293,4 @@ export * from './taxfiles';
 export * from './fund-snapshots';
 export * from './paging';
 export * from './ai-keys';
+export * from './history';

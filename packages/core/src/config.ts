@@ -35,6 +35,8 @@ export interface AppConfig {
     includeSip: boolean;
     /** a fund statement shows a SIP as stopped when its last instalment is more than this many days before the statement ends */
     sipStoppedAfterDays: number;
+    /** Import history: a monthly tab with a deposit that starts more than this many days after the month it is named for is flagged (probably a copy of a later month) */
+    historyStartsAfterDays: number;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -222,6 +224,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     interestTdsRate: 0,
     includeSip: true,
     sipStoppedAfterDays: 45,
+    historyStartsAfterDays: 62,
   },
   inbox: { trustedForwarders: [] },
   rates: {
@@ -427,6 +430,9 @@ export function configFromJson(raw: unknown): AppConfig {
       includeSip: bool(est.includeSip, d.estimates.includeSip),
       sipStoppedAfterDays: Math.round(
         num(est.sipStoppedAfterDays, d.estimates.sipStoppedAfterDays, 20, 400),
+      ),
+      historyStartsAfterDays: Math.round(
+        num(est.historyStartsAfterDays, d.estimates.historyStartsAfterDays, 0, 400),
       ),
     },
     inbox: {
