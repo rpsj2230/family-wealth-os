@@ -59,21 +59,32 @@ export async function saveDigestSettings(_p: FormResult | null, f: FormData): Pr
       message: `Not saved: “${typed.find((e) => !EMAIL.test(e))}” is not an e-mail address.`,
     };
   if (extra.length > 5) return { ok: false, message: 'Not saved: at most five extra addresses.' };
-  const { error } = await supabase.from('digest_settings').upsert({
+  const row = {
     household_id: householdId,
     enabled,
     extra_recipients: [...new Set(extra)],
     include_retirement: includeRetirement,
-    include_goals: includeGoals,
     updated_at: new Date().toISOString(),
-  });
+  };
+  let { error } = await supabase
+    .from('digest_settings')
+    .upsert({ ...row, include_goals: includeGoals });
+  // the goals switch is a newer column: until the database update that adds it has run, the other settings must still save
+  let goalsPending = false;
+  if (error && /include_goals/i.test(error.message)) {
+    goalsPending = true;
+    ({ error } = await supabase.from('digest_settings').upsert(row));
+  }
   if (error) return { ok: false, message: 'That could not be saved.' };
   revalidatePath('/settings');
+  const base = enabled
+    ? 'Saved. The summary e-mail goes out every morning at 08:30 Singapore time.'
+    : 'Saved. The summary e-mail is switched off.';
   return {
     ok: true,
-    message: enabled
-      ? 'Saved. The summary e-mail goes out every morning at 08:30 Singapore time.'
-      : 'Saved. The summary e-mail is switched off.',
+    message: goalsPending
+      ? `${base} The goals switch could not be kept yet: it needs a database update that has not been applied, and the goals are included until it is.`
+      : base,
   };
 }
 

@@ -156,10 +156,8 @@ async function TaxTab({ db }: { db: SupabaseClient }) {
 
 async function NotificationsTab({ db }: { db: SupabaseClient }) {
   const [digest, integ, log] = await Promise.all([
-    db
-      .from('digest_settings')
-      .select('enabled, extra_recipients, include_retirement, include_goals')
-      .maybeSingle(),
+    // every column, so the page still reads when the database lacks the newer goals switch
+    db.from('digest_settings').select('*').maybeSingle(),
     db.from('integration_settings').select('telegram_set, telegram_chat_ids').maybeSingle(),
     db
       .from('digest_log')
@@ -171,7 +169,7 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
     enabled: boolean;
     extra_recipients: string[];
     include_retirement: boolean;
-    include_goals: boolean | null;
+    include_goals?: boolean | null;
   } | null;
   const t = integ.data as { telegram_set: boolean; telegram_chat_ids: string | null } | null;
   const deliveries: DeliveryRow[] = (log.data ?? []).map((r) => ({
