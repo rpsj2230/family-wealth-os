@@ -2636,3 +2636,43 @@ details.bankdet {
 .pastepage .bad {
   color: var(--fail, #b42318);
 }
+
+/* ---- a long server step is running: moving bar and a sentence, beside the button ---- */
+.busy-note {
+  margin: 10px 0;
+  min-width: 0;
+}
+.busy-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.busy-bar > span {
+  display: block;
+  width: 35%;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  animation: busy-slide 1.2s ease-in-out infinite;
+}
+@keyframes busy-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.busy-note p {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce) {
+  .busy-bar > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}

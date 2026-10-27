@@ -289,3 +289,16 @@ for (const width of [412, 810]) {
     await noOverflow(page);
   });
 }
+
+test.describe('Import > Excel workbook tab: history box', () => {
+  test('the workbook tab offers history from all monthly tabs with its own file box', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=workbook');
+    const box = page.locator('details', { hasText: 'History from all monthly tabs' });
+    await box.locator('summary').click();
+    await box.getByTestId('history-file').setInputFiles(fakeWorkbook);
+    await expect(box.getByTestId('hist-read')).toBeVisible();
+    await noOverflow(page);
+  });
+});

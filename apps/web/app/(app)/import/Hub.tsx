@@ -6,6 +6,7 @@ import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
 import { FundChanges } from '@/components/FundChanges';
 import type { PersonPreview } from '@/lib/fund-import';
+import { HistoryPanel } from './HistoryPanel';
 import { ImportDoor } from './ImportDoor';
 import { plainCountName } from '@/lib/import-detect';
 import type { SyncView } from '@fwos/ingest';
@@ -230,6 +231,15 @@ export function ImportHub({
               </p>
             </div>
           </section>
+          <details className="card" style={{ gridColumn: '1 / -1' }}>
+            <summary>History from all monthly tabs: fill in the past months</summary>
+            <p className="muted small">
+              Reads every monthly tab of the workbook, shows what is missing or different, and adds
+              the older balances and closed deposits. Nothing on file is ever changed or deleted
+              without your choice.
+            </p>
+            <HistoryPanel demo={demo} />
+          </details>
           <details className="card" style={{ gridColumn: '1 / -1' }}>
             <summary>First time, or a new household: import the whole workbook</summary>
             <fieldset disabled={demo} className="plain">

@@ -2,6 +2,7 @@
 
 import { startTransition, useActionState, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { BusyNote, ResultNote } from '@/components/BusyNote';
 import { FilePicker } from '@/components/FilePicker';
 import { AppliedChanges, FundChanges } from '@/components/FundChanges';
 import type { CasState, FundCsvState } from '@/lib/fund-import';
@@ -36,15 +37,18 @@ export function ImportForm({ today, file }: { today: string; file?: File | null 
           {previewing ? 'Reading…' : 'Preview (nothing is saved)'}
         </button>
       </div>
+      <BusyNote active={previewing}>
+        Reading every sheet and checking the totals against your file. Nothing is saved yet.
+      </BusyNote>
 
       {shown.stage === 'error' && (
-        <p className="notice warn" role="alert">
+        <ResultNote tone="warn" role="alert">
           {shown.message}
-        </p>
+        </ResultNote>
       )}
 
       {shown.stage === 'committed' && (
-        <div className="notice ok" role="status">
+        <ResultNote tone="ok" role="status">
           <p>
             Imported {shown.committed?.assets} accounts and holdings and{' '}
             {shown.committed?.observations} balances from {shown.fileName}.
@@ -52,7 +56,7 @@ export function ImportForm({ today, file }: { today: string; file?: File | null 
           <Link className="btn primary" href="/">
             Go to the dashboard
           </Link>
-        </div>
+        </ResultNote>
       )}
 
       {shown.stage === 'previewed' && (
@@ -111,6 +115,10 @@ export function ImportForm({ today, file }: { today: string; file?: File | null 
               ? 'Importing…'
               : `Import ${needs.length ? `(${needs.length} items flagged)` : ''}`}
           </button>
+          <BusyNote active={committing}>
+            Importing your accounts, deposits and balances. This can take up to a minute: please
+            keep this page open. The result appears here when it is done.
+          </BusyNote>
         </>
       )}
     </form>
@@ -128,15 +136,18 @@ export function SyncLayoutForm({ today, file }: { today: string; file?: File | n
           {pending ? 'Updating…' : 'Update order, names and links'}
         </button>
       </div>
+      <BusyNote active={pending}>
+        Updating the order, names and links. Please keep this page open.
+      </BusyNote>
       {state.stage === 'error' && (
-        <p className="notice warn" role="alert">
+        <ResultNote tone="warn" role="alert">
           {state.message}
-        </p>
+        </ResultNote>
       )}
       {state.stage === 'committed' && (
-        <p className="notice ok" role="status">
+        <ResultNote tone="ok" role="status">
           {state.message}
-        </p>
+        </ResultNote>
       )}
     </form>
   );
@@ -248,6 +259,9 @@ export function CasForm({
         </button>
         <span className="muted small">Nothing is saved until you apply the changes.</span>
       </div>
+      <BusyNote active={previewing}>
+        Reading the file and comparing it with what is on file. Nothing is saved yet.
+      </BusyNote>
 
       {shown.stage === 'error' && (
         <p className="notice warn" role="alert">
@@ -273,26 +287,32 @@ export function CasForm({
             </ul>
           )}
           {sel.seen.length > 0 && (
-            <div className="fc-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || sel.take.length === 0}
-                onClick={() => {
-                  setDone(true);
-                  send(applyAct, true);
-                }}
-              >
-                {applying
-                  ? 'Applying…'
-                  : sel.take.length === 0
-                    ? 'Nothing selected'
-                    : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
-              </button>
-              <span className="muted small">
-                Untick anything that is wrong. What you untick is left as it is.
-              </span>
-            </div>
+            <>
+              <div className="fc-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy || sel.take.length === 0}
+                  onClick={() => {
+                    setDone(true);
+                    send(applyAct, true);
+                  }}
+                >
+                  {applying
+                    ? 'Applying…'
+                    : sel.take.length === 0
+                      ? 'Nothing selected'
+                      : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
+                </button>
+                <span className="muted small">
+                  Untick anything that is wrong. What you untick is left as it is.
+                </span>
+              </div>
+              <BusyNote active={applying}>
+                Saving the selected changes. This can take a little while: please keep this page
+                open.
+              </BusyNote>
+            </>
           )}
         </>
       )}
@@ -401,6 +421,9 @@ export function FundCsvForm({
         </button>
         <span className="muted small">Nothing is saved until you apply the changes.</span>
       </div>
+      <BusyNote active={previewing}>
+        Reading the file and comparing it with what is on file. Nothing is saved yet.
+      </BusyNote>
 
       {shown.stage === 'error' && (
         <p className="notice warn" role="alert">
@@ -428,26 +451,32 @@ export function FundCsvForm({
             </ul>
           )}
           {sel.seen.length > 0 && (
-            <div className="fc-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || sel.take.length === 0}
-                onClick={() => {
-                  setDone(true);
-                  send(commitAct, true);
-                }}
-              >
-                {committing
-                  ? 'Applying…'
-                  : sel.take.length === 0
-                    ? 'Nothing selected'
-                    : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
-              </button>
-              <span className="muted small">
-                Untick anything that is wrong. What you untick is left as it is.
-              </span>
-            </div>
+            <>
+              <div className="fc-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy || sel.take.length === 0}
+                  onClick={() => {
+                    setDone(true);
+                    send(commitAct, true);
+                  }}
+                >
+                  {committing
+                    ? 'Applying…'
+                    : sel.take.length === 0
+                      ? 'Nothing selected'
+                      : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
+                </button>
+                <span className="muted small">
+                  Untick anything that is wrong. What you untick is left as it is.
+                </span>
+              </div>
+              <BusyNote active={committing}>
+                Saving the selected changes. This can take a little while: please keep this page
+                open.
+              </BusyNote>
+            </>
           )}
         </>
       )}
