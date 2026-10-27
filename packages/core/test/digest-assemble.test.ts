@@ -190,15 +190,10 @@ describe('assembleDigest: the money figures are the portal’s', () => {
     expect(w.today.pct).toBeCloseTo(w.today.amount / (w.total - w.today.amount), 10);
   });
 
-  it('overall profit is value less money put in, summed over the four kinds, as Home’s headline does', () => {
-    expect(w.overall.profit).toBeCloseTo(
-      w.classes.reduce((a, c) => a + c.profit, 0),
-      6,
-    );
-    expect(w.overall.invested).toBeCloseTo(
-      w.classes.reduce((a, c) => a + c.invested, 0),
-      6,
-    );
+  it('overall profit is on the money invested in deposits and funds, as Home’s headline is (savings and cash are not invested)', () => {
+    const kind = (k: string) => w.classes.find((c) => c.key === k)!;
+    expect(w.overall.profit).toBeCloseTo(kind('fd').profit + kind('funds').profit, 6);
+    expect(w.overall.invested).toBeCloseTo(kind('fd').invested + kind('funds').invested, 6);
     expect(w.overall.profitPct).toBeCloseTo(w.overall.profit / w.overall.invested, 10);
     const funds = w.classes.find((c) => c.key === 'funds')!;
     expect(funds.profit).toBeCloseTo(400_000, 4);

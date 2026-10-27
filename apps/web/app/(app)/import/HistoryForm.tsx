@@ -16,6 +16,7 @@ import {
   headline,
   historicalText,
   importOrder,
+  rebuildText,
   resultText,
   type HistoryView,
   type Pins,
@@ -51,6 +52,7 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
   const [pins, setPins] = useState<Pins>({});
   const [progress, setProgress] = useState({ done: 0, total: 0, current: '' });
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
+  const [chartNote, setChartNote] = useState<string | null>(null);
   const stop = useRef(false);
 
   const form = (extra: Record<string, string> = {}, ov = overrides, pn = pins) => {
@@ -112,6 +114,7 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
     stop.current = false;
     setStage('importing');
     setOutcomes([]);
+    setChartNote(null);
     setProgress({ done: 0, total: order.length, current: '' });
     const out: Outcome[] = [];
     for (const [i, tab] of order.entries()) {
@@ -155,7 +158,9 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
     setStage('done');
     if (!demo) {
       try {
-        await finishHistory();
+        // the net-worth history is rebuilt from what is now on file (month ends, marked as rebuilt)
+        const r = await finishHistory();
+        if (r) setChartNote(rebuildText(r));
       } catch {
         // the figures refresh on the next visit
       }
@@ -503,6 +508,11 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
                     conflictsReplaced: sum((r) => r.conflictsReplaced),
                     conflictsKept: sum((r) => r.conflictsKept),
                   })}
+                </p>
+              )}
+              {chartNote && (
+                <p className="small" data-testid="hist-chart-note">
+                  {chartNote}
                 </p>
               )}
               {failed.length > 0 && (

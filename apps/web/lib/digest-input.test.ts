@@ -198,7 +198,9 @@ describe('buildDigestInput (with a stand-in database)', () => {
     ]);
     expect(i.retirement?.card?.name).toBe('Retirement at 58');
     expect(i.needsYou!.some((n) => /task due/.test(n.text))).toBe(true);
-    expect(i.changes!.since).toBe('2026-09-20');
+    // the position on the first day of the last 30 days, rebuilt from the records on file (not the snapshot nearest to it)
+    expect(i.changes!.since).toBe('2026-09-27');
+    expect(i.month).toMatchObject({ from: '2026-09-27' });
     expect(i.changes!.maturities[0]!.name).toContain('Equitas');
     expect(i.attention.maturingSoon[0]!.amount).toBeGreaterThan(800_000);
   });

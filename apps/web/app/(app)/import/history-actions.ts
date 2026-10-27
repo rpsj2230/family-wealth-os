@@ -1,7 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { loadHistoryExisting, historyIo, loadSettings } from '@fwos/data';
+import {
+  loadHistoryExisting,
+  historyIo,
+  loadSettings,
+  rebuildSnapshots,
+  type RebuildResult,
+} from '@fwos/data';
 import {
   applyHistoryMonth,
   planHistory,
@@ -11,7 +17,7 @@ import {
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
-import { toView, type HistoryView } from '@/lib/history-view';
+import { rebuildText, toView, type HistoryView } from '@/lib/history-view';
 
 export interface HistoryPreviewState {
   ok: boolean;
@@ -154,8 +160,33 @@ export async function importHistoryMonth(formData: FormData): Promise<HistoryMon
   }
 }
 
-/** Called once after the last month, so every page shows the new history. */
-export async function finishHistory(): Promise<void> {
-  await loadContext();
+/**
+ * Called once after the last month: the net-worth history is rebuilt from what is now on file (month ends, marked as rebuilt; a day
+ * recorded on the day is never touched) and every page shows the new history. The rebuild never fails the import.
+ */
+export async function finishHistory(): Promise<RebuildResult | null> {
+  const { supabase, householdId } = await loadContext();
+  const rebuilt = householdId
+    ? await rebuildSnapshots(supabase as unknown as SupabaseClient, householdId)
+    : null;
   revalidatePath('/', 'layout');
+  return rebuilt;
+}
+
+/** The button on the History coverage panel: rebuilds the net-worth chart from the history on file. Safe to press again. */
+export async function rebuildHistoryChart(): Promise<RebuildResult & { message: string }> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId)
+    return {
+      ok: false,
+      written: 0,
+      planned: 0,
+      keptRecorded: 0,
+      empty: 0,
+      from: null,
+      message: 'Create your household first (Dashboard).',
+    };
+  const r = await rebuildSnapshots(supabase as unknown as SupabaseClient, householdId);
+  revalidatePath('/', 'layout');
+  return { ...r, message: rebuildText(r) };
 }

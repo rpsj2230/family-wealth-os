@@ -45,7 +45,13 @@ describe('the e-mail agrees with Home', () => {
   });
 
   it('the month change and late inputs are Home’s', () => {
-    expect(input.month).toEqual(home.change.month);
+    // the last N days is what Home's tile says: the earnings from the same period start, one function for both
+    expect(input.month).toEqual({
+      amount: home.tiles.recent.amount,
+      pct: home.tiles.recent.pct,
+      from: home.tiles.recent.from,
+      partial: home.tiles.recent.clamped,
+    });
     expect(input.lateInputs).toBe(home.trustDetail.fresh.stale + home.trustDetail.fresh.missing);
     expect(input.asOf).toBe(home.asOf);
   });

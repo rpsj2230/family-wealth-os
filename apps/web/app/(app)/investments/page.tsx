@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { parseRange, personStyles } from '@fwos/core';
+import { loadPositionInput, loadSettings } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { FundTransactionForm } from '@/components/FundTransactionForm';
 import { FundUpdateGrid, type FundInput } from '@/components/FundUpdateGrid';
 import { ListingTools } from '@/components/ListingTools';
@@ -26,6 +28,9 @@ export default async function InvestmentsPage({
     heat?: string;
     group?: string;
     edit?: string;
+    g?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -56,6 +61,14 @@ export default async function InvestmentsPage({
     })),
   );
   const match = tab === 'match' ? await loadMatchView(supabase) : null;
+  // the Value by period tab values the funds on every period end: the units on each day times the price, from the position engine
+  const position =
+    tab === 'valuation'
+      ? await loadPositionInput(supabase as unknown as SupabaseClient, loaded, {
+          config: (await loadSettings(supabase as unknown as SupabaseClient)).config,
+          allPrices: true,
+        })
+      : undefined;
 
   return (
     <InvestShell
@@ -66,6 +79,7 @@ export default async function InvestmentsPage({
       styles={styles}
       owners={owners}
       noPrice={noPrice}
+      position={position}
       actions={{ save: saveFundEdit, addFund, addTxn: addFundTxn }}
     >
       {tab === 'update' && (

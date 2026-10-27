@@ -24,6 +24,7 @@ import { isCounted } from './networth';
 import type { Portfolio } from './portfolio';
 import { assess, earliestRetirementAge, monteCarlo } from './retirement';
 import { buildPlan, type Holdings, type PlanSettings } from './planning';
+import { positionAsOf, positionGains, type PositionInput } from './position';
 
 /** Why the retirement view reads as it does, in words (the same as the portal's three states). */
 const STATUS_TEXT = {
@@ -73,6 +74,12 @@ export interface DigestSources {
   /** bank rates not checked within Settings' stale days */
   staleRates: number;
   monthly: DigestInput['monthly'];
+  /**
+   * What the position engine reads (records, deposit terms, fund ledgers and prices). With it, the last N days and the moves by kind
+   * and by person are what Home shows: earnings from the records on file, not the change between two saved snapshots. Without it
+   * they fall back to the saved snapshots.
+   */
+  position?: PositionInput;
 }
 
 export function assembleDigest(s: DigestSources): DigestInput {
@@ -93,11 +100,27 @@ export function assembleDigest(s: DigestSources): DigestInput {
     ...s.snapshots.filter((x) => x.date < s.date).map((x) => ({ date: x.date, value: x.total })),
     { date: s.date, value: nw.total },
   ];
+  const gains = s.position
+    ? positionGains({ position: s.position, recentDays: cfg.home.changeDays })
+    : null;
+  const recent = gains?.tiles.find((t) => t.key === 'recent') ?? null;
   const changes = netWorthChanges(trend, s.date, cfg.home.changeDays);
   const earlier = s.snapshots.filter((x) => x.date < s.date);
   const prev = earlier[earlier.length - 1];
   const fromSnap = changes.month ? s.snapshots.find((x) => x.date === changes.month!.from) : null;
-  const from = fromSnap && Object.keys(fromSnap.byType).length > 0 ? fromSnap : null;
+  // the position on the first day of the period, rebuilt from the records on file; else the snapshot nearest to it
+  const rebuilt =
+    s.position && recent && gains?.dataStarts ? positionAsOf(s.position, recent.from) : null;
+  const from =
+    rebuilt && rebuilt.counted > 0
+      ? {
+          date: recent!.from,
+          byType: rebuilt.byType as Record<string, number>,
+          byOwner: rebuilt.byOwner,
+        }
+      : fromSnap && Object.keys(fromSnap.byType).length > 0
+        ? fromSnap
+        : null;
   const max = cfg.digest.changesMax;
 
   // what needs the person, in Home's order, then the tax and rate lines
@@ -217,10 +240,12 @@ export function assembleDigest(s: DigestSources): DigestInput {
     lateInputs: late,
     goals,
     needsYou,
-    month: changes.month,
+    month: recent
+      ? { amount: recent.amount, pct: recent.pct, from: recent.from, partial: recent.clamped }
+      : changes.month,
     changes: {
       since: from?.date ?? changes.month?.from ?? s.date,
-      partial: !!changes.month?.partial,
+      partial: recent ? recent.clamped : !!changes.month?.partial,
       kinds: from
         ? moversBetween(
             foldByKind(from.byType),

@@ -1,5 +1,13 @@
-import { isEstimatedTxn, type FundHolding, type PerfFundIn } from '@fwos/core';
-import type { FundRow } from './investments';
+import {
+  DEFAULT_CONFIG,
+  isEstimatedTxn,
+  positionConfig,
+  type FundHolding,
+  type PerfFundIn,
+  type PosFund,
+  type PositionInput,
+} from '@fwos/core';
+import type { FundRow, InvestmentView } from './investments';
 
 /**
  * A fund as the shared period-gain figures read it: its value on each day that is measured and its cash flows, exactly the two things
@@ -38,3 +46,53 @@ export const perfFundIn = (f: FundRow): PerfFundIn => ({
   estimatedSince: fundHoldingOf(f).estimatedSince,
   value: f.value,
 });
+
+/**
+ * A fund as the position engine reads it when there is no price list to read (the public sample): its ledger lines and cash flows, and
+ * its value on every day the fund series was worked out for, as the values on file. The signed-in page reads the prices themselves
+ * (packages/data position.ts) and values the units on each day.
+ */
+export function posFundOfRow(f: FundRow): PosFund {
+  const byDay = new Map<string, number>();
+  for (const p of [...f.perf, ...f.periodPoints, ...f.history]) byDay.set(p.date, p.value);
+  return {
+    txns: f.txns.map((t) => ({
+      date: t.date,
+      units: t.units,
+      amount: t.amount,
+      estimated: t.source === 'estimate' || isEstimatedTxn(t),
+    })),
+    navs: [],
+    units: null,
+    snapshots: [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, value]) => ({ date, value })),
+    flows: f.flows,
+    hasStatement: f.hasStatement,
+    estimatedSince: fundHoldingOf(f).estimatedSince,
+  };
+}
+
+/**
+ * The funds of an Investments view as the position engine's input, for the public sample (which has no price list to read). The
+ * signed-in page reads the prices themselves and values the units on each day; see packages/data position.ts.
+ */
+export function fundsPosition(view: InvestmentView): PositionInput {
+  const funds = view.groups.flatMap((g) => g.funds);
+  return {
+    assets: funds.map((f) => ({
+      assetId: f.assetId,
+      ownerId: f.ownerId,
+      type: 'mutual_fund' as const,
+      status: f.status,
+      name: f.name,
+      currency: 'INR',
+      rate: { own: null, listed: null, tds: null },
+      records: [],
+      fd: null,
+      fund: posFundOfRow(f),
+    })),
+    config: positionConfig(DEFAULT_CONFIG, view.today),
+    current: Object.fromEntries(funds.map((f) => [f.assetId, { value: f.value, counted: true }])),
+  };
+}

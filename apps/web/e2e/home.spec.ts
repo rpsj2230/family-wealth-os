@@ -96,7 +96,7 @@ test.describe('Home (public sample)', () => {
       'Total invested',
       'Current value',
       'Maturity value',
-      'Total profit so far',
+      'Profit so far',
       'Earned today',
     ])
       await expect(figures.locator('.bv-delta-label', { hasText: label })).toBeVisible();
@@ -110,6 +110,37 @@ test.describe('Home (public sample)', () => {
     // a gain says so in words as well as in colour, and today’s earning is marked as an estimate
     await expect(figures.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
     await expect(figures.getByText('est.', { exact: true }).first()).toBeVisible();
+    await noSideways(page);
+  });
+
+  test('the period tiles start where the period really starts and say what they rest on', async ({
+    page,
+  }) => {
+    await page.goto('/demo/dashboard');
+    const deltas = hero(page).getByLabel('How net worth changed');
+    const month = deltas.locator('.bv-delta', { hasText: 'Last 30 days' });
+    const year = deltas.locator('.bv-delta', { hasText: 'This financial year' });
+    // each period begins on its own first day, not on "your first record"
+    await expect(month).toContainText('since 26 Sep 2026');
+    await expect(year).toContainText('since 1 Apr 2026');
+    await expect(deltas).not.toContainText('first record');
+    // how many holdings the first day rests on, and that net worth moved by a different amount
+    await expect(month).toContainText(/\d+ of \d+ holdings had a value then/);
+    await expect(year).toContainText(/\d+ of \d+ holdings had a value then/);
+    await expect(year).toContainText('Net worth moved');
+    // the two periods give different earnings
+    const amount = async (l: typeof month) =>
+      (await l.locator('.bv-delta-value strong').innerText()).trim();
+    expect(await amount(month)).not.toBe(await amount(year));
+    // the "?" names the records the first day is built from
+    await page.locator('[data-why="home.fy"]').first().click();
+    const panel = page.getByTestId('why-panel');
+    await expect(panel).toContainText('nearest record on or before');
+    await expect(panel).toContainText(/records from \d+ \w+ 20\d\d/);
+    await page.keyboard.press('Escape');
+    // invested money is deposits and funds only
+    const figures = hero(page).getByRole('group', { name: 'Money figures' });
+    await expect(figures).toContainText('savings and cash are not counted as invested');
     await noSideways(page);
   });
 
@@ -287,4 +318,20 @@ test.describe('Home (public sample)', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await noSideways(page);
   });
+
+  for (const w of [412, 810]) {
+    test(`the period tiles do not scroll sideways with a wide font at ${w}px`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ viewport: { width: w, height: 900 } });
+      const page = await context.newPage();
+      await page.goto('/demo/dashboard');
+      await page.addStyleTag({
+        content: '* { font-family: "DejaVu Sans", sans-serif !important; }',
+      });
+      await noSideways(page);
+      await expect(hero(page).getByText('holdings had a value then').first()).toBeVisible();
+      await context.close();
+    });
+  }
 });

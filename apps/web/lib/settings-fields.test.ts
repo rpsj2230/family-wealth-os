@@ -29,14 +29,34 @@ describe('settings fields', () => {
 
   it('the fund history card holds a date and two tolerances, and a date that is not one is named', () => {
     const v = groupValues(group('funds'), DEFAULT_CONFIG);
-    expect(v).toEqual({ historyFrom: '2021-01-01', unitTolerance: '0.001', moneyTolerance: '1' });
+    expect(v).toEqual({
+      historyFrom: '2021-01-01',
+      unitTolerance: '0.001',
+      moneyTolerance: '1',
+      valuationPeriods: '12',
+      financialQuarters: true,
+    });
     const ok = parseGroup(
       group('funds'),
-      form({ historyFrom: '2019-04-01', unitTolerance: '0.002', moneyTolerance: '2' }),
+      form({
+        historyFrom: '2019-04-01',
+        unitTolerance: '0.002',
+        moneyTolerance: '2',
+        valuationPeriods: '12',
+        financialQuarters: 'on',
+      }),
     );
     expect(ok).toEqual({
       ok: true,
-      raw: { funds: { historyFrom: '2019-04-01', unitTolerance: 0.002, moneyTolerance: 2 } },
+      raw: {
+        funds: {
+          historyFrom: '2019-04-01',
+          unitTolerance: 0.002,
+          moneyTolerance: 2,
+          valuationPeriods: 12,
+          financialQuarters: true,
+        },
+      },
     });
     const bad = parseGroup(
       group('funds'),
@@ -86,6 +106,11 @@ describe('settings fields', () => {
         historyJumpFactor: '50',
         historyJumpFloor: '1,00,000',
         historyTieRatio: '3',
+        observedRateGap: '2',
+        assumedGrowthProperty: '0',
+        assumedGrowthRetirement: '0',
+        assumedGrowthOther: '0',
+        reconcileTolerance: '1',
         savingsRate: '3.5',
         tdsRate: '0',
         includeSip: 'on',
@@ -101,6 +126,11 @@ describe('settings fields', () => {
           historyJumpFactor: 50,
           historyJumpFloor: 100000,
           historyTieRatio: 3,
+          observedRateGap: 0.02,
+          assumedGrowthProperty: 0,
+          assumedGrowthRetirement: 0,
+          assumedGrowthOther: 0,
+          reconcileTolerance: 0.01,
           savingsRate: 0.035,
           interestTdsRate: 0,
           includeSip: true,

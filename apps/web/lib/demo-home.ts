@@ -6,6 +6,7 @@
 import {
   DEFAULT_CONFIG,
   buildPortfolio,
+  positionInputFrom,
   buildSources,
   projectGoal,
   queueOf,
@@ -20,7 +21,7 @@ import { DEMO_TODAY as DEMO_DATE, demoModel } from './demo-fixture';
 import { demoView } from './demo-funds';
 import { DEFAULT_INFLATION, returnFor, type GoalSummary } from './goals-view';
 import type { HomeInput, HomeSnapshot } from './home';
-import { periodInputs } from './home-periods';
+import { posFundOfRow } from './fund-holdings';
 import { fundPace } from './investments';
 
 const TODAY = DEMO_DATE.toISOString().slice(0, 10);
@@ -57,6 +58,8 @@ function snapshotsFor(byType: Record<string, number>, byOwner: Record<string, nu
     const sum = Object.values(split).reduce((a, b) => a + b, 0);
     out.push({
       date,
+      // the older points are shown as rebuilt from history, as they would be after Import > History
+      source: days > 91 ? 'rebuilt' : 'daily',
       total: sum,
       byType: split,
       byOwner: Object.fromEntries(
@@ -279,12 +282,14 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     ],
     openTasks: 4,
     inboxReview: demoInbox().filter((x) => queueOf(x) === 'review').length,
-    ...periodInputs({
-      assetRows: assets,
-      fdRows: m.fds,
-      obsRows: observations,
-      blocks: m.blocks,
-      overview,
+    position: positionInputFrom({
+      assets,
+      observations,
+      fds: m.fds,
+      funds: Object.fromEntries(funds.map((f) => [f.assetId, posFundOfRow(f)])),
+      config,
+      today: TODAY,
+      portfolio,
     }),
     monthlySpending: 180_000,
     recent,

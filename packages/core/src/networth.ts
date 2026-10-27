@@ -58,6 +58,9 @@ const LIQUIDITY: Record<AssetType, Liquidity | null> = {
   policy: null, // insurance coverage is never wealth
 };
 
+/** How reachable a kind of holding is; null for a kind that is never wealth (insurance cover). */
+export const liquidityOf = (type: AssetType): Liquidity | null => LIQUIDITY[type];
+
 /** Statuses whose value is still part of wealth. Matured-but-unconfirmed FDs are excluded until confirmed. */
 const COUNTED_STATUS = new Set(['active', 'stopped']);
 

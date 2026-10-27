@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { coverageWords, positionAsOf, sinceWords } from '@fwos/core';
 import { demoHomeInput } from './demo-home';
 import { buildHome } from './home';
 
@@ -93,7 +94,9 @@ describe('Home model for the sample household', () => {
   it('reports what changed by kind and by person', () => {
     expect(h.whatChanged).not.toBeNull();
     const w = h.whatChanged!;
-    expect(w.change).toBeCloseTo(h.total - h.trend.all.find((p) => p.date === w.since)!.value, 2);
+    // the position on the first day of the last days, rebuilt from what was on file by then
+    expect(w.since).toBe(h.tiles.recent.from);
+    expect(w.change).toBeCloseTo(h.total - positionAsOf(input.position, w.since).total, 2);
     expect(w.kinds.length).toBeGreaterThan(0);
   });
 
@@ -105,5 +108,71 @@ describe('Home model for the sample household', () => {
       config: { ...input.config, home: { ...input.config.home, bankShareWatch: 0.05 } },
     });
     expect(strict.risks.find((r) => r.key === 'bank')!.verdict).toBe('watch');
+  });
+});
+
+describe('the headline tiles', () => {
+  const m = model();
+  const t = m.tiles;
+
+  it('are the total row of the profit-by-period table: one function, so the page cannot disagree with itself', () => {
+    for (const w of m.periods.windows) {
+      expect(t[w.key].amount).toBe(m.periods.total.cells[w.key].profit);
+      expect(t[w.key].pct).toBe(m.periods.total.cells[w.key].pct);
+      expect(t[w.key].from).toBe(w.from);
+    }
+  });
+
+  it('start where the period really starts, so the last 30 days and the financial year differ', () => {
+    expect(t.recent.asked).toBe('2026-09-26');
+    expect(t.fy.asked).toBe('2026-04-01');
+    expect(sinceWords(t.recent)).toBe('since 26 Sep 2026');
+    expect(sinceWords(t.fy)).toBe('since 1 Apr 2026');
+    expect(t.recent.clamped).toBe(false);
+    expect(t.fy.clamped).toBe(false);
+    expect(t.fy.amount).toBeGreaterThan(t.recent.amount * 2);
+    // the sample has records well before the financial year, so the year is not cut off at a first record
+    expect(m.dataStarts! < t.fy.from).toBe(true);
+  });
+
+  it('say how many holdings the first day rests on, and the record dates behind it', () => {
+    expect(coverageWords(t.fy)).toMatch(/^\d+ of \d+ holdings had a value then$/);
+    expect(t.fy.coverage.withValue).toBeLessThan(t.fy.coverage.of);
+    expect(t.fy.startFrom.movedForward).toBeGreaterThan(0);
+    expect(t.fy.startFrom.oldest! <= t.fy.from).toBe(true);
+    expect(t.recent.coverage.withValue).toBeGreaterThan(t.fy.coverage.withValue);
+  });
+
+  it('count only what holdings earned: net worth moves by a different amount, because money came in and went out', () => {
+    expect(t.recent.netWorth.change).not.toBeCloseTo(t.recent.amount, 0);
+    expect(t.recent.netWorth.end).toBeCloseTo(m.total, 2);
+  });
+});
+
+describe('invested money and profit', () => {
+  const m = model();
+  const card = (k: string) => m.classes.find((c) => c.key === k)!;
+
+  it('invested is deposits and funds only: savings and cash balances are not invested', () => {
+    expect(m.money.invested).toBeCloseTo(card('fd').invested + card('funds').invested, 2);
+    expect(m.money.invested).toBeLessThan(m.money.invested + card('cash').invested);
+    expect(m.money.parts.notInvested).toBeCloseTo(card('cash').current + card('others').current, 2);
+    expect(m.money.valueOfInvested).toBeCloseTo(m.money.invested + m.money.profit, 2);
+  });
+
+  it('profit is the interest accrued on deposits plus the gain on the fund units held, as a share of the money invested at cost', () => {
+    expect(m.money.profit).toBeCloseTo(card('fd').profit + card('funds').profit, 2);
+    expect(m.money.profitPct).toBeCloseTo(m.money.profit / m.money.invested, 10);
+    // the profit does not change when a savings balance does
+    expect(m.money.profit).toBeLessThan(m.money.current - m.money.invested);
+  });
+});
+
+describe('the trend', () => {
+  it('says how many of its points are rebuilt from history and how many months have none', () => {
+    const m = model();
+    expect(m.trend.rebuilt).toBeGreaterThan(0);
+    expect(m.trend.rebuilt).toBeLessThan(m.trend.history);
+    expect(m.trend.missingMonths).toBeGreaterThan(0);
   });
 });

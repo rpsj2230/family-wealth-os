@@ -9,7 +9,7 @@ import type { BankOverview } from './bank-overview';
 import { capacityKeyFor, dicgcPosition } from './dicgc';
 import type { ValuedAsset } from './networth';
 import type { AssetRow } from './portfolio';
-import { classCards, type ClassCard } from './home';
+import { classCards, investedMoney, type ClassCard } from './home';
 
 export interface DigestWealthInput {
   netWorth: number;
@@ -67,8 +67,8 @@ export function digestWealth(i: DigestWealthInput): DigestWealth {
     funds: i.funds,
     earned: {},
   });
-  const invested = classes.reduce((a, c) => a + c.invested, 0);
-  const profit = classes.reduce((a, c) => a + c.profit, 0);
+  // the same definitions as Home: invested money is deposits and funds, and the profit is on that money
+  const money = investedMoney(classes, i.netWorth);
   return {
     total: i.netWorth,
     today: {
@@ -78,10 +78,10 @@ export function digestWealth(i: DigestWealthInput): DigestWealth {
       funds: fundsDay,
     },
     overall: {
-      invested,
-      profit,
-      profitPct: invested > 0 ? profit / invested : null,
-      estimated: classes.some((c) => c.estimated && c.profit !== 0),
+      invested: money.invested,
+      profit: money.profit,
+      profitPct: money.profitPct,
+      estimated: money.estimated,
     },
     classes,
   };

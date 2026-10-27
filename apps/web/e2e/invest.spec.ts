@@ -41,7 +41,7 @@ test.describe('Investments (public sample)', () => {
       await expect(hero).toContainText(label);
     await expect(hero).toContainText('Maturity value: not applicable');
     await expect(hero.getByRole('img', { name: /is the money put in/ })).toBeVisible();
-    await expect(tabs(page).getByRole('link')).toHaveCount(7);
+    await expect(tabs(page).getByRole('link')).toHaveCount(8);
     await expect(page.getByRole('heading', { name: 'Value and money put in' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Return over time' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Goal by goal' })).toBeVisible();

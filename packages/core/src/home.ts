@@ -539,6 +539,55 @@ export function classCards(i: ClassCardsInput): ClassCard[] {
 }
 
 // ------------------------------------------------------------------------------------------------
+// Invested money and the profit on it
+// ------------------------------------------------------------------------------------------------
+export interface InvestedMoney {
+  /** the money put into deposits (their principal) and funds (the cost of the units still held) */
+  invested: number;
+  /** what those deposits and funds are worth above it: interest accrued on deposits plus the gain on the fund units held */
+  profit: number;
+  /** the profit as a share of the money invested, at cost; null when nothing is invested */
+  profitPct: number | null;
+  /** what the invested money is worth now */
+  valueOfInvested: number;
+  parts: {
+    fd: { invested: number; current: number; profit: number };
+    funds: { invested: number; current: number; profit: number };
+    /** the part of net worth that is not invested money: savings and cash, shares, property, pension accounts, money lent */
+    notInvested: number;
+  };
+  /** the profit of deposits or funds rests on an estimate */
+  estimated: boolean;
+}
+
+/**
+ * Total invested and the profit on it, for Home and the daily summary alike. Invested money is deposits and funds: savings and cash
+ * balances, shares, property and money lent are in net worth but have no cost to earn a profit on, so they are not "invested" and
+ * are not in the profit. The per cent is of the money invested, at cost.
+ */
+export function investedMoney(classes: ClassCard[], netWorth: number): InvestedMoney {
+  const fd = classes.find((c) => c.key === 'fd');
+  const funds = classes.find((c) => c.key === 'funds');
+  const part = (c: ClassCard | undefined) => ({
+    invested: c?.invested ?? 0,
+    current: c?.current ?? 0,
+    profit: c?.profit ?? 0,
+  });
+  const a = part(fd);
+  const b = part(funds);
+  const invested = a.invested + b.invested;
+  const profit = a.profit + b.profit;
+  return {
+    invested,
+    profit,
+    profitPct: invested > 0 ? profit / invested : null,
+    valueOfInvested: a.current + b.current,
+    parts: { fd: a, funds: b, notInvested: netWorth - a.current - b.current },
+    estimated: [fd, funds].some((c) => !!c && c.estimated && c.profit !== 0),
+  };
+}
+
+// ------------------------------------------------------------------------------------------------
 // Best and weakest fund
 // ------------------------------------------------------------------------------------------------
 export interface FundReturn {

@@ -7,7 +7,11 @@ import {
   groupLines,
   GROUP_BYS,
   heroModel,
+  buildValuationExplain,
   lotAgeing,
+  parseGranularity,
+  parseValuationRange,
+  valuationHistory,
   type Explain,
   type InvestOverviewSet,
   parseGroupBy,
@@ -16,6 +20,7 @@ import {
   upcomingSips,
   type GroupBy,
   type PersonStyle,
+  type PositionInput,
   type ShareRow,
   type YearKind,
 } from '@fwos/core';
@@ -41,6 +46,7 @@ import {
   UpcomingSips,
 } from '@/components/invest/OverviewParts';
 import { PortfolioHero } from '@/components/invest/PortfolioHero';
+import { ValueByPeriod } from '@/components/invest/ValueByPeriod';
 import { ReturnsByPeriod, type PeriodRow } from '@/components/invest/PerfParts';
 import { investOverviewExplain, investPerfExplain } from '@/lib/explain-invest';
 import { fundEditRows, householdLedger } from '@/lib/invest-ledger';
@@ -59,6 +65,7 @@ import '@/components/invest/invest.css';
 export const TABS = [
   'overview',
   'performance',
+  'valuation',
   'funds',
   'transactions',
   'breakdown',
@@ -70,6 +77,7 @@ export type InvestTab = (typeof TABS)[number];
 export const PERSON_TABS: InvestTab[] = [
   'overview',
   'performance',
+  'valuation',
   'funds',
   'transactions',
   'breakdown',
@@ -91,6 +99,10 @@ export interface InvestQuery {
   heat?: string | undefined;
   group?: string | undefined;
   edit?: string | undefined;
+  /** Value by period: weeks, months, quarters or years, and the dates of a chosen stretch */
+  g?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
 }
 
 const fmtShare = (rows: ShareRow[]) => rows;
@@ -109,6 +121,7 @@ export function InvestShell({
   owners,
   noPrice,
   actions,
+  position,
   children,
 }: {
   /** '/investments' or '/demo/investments' */
@@ -120,6 +133,8 @@ export function InvestShell({
   owners: { id: string; name: string }[];
   noPrice: number;
   actions?: FundEditActions;
+  /** what the Value by period tab reads (only given when that tab is open) */
+  position?: PositionInput | undefined;
   children?: ReactNode;
 }) {
   const tab = q.tab;
@@ -133,6 +148,9 @@ export function InvestShell({
       compare: q.compare,
       heat: q.heat,
       group: q.group,
+      g: q.g,
+      from: q.from,
+      to: q.to,
       ...patch,
     };
     const sp = new URLSearchParams();
@@ -149,6 +167,9 @@ export function InvestShell({
       compare: undefined,
       heat: undefined,
       group: undefined,
+      g: undefined,
+      from: undefined,
+      to: undefined,
     });
 
   const funds = view.groups.flatMap((g) => g.funds);
@@ -254,6 +275,7 @@ export function InvestShell({
         tabs={[
           { key: 'overview', label: 'Overview' },
           { key: 'performance', label: 'Performance' },
+          { key: 'valuation', label: 'Value by period' },
           { key: 'funds', label: 'Funds' },
           { key: 'transactions', label: 'Transactions' },
           { key: 'breakdown', label: 'Breakdown' },
@@ -321,6 +343,20 @@ export function InvestShell({
           styles={styles}
           heat={heat}
           link={(patch) => link({ tab: 'performance', ...patch })}
+        />
+      )}
+
+      {tab === 'valuation' && position && (
+        <ValuationTab
+          position={position}
+          q={q}
+          who={who}
+          styles={styles}
+          recent={cfg.valuationPeriods}
+          financialQuarters={cfg.financialQuarters}
+          base={base}
+          link={(patch) => link({ tab: 'valuation', ...patch })}
+          demo={demo}
         />
       )}
 
@@ -709,5 +745,58 @@ function FundsBody({
         </p>
       )}
     </>
+  );
+}
+
+/** Investments > Value by period: the chart and table of the funds' worth at the end of each period. */
+function ValuationTab({
+  position,
+  q,
+  who,
+  styles,
+  recent,
+  financialQuarters,
+  base,
+  link,
+  demo,
+}: {
+  position: PositionInput;
+  q: InvestQuery;
+  who: string | null;
+  styles: Record<string, PersonStyle>;
+  recent: number;
+  financialQuarters: boolean;
+  base: string;
+  link: (patch: Record<string, string | undefined>) => string;
+  demo: boolean;
+}) {
+  const h = valuationHistory({
+    position,
+    granularity: parseGranularity(q.g),
+    range: parseValuationRange(q.range, q.from, q.to),
+    owner: who,
+    recent,
+    financialQuarters,
+  });
+  const name = who ? (styles[who]?.name ?? 'everyone') : 'everyone';
+  const csv = new URLSearchParams();
+  csv.set('g', h.granularity);
+  if (h.range.kind === 'between') {
+    csv.set('from', h.range.from);
+    csv.set('to', h.range.to);
+  } else csv.set('range', h.range.kind);
+  if (who) csv.set('p', who);
+  return (
+    <ValueByPeriod
+      h={h}
+      ex={buildValuationExplain(h, name)}
+      href={link}
+      csvHref={`${base}/valuation-csv?${csv.toString()}`}
+      action={base}
+      keep={{ tab: 'valuation', g: h.granularity, ...(who ? { p: who } : {}) }}
+      recent={recent}
+      who={name}
+      demo={demo}
+    />
   );
 }

@@ -126,11 +126,11 @@ export function Changed({
       ) : (
         <>
           <p className="hm-line">
-            <Signed label="Net worth" amount={w.change} pct={m.change.month?.pct ?? null} />
+            <Signed label="Net worth" amount={w.change} pct={w.pct} />
             <span className="muted small">
               {' '}
-              since {niceDate(w.since)}
-              {w.partial ? ' (your first record)' : ''}
+              {w.partial ? 'data starts' : 'since'} {niceDate(w.since)}; money added or taken out is
+              part of it
             </span>
           </p>
           <h3 className="bv-h">By kind of holding</h3>

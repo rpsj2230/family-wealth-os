@@ -65,6 +65,7 @@ export function demoDigestSources(over: Partial<DigestSources> = {}): DigestSour
     appUrl: 'https://wealth.example.test',
     config: h.config,
     portfolio: h.portfolio,
+    position: h.position,
     blocks: h.blocks,
     overview: bankOverview(h.blocks, h.overview),
     cover: depositCover({

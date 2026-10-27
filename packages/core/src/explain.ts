@@ -271,6 +271,7 @@ export const FIGURES = {
     'invest.sipCard',
     'invest.bookedCard',
   ],
+  valuation: ['valuation.chart', 'valuation.table'],
   fund: [
     'fund.value',
     'fund.moneyIn',

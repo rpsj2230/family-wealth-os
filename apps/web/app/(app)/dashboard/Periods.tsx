@@ -16,7 +16,8 @@ import { homeLink } from './parts';
 
 /** "26 Sep to today", "1 Apr 2025 to 31 Mar 2026". */
 function span(w: PeriodWindow, today: string): string {
-  if (w.days === 0) return 'starts today';
+  if (w.days === 0) return w.clamped ? 'before the data starts' : 'starts today';
+  if (w.clamped) return `data starts ${niceDate(w.from)}`;
   return `${niceDate(w.from)} to ${w.through === today ? 'today' : niceDate(w.through)}`;
 }
 
@@ -86,7 +87,9 @@ export function Periods({
         <WhyHead why={ex['home.periods']}>
           <h2 id="hm-periods">Profit earned, by period</h2>
         </WhyHead>
-        <span className="muted small">worked out from the terms, not from saved totals</span>
+        <span className="muted small">
+          worked out from the records and terms, not from saved totals
+        </span>
       </header>
       <p className="small" data-testid="hm-periods-summary">
         In all, {sentence('recent')}; {sentence('month')}; {sentence('fy')}; {sentence('lastFy')}.
@@ -128,8 +131,11 @@ export function Periods({
         <summary>How these are worked out</summary>
         <ul className="list small muted">
           <li>
-            This is profit only. The change in net worth at the top of the page also includes money
-            you added or took out, so the two differ by design.
+            This is profit only. The change in net worth also includes money you added or took out,
+            so the two differ by design. Every holding is valued on the first day of a period from
+            the nearest record on or before it, moved forward at its rate, its fund price or the
+            exchange rate; a period that begins before the first record begins where the data does
+            and says “data starts”.
           </li>
           <li>
             <strong>Last {plural(w[0]!.days, 'day')}</strong> is the length set in{' '}

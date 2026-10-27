@@ -10,6 +10,7 @@ import {
   isEstimateLine,
   moveAmount,
   planHarvest,
+  positionAsOf,
   receivableStatus,
   rateOfferFromRow,
   savingsRatesOf,
@@ -23,6 +24,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
 import { pageAll } from './paging';
+import { loadPositionInput } from './position';
 import { loadSettings } from './settings';
 import { loadRatesContext } from './rates';
 import { loadHarvestPositions } from './harvest';
@@ -341,14 +343,36 @@ export async function buildDigestInput(
     // rates are optional; the summary goes out without them
   }
 
+  // what the holdings earned and what the household held on earlier days: the position engine, the same one Home uses. The summary
+  // goes out without it (and falls back to the saved snapshots) if the records cannot be read.
+  let position: DigestSources['position'];
+  try {
+    position = await loadPositionInput(db, l, {
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
+      config: cfg,
+    });
+  } catch {
+    position = undefined;
+  }
+
   // on the first of a month: how the month went
   let monthly: DigestInput['monthly'] = null;
   if (opts.date.slice(8) === '01') {
     const d = new Date(`${opts.date}T00:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() - 1);
     const since = d.toISOString().slice(0, 10);
+    const then = position ? positionAsOf(position, since) : null;
     const old = [...snaps].filter((s) => s.taken_on <= since).pop();
-    if (old)
+    if (then && then.counted > 0)
+      monthly = {
+        since,
+        change: Math.round(portfolio.netWorth.total - then.total),
+        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
+          name: ownerName.get(id) ?? 'Unknown',
+          change: Math.round(v - (then.byOwner[id] ?? 0)),
+        })),
+      };
+    else if (old)
       monthly = {
         since: old.taken_on,
         change: Math.round(portfolio.netWorth.total - Number(old.total)),
@@ -394,5 +418,6 @@ export async function buildDigestInput(
     rateIdeas,
     staleRates,
     monthly,
+    ...(position ? { position } : {}),
   });
 }
