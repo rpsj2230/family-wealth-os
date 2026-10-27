@@ -9,6 +9,22 @@ For Rupash and Ragini. Everything here describes what the app does today. Items 
 - An asset with no value is listed but never counted as zero. Insurance cover is never counted in net worth, and nor is a deposit marked as matured and unconfirmed. A deposit past its date that is still listed as running is counted at its maturity amount until you say where the money went; Accounts and Deposits leave it out of their bank figures and Home says so under the banks card.
 - Money you have lent is shown as owed, not as cash.
 
+## The ? next to a figure
+
+A small round **?** sits next to the headline figures on Home, Accounts, Deposits, Cash, Investments (and a fund's page), Reports, Tax, the Monthly update, New money and Rates. Press it (or Tab to it and press Enter or Space) and a card opens; on a phone it slides up from the bottom. Escape, the **X**, or a tap outside closes it and you are back where you were.
+
+The card says, in this order: **what the figure is** in one sentence; **how it is worked out**, with the real numbers put in and the base of every percentage ("₹8,03,737 profit ÷ ₹43,01,000 money put in = +18.7%"; the same profit as a share of today's value is a different percentage, and the card says which is which); **where it comes from**, one line per input with its date range and a word saying what kind of data it is; and **how complete it is**, with the funds or accounts that hold it back and a link to fix them (the Investments data check, the Import page, the Monthly update). Where a number is shown rounded (₹8.04 L) the card also gives the exact rupees, and so does hovering over it.
+
+Every input is one of five kinds, each shown as a word as well as a colour:
+
+- **statement**: read from a fund statement, a bank statement or a document.
+- **recorded**: typed in or confirmed by a person (a balance, a unit count, a deposit's terms, a setting).
+- **calculated**: worked out exactly from recorded facts (units times a price, a deposit's interest from its own terms).
+- **estimated**: worked out from a rate, a plan or a price move; a good guess, not a record.
+- **missing**: the data is not there, so the figure is left out or reduced; the card says what is needed.
+
+The whole figure is then **Complete**, **Partly estimated**, **Estimated** or **Missing data**. This is the same judgement the "est." mark, the fund history check and the "older than expected" words already make; the card only explains it.
+
 ## Home
 
 The first page answers, from the top down:

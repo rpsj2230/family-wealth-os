@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatInrCompact } from '@fwos/core';
+import { formatInrCompact, type ExplainSet } from '@fwos/core';
 import type { HomeModel, RiskRow } from '@/lib/home';
 import { CardHead, MaybeLink, homeLink } from './parts';
 
@@ -11,13 +11,22 @@ const STATUS: Record<string, { word: string; cls: string }> = {
 };
 
 /** Each goal with how much of its future cost is covered, in words as well as a bar. */
-export function Goals({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Goals({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   const goals = m.goals.list;
   return (
     <section className="card hm-card" aria-labelledby="hm-goals">
       <CardHead
         title="Goals"
         id="hm-goals"
+        why={ex['home.goals']}
         href={homeLink('/goals', sample)}
         linkLabel="All goals"
       />
@@ -90,10 +99,18 @@ function RiskLine({ r, sample }: { r: RiskRow; sample: boolean }) {
 }
 
 /** What could hurt: deposit insurance, one bank holding too much, one kind of holding dominating, money lent that is late. */
-export function Risks({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Risks({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   return (
     <section className="card hm-card hm-wide" aria-labelledby="hm-risks">
-      <CardHead title="What to watch" id="hm-risks" />
+      <CardHead title="What to watch" id="hm-risks" why={ex['home.risks']} />
       <ul className="hm-risks">
         {m.risks.map((r) => (
           <RiskLine key={r.key} r={r} sample={sample} />

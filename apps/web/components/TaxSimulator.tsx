@@ -8,8 +8,10 @@ import {
   type TaxRuleSet,
   simulateRedemption,
   suggestHarvest,
+  type Explain,
   type Lot,
 } from '@fwos/core';
+import { WhyHead } from './Why';
 
 interface ParsedLots {
   lots: Lot[];
@@ -51,9 +53,12 @@ const num = (s: string) => (s.trim() === '' ? 0 : Number(s.replace(/[₹,%\s,]/g
 export function TaxSimulator({
   sample,
   rules: allRules,
+  why,
 }: {
   sample?: boolean;
   rules?: TaxRuleSet[];
+  /** the "?" that says how the results are worked out */
+  why?: Explain;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [lotsText, setLotsText] = useState(
@@ -252,7 +257,13 @@ export function TaxSimulator({
       )}
       {sim && sim.status === 'ok' && (
         <section className="card" aria-labelledby="simres">
-          <h2 id="simres">Result of this redemption</h2>
+          {why ? (
+            <WhyHead why={why}>
+              <h2 id="simres">Result of this redemption</h2>
+            </WhyHead>
+          ) : (
+            <h2 id="simres">Result of this redemption</h2>
+          )}
           <table className="tbl responsive">
             <thead>
               <tr>
@@ -339,7 +350,13 @@ export function TaxSimulator({
 
       {harvest && (
         <section className="card" aria-labelledby="harv">
-          <h2 id="harv">Could using this year&apos;s tax-free allowance make sense?</h2>
+          {why ? (
+            <WhyHead why={why}>
+              <h2 id="harv">Could using this year&apos;s tax-free allowance make sense?</h2>
+            </WhyHead>
+          ) : (
+            <h2 id="harv">Could using this year&apos;s tax-free allowance make sense?</h2>
+          )}
           {harvest.status !== 'ok' ? (
             <p>{harvest.message}</p>
           ) : (

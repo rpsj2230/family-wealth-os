@@ -11,6 +11,8 @@ import {
 } from '@fwos/core';
 import { readAmount } from '@/lib/read-amount';
 import { PageHead } from '@/components/PageHead';
+import { WhyHead } from '@/components/Why';
+import { newMoneyExplain } from '@/lib/explain-rates';
 import { ParamTabs } from '@/components/ParamTabs';
 import { AmountForm, OptionsView } from './Options';
 import { InsuranceRoom, Suggestions } from './Parts';
@@ -76,6 +78,22 @@ export function NewMoneyView({
   const suggestions = compareHoldings(holdings, offers, prefs, today, limit);
   const totalGain = suggestions.reduce((s, x) => s + x.annualGain, 0);
   const stale = offers.filter((o) => offerAge(o, today) > prefs.staleDays).length;
+  const ex = newMoneyExplain({
+    offers,
+    holdings,
+    today,
+    staleDays: prefs.staleDays,
+    limit,
+    baselineRate,
+    amount,
+    kind,
+    result,
+    suggestions: { count: suggestions.length, totalGain },
+    ratesHref,
+    depositsHref: ratesHref.startsWith('/demo')
+      ? '/demo/deposits?tab=cover'
+      : '/deposits?tab=cover',
+  });
 
   return (
     <>
@@ -83,7 +101,7 @@ export function NewMoneyView({
         title="New money"
         subtitle="Type an amount. You get five ways to place it with the reasons, and a recommendation that balances the rate, the deposit-insurance limit and how the money is spread."
         pills={[
-          { label: `${offers.length} rates on file`, tone: 'info' },
+          { label: `${offers.length} rates on file`, tone: 'info', why: ex['newmoney.options'] },
           { label: `insurance limit ${formatInr(limit)} per person per bank` },
           ...(stale > 0
             ? [
@@ -131,6 +149,7 @@ export function NewMoneyView({
               amount={amount}
               banksBase={banksBase}
               ratesHref={ratesHref}
+              why={ex['newmoney.options']}
             />
           ) : (
             <p className="empty">
@@ -145,7 +164,9 @@ export function NewMoneyView({
 
       {tab === 'better' && (
         <section className="card" aria-labelledby="sug-h">
-          <h2 id="sug-h">Your money against the market</h2>
+          <WhyHead why={ex['newmoney.better']}>
+            <h2 id="sug-h">Your money against the market</h2>
+          </WhyHead>
           <p className="muted small">
             Compared after tax (NRE interest is not taxed in India; NRO interest is, at the rate in
             Settings). A running deposit is never suggested to be broken early.
@@ -162,7 +183,9 @@ export function NewMoneyView({
 
       {tab === 'room' && (
         <section className="card" aria-labelledby="room-h">
-          <h2 id="room-h">Who holds what today</h2>
+          <WhyHead why={ex['newmoney.room']}>
+            <h2 id="room-h">Who holds what today</h2>
+          </WhyHead>
           <p className="muted small">
             Each ownership name at each bank, with interest. Deposit insurance covers up to{' '}
             {formatInr(limit)} per bank for each name, savings, fixed and other deposits added

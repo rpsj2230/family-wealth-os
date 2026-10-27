@@ -5,6 +5,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import {
   FUND_COLUMNS,
   formatInr,
+  type Explain,
   searchLines,
   sortLines,
   type FundGroup,
@@ -18,6 +19,7 @@ import {
 import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { PersonBadge } from '@/components/Person';
+import { Why } from '@/components/Why';
 import { niceMonth } from '@/lib/dates';
 import { toCsv } from '@/lib/listing';
 import { DataCheck, LedgerChip } from './DataCheck';
@@ -50,16 +52,20 @@ function Totals({ t, label }: { t: GroupTotals; label?: ReactNode }) {
       <td className="num c-val" data-label="Value now">
         {inr(t.value)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
-        <span className="fl-s">{(t.share * 100).toFixed(t.share < 0.1 ? 1 : 0)}% of total</span>
+        <span className="fl-s">
+          {(t.share * 100).toFixed(t.share < 0.1 ? 1 : 0)}% of total value
+        </span>
       </td>
       <td className={`num c-pl ${tone(t.gain)}`} data-label="Profit or loss">
         {rupees(t.gain)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
-        <span className="fl-s">{t.gainPct === null ? '–' : pct(t.gainPct, 1)}</span>
+        <span className="fl-s">
+          {t.gainPct === null ? '–' : `${pct(t.gainPct, 1)} of invested`}
+        </span>
       </td>
       <td className={`num c-day ${tone(t.dayAmount)}`} data-label="Today">
         {t.dayAmount === null ? '–' : rupees(t.dayAmount)}
-        <span className="fl-s">{t.dayPct === null ? '' : pct(t.dayPct)}</span>
+        <span className="fl-s">{t.dayPct === null ? '' : `${pct(t.dayPct)} on prior value`}</span>
       </td>
       <td className={`num c-xirr ${tone(t.xirr)}`} data-label="Return a year">
         {t.xirr === null ? '–' : pct(t.xirr, 1)}
@@ -158,20 +164,20 @@ function Row({
       <td className="num c-val" data-label="Value now">
         {l.value ? inr(l.value) : '–'}
         <span className="fl-s">
-          {l.value > 0 ? `${(l.share * 100).toFixed(l.share < 0.1 ? 1 : 0)}% of total` : ''}
+          {l.value > 0 ? `${(l.share * 100).toFixed(l.share < 0.1 ? 1 : 0)}% of total value` : ''}
           {l.value > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
       <td className={`num c-pl ${l.invested ? tone(l.gain) : ''}`} data-label="Profit or loss">
         {l.invested ? rupees(l.gain) : '–'}
         <span className="fl-s">
-          {l.gainPct === null ? '' : pct(l.gainPct, 1)}
+          {l.gainPct === null ? '' : `${pct(l.gainPct, 1)} of invested`}
           {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
       <td className={`num c-day ${tone(l.dayAmount)}`} data-label="Today">
         {l.dayAmount === null ? '–' : rupees(l.dayAmount)}
-        <span className="fl-s">{l.dayPct === null ? '' : pct(l.dayPct)}</span>
+        <span className="fl-s">{l.dayPct === null ? '' : `${pct(l.dayPct)} on prior value`}</span>
       </td>
       <td className={`num c-xirr ${tone(l.xirr)}`} data-label="Return a year">
         {l.xirr === null ? '–' : pct(l.xirr, 1)}
@@ -222,7 +228,10 @@ export function FundsTable({
   demo,
   matchHref,
   checks,
+  why,
 }: {
+  /** the "?" that says how the columns and totals are worked out */
+  why?: Explain;
   groups: FundGroup[];
   grand: GroupTotals | null;
   by: GroupBy;
@@ -366,6 +375,7 @@ export function FundsTable({
         <span className="small muted" aria-live="polite">
           {count === total ? `${total} funds` : `${count} of ${total} funds`}
         </span>
+        {why && <Why explain={why} />}
       </div>
 
       <div className="fl-wrap">

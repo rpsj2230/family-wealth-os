@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { formatInrCompact, formatPct } from '@fwos/core';
+import { formatInrCompact, formatPct, type Explain, type ExplainSet } from '@fwos/core';
 import { whole } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
+import { Why } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 
 const direction = (n: number) => {
@@ -15,15 +16,20 @@ function Tile({
   amount,
   note,
   testId,
+  why,
 }: {
   label: string;
   amount: number;
   note: string;
   testId: string;
+  why?: Explain;
 }) {
   return (
     <div className="bv-delta flat hm-mtile">
-      <div className="bv-delta-label">{label}</div>
+      <div className="bv-delta-label">
+        {label}
+        {why && <Why explain={why} />}
+      </div>
       <div className="bv-delta-value">
         <strong data-testid={testId}>{formatInrCompact(amount)}</strong>
       </div>
@@ -41,6 +47,7 @@ function SignedTile({
   note,
   estimated,
   testId,
+  why,
 }: {
   label: string;
   amount: number;
@@ -48,6 +55,7 @@ function SignedTile({
   note: ReactNode;
   estimated: boolean;
   testId: string;
+  why?: Explain;
 }) {
   const dir = direction(amount);
   return (
@@ -55,6 +63,7 @@ function SignedTile({
       <div className="bv-delta-label">
         {label}
         {estimated && <Est />}
+        {why && <Why explain={why} />}
       </div>
       <div className="bv-delta-value">
         <span aria-hidden="true" className="bv-arrow">
@@ -79,7 +88,7 @@ function SignedTile({
  * The five money figures under the net worth: what was put in, what it is worth, what it pays at maturity, what it has earned and
  * what it earned today. Together the four kinds of holding below add up to these, so each figure can be checked on its own page.
  */
-export function Money({ m }: { m: HomeModel }) {
+export function Money({ m, ex }: { m: HomeModel; ex: ExplainSet<'home'> }) {
   const k = m.money;
   return (
     <div className="hm-money" role="group" aria-label="Money figures">
@@ -88,34 +97,39 @@ export function Money({ m }: { m: HomeModel }) {
         amount={k.invested}
         note="deposit amounts, cost of the fund units held, last balances recorded"
         testId="hm-invested"
+        why={ex['home.invested']}
       />
       <Tile
         label="Current value"
         amount={k.current}
         note="net worth: everything counted, at today’s value"
         testId="hm-current"
+        why={ex['home.current']}
       />
       <Tile
         label="Maturity value"
         amount={k.maturity}
         note="deposits at what they pay on their dates, the rest at today’s value"
         testId="hm-maturity"
+        why={ex['home.maturity']}
       />
       <SignedTile
         label="Total profit so far"
         amount={k.profit}
         pct={k.profitPct}
-        note="current value less invested"
+        note="current value less invested; % of the amount invested"
         estimated={k.estimated}
         testId="hm-profit"
+        why={ex['home.profit']}
       />
       <SignedTile
         label="Earned today"
         amount={m.change.today.amount}
         pct={m.change.today.pct}
-        note="interest at each rate and fund price moves, since yesterday"
+        note="interest at each rate and fund price moves, since yesterday; % of yesterday’s net worth"
         estimated
         testId="hm-earned-today"
+        why={ex['home.earnedToday']}
       />
     </div>
   );

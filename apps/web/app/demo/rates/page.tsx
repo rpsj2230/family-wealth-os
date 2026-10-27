@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { buildBoardCards, parseSort, parseView } from '@fwos/core';
 import { PageHead } from '@/components/PageHead';
+import { ratesExplain } from '@/lib/explain-rates';
 import { BoardToolbar, RateBoard } from '@/app/(app)/rates/Board';
 import {
   DEMO_EVENTS,
@@ -36,6 +37,14 @@ export default async function DemoRates({
     view,
     sort,
   });
+  const ex = ratesExplain({
+    offers: DEMO_OFFERS,
+    today: DEMO_RATES_TODAY,
+    staleDays: DEMO_RATE_PREFS.staleDays,
+    unreadable: 0,
+    banks: cards.length,
+    sample: true,
+  });
   return (
     <main className="content">
       <p>
@@ -49,7 +58,11 @@ export default async function DemoRates({
         title="Rates (sample)"
         subtitle="What each bank pays, where every figure came from and when it was last checked."
         pills={[
-          { label: `${DEMO_OFFERS.length} rates on file`, tone: 'info' },
+          {
+            label: `${DEMO_OFFERS.length} rates on file`,
+            tone: 'info',
+            why: ex['rates.freshness'],
+          },
           { label: 'newest check 21 Oct 2026' },
         ]}
       />

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { formatInr, formatInrCompact, formatPct } from '@fwos/core';
+import { formatInr, formatInrCompact, formatPct, type Explain } from '@fwos/core';
 import { Est } from '@/components/Est';
+import { Why, WhyHead } from '@/components/Why';
 
 /** Pages that also exist as public samples under /demo; any other link is drawn as plain text in the sample. */
 const SAMPLE_PAGES = [
@@ -71,16 +72,25 @@ export function CardHead({
   href,
   linkLabel,
   aside,
+  why,
 }: {
   title: string;
   id?: string;
   href?: string | null;
   linkLabel?: string;
   aside?: ReactNode;
+  /** the "?" that says how the card's figures were worked out */
+  why?: Explain | undefined;
 }) {
   return (
     <header className="hm-head">
-      <h2 id={id}>{title}</h2>
+      {why ? (
+        <WhyHead why={why}>
+          <h2 id={id}>{title}</h2>
+        </WhyHead>
+      ) : (
+        <h2 id={id}>{title}</h2>
+      )}
       {aside}
       {href && linkLabel && (
         <Link href={href} className="hm-more small">
@@ -101,12 +111,14 @@ export function Signed({
   pct,
   estimate = false,
   compact = true,
+  why,
 }: {
   label: string;
   amount: number;
   pct?: number | null;
   estimate?: boolean;
   compact?: boolean;
+  why?: Explain | undefined;
 }) {
   const rounded = Math.round(amount);
   const dir = rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat';
@@ -126,6 +138,7 @@ export function Signed({
         <span className="hm-signed-pct">{formatPct(Math.abs(pct), 2)}</span>
       )}
       {estimate && <Est />}
+      {why && <Why explain={why} />}
     </span>
   );
 }

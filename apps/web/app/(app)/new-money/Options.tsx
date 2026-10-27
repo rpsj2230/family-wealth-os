@@ -3,11 +3,13 @@ import {
   formatInr,
   formatInrCompact,
   ratePct,
+  type Explain,
   type OptionsResult,
   type PersonStyle,
   type PlacementOption,
 } from '@fwos/core';
 import { BankBadge } from '@/components/BankBadge';
+import { WhyHead } from '@/components/Why';
 import { PersonBadge } from '@/components/Person';
 import { slugify } from '@/lib/slug';
 import './options.css';
@@ -209,7 +211,10 @@ export function OptionsView({
   amount,
   banksBase,
   ratesHref,
+  why,
 }: {
+  /** the "?" that says how the figures of the options are worked out */
+  why: Explain;
   result: OptionsResult;
   amount: number;
   banksBase: string;
@@ -220,7 +225,9 @@ export function OptionsView({
     <>
       <section className="card nmo-pick" aria-labelledby="nmo-pick-h">
         <p className="nmo-eyebrow">Recommended for {whole(amount)}</p>
-        <h2 id="nmo-pick-h">{result.headline}</h2>
+        <WhyHead why={why}>
+          <h2 id="nmo-pick-h">{result.headline}</h2>
+        </WhyHead>
         <ul className="nmo-reasons">
           {result.reasoning.map((r) => (
             <li key={r}>{r}</li>

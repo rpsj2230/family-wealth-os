@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { standings, summarizeStandings } from '@fwos/core';
+import { buildMonthlyExplain, DEFAULT_CONFIG, standings, summarizeStandings } from '@fwos/core';
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { AutomationStrip } from '@/components/AutomationCards';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
+import { Why } from '@/components/Why';
 import { QuickEditProvider } from '@/components/QuickEdit';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { demoModel } from '@/lib/demo-fixture';
@@ -82,6 +83,13 @@ export default async function DemoMonthly({
   const shown = blocks.slice(0, 6);
   const sum = summarizeStandings(standings(shown, '2026-10-26'));
   const waiting = sum.waiting + sum.attention;
+  const exM = buildMonthlyExplain({
+    today: '2026-10-26',
+    month: 'October 2026',
+    summary: sum,
+    freshnessDays: DEFAULT_CONFIG.estimates.freshnessDays,
+    links: { inbox: '/demo/inbox', accounts: '/demo/accounts' },
+  });
   const tabs = [
     { key: 'banks', label: 'Banks and deposits', badge: waiting },
     { key: 'other', label: 'Property, loans and other' },
@@ -107,11 +115,16 @@ export default async function DemoMonthly({
               {
                 label: `${sum.current} of ${sum.banks} banks up to date`,
                 tone: waiting === 0 ? 'ok' : 'warn',
+                why: exM['monthly.status'],
               },
             ]}
             actions={<SheetSyncButton info={DEMO_SYNC_INFO} demoView={demoSyncView()} />}
           />
           <Tabs base="/demo/monthly" current={tab} tabs={tabs} />
+          <p className="muted small">
+            Each balance shows how current it is and who recorded it.{' '}
+            <Why explain={exM['monthly.freshness']} />
+          </p>
           {tab === 'other' ? (
             <MonthlyGrid rows={OTHER} today="2026-10-26" />
           ) : (

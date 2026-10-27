@@ -5,6 +5,7 @@ import {
   formatPct,
   type BankOverview as Overview,
   type BankShare,
+  type ExplainSet,
   type MaturityYear,
   type PersonStyle,
 } from '@fwos/core';
@@ -12,6 +13,7 @@ import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankO
 import '@/app/(app)/accounts/bankoverview.css';
 import './overview.css';
 import { PersonBadge } from '@/components/Person';
+import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 
 /**
@@ -28,7 +30,9 @@ export function DepositOverviewPanel({
   styles,
   scope = null,
   sample = false,
+  ex,
 }: {
+  ex: ExplainSet<'deposits'>;
   o: Overview;
   banks: BankShare[];
   ladder: MaturityYear[];
@@ -50,7 +54,9 @@ export function DepositOverviewPanel({
     <section className="card bv dv" aria-label="Fixed deposits overview">
       <div className="bv-top">
         <div className="bv-hero">
-          <h2 className="bv-eyebrow">Fixed deposits today{scope ? ` · ${scope}` : ''}</h2>
+          <WhyHead why={ex['deposits.total']}>
+            <h2 className="bv-eyebrow">Fixed deposits today{scope ? ` · ${scope}` : ''}</h2>
+          </WhyHead>
           <div className="bv-big" data-testid="dv-current">
             {formatInrCompact(o.current)}
           </div>
@@ -66,19 +72,23 @@ export function DepositOverviewPanel({
               amount={o.profit}
               pct={o.profitPct}
               note="interest earned on the amount invested"
+              why={ex['deposits.profit']}
             />
             <Delta
               label="Earned today"
               amount={o.today.change}
               pct={o.today.changePct}
-              note="since yesterday, at each rate"
+              note="since yesterday, at each rate; % of yesterday’s value"
               estimate
+              why={ex['deposits.today']}
             />
           </div>
         </div>
 
         <div className="bv-journey">
-          <h3 className="bv-h">From invested to maturity</h3>
+          <WhyHead why={ex['deposits.journey']}>
+            <h3 className="bv-h">From invested to maturity</h3>
+          </WhyHead>
           {pctDone === null ? (
             <p className="muted small">
               No deposit has interest left to earn, so there is no journey to show.
@@ -121,7 +131,9 @@ export function DepositOverviewPanel({
         <div className="dv-pair">
           <div className="dv-banks">
             <div className="dv-headrow">
-              <h3 className="bv-h">Which bank holds how much</h3>
+              <WhyHead why={ex['deposits.banks']}>
+                <h3 className="bv-h">Which bank holds how much</h3>
+              </WhyHead>
               <Link className="small" href={to('/deposits?g=bank')}>
                 Group the list by bank
               </Link>
@@ -150,7 +162,9 @@ export function DepositOverviewPanel({
           </div>
 
           <div className="dv-ladder">
-            <h3 className="bv-h">What matures, year by year</h3>
+            <WhyHead why={ex['deposits.ladder']}>
+              <h3 className="bv-h">What matures, year by year</h3>
+            </WhyHead>
             <ol className="dv-list" data-testid="dv-ladder">
               {ladder.map((s) => (
                 <li key={s.year}>
@@ -175,16 +189,19 @@ export function DepositOverviewPanel({
           label="Invested"
           value={formatInrCompact(o.invested)}
           sub={`${plural(o.deposits, 'running deposit')} · principal only`}
+          why={ex['deposits.invested']}
         />
         <Stat
           label="Maturity value"
           value={formatInrCompact(o.maturity)}
           sub={`${formatInrCompact(o.interest.total)} total interest over the life of the deposits`}
+          why={ex['deposits.maturity']}
         />
         <Stat
           label="Interest still to earn"
           value={formatInrCompact(o.interest.toEarn)}
           sub="until every deposit matures"
+          why={ex['deposits.toEarn']}
         />
         <Stat
           label="Next maturity"
@@ -195,6 +212,7 @@ export function DepositOverviewPanel({
               : 'no deposit is running'
           }
           href={to('/deposits?tab=maturities')}
+          why={ex['deposits.next']}
         />
         <Stat
           label={`Maturing in ${plural(o.soon.days, 'day')}`}
@@ -202,6 +220,7 @@ export function DepositOverviewPanel({
           sub={o.soon.count === 0 ? 'nothing falls due soon' : plural(o.soon.count, 'deposit')}
           tone={o.soon.count > 0 ? 'warn' : undefined}
           href={to('/deposits?tab=maturities')}
+          why={ex['deposits.soon']}
         />
         <Stat
           label="To confirm"
@@ -209,15 +228,17 @@ export function DepositOverviewPanel({
           sub={toConfirm === 0 ? 'nothing waiting' : 'matured: say where the money went'}
           tone={toConfirm > 0 ? 'warn' : undefined}
           href={to('/deposits?tab=maturities')}
+          why={ex['deposits.toConfirm']}
         />
         <Stat
           label="Largest bank"
           value={banks[0] ? formatPct(banks[0].share, 0) : '–'}
           sub={
             banks[0]
-              ? `${banks[0].bank} holds ${formatInrCompact(banks[0].current)}`
+              ? `${banks[0].bank} holds ${formatInrCompact(banks[0].current)} of the deposits`
               : 'no bank yet'
           }
+          why={ex['deposits.largest']}
         />
         <Stat
           label="Above the insured limit"
@@ -229,6 +250,7 @@ export function DepositOverviewPanel({
           }
           tone={cover.uninsured > 0 ? 'warn' : undefined}
           href={to('/deposits?tab=cover')}
+          why={ex['deposits.cover']}
         />
       </dl>
 
@@ -236,7 +258,9 @@ export function DepositOverviewPanel({
         <div className="bv-splits">
           {people.length > 1 && (
             <div className="bv-split">
-              <h3 className="bv-h">Whose deposits</h3>
+              <WhyHead why={ex['deposits.people']}>
+                <h3 className="bv-h">Whose deposits</h3>
+              </WhyHead>
               <SplitBar
                 caption="Whose deposits"
                 parts={people.map((p) => ({
@@ -267,7 +291,9 @@ export function DepositOverviewPanel({
           )}
           {o.accountTypes.length > 0 && (
             <div className="bv-split">
-              <h3 className="bv-h">NRE and NRO</h3>
+              <WhyHead why={ex['deposits.types']}>
+                <h3 className="bv-h">NRE and NRO</h3>
+              </WhyHead>
               <SplitBar
                 caption="NRE and NRO"
                 parts={o.accountTypes.map((t) => ({

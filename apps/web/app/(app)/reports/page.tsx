@@ -38,6 +38,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       {tab === 'deposits' && (
         <DepositReports
           fds={reportFds(input.fdLines, input.fdRows, who)}
+          scope={who ? (input.styles[who]?.name ?? null) : null}
           today={input.today}
           base="/reports"
           params={keep}
@@ -46,6 +47,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       {tab === 'funds' && input.view && (
         <FundReports
           funds={reportFunds(input.view, who)}
+          scope={who ? (input.styles[who]?.name ?? null) : null}
           today={input.today}
           longMonths={input.view.holdingMonths}
           base="/reports"

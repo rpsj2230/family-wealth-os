@@ -3,6 +3,8 @@ import {
   formatInr,
   formatUnits,
   shortDate,
+  type Explain,
+  type ExplainSet,
   type HarvestView,
   type LossRow,
   type NotNowRow,
@@ -12,6 +14,7 @@ import {
   type WorkingLot,
 } from '@fwos/core';
 import { PersonBadge } from '@/components/Person';
+import { Why, WhyHead } from '@/components/Why';
 import { CopyUnits } from './CopyUnits';
 import './tax.css';
 
@@ -279,7 +282,15 @@ function LossList({ rows }: { rows: LossRow[] }) {
   );
 }
 
-export function PersonHarvest({ pv, person }: { pv: PersonView; person: PersonStyle | undefined }) {
+export function PersonHarvest({
+  pv,
+  person,
+  ex,
+}: {
+  pv: PersonView;
+  person: PersonStyle | undefined;
+  ex: ExplainSet<'tax'>;
+}) {
   return (
     <section
       className="card personcard tx-person"
@@ -290,7 +301,10 @@ export function PersonHarvest({ pv, person }: { pv: PersonView; person: PersonSt
         <h2>
           <PersonBadge p={person} name size={26} />
         </h2>
-        <span className="small muted">Free allowance {inr(pv.meter.allowance)} a year</span>
+        <span className="small muted">
+          Free allowance {inr(pv.meter.allowance)} a year
+          <Why explain={ex['tax.allowance']} />
+        </span>
       </header>
       <p className="tx-headline">{pv.headline}</p>
       <p className="tx-sub muted">{pv.sub}</p>
@@ -298,7 +312,9 @@ export function PersonHarvest({ pv, person }: { pv: PersonView; person: PersonSt
 
       {pv.sell.length > 0 && (
         <>
-          <h3 className="tx-h">Sell this</h3>
+          <WhyHead why={ex['tax.sell']}>
+            <h3 className="tx-h">Sell this</h3>
+          </WhyHead>
           <SellList rows={pv.sell} />
           {pv.working.length > 0 && (
             <details className="disclose tx-working">
@@ -322,10 +338,12 @@ export function PersonHarvest({ pv, person }: { pv: PersonView; person: PersonSt
         </>
       )}
 
-      <h3 className="tx-h" id={`losses-${pv.ownerId}`}>
-        Losses you can book{' '}
-        {pv.losses.rows.length > 0 && <span className="tx-count">{pv.losses.rows.length}</span>}
-      </h3>
+      <WhyHead why={ex['tax.losses']}>
+        <h3 className="tx-h" id={`losses-${pv.ownerId}`}>
+          Losses you can book{' '}
+          {pv.losses.rows.length > 0 && <span className="tx-count">{pv.losses.rows.length}</span>}
+        </h3>
+      </WhyHead>
       {pv.losses.rows.length === 0 ? (
         <p className="small muted">{pv.losses.summary}</p>
       ) : (
@@ -377,18 +395,21 @@ export function Checklist({ view }: { view: HarvestView }) {
 }
 
 /** One small footnote at the very bottom: what the sales will cost. */
-export function CostsNote({ view }: { view: HarvestView }) {
+export function CostsNote({ view, why }: { view: HarvestView; why?: Explain }) {
   return (
-    <details className="tx-costs small">
-      <summary>
-        Costs to expect: stamp duty, STT, exit load <b className="num">{inr(view.costs.total)}</b>
-      </summary>
-      <ul className="list">
-        <li>Stamp duty: {inr(view.costs.stampDuty)}</li>
-        <li>Securities transaction tax (STT): {inr(view.costs.stt)}</li>
-        <li>Exit load: {view.costs.exitLoad > 0 ? inr(view.costs.exitLoad) : 'none'}</li>
-      </ul>
-      <p className="muted">These come from the rates in Settings. Nothing is sold for you.</p>
-    </details>
+    <div className="tx-costsrow">
+      <details className="tx-costs small">
+        <summary>
+          Costs to expect: stamp duty, STT, exit load <b className="num">{inr(view.costs.total)}</b>
+        </summary>
+        <ul className="list">
+          <li>Stamp duty: {inr(view.costs.stampDuty)}</li>
+          <li>Securities transaction tax (STT): {inr(view.costs.stt)}</li>
+          <li>Exit load: {view.costs.exitLoad > 0 ? inr(view.costs.exitLoad) : 'none'}</li>
+        </ul>
+        <p className="muted">These come from the rates in Settings. Nothing is sold for you.</p>
+      </details>
+      {why && <Why explain={why} />}
+    </div>
   );
 }

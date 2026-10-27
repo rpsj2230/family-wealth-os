@@ -1,7 +1,15 @@
 import Link from 'next/link';
-import { classHref, formatInrCompact, formatPct, type ClassCard } from '@fwos/core';
+import {
+  classHref,
+  formatInrCompact,
+  formatPct,
+  type ClassCard,
+  type Explain,
+  type ExplainSet,
+} from '@fwos/core';
 import { plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
+import { Why } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 import { Signed, homeLink } from './parts';
 
@@ -13,7 +21,7 @@ const NOUN: Record<ClassCard['key'], [string, string]> = {
 };
 
 /** One kind of holding, small: what was put in, what it has earned, what it is worth, the profit or loss and its share of the total. */
-function ClassCardView({ c, sample }: { c: ClassCard; sample: boolean }) {
+function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why: Explain }) {
   const href = homeLink(classHref(c.key), sample);
   const [one, many] = NOUN[c.key];
   const title = href ? (
@@ -33,6 +41,7 @@ function ClassCardView({ c, sample }: { c: ClassCard; sample: boolean }) {
             ›
           </span>
         )}
+        <Why explain={why} />
       </h3>
       <div className="hm-class-now" data-testid={`hm-class-${c.key}-current`}>
         {formatInrCompact(c.current)}
@@ -58,6 +67,9 @@ function ClassCardView({ c, sample }: { c: ClassCard; sample: boolean }) {
           pct={c.profitPct}
           estimate={c.estimated && Math.round(c.profit) !== 0}
         />
+        {c.profitPct !== null && (
+          <span className="small muted"> on the {formatInrCompact(c.invested)} invested</span>
+        )}
       </p>
       <p className="hm-class-share small muted">
         {formatPct(c.share, 0)} of net worth
@@ -80,7 +92,15 @@ function ClassCardView({ c, sample }: { c: ClassCard; sample: boolean }) {
  * Four small cards, one per kind of holding, in one row (four columns, then two, then one by the width of the page): deposits,
  * mutual funds, cash and the rest. Together they are the net worth. Each links to the page that has the detail.
  */
-export function Classes({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Classes({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   const funds = m.classes.find((c) => c.key === 'funds')!;
   const w = m.periods.basis;
   const rates = m.assumptions;
@@ -92,7 +112,22 @@ export function Classes({ m, sample }: { m: HomeModel; sample: boolean }) {
       </header>
       <ul className="hm-class-grid">
         {m.classes.map((c) => (
-          <ClassCardView key={c.key} c={c} sample={sample} />
+          <ClassCardView
+            key={c.key}
+            c={c}
+            sample={sample}
+            why={
+              ex[
+                c.key === 'fd'
+                  ? 'home.classDeposits'
+                  : c.key === 'funds'
+                    ? 'home.classFunds'
+                    : c.key === 'cash'
+                      ? 'home.classCash'
+                      : 'home.classOthers'
+              ]
+            }
+          />
         ))}
       </ul>
       <details className="bv-how">

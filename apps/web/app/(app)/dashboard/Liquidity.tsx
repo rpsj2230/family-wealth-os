@@ -1,4 +1,4 @@
-import { formatInrCompact, formatPct } from '@fwos/core';
+import { formatInrCompact, formatPct, type ExplainSet } from '@fwos/core';
 import { plural } from '@/app/(app)/accounts/BankOverview';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
@@ -10,7 +10,15 @@ const when = (days: number) => (days === 0 ? 'Today' : `Within ${plural(days, 'd
  * How fast the money can be reached. First what arrives with nothing sold (accounts now, then deposits as they mature); then, for the
  * windows set in Settings, what could be in the bank at no cost and the most there could be if funds are sold and deposits broken.
  */
-export function Liquidity({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Liquidity({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   const l = m.liquidity;
   const steps = l.ladder.filter((s) => s.amount > 0 || s.key === 'now');
   const top = Math.max(1, l.ladderTotal);
@@ -19,6 +27,7 @@ export function Liquidity({ m, sample }: { m: HomeModel; sample: boolean }) {
       <CardHead
         title="How fast can I get at it?"
         id="hm-liquid"
+        why={ex['home.liquidity']}
         href={homeLink('/raise', sample)}
         linkLabel="I need money"
       />

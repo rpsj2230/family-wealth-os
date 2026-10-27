@@ -13,7 +13,9 @@ import { PageHead } from '@/components/PageHead';
 import { PersonBadge } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
 import { TaxSimulator } from '@/components/TaxSimulator';
+import { WhyHead } from '@/components/Why';
 import { loadContext } from '@/lib/data';
+import { taxExplain } from '@/lib/explain-tax';
 import { updateRefund } from './actions';
 import { Checklist, CostsNote, niceDate, PersonHarvest } from './Parts';
 
@@ -96,6 +98,14 @@ export default async function TaxPage({
       day: settings.config.reminders.harvestDay,
     }) === iso;
   const refundsOpen = (refunds ?? []).filter((r) => r.status !== 'received').length;
+  const ex = taxExplain({
+    view,
+    plan,
+    today: iso,
+    refunds: refunds ?? [],
+    incomeLimit: settings.config.refunds.incomeLimit,
+    sample: false,
+  });
 
   return (
     <>
@@ -153,12 +163,12 @@ export default async function TaxPage({
             <p className="notice warn">No fund holdings found yet.</p>
           )}
           {view.people.map((pv) => (
-            <PersonHarvest key={pv.ownerId} pv={pv} person={styles[pv.ownerId]} />
+            <PersonHarvest key={pv.ownerId} pv={pv} person={styles[pv.ownerId]} ex={ex} />
           ))}
           {view.people.length > 0 && (
             <>
               <Checklist view={view} />
-              <CostsNote view={view} />
+              <CostsNote view={view} why={ex['tax.costs']} />
             </>
           )}
         </>
@@ -166,7 +176,9 @@ export default async function TaxPage({
 
       {tab === 'refunds' && (
         <section className="card" id="refunds">
-          <h2>Tax refunds to claim</h2>
+          <WhyHead why={ex['tax.refunds']}>
+            <h2>Tax refunds to claim</h2>
+          </WhyHead>
           <p className="muted small">
             As a non-resident, tax is withheld when funds are sold. Each harvest creates a record
             here by itself. After you sell, enter what was actually withheld (it is on the contract
@@ -280,7 +292,7 @@ export default async function TaxPage({
           </section>
           <details className="card">
             <summary>Try a specific sale (simulator)</summary>
-            <TaxSimulator rules={settings.rules} />
+            <TaxSimulator rules={settings.rules} why={ex['tax.simulator']} />
           </details>
         </>
       )}

@@ -95,8 +95,9 @@ export default async function AssetPage({
           colour={d.person?.colour ?? 'var(--viz-1)'}
           tax={fundView.tax}
           taxHref="/tax"
-          overview={
+          overview={(ex) => (
             <FundDetailPanel
+              ex={ex}
               fund={fundView.fund}
               detail={fundView.detail}
               base={`/asset/${id}`}
@@ -104,7 +105,7 @@ export default async function AssetPage({
               holdingMonths={fundView.holdingMonths}
               {...(d.person ? { colour: d.person.colour } : {})}
             />
-          }
+          )}
           records={records}
         />
       </FundEditProvider>

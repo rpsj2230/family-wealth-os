@@ -31,7 +31,7 @@ test.describe('Investments (public sample)', () => {
     const hero = page.getByRole('region', { name: 'Mutual funds at a glance' });
     for (const label of [
       'Current value of mutual funds',
-      'Invested',
+      'Money put in',
       'Profit or loss',
       'Annual return (XIRR)',
       'Booked by selling',

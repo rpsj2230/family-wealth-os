@@ -1,8 +1,15 @@
 import Link from 'next/link';
-import { buildBankBlocks, personStyles, standings, summarizeStandings } from '@fwos/core';
+import {
+  buildBankBlocks,
+  buildMonthlyExplain,
+  personStyles,
+  standings,
+  summarizeStandings,
+} from '@fwos/core';
 import { AutomationStrip } from '@/components/AutomationCards';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
+import { Why } from '@/components/Why';
 import { QuickEditHost } from '@/components/QuickEditHost';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadAutomation } from '@/lib/automation';
@@ -102,6 +109,14 @@ export default async function MonthlyPage({
     if (!((r.currency as string) in fxHint)) fxHint[r.currency as string] = Number(r.inr_per_unit);
   const sum = summarizeStandings(standings(blocks, iso));
   const waiting = sum.waiting + sum.attention;
+  const exM = buildMonthlyExplain({
+    today: iso,
+    month: month(today),
+    summary: sum,
+    freshnessDays: (await loadSettings(supabase as unknown as SupabaseClient)).config.estimates
+      .freshnessDays,
+    links: { inbox: '/inbox', accounts: '/accounts' },
+  });
   const { cards, inboxWaiting } = await loadAutomation(supabase, iso);
   const quick = quickModel({
     blocks,
@@ -121,6 +136,7 @@ export default async function MonthlyPage({
           {
             label: `${sum.current} of ${sum.banks} banks up to date`,
             tone: waiting === 0 ? 'ok' : 'warn',
+            why: exM['monthly.status'],
           },
           ...(sum.depositsToConfirm > 0
             ? [
@@ -141,6 +157,10 @@ export default async function MonthlyPage({
         }
       />
       <Tabs base="/monthly" current="banks" tabs={tabList(waiting)} />
+      <p className="muted small">
+        Each balance shows how current it is and who recorded it.{' '}
+        <Why explain={exM['monthly.freshness']} />
+      </p>
       <AutomationStrip cards={cards.filter((c) => c.key === 'email' || c.key === 'market')} />
       {inboxWaiting > 0 && (
         <p className="notice warn" role="note">

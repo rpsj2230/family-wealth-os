@@ -1,4 +1,5 @@
-import { formatInr } from '@fwos/core';
+import { formatInr, type Explain } from '@fwos/core';
+import { WhyHead } from './Why';
 import './grandtotal.css';
 
 /**
@@ -12,7 +13,10 @@ export function GrandTotal({
   current,
   lines,
   scope,
+  why,
 }: {
+  /** the "?" that says how the totals are worked out */
+  why?: Explain;
   invested: number;
   maturity: number;
   current: number;
@@ -23,7 +27,13 @@ export function GrandTotal({
   return (
     <section className="card grandtotal" data-grand aria-label="Total of the lines showing">
       <div className="gt-head">
-        <h2>Total{scope ? ` · ${scope}` : ''}</h2>
+        {why ? (
+          <WhyHead why={why}>
+            <h2>Total{scope ? ` · ${scope}` : ''}</h2>
+          </WhyHead>
+        ) : (
+          <h2>Total{scope ? ` · ${scope}` : ''}</h2>
+        )}
         <span className="gt-sub muted small">
           <b data-gt="n">{lines}</b> lines
           <span data-gt-filtered hidden>

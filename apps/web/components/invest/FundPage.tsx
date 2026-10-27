@@ -4,6 +4,8 @@ import {
   formatInr,
   formatInrCompact,
   rebase,
+  type Explain,
+  type ExplainSet,
   type FundTaxPanel,
   type PlanSplit,
   type YearKind,
@@ -13,7 +15,9 @@ import { SipStrip, StatList, type Stat } from '@/components/FundViz';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { PlotChart, type PlotSeries } from '@/components/PlotChart';
 import { Tabs } from '@/components/Tabs';
+import { Why, WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
+import { fundExplain } from '@/lib/explain-fund';
 import type { FundDetail } from '@/lib/fund-detail-model';
 import type { FundRow } from '@/lib/investments';
 import { AddsUp, LedgerChip } from './DataCheck';
@@ -56,16 +60,21 @@ function Tile({
   sub,
   cls,
   main,
+  why,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   cls?: string | null | undefined;
   main?: boolean;
+  why?: Explain;
 }) {
   return (
     <article className={`kpi ${main ? 'main' : ''}`}>
-      <div className="kpi-label">{label}</div>
+      <div className="kpi-label">
+        {label}
+        {why && <Why explain={why} />}
+      </div>
       <div className={`kpi-value ${cls ?? ''}`}>{value}</div>
       {sub && <div className="kpi-sub muted">{sub}</div>}
     </article>
@@ -105,8 +114,8 @@ export function FundPage({
   keep: Record<string, string>;
   today: string;
   demo: boolean;
-  /** the existing figures and graphs of a fund (range switch included) */
-  overview: ReactNode;
+  /** the existing figures and graphs of a fund (range switch included); given the fund's explainers when it is a function */
+  overview: ReactNode | ((ex: ExplainSet<'fund'>) => ReactNode);
   /** details, recorded values and the activity log */
   records: ReactNode;
   holdingMonths: number | null;
@@ -129,6 +138,17 @@ export function FundPage({
     return s ? `${base}?${s}` : base;
   };
   void plan;
+  const ex = fundExplain({
+    fund: f,
+    detail: d,
+    tax,
+    today,
+    holdingMonths,
+    overviewHref: href({ tab: undefined }),
+    importHref: demo ? '/demo/import' : '/import',
+    matchHref: demo ? '/demo/investments?tab=match' : '/investments?tab=match',
+    taxHref,
+  });
   const gain = f.value - f.invested;
   const gainPct = f.invested > 0 ? f.value / f.invested - 1 : null;
   const ret = d.returns;
@@ -149,6 +169,7 @@ export function FundPage({
       <section className="fundhero" aria-label="This fund at a glance">
         <Tile
           main
+          why={ex['fund.value']}
           label="Value now"
           value={
             <>
@@ -166,13 +187,15 @@ export function FundPage({
                   <span className={tone(f.dayAmount)}>
                     {rupees(f.dayAmount)} ({f.dayPct === null ? '' : pct(f.dayPct)})
                   </span>
+                  <Why explain={ex['fund.today']} />
                 </>
               )}
             </>
           }
         />
         <Tile
-          label="Invested"
+          why={ex['fund.moneyIn']}
+          label="Money put in"
           value={
             <>
               {f.invested ? inr(f.invested) : '–'}
@@ -182,6 +205,7 @@ export function FundPage({
           sub={d.avgCost === null ? 'cost of the units held' : `average cost ${price(d.avgCost)}`}
         />
         <Tile
+          why={ex['fund.profit']}
           label="Profit or loss"
           value={
             <>
@@ -190,9 +214,14 @@ export function FundPage({
             </>
           }
           cls={f.invested ? tone(gain) : null}
-          sub={gainPct === null ? 'no cost recorded' : `${pct(gainPct, 1)} on money put in`}
+          sub={
+            gainPct === null
+              ? 'no cost recorded'
+              : `${pct(gainPct, 1)} on the ${formatInrCompact(f.invested)} put in`
+          }
         />
         <Tile
+          why={ex['fund.xirr']}
           label="Return a year (XIRR)"
           value={
             <>
@@ -210,6 +239,7 @@ export function FundPage({
           }
         />
         <Tile
+          why={d.cagr !== null ? ex['fund.cagr'] : ex['fund.booked']}
           label={d.cagr !== null ? 'Compound growth' : 'Booked by selling'}
           value={
             d.cagr !== null
@@ -236,6 +266,7 @@ export function FundPage({
           }
         />
         <Tile
+          why={ex['fund.sip']}
           label="Monthly investment"
           value={f.sipMonthly ? (f.sipStopped ? 'Stopped' : inr(f.sipMonthly)) : 'None'}
           sub={
@@ -323,7 +354,9 @@ export function FundPage({
           </p>
           <section className="card wide" aria-labelledby="fr">
             <div className="cardhead">
-              <h2 id="fr">Return over each period</h2>
+              <WhyHead why={ex['fund.returns']}>
+                <h2 id="fr">Return over each period</h2>
+              </WhyHead>
               <span className="small muted">
                 {ret.basis === 'price' ? 'Price return' : 'From recorded values'}
               </span>
@@ -421,7 +454,9 @@ export function FundPage({
       <>
         <section className="card wide" aria-labelledby="fl">
           <div className="cardhead">
-            <h2 id="fl">Units still held</h2>
+            <WhyHead why={ex['fund.units']}>
+              <h2 id="fl">Units still held</h2>
+            </WhyHead>
             <span className="small muted">Each purchase with units left, oldest first</span>
           </div>
           {open.length > 0 ? (
@@ -545,7 +580,9 @@ export function FundPage({
 
         <section className="card wide" aria-labelledby="fs">
           <div className="cardhead">
-            <h2 id="fs">Gains booked by selling</h2>
+            <WhyHead why={ex['fund.booked']}>
+              <h2 id="fs">Gains booked by selling</h2>
+            </WhyHead>
             <span className="small muted">Oldest units sold first</span>
           </div>
           {sales.length > 0 ? (
@@ -668,11 +705,12 @@ export function FundPage({
           {addsUp}
           <TaxPanel
             panel={tax}
+            why={ex['fund.tax']}
             taxHref={taxHref}
             setExitLoadHref={href({ edit: f.assetId })}
             fundName={f.name}
           />
-          {overview}
+          {typeof overview === 'function' ? overview(ex) : overview}
         </>
       )}
       {tab === 'returns' && returnsBody}

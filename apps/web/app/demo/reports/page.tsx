@@ -33,6 +33,7 @@ export default async function DemoReports({ searchParams }: { searchParams: Prom
       {tab === 'deposits' ? (
         <DepositReports
           fds={DEMO_REPORT_FDS}
+          sample
           today={DEMO_TODAY}
           base="/demo/reports"
           params={params}
@@ -40,6 +41,7 @@ export default async function DemoReports({ searchParams }: { searchParams: Prom
       ) : (
         <FundReports
           funds={reportFunds(demoView(null, 'all'), null)}
+          sample
           today={DEMO_TODAY}
           longMonths={DEMO_HOLDING_MONTHS}
           base="/demo/reports"

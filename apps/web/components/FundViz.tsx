@@ -5,10 +5,12 @@ import {
   formatInr,
   formatInrCompact,
   type CalendarCell,
+  type Explain,
   type FundRangeKey,
   type MonthContribution,
 } from '@fwos/core';
 import { pct, rupees } from './InvestHeadline';
+import { Why } from './Why';
 import { monthShort } from './viz-dates';
 import './fundviz.css';
 
@@ -58,6 +60,8 @@ export interface Stat {
   value: ReactNode;
   note?: ReactNode;
   tone?: 'gain' | 'fail' | '' | null | undefined;
+  /** the "?" that says how this figure was worked out */
+  why?: Explain | undefined;
 }
 
 /** A tidy grid of labelled figures, each with one line saying what it is or where it comes from. */
@@ -66,7 +70,10 @@ export function StatList({ items, label }: { items: Stat[]; label: string }) {
     <dl className="statgrid" aria-label={label}>
       {items.map((s) => (
         <div key={s.label}>
-          <dt>{s.label}</dt>
+          <dt>
+            {s.label}
+            {s.why && <Why explain={s.why} />}
+          </dt>
           <dd className={`v ${s.tone ?? ''}`}>{s.value}</dd>
           {s.note && <dd className={`n ${s.tone ?? ''}`}>{s.note}</dd>}
         </div>

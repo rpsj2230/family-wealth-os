@@ -12,8 +12,11 @@ import {
   fundSummary,
   parseFdBy,
   parseFundBy,
+  buildReportsExplain,
   parsePeriod,
+  reportTableExplain,
   sipTable,
+  type ExplainSet,
   type ReportFd,
   type ReportFund,
   type ReportTable,
@@ -22,6 +25,7 @@ import { BarList, inrCompact } from '@/components/charts';
 import { KpiStrip } from '@/components/KpiStrip';
 import { ParamTabs } from '@/components/ParamTabs';
 import { CsvButton, ReportSheet } from '@/components/ReportTable';
+import { Why, WhyHead } from '@/components/Why';
 
 export type Params = Record<string, string | undefined>;
 
@@ -33,15 +37,19 @@ function Report({
   table,
   controls,
   caption,
+  ctx,
 }: {
   table: ReportTable;
   controls?: React.ReactNode;
   caption?: string;
+  ctx: { today: string; noStatement: number; funds: number; links: { import: string } };
 }) {
   return (
     <section className="card rptcard" aria-labelledby={`${table.id}-h`}>
       <div className="rpthead">
-        <h2 id={`${table.id}-h`}>{table.title}</h2>
+        <WhyHead why={reportTableExplain(table, ctx)}>
+          <h2 id={`${table.id}-h`}>{table.title}</h2>
+        </WhyHead>
         <CsvButton table={table} />
       </div>
       {table.note && <p className="muted small">{table.note}</p>}
@@ -87,17 +95,36 @@ function Switch({
   );
 }
 
+const reportLinks = (sample: boolean) => ({
+  deposits: sample ? '/demo/deposits' : '/deposits',
+  investments: sample ? '/demo/investments' : '/investments',
+  import: sample ? '/demo/import' : '/import',
+  settings: sample ? '/demo/settings' : '/settings',
+});
+
 export function DepositReports({
   fds,
   today,
   base,
   params,
+  scope = null,
+  sample = false,
 }: {
   fds: ReportFd[];
   today: string;
   base: string;
   params: Params;
+  scope?: string | null;
+  sample?: boolean;
 }) {
+  const ex: ExplainSet<'reports'> = buildReportsExplain({
+    today,
+    scope,
+    fds,
+    funds: [],
+    links: reportLinks(sample),
+  });
+  const ctx = { today, noStatement: 0, funds: 0, links: { import: reportLinks(sample).import } };
   const ms = parsePeriod(params.ms, 'date');
   const ss = parsePeriod(params.ss, 'date');
   const by = parseFdBy(params.by);
@@ -116,24 +143,49 @@ export function DepositReports({
       <KpiStrip
         label="Deposits at a glance"
         items={[
-          { label: 'Deposits', value: fds.length, sub: 'running or waiting to be confirmed' },
-          { label: 'Amount put in', value: formatInrCompact(principal), main: true },
-          { label: 'Pays at maturity', value: formatInrCompact(maturity) },
+          {
+            label: 'Deposits',
+            value: fds.length,
+            sub: 'running or waiting to be confirmed',
+            why: ex['reports.fdCount'],
+          },
+          {
+            label: 'Amount put in',
+            value: formatInrCompact(principal),
+            main: true,
+            why: ex['reports.fdPrincipal'],
+          },
+          {
+            label: 'Pays at maturity',
+            value: formatInrCompact(maturity),
+            why: ex['reports.fdMaturity'],
+          },
           {
             label: 'Interest still to earn',
             value: formatInrCompact(maturity - principal),
             sub: 'from booking to maturity',
+            why: ex['reports.fdInterest'],
           },
-          { label: 'Average rate', value: pctText(avg), sub: 'weighted by amount' },
+          {
+            label: 'Average rate',
+            value: pctText(avg),
+            sub: 'weighted by amount',
+            why: ex['reports.fdRate'],
+          },
           {
             label: 'Next maturity',
             value: next ? formatInrCompact(nextAmt ?? 0) : '–',
             sub: next ?? 'none ahead',
+            why: ex['reports.fdNext'],
           },
         ]}
         six
       />
+      <p className="muted small">
+        Every table ends with a Grand total row. <Why explain={ex['reports.table']} />
+      </p>
       <Report
+        ctx={ctx}
         table={fdSummary(fds, { basis: 'maturity', period: ms })}
         caption="What each maturity date pays"
         controls={
@@ -148,6 +200,7 @@ export function DepositReports({
         }
       />
       <Report
+        ctx={ctx}
         table={fdSummary(fds, { basis: 'start', period: ss })}
         controls={
           <Switch
@@ -161,6 +214,7 @@ export function DepositReports({
         }
       />
       <Report
+        ctx={ctx}
         table={fdBreakdown(fds, by)}
         controls={
           <Switch
@@ -173,7 +227,11 @@ export function DepositReports({
           />
         }
       />
-      <Report table={fdInterestByFy(fds, today)} caption="Interest in each financial year" />
+      <Report
+        ctx={ctx}
+        table={fdInterestByFy(fds, today)}
+        caption="Interest in each financial year"
+      />
     </>
   );
 }
@@ -184,13 +242,30 @@ export function FundReports({
   longMonths,
   base,
   params,
+  scope = null,
+  sample = false,
 }: {
   funds: ReportFund[];
   today: string;
   longMonths: number | null;
   base: string;
   params: Params;
+  scope?: string | null;
+  sample?: boolean;
 }) {
+  const ex: ExplainSet<'reports'> = buildReportsExplain({
+    today,
+    scope,
+    fds: [],
+    funds,
+    links: reportLinks(sample),
+  });
+  const ctx = {
+    today,
+    noStatement: funds.filter((f) => !f.hasStatement).length,
+    funds: funds.length,
+    links: { import: reportLinks(sample).import },
+  };
   const fb = parseFundBy(params.fb);
   const fp = parsePeriod(params.fp, 'month');
   const flow = parsePeriod(params.flow, 'fy');
@@ -207,21 +282,46 @@ export function FundReports({
       <KpiStrip
         label="Mutual funds at a glance"
         items={[
-          { label: 'Funds', value: funds.length },
-          { label: 'Invested', value: formatInrCompact(invested) },
-          { label: 'Value now', value: formatInrCompact(value), main: true },
+          { label: 'Funds', value: funds.length, why: ex['reports.fundCount'] },
+          {
+            label: 'Invested',
+            value: formatInrCompact(invested),
+            why: ex['reports.fundInvested'],
+          },
+          {
+            label: 'Value now',
+            value: formatInrCompact(value),
+            main: true,
+            why: ex['reports.fundValue'],
+          },
           {
             label: 'Gain',
             value: formatInrCompact(value - invested),
             tone: value - invested < 0 ? 'fail' : 'gain',
-            sub: invested > 0 ? pctText((value - invested) / invested, 1) : undefined,
+            sub:
+              invested > 0 ? `${pctText((value - invested) / invested, 1)} of invested` : undefined,
+            why: ex['reports.fundGain'],
           },
-          { label: 'Return a year', value: pctText(xirr, 1), sub: 'average, weighted by value' },
-          { label: 'SIPs per month', value: formatInrCompact(sip), sub: 'running SIPs' },
+          {
+            label: 'Return a year',
+            value: pctText(xirr, 1),
+            sub: 'average of the funds, weighted by value',
+            why: ex['reports.fundXirr'],
+          },
+          {
+            label: 'SIPs per month',
+            value: formatInrCompact(sip),
+            sub: 'running SIPs',
+            why: ex['reports.fundSip'],
+          },
         ]}
         six
       />
+      <p className="muted small">
+        Every table ends with a Grand total row. <Why explain={ex['reports.table']} />
+      </p>
       <Report
+        ctx={ctx}
         table={fundSummary(funds, fb, fp)}
         controls={
           <>
@@ -246,8 +346,9 @@ export function FundReports({
           </>
         }
       />
-      <Report table={sipTable(funds, today)} />
+      <Report ctx={ctx} table={sipTable(funds, today)} />
       <Report
+        ctx={ctx}
         table={fundFlow(funds, flow)}
         caption="Net money invested"
         controls={
@@ -261,7 +362,7 @@ export function FundReports({
           />
         }
       />
-      <Report table={fundAge(funds, today, longMonths)} />
+      <Report ctx={ctx} table={fundAge(funds, today, longMonths)} />
       <p className="muted small">
         More on how these funds are doing:{' '}
         <Link href="/investments?tab=breakdown">Investments, Breakdown</Link> and{' '}

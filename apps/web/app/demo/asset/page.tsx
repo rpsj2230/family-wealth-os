@@ -306,8 +306,9 @@ export default async function DemoAsset({
             colour={owner.colour}
             tax={buildFundTax(all, sample.row)}
             taxHref="/demo/tax-harvest"
-            overview={
+            overview={(ex) => (
               <FundDetailPanel
+                ex={ex}
                 fund={sample.row}
                 detail={detail}
                 base={`/demo/asset?kind=fund&id=${fundId}`}
@@ -318,7 +319,7 @@ export default async function DemoAsset({
                 holdingMonths={DEMO_HOLDING_MONTHS}
                 colour={owner.colour}
               />
-            }
+            )}
             records={
               <>
                 <AssetFacts facts={view.facts} />

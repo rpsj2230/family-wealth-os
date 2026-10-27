@@ -5,11 +5,14 @@ import {
   formatInrCompact,
   formatPct,
   type BankOverview as Overview,
+  type Explain,
+  type ExplainSet,
   type PersonStyle,
 } from '@fwos/core';
 import './bankoverview.css';
 import { Est } from '@/components/Est';
 import { PersonBadge } from '@/components/Person';
+import { Why, WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -22,12 +25,15 @@ export function Delta({
   pct,
   note,
   estimate = false,
+  why,
 }: {
   label: string;
   amount: number;
   pct: number | null;
   note: string;
   estimate?: boolean;
+  /** the "?" that says how the figure was worked out */
+  why?: Explain | undefined;
 }) {
   const rounded = Math.round(amount);
   const dir = rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat';
@@ -36,6 +42,7 @@ export function Delta({
       <div className="bv-delta-label">
         {label}
         {estimate && <Est />}
+        {why && <Why explain={why} />}
       </div>
       <div className="bv-delta-value">
         <span aria-hidden="true" className="bv-arrow">
@@ -58,12 +65,15 @@ export function Stat({
   sub,
   tone,
   href,
+  why,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   tone?: 'warn' | undefined;
   href?: string;
+  /** the "?" that says how the figure was worked out */
+  why?: Explain | undefined;
 }) {
   return (
     <div className={`bv-stat ${href ? 'clickable' : ''}`}>
@@ -75,6 +85,7 @@ export function Stat({
         ) : (
           label
         )}
+        {why && <Why explain={why} />}
       </dt>
       <dd className={`bv-stat-value ${tone ?? ''}`}>{value}</dd>
       {sub && <dd className="bv-stat-sub">{sub}</dd>}
@@ -120,7 +131,10 @@ export function BankOverviewPanel({
   month,
   scope = null,
   sample = false,
+  ex,
 }: {
+  /** the "?" explainers of the figures below */
+  ex: ExplainSet<'accounts'>;
   o: Overview;
   styles: Record<string, PersonStyle>;
   month: string;
@@ -141,7 +155,9 @@ export function BankOverviewPanel({
     <section className="card bv" aria-label="Money in banks">
       <div className="bv-top">
         <div className="bv-hero">
-          <h2 className="bv-eyebrow">In banks today{scope ? ` · ${scope}` : ''}</h2>
+          <WhyHead why={ex['accounts.total']}>
+            <h2 className="bv-eyebrow">In banks today{scope ? ` · ${scope}` : ''}</h2>
+          </WhyHead>
           <div className="bv-big" data-testid="bv-current">
             {formatInrCompact(o.current)}
           </div>
@@ -157,19 +173,23 @@ export function BankOverviewPanel({
               amount={o.profit}
               pct={o.profitPct}
               note="on the amount invested"
+              why={ex['accounts.profit']}
             />
             <Delta
               label="Earned today"
               amount={o.today.change}
               pct={o.today.changePct}
-              note="since yesterday, at each rate"
+              note="since yesterday, at each rate; % of yesterday’s value"
               estimate
+              why={ex['accounts.today']}
             />
           </div>
         </div>
 
         <div className="bv-journey">
-          <h3 className="bv-h">From invested to maturity</h3>
+          <WhyHead why={ex['accounts.journey']}>
+            <h3 className="bv-h">From invested to maturity</h3>
+          </WhyHead>
           {pctDone === null ? (
             <p className="muted small">
               No deposit has interest left to earn, so there is no journey to show.
@@ -209,7 +229,9 @@ export function BankOverviewPanel({
       </div>
 
       <div className="bv-where">
-        <h3 className="bv-h">Where the money sits</h3>
+        <WhyHead why={ex['accounts.where']}>
+          <h3 className="bv-h">Where the money sits</h3>
+        </WhyHead>
         <SplitBar
           caption="Where the money sits"
           parts={[
@@ -243,17 +265,20 @@ export function BankOverviewPanel({
               : `${formatInrCompact(o.parts.fd.invested)} invested · ${formatInrCompact(o.parts.fd.maturity)} at maturity${o.fdRate !== null ? ` · ${formatPct(o.fdRate, 2)} a year on average` : ''}`
           }
           href={to('/deposits')}
+          why={ex['accounts.deposits']}
         />
         <Stat
           label="Savings and cash"
           value={formatInrCompact(o.parts.cash.current)}
           sub={`${plural(o.parts.cash.count, 'account')} · ${formatInrCompact(o.parts.cash.invested)} last recorded`}
           href={to('/cash')}
+          why={ex['accounts.cash']}
         />
         <Stat
           label="Interest still to earn"
           value={formatInrCompact(o.interest.toEarn)}
           sub="until every deposit matures"
+          why={ex['accounts.toEarn']}
         />
         <Stat
           label="Next maturity"
@@ -264,6 +289,7 @@ export function BankOverviewPanel({
               : 'no deposit is running'
           }
           href={to('/deposits?tab=maturities')}
+          why={ex['accounts.next']}
         />
         <Stat
           label={`Maturing in ${plural(o.soon.days, 'day')}`}
@@ -271,15 +297,17 @@ export function BankOverviewPanel({
           sub={o.soon.count === 0 ? 'nothing falls due soon' : plural(o.soon.count, 'deposit')}
           tone={o.soon.count > 0 ? 'warn' : undefined}
           href={to('/deposits?tab=maturities')}
+          why={ex['accounts.soon']}
         />
         <Stat
           label="Largest bank"
           value={o.topBank ? formatPct(o.topBank.share, 0) : '–'}
           sub={
             o.topBank
-              ? `${o.topBank.name} holds ${formatInrCompact(o.topBank.amount)}`
+              ? `${o.topBank.name} holds ${formatInrCompact(o.topBank.amount)} of the money in banks`
               : 'no bank yet'
           }
+          why={ex['accounts.largestBank']}
         />
         {o.cover && (
           <Stat
@@ -292,6 +320,7 @@ export function BankOverviewPanel({
             }
             tone={o.cover.uninsured > 0 ? 'warn' : undefined}
             href={to('/deposits?tab=cover')}
+            why={ex['accounts.cover']}
           />
         )}
         <Stat
@@ -311,6 +340,7 @@ export function BankOverviewPanel({
           }
           tone={o.needsYou > 0 ? 'warn' : undefined}
           href={to('/monthly')}
+          why={ex['accounts.updated']}
         />
       </dl>
 
@@ -318,7 +348,9 @@ export function BankOverviewPanel({
         <div className="bv-splits">
           {people.length > 1 && (
             <div className="bv-split">
-              <h3 className="bv-h">Whose money</h3>
+              <WhyHead why={ex['accounts.people']}>
+                <h3 className="bv-h">Whose money</h3>
+              </WhyHead>
               <SplitBar
                 caption="Whose money"
                 parts={people.map((p) => ({
@@ -349,7 +381,9 @@ export function BankOverviewPanel({
           )}
           {o.accountTypes.length > 0 && (
             <div className="bv-split">
-              <h3 className="bv-h">NRE and NRO</h3>
+              <WhyHead why={ex['accounts.types']}>
+                <h3 className="bv-h">NRE and NRO</h3>
+              </WhyHead>
               <SplitBar
                 caption="NRE and NRO"
                 parts={o.accountTypes.map((t) => ({

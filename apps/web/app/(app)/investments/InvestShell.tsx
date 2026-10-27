@@ -8,6 +8,8 @@ import {
   GROUP_BYS,
   heroModel,
   lotAgeing,
+  type Explain,
+  type InvestOverviewSet,
   parseGroupBy,
   splitByPlan,
   totalsOfLines,
@@ -18,6 +20,7 @@ import {
   type YearKind,
 } from '@fwos/core';
 import { StackBar } from '@/components/FundViz';
+import { WhyHead } from '@/components/Why';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { PlotChart } from '@/components/PlotChart';
@@ -39,6 +42,7 @@ import {
 } from '@/components/invest/OverviewParts';
 import { PortfolioHero } from '@/components/invest/PortfolioHero';
 import { ReturnsByPeriod, type PeriodRow } from '@/components/invest/PerfParts';
+import { investOverviewExplain, investPerfExplain } from '@/lib/explain-invest';
 import { fundEditRows, householdLedger } from '@/lib/invest-ledger';
 import { buildPl, parseCompareMode } from '@/lib/invest-pl';
 import { fundLines, investPerformance, xirrOfIds } from '@/lib/invest-perf';
@@ -178,6 +182,16 @@ export function InvestShell({
   const totals = Object.fromEntries(
     view.groups.map((g) => [g.ownerId, formatInr(Math.round(g.totals.value))]),
   );
+  // the "?" explainers: worked out from the same view, hero and statistics as the figures they sit beside
+  const exArgs = { view, base, demo, who, styles, hero, stats: stats.all, pace };
+  const ex = investOverviewExplain(exArgs);
+  const growth = tab === 'performance' ? investGrowth(view) : undefined;
+  const pl =
+    tab === 'performance' && perf
+      ? buildPl(view, perf, styles, parsePlKind(q.by), parseCompareMode(q.compare))
+      : undefined;
+  const heat = (q.heat === 'calendar' ? 'calendar' : 'financial') as YearKind;
+  const exPerf = perf ? investPerfExplain({ ...exArgs, perf, growth, pl, heat }) : null;
   const editRows = fundEditRows(view);
   const matchHref = link({ tab: 'match', p: undefined });
   const keepForPerson = Object.fromEntries(
@@ -260,6 +274,7 @@ export function InvestShell({
       {tab === 'overview' && perf && (
         <>
           <PortfolioHero
+            ex={ex}
             hero={hero}
             asOf={view.today}
             history={view.series}
@@ -275,6 +290,8 @@ export function InvestShell({
             }}
           />
           <OverviewBody
+            ex={ex}
+            exReturns={exPerf!['invest.returns']}
             view={view}
             perf={perf}
             lines={lines}
@@ -291,23 +308,25 @@ export function InvestShell({
         </>
       )}
 
-      {tab === 'performance' && perf && (
+      {tab === 'performance' && perf && growth && pl && exPerf && (
         <PerformanceTab
+          ex={exPerf}
           view={view}
           stats={stats.all}
           perf={perf}
-          growth={investGrowth(view)}
+          growth={growth}
           pace={pace}
-          pl={buildPl(view, perf, styles, parsePlKind(q.by), parseCompareMode(q.compare))}
+          pl={pl}
           who={who}
           styles={styles}
-          heat={(q.heat === 'calendar' ? 'calendar' : 'financial') as YearKind}
+          heat={heat}
           link={(patch) => link({ tab: 'performance', ...patch })}
         />
       )}
 
       {tab === 'funds' && (
         <FundsBody
+          ex={ex}
           view={view}
           lines={lines}
           xirrOf={xirrOf}
@@ -347,6 +366,7 @@ export function InvestShell({
 
       {tab === 'breakdown' && (
         <BreakdownTab
+          ex={ex}
           view={view}
           stats={stats.all}
           who={who}
@@ -375,6 +395,8 @@ export function InvestShell({
 /* ----------------------------------------------------------------------------------------------- overview */
 
 function OverviewBody({
+  ex,
+  exReturns,
   view,
   perf,
   lines,
@@ -388,6 +410,8 @@ function OverviewBody({
   stats,
   funds,
 }: {
+  ex: InvestOverviewSet;
+  exReturns: Explain;
   view: InvestmentView;
   perf: ReturnType<typeof investPerformance>;
   lines: ReturnType<typeof fundLines>;
@@ -434,7 +458,9 @@ function OverviewBody({
     <>
       <section className="card dcsection" aria-labelledby="ov-dc">
         <div className="cardhead">
-          <h2 id="ov-dc">Is the history complete?</h2>
+          <WhyHead why={ex['invest.dataCheck']}>
+            <h2 id="ov-dc">Is the history complete?</h2>
+          </WhyHead>
           <Link className="sectionlink" href={link({ tab: 'funds', group: undefined })}>
             Funds
           </Link>
@@ -453,7 +479,9 @@ function OverviewBody({
       <div className="invgrid two">
         <section className="card" aria-labelledby="ov-v">
           <div className="cardhead">
-            <h2 id="ov-v">Value and money put in</h2>
+            <WhyHead why={ex['invest.valueChart']}>
+              <h2 id="ov-v">Value and money put in</h2>
+            </WhyHead>
             <Link className="sectionlink" href={tabHref('performance')}>
               Performance
             </Link>
@@ -482,7 +510,9 @@ function OverviewBody({
         </section>
         <section className="card" aria-labelledby="ov-r">
           <div className="cardhead">
-            <h2 id="ov-r">Return over time</h2>
+            <WhyHead why={exReturns}>
+              <h2 id="ov-r">Return over time</h2>
+            </WhyHead>
             <Link className="sectionlink" href={tabHref('performance')}>
               All periods
             </Link>
@@ -500,7 +530,9 @@ function OverviewBody({
       <div className="invgrid">
         <section className="card" aria-labelledby="ov-g">
           <div className="cardhead">
-            <h2 id="ov-g">Goal by goal</h2>
+            <WhyHead why={ex['invest.goals']}>
+              <h2 id="ov-g">Goal by goal</h2>
+            </WhyHead>
             <span className="small muted">Funds set aside for each goal</span>
           </div>
           {anyGoal ? (
@@ -519,7 +551,9 @@ function OverviewBody({
         </section>
         <section className="card" aria-labelledby="ov-k">
           <div className="cardhead">
-            <h2 id="ov-k">Where the money is</h2>
+            <WhyHead why={ex['invest.mix']}>
+              <h2 id="ov-k">Where the money is</h2>
+            </WhyHead>
             <Link className="sectionlink" href={tabHref('breakdown')}>
               Breakdown
             </Link>
@@ -536,7 +570,9 @@ function OverviewBody({
         </section>
         <section className="card" aria-labelledby="ov-m">
           <div className="cardhead">
-            <h2 id="ov-m">Movers</h2>
+            <WhyHead why={ex['invest.movers']}>
+              <h2 id="ov-m">Movers</h2>
+            </WhyHead>
             <span className="small muted">Today and overall</span>
           </div>
           <Movers
@@ -550,7 +586,9 @@ function OverviewBody({
         </section>
         <section className="card" aria-labelledby="ov-s">
           <div className="cardhead">
-            <h2 id="ov-s">Next monthly investments</h2>
+            <WhyHead why={ex['invest.nextSips']}>
+              <h2 id="ov-s">Next monthly investments</h2>
+            </WhyHead>
             <span className="small muted">SIP calendar</span>
           </div>
           <UpcomingSips
@@ -563,7 +601,9 @@ function OverviewBody({
       {people && people.length > 1 && (
         <section className="card wide" aria-labelledby="ov-p">
           <div className="cardhead">
-            <h2 id="ov-p">Person against person</h2>
+            <WhyHead why={ex['invest.people']}>
+              <h2 id="ov-p">Person against person</h2>
+            </WhyHead>
             <Link className="sectionlink" href={tabHref('breakdown')}>
               Breakdown
             </Link>
@@ -582,6 +622,7 @@ function OverviewBody({
 /* ----------------------------------------------------------------------------------------------- funds */
 
 function FundsBody({
+  ex,
   view,
   lines,
   xirrOf,
@@ -594,6 +635,7 @@ function FundsBody({
   groupHref,
   who,
 }: {
+  ex: InvestOverviewSet;
   view: InvestmentView;
   lines: ReturnType<typeof fundLines>;
   xirrOf: ReturnType<typeof xirrOfIds>;
@@ -635,7 +677,9 @@ function FundsBody({
       {goalGroups && (
         <section className="card" aria-labelledby="fg">
           <div className="cardhead">
-            <h2 id="fg">Goal by goal</h2>
+            <WhyHead why={ex['invest.goals']}>
+              <h2 id="fg">Goal by goal</h2>
+            </WhyHead>
             <span className="small muted">Money put in, growth and value</span>
           </div>
           <GoalSummary
@@ -647,6 +691,7 @@ function FundsBody({
         </section>
       )}
       <FundsTable
+        why={ex['invest.fundsTable']}
         groups={groups}
         grand={grand}
         by={group}
