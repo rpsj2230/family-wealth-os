@@ -65,6 +65,11 @@ export default async function DemoRates({
           },
           { label: 'newest check 21 Oct 2026' },
         ]}
+        actions={
+          <Link className="btn primary" href="/demo/rates/sync">
+            Sync rates
+          </Link>
+        }
       />
       <BoardToolbar base="/demo/rates" view={view} sort={sort} />
       <RateBoard cards={cards} staleDays={DEMO_RATE_PREFS.staleDays} base="/demo/rates" />

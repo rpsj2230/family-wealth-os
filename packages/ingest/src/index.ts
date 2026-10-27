@@ -11,6 +11,7 @@ export * from './fund-ledger';
 export * from './cas-pdf';
 export * from './txn-csv';
 export * from './rate-docs';
+export * from './rate-links';
 export * from './ai-providers';
 export * from './ai-runtime';
 export * from './ai-chain';

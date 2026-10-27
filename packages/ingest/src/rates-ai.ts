@@ -90,6 +90,7 @@ const PROMPT = (
  (1) the savings account interest rate, with every balance slab as its own offer;
  (2) fixed deposit rates for NRE deposits (if the page does not separate NRE from domestic rates, give the general fixed deposit rates).
 Savings rates may differ for NRE and NRO accounts: give both when the page does. Ignore everything else: NRO or foreign-currency fixed deposits, recurring deposits, tax-saver deposits, senior-citizen-only tables, corporate or bulk deposits.
+The text may hold several documents, each starting with a heading line that ends in a bracket saying which rates it carries. Take savings account rates only from documents marked "savings account rates only" or "savings and fixed deposit rates", and fixed deposit rates only from documents marked "fixed deposit rates only" or "savings and fixed deposit rates". If a heading gives a date the bank lists the rates as effective from, those are the current rates.
 Return ONLY JSON: {"offers":[{"product":"savings"|"fd","accountKind":"NRE"|"NRO"|"any","tenureFromMonths":<integer>,"tenureToMonths":<integer>,"ratePct":<number>,"balanceFromRupees":<number or null>,"balanceToRupees":<number or null>,"conditions":"<short text or empty>"}]}.
 Rules: ratePct is the yearly rate in percent exactly as printed (7.25 means 7.25%). For fixed deposits give the tenure band in whole months
 (1 year = 12; "2 years to less than 3 years" = 24 to 35; days: 7-45 days = 0 to 1). For savings use "any", 0 and 0, with balanceFromRupees (above)

@@ -1,25 +1,22 @@
 /* eslint-disable no-console */
 /**
- * Weekly: reads each rate page listed in Settings with your AI keys and refreshes the stored offers.
- * Offers you typed yourself are never overwritten. A page that cannot be read leaves the previous offers in place and
- * records why, so nothing silently disappears. The AI keys switched on are tried in their order (see @fwos/ingest `ai-chain`):
- * a key that fails is skipped for the next one, and a key that was refused is not asked again for the rest of the run.
+ * Weekly: reads each bank's rate pages listed in Settings (and the bank's own published rate documents) with your AI keys and refreshes
+ * the stored offers. The reading is the same function the Sync bank rates page uses (`syncBankRates` in @fwos/data), so the two cannot
+ * differ. Offers you typed yourself are never overwritten. A bank whose pages cannot be read keeps its previous offers and the reason is
+ * recorded in plain words, so nothing silently disappears. Rates are only ever read from the bank's own pages. The AI keys switched on
+ * are tried in their order (see @fwos/ingest `ai-chain`): a key that fails is skipped for the next one, and a key that was refused is
+ * not asked again for the rest of the run.
  */
-import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { sameBank } from '@fwos/core';
-import { aiChainFor, loadSettings, saveRatesRead } from '@fwos/data';
 import {
-  buildRatesRequest,
-  briefOf,
-  callAi,
-  parseRatesResponse,
-  rateDocsFor,
-  readRateDoc,
-  hostOf,
-  PROVIDER_SHORT,
-  type AiAttempt,
-} from '@fwos/ingest';
+  aiChainFor,
+  heldBankNames,
+  loadSettings,
+  syncBankRates,
+  type SyncSource,
+} from '@fwos/data';
+import { isDocKind, type AiAttempt } from '@fwos/ingest';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -37,63 +34,58 @@ const today = new Date().toISOString().slice(0, 10);
 const logAiFailure = (a: AiAttempt) =>
   console.log(`AI: ${a.brief}${a.detail ? ` - ${a.detail}` : ''}`);
 const startedAt = Date.now();
-/** the workflow is stopped after 15 minutes; stop starting new pages after 11 */
+/** the workflow is stopped after 15 minutes; stop starting new banks after 11 */
 const BUDGET_MS = 11 * 60_000;
 
-const readDoc = (url: string, max?: number) => readRateDoc(url, max);
+interface Row {
+  id: string;
+  bank: string;
+  url: string;
+  kind: string | null;
+  page_hash: string | null;
+  read_on: string | null;
+}
 
 async function main() {
   const hh = await db.from('households').select('id');
   if (hh.error) throw new Error(hh.error.message);
-  let failed = 0;
   for (const h of hh.data ?? []) {
     const household = h.id as string;
     // rates that apply only above the most you would put with one bank are not read
     const rateCfg = (await loadSettings(db, household)).config.rates;
-    const maxAmount = rateCfg.maxAmount;
-    const staleDays = rateCfg.staleDays;
-    // one chain for the whole run, so a key that is refused is skipped for every page after it
+    // one chain for the whole run, so a key that is refused is skipped for every bank after it
     const ai = await aiChainFor(db, household, 'service', {
       limits: { callMs: 30_000, tries: 3 },
       onFailure: logAiFailure,
     });
-    const sources = await db
+    const listed = await db
       .from('rate_sources')
-      .select('id, bank, url, page_hash, read_on')
+      .select('id, bank, url, kind, page_hash, read_on')
       .eq('household_id', household)
-      .eq('enabled', true);
-    if (!sources.data?.length) {
+      .eq('enabled', true)
+      .order('bank');
+    const rows = (listed.data ?? []) as Row[];
+    if (!rows.length) {
       console.log('No rate pages are listed in Settings; nothing to refresh.');
       continue;
     }
-    if (ai.empty) {
-      // say so where it can be seen: on each page's line in Settings and on the Rates page, and as a warning on this run
-      const why =
-        'Not read: no AI key is switched on. Add an Anthropic, OpenRouter, Groq or Gemini key, or switch one on, in Settings > Connections.';
-      await db
-        .from('rate_sources')
-        .update({ last_run_on: today, last_result: why })
-        .eq('household_id', household)
-        .eq('enabled', true);
-      console.log(`::warning::${why}`);
-      continue;
+    // a bank can have several pages (savings on one, deposits on another): they are read together
+    const banks: { bank: string; rows: Row[] }[] = [];
+    for (const r of rows) {
+      const g = banks.find((b) => sameBank(b.bank, r.bank));
+      if (g) g.rows.push(r);
+      else banks.push({ bank: r.bank, rows: [r] });
     }
-    // names of the banks where you hold something, used to keep one spelling of each bank's name
-    const held = await db
-      .from('assets')
-      .select('institution_id, institutions(name)')
-      .eq('household_id', household)
-      .in('type', ['bank_account', 'fixed_deposit'])
-      .in('status', ['active', 'stopped']);
-    const heldNames = [
-      ...new Set(
-        ((held.data ?? []) as unknown as { institutions: { name: string } | null }[])
-          .map((a) => a.institutions?.name)
-          .filter((n): n is string => !!n),
-      ),
-    ];
-    for (const src of sources.data) {
-      // the job has a fixed time allowance: a page not reached in time keeps its previous rates and is tried at the next run
+    const heldNames = await heldBankNames(db, household);
+    for (const b of banks) {
+      const sources: SyncSource[] = b.rows.map((r) => ({
+        id: r.id,
+        url: r.url,
+        kind: isDocKind(r.kind) ? r.kind : 'both',
+        pageHash: r.page_hash,
+        readOn: r.read_on,
+      }));
+      // the job has a fixed time allowance: a bank not reached in time keeps its previous rates and is tried at the next run
       if (Date.now() - startedAt > BUDGET_MS) {
         await db
           .from('rate_sources')
@@ -101,145 +93,28 @@ async function main() {
             last_run_on: today,
             last_result: 'Not reached this run (time ran out). It is tried again at the next run.',
           })
-          .eq('id', src.id);
-        console.log(`${src.bank}: not reached, time ran out`);
+          .in(
+            'id',
+            sources.map((s) => s.id),
+          );
+        console.log(`${b.bank}: not reached, time ran out`);
         continue;
       }
-      const note = async (result: string) => {
-        await db
-          .from('rate_sources')
-          .update({ last_run_on: today, last_result: result.slice(0, 300) })
-          .eq('id', src.id);
-        console.log(`${src.bank}: ${result}`);
-      };
-      try {
-        const bankName = src.bank as string;
-        // the page saved in Settings, plus the bank's own published rate sheets; public comparison pages only when nothing from the bank can be read
-        const docs = rateDocsFor(bankName);
-        const parts: string[] = [];
-        const used: string[] = [];
-        const problems: string[] = [];
-        const add = async (url: string, label: string, max?: number) => {
-          try {
-            parts.push(`### ${label}\n${await readDoc(url, max)}`);
-            used.push(url);
-            return true;
-          } catch (e) {
-            problems.push(`${hostOf(url)} ${(e as Error).message}`);
-            return false;
-          }
-        };
-        let fromBank = await add(src.url as string, `${bankName}: page saved in Settings`);
-        for (const d of docs.official) fromBank = (await add(d.url, d.label, 14_000)) || fromBank;
-        let thirdParty = false;
-        if (!fromBank)
-          for (const d of docs.reference)
-            thirdParty = (await add(d.url, d.label, 15_000)) || thirdParty;
-        if (parts.length === 0)
-          throw new Error(
-            `no page could be read (${problems.join('; ')}). Paste the rates from your notes on the Rates page, or save another address for this bank.`,
-          );
-        // rules written when you corrected this bank's rates earlier are passed to the reader
-        const bankHints = await db
-          .from('rate_hints')
-          .select('bank, hint')
-          .eq('household_id', household)
-          .eq('active', true)
-          .order('created_on', { ascending: false })
-          .limit(60);
-        const forThisBank = ((bankHints.data ?? []) as { bank: string; hint: string }[])
-          .filter((h) => sameBank(h.bank, bankName))
-          .map((h) => h.hint);
-        // a page whose text (with the corrections and the ceiling that go with it) is the same as when it was last read needs no AI call:
-        // its rates are confirmed as checked today. It is read again anyway after half the time a rate counts as fresh.
-        const hash = createHash('sha256')
-          .update(JSON.stringify({ v: 1, text: parts.join('\n\n'), hints: forThisBank, maxAmount }))
-          .digest('hex');
-        const readOn = (src.read_on as string | null) ?? null;
-        const sameAsBefore =
-          src.page_hash === hash &&
-          readOn !== null &&
-          (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${readOn}T00:00:00Z`)) / 86_400_000 <
-            Math.max(1, Math.floor(staleDays / 2));
-        if (sameAsBefore) {
-          const stored = await db
-            .from('rate_offers')
-            .select('id, bank')
-            .eq('household_id', household)
-            .eq('source_kind', 'ai');
-          if (stored.error) throw new Error(`stored rates: ${stored.error.message}`);
-          const ids = ((stored.data ?? []) as { id: string; bank: string }[])
-            .filter((o) => sameBank(o.bank, bankName))
-            .map((o) => o.id);
-          if (ids.length > 0) {
-            const upd = await db.from('rate_offers').update({ checked_on: today }).in('id', ids);
-            if (upd.error) throw new Error(`confirm rates: ${upd.error.message}`);
-            await note(
-              `unchanged since ${readOn}: not read again (no AI cost); ${ids.length} rates confirmed as checked today`,
-            );
-            continue;
-          }
-        }
-        // each key's model is checked when it is first needed (providers retire models without notice)
-        const ask = () => {
-          const text = parts.join('\n\n');
-          return callAi(ai, {
-            purpose: 'rates_refresh',
-            build: (provider, key, model) =>
-              buildRatesRequest(provider, key, bankName, text, model, forThisBank, maxAmount),
-            parse: (provider, json) => {
-              const offers = parseRatesResponse(provider, json, bankName, { maxAmount });
-              return offers.length > 0 ? offers : null;
-            },
-          });
-        };
-        // every key answered but none found a rate: the page is the problem, not the keys
-        const pageHadNoRates = (r: Awaited<ReturnType<typeof ask>>) =>
-          !r.ok && r.attempts.length > 0 && r.attempts.every((a) => a.status === 200);
-        let res = await ask();
-        // a bank page that loads but builds its table with a script has text and no rates: then the public comparison pages are tried
-        if (pageHadNoRates(res) && !thirdParty && docs.reference.length > 0) {
-          parts.length = 0;
-          used.length = 0;
-          for (const d of docs.reference)
-            thirdParty = (await add(d.url, d.label, 15_000)) || thirdParty;
-          if (parts.length > 0) res = await ask();
-        }
-        if (!res.ok) {
-          if (pageHadNoRates(res))
-            throw new Error(
-              `no rates could be read from the page${problems.length ? ` (${problems.join('; ')})` : ''}`,
-            );
-          throw new Error(`AI service: ${res.brief}`);
-        }
-        const read = res.value;
-
-        const summary = await saveRatesRead({
-          db,
-          household,
-          bank: bankName,
-          read,
-          heldNames,
-          today,
-          thirdParty,
-          sourceUrl: used[0],
-          sourceNote: thirdParty
-            ? `Reference only, from ${[...new Set(used.map(hostOf))].join(' and ')} (third party: the bank's own page cannot be read by a program; check the date)`
-            : `Read from ${[...new Set(used.map(hostOf))].join(' and ')}`,
-        });
-        await db.from('rate_sources').update({ page_hash: hash, read_on: today }).eq('id', src.id);
-        await note(
-          res.attempts.length > 0
-            ? `${summary}; read by ${PROVIDER_SHORT[res.provider]} after ${briefOf(res.attempts)}`
-            : summary,
-        );
-      } catch (e) {
-        failed++;
-        await note(`could not refresh: ${(e as Error).message}`);
-      }
+      // no AI key is switched on: say so on every bank (shown in Settings, on the Rates page and on the Sync page) and as a warning
+      const r = await syncBankRates({
+        db,
+        household,
+        bank: b.bank,
+        sources,
+        ai,
+        settings: { maxAmount: rateCfg.maxAmount, staleDays: rateCfg.staleDays },
+        today,
+        heldNames,
+        log: (line) => console.log(line),
+      });
+      if (r.status === 'no_key') console.log(`::warning::${r.message}`);
     }
   }
-  if (failed > 0) process.exitCode = 0; // a page that cannot be read is reported in Settings, not as a failed job
 }
 
 main().catch((e) => {

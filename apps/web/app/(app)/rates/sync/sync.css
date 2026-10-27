@@ -1,0 +1,146 @@
+/* Sync bank rates. Uses the shared design tokens, so dark mode follows. Nothing here may push the page sideways: every flex child
+   can shrink (min-width: 0) and long addresses and sentences wrap anywhere. */
+.sync-all .sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.sync-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
+  align-items: start;
+  margin-top: 14px;
+}
+.sync-row {
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.sync-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.sync-head .sync-bank {
+  margin: 0;
+  font-size: 1.05rem;
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.sync-head .pill {
+  margin-top: 0;
+}
+.sync-meta,
+.sync-result,
+.sync-doc,
+.sync-hint {
+  margin: 0;
+  min-width: 0;
+}
+.sync-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+.sync-meta .sync-tp {
+  margin-top: 0;
+}
+.sync-result.bad {
+  color: var(--fail, #b42318);
+}
+.sync-hint {
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.sync-docs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sync-docs li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.sync-mark {
+  flex: none;
+  width: 1.1em;
+  text-align: center;
+  font-weight: 600;
+}
+.sync-mark.ok {
+  color: var(--ok-fg, #166534);
+}
+.sync-mark.bad {
+  color: var(--fail, #b42318);
+}
+.sync-docbody {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.sync-where {
+  font-size: 0.85rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.sync-docbody .bad {
+  color: var(--fail, #b42318);
+}
+.sync-extra {
+  margin: 0;
+  min-width: 0;
+}
+.sync-extra summary {
+  color: var(--primary);
+  font-weight: 500;
+  cursor: pointer;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+.sync-extra textarea,
+.sync-extra input,
+.sync-extra select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.sync-add {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.sync-third {
+  min-width: 0;
+}
+.sync-third p {
+  margin: 0 0 8px;
+}
+.sync-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.sync-confirm p {
+  flex: 1 1 100%;
+}

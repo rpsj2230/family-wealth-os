@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { configFromJson, fyOf, profileFromJson, RULES } from '@fwos/core';
-import { isAiProvider, type AiProvider } from '@fwos/ingest';
+import { isAiProvider, isDocKind, type AiProvider } from '@fwos/ingest';
 import type { AiKeyRow } from '@/lib/ai-key-view';
 import type { TaxRuleRow } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
@@ -201,7 +201,7 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
         'provider, priority, enabled, label, last_ok_at, last_model, last_error_at, last_error_status, last_error, tested_at, test_ok, test_note',
       )
       .order('priority'),
-    db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
+    db.from('rate_sources').select('id, bank, url, kind, last_run_on, last_result').order('bank'),
     loadSheetSyncInfo(db as unknown as Parameters<typeof loadSheetSyncInfo>[0]),
   ]);
   const i = integ.data as { inbox_label: string } | null;
@@ -225,6 +225,7 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
     id: r.id as string,
     bank: r.bank as string,
     url: r.url as string,
+    kind: isDocKind(r.kind) ? r.kind : 'both',
     lastRunOn: (r.last_run_on as string | null) ?? null,
     lastResult: (r.last_result as string | null) ?? null,
   }));
