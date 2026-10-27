@@ -218,7 +218,9 @@ describe('conflictProposal: what I suggest when a value disagrees with what is o
     expect(conflictDefault(c('verified', 'statement'))).toBe('keep');
   });
   it('suggests the sheet when what is on file was only estimated or read without a check', () => {
-    expect(conflictProposal(c('estimated', 'calculated')).suggest).toBe("Use the sheet's value, ₹18,000.");
+    expect(conflictProposal(c('estimated', 'calculated')).suggest).toBe(
+      "Use the sheet's value, ₹18,000.",
+    );
     expect(conflictProposal(c('estimated', 'calculated')).why).toContain('only estimated');
     expect(conflictDefault(c('imported_unverified', 'email'))).toBe('sheet');
     expect(conflictProposal(c('imported_unverified', 'email')).why).toContain('without a check');

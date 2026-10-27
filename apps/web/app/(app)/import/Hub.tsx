@@ -124,9 +124,7 @@ export function ImportHub({
             <p className="meta">A PDF from CAMS, KFintech, MF Central or CDSL.</p>
             <p className="small">
               {casReview.length ? (
-                <strong>
-                  {casReview.length} waiting for you: open it for my suggestion
-                </strong>
+                <strong>{casReview.length} waiting for you: open it for my suggestion</strong>
               ) : (
                 <span className="muted">
                   {data.cas.length ? `Last one ${longDate(data.cas[0]!.at)}` : 'None yet'}
@@ -287,8 +285,8 @@ export function ImportHub({
                 After you choose the file, the app compares it with what you already have and lists
                 only what is new or changed. Everything starts ticked; untick what is wrong. Where
                 the app cannot be sure, it says what it found, what it suggests and why: approve the
-                suggestion, pick another answer or type what is missing. Nothing is written until you
-                press the button.
+                suggestion, pick another answer or type what is missing. Nothing is written until
+                you press the button.
               </p>
               <FundChanges people={demoChanges} owners={data.owners} />
               <div className="fc-actions">
@@ -372,8 +370,8 @@ export function ImportHub({
                 After you choose the file, the app compares it with what you already have and lists
                 only what is new or changed. Everything starts ticked; untick what is wrong. Where
                 the app cannot be sure, it says what it found, what it suggests and why: approve the
-                suggestion, pick another answer or type what is missing. Nothing is written until you
-                press the button.
+                suggestion, pick another answer or type what is missing. Nothing is written until
+                you press the button.
               </p>
               <FundChanges people={demoChanges} owners={data.owners} />
               <div className="fc-actions">

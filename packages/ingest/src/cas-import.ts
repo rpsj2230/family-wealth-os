@@ -161,7 +161,10 @@ export function matchScheme(scheme: CasScheme, amfi: string | null, funds: CasFu
     .sort((a, b) => b.score - a.score);
   if (scored.length === 0) return { status: 'none' };
   if (scored.length > 1 && scored[0]!.score - scored[1]!.score < 0.15)
-    return { status: 'ambiguous', candidates: scored.filter((x) => scored[0]!.score - x.score < 0.15).map((x) => x.f) };
+    return {
+      status: 'ambiguous',
+      candidates: scored.filter((x) => scored[0]!.score - x.score < 0.15).map((x) => x.f),
+    };
   return { status: 'one', fund: scored[0]!.f };
 }
 
@@ -549,7 +552,12 @@ export async function applyFundDiff(
       };
       // a SIP the statement could not judge, stopped from the date the person typed
       const stop = answerOf(sipKey(item.key), item.sipPrompt);
-      if (item.sipPrompt && item.assetId && stop?.option === 'stop' && validDay(stop.input, today)) {
+      if (
+        item.sipPrompt &&
+        item.assetId &&
+        stop?.option === 'stop' &&
+        validDay(stop.input, today)
+      ) {
         await io.save({
           assetId: item.assetId,
           transactions: [],
@@ -601,7 +609,8 @@ export async function applyFundDiff(
         if (!io.markSold) throw new Error('this importer cannot close a fund');
         // sold on the date the person typed, else the statement's date
         const typed = answerOf(item.key, item.prompt);
-        const on = typed?.option === 'sold' && validDay(typed.input, today) ? typed.input : w.markSoldAsOf;
+        const on =
+          typed?.option === 'sold' && validDay(typed.input, today) ? typed.input : w.markSoldAsOf;
         await io.markSold({ assetId: item.assetId!, asOf: on });
         r.assumedSold.push(item.name);
         r.lines.push(`assumed sold: ${item.name} (${item.why ?? 'not on the statement'})`);

@@ -123,7 +123,8 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
         continue;
       }
       const mine: Record<string, ConflictChoice> = {};
-      for (const c of view.conflicts) if (c.tab === tab) mine[c.id] = choices[c.id] ?? conflictDefault(c);
+      for (const c of view.conflicts)
+        if (c.tab === tab) mine[c.id] = choices[c.id] ?? conflictDefault(c);
       try {
         const r = await importHistoryMonth(form({ tab, choices: JSON.stringify(mine) }));
         if (r.ok && r.result)
@@ -319,9 +320,9 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
             <section className="hist-block" aria-labelledby="hist-conf">
               <h3 id="hist-conf">Values that disagree with what is on file ({picked.length})</h3>
               <p className="muted small">
-                Each one says what I suggest and why, and starts on that answer; the value on file is
-                only replaced when the answer is the sheet&rsquo;s value. A value on a later date is
-                never touched.
+                Each one says what I suggest and why, and starts on that answer; the value on file
+                is only replaced when the answer is the sheet&rsquo;s value. A value on a later date
+                is never touched.
               </p>
               <ul className="hist-conflicts">
                 {picked.map((c) => {
@@ -341,7 +342,9 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
                               type="radio"
                               name={`c-${c.id}`}
                               checked={now === o.id}
-                              onChange={() => setChoices({ ...choices, [c.id]: o.id as ConflictChoice })}
+                              onChange={() =>
+                                setChoices({ ...choices, [c.id]: o.id as ConflictChoice })
+                              }
                             />{' '}
                             {o.label}
                             {o.id === p.recommended ? ' (suggested)' : ''}

@@ -27,7 +27,12 @@ describe('suggestion', () => {
   });
 
   it('says it cannot tell, and offers no Approve button, when there is no evidence', () => {
-    const s = suggestion({ found: 'Two funds fit.', suggest: null, why: 'Nothing separates them.', options });
+    const s = suggestion({
+      found: 'Two funds fit.',
+      suggest: null,
+      why: 'Nothing separates them.',
+      options,
+    });
     expect(s.suggest).toBe(CANNOT_TELL);
     expect(s.approve).toBeNull();
     expect(s.recommended).toBeNull();

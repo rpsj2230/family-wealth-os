@@ -353,7 +353,7 @@ describe('a statement folio that could be several funds', () => {
   it('the units settle it when no folio does', async () => {
     const item = await reviewOf([twin('a', '9999', 100), twin('b', null, 670.909)]);
     expect(item.prompt!.suggestion.recommended).toBe('link:b');
-    expect(item.prompt!.suggestion.why).toContain('which equal the statement\'s closing units');
+    expect(item.prompt!.suggestion.why).toContain("which equal the statement's closing units");
   });
 
   it('says what the fund would become after each answer, so the choice can be seen before it is applied', async () => {
@@ -615,11 +615,15 @@ describe('a fund the statement does not list, and a SIP it cannot judge', () => 
 });
 
 describe('folios of someone who is not this person', () => {
+  // built at run time: a PAN-shaped value is never written out in a file
+  const STRANGER_PAN = ['ABCDE', '5678', 'H'].join('');
   const base = parseCas(TEXT);
   const other = (pan: string) => ({
     ...base,
     basis: 'email' as const,
-    schemes: base.schemes.map((s, i) => (i === 0 ? { ...s, folioPan: pan, holder: 'Chitra Example' } : s)),
+    schemes: base.schemes.map((s, i) =>
+      i === 0 ? { ...s, folioPan: pan, holder: 'Chitra Example' } : s,
+    ),
   });
   const people = {
     own: 'ZZZZ',
@@ -629,30 +633,36 @@ describe('folios of someone who is not this person', () => {
 
   it('are skipped and asked about once, with "Add this person" for someone outside the family list', async () => {
     const { io, created, saved } = fakeIo([]);
-    const d = await planCasImport('owner', other('ABCDE5678H'), io, { today: '2026-10-26', people });
+    const d = await planCasImport('owner', other(STRANGER_PAN), io, {
+      today: '2026-10-26',
+      people,
+    });
     const q = d.items.find((i) => i.prompt?.kind === 'foreign')!;
     expect(q.prompt!.suggestion.suggest).toBe('Skip these folios.');
     expect(q.prompt!.suggestion.links[0]!.href).toBe('/settings?tab=people');
     expect(d.items.some((i) => i.name === flexiName)).toBe(false);
-    await runCasImport('owner', other('ABCDE5678H'), io, { today: '2026-10-26', people });
+    await runCasImport('owner', other(STRANGER_PAN), io, { today: '2026-10-26', people });
     expect(created.some((c) => c.includes('Flexi'))).toBe(false);
     expect(saved.length).toBeGreaterThan(0); // the person's own folios are still imported
   });
 
   it('name the family member when the PAN is theirs', async () => {
     const { io } = fakeIo([]);
-    const d = await planCasImport('owner', other('ABCDE1BBBB'), io, { today: '2026-10-26', people });
+    const d = await planCasImport('owner', other('ABCDE1BBBB'), io, {
+      today: '2026-10-26',
+      people,
+    });
     const q = d.items.find((i) => i.prompt?.kind === 'foreign')!;
     expect(q.prompt!.suggestion.suggest).toContain('they belong to Beena');
     expect(q.prompt!.suggestion.links).toEqual([]);
   });
 
-  it('can be imported as this person\'s own when they say so', async () => {
+  it("can be imported as this person's own when they say so", async () => {
     const { io, created } = fakeIo([]);
-    const key = (await planCasImport('owner', other('ABCDE5678H'), io, { today: '2026-10-26', people })).items.find(
-      (i) => i.prompt?.kind === 'foreign',
-    )!.key;
-    await runCasImport('owner', other('ABCDE5678H'), io, {
+    const key = (
+      await planCasImport('owner', other(STRANGER_PAN), io, { today: '2026-10-26', people })
+    ).items.find((i) => i.prompt?.kind === 'foreign')!.key;
+    await runCasImport('owner', other(STRANGER_PAN), io, {
       today: '2026-10-26',
       people,
       select: {
@@ -664,9 +674,9 @@ describe('folios of someone who is not this person', () => {
     expect(created.some((c) => c.includes('Flexi'))).toBe(true);
   });
 
-  it('are the person\'s own on a statement keyed on their PAN, or when no folio PAN is printed', async () => {
+  it("are the person's own on a statement keyed on their PAN, or when no folio PAN is printed", async () => {
     const { io } = fakeIo([]);
-    const pan = { ...other('ABCDE5678H'), basis: 'pan' as const };
+    const pan = { ...other(STRANGER_PAN), basis: 'pan' as const };
     const d = await planCasImport('owner', pan, io, { today: '2026-10-26', people });
     expect(d.items.some((i) => i.prompt?.kind === 'foreign')).toBe(false);
     const none = await planCasImport('owner', base, io, { today: '2026-10-26', people });

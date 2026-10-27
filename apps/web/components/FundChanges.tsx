@@ -181,7 +181,9 @@ function Ask({
                 {s.approve}
               </button>
               {byDefault && !isQuiet(rec.id) && (
-                <span className="muted small">Applied with the other changes unless you choose otherwise.</span>
+                <span className="muted small">
+                  Applied with the other changes unless you choose otherwise.
+                </span>
               )}
             </>
           )}
@@ -226,16 +228,17 @@ function Ask({
       )}
       {outs.length > 0 && (
         <div className="fc-after" aria-live="polite">
-          <p className="small muted">
-            After you press Apply{chosen ? ` (${chosen.action})` : ''}:
-          </p>
+          <p className="small muted">After you press Apply{chosen ? ` (${chosen.action})` : ''}:</p>
           <ul>
             {outs.map((o) => (
               <li key={o.key}>
                 <strong>{o.name}</strong> <Chips chips={chipsOf(o)} />
                 <Nums item={o} />
                 {!o.changed && o.lines.newCount === 0 && (
-                  <span className="muted small"> Nothing else changes; only the link is remembered.</span>
+                  <span className="muted small">
+                    {' '}
+                    Nothing else changes; only the link is remembered.
+                  </span>
                 )}
               </li>
             ))}
@@ -486,7 +489,8 @@ export function FundChanges({
               {changed.length === 0
                 ? 'Nothing new.'
                 : `${changed.length} fund${changed.length === 1 ? '' : 's'} with something new or changed${quiet.length ? `, ${quiet.length} unchanged` : ''}.`}
-              {asking > 0 && ` ${asking} ${asking === 1 ? 'is' : 'are'} waiting for your decision, with my suggestion.`}
+              {asking > 0 &&
+                ` ${asking} ${asking === 1 ? 'is' : 'are'} waiting for your decision, with my suggestion.`}
             </p>
             {changed.length === 0 ? (
               <p className="notice ok" role="status">

@@ -91,7 +91,11 @@ export function ReviewCard({
       </p>
       <p className="why small">{e.why}</p>
       {prop ? (
-        <div className="inbox-ask" role="group" aria-label={`Suggestion for ${entry.subject || 'this message'}`}>
+        <div
+          className="inbox-ask"
+          role="group"
+          aria-label={`Suggestion for ${entry.subject || 'this message'}`}
+        >
           <p className="small">
             <span className="ask-lead">What I suggest</span> {prop.proposal.suggest}{' '}
             <span className="muted">{prop.proposal.why}</span>
@@ -107,7 +111,9 @@ export function ReviewCard({
             </form>
           )}
           <p className="muted small">
-            {prop.accountId ? 'Or choose another account, correct the amount, or ignore it:' : 'Choose the account below (and correct the amount if it is wrong), or ignore it:'}
+            {prop.accountId
+              ? 'Or choose another account, correct the amount, or ignore it:'
+              : 'Choose the account below (and correct the amount if it is wrong), or ignore it:'}
           </p>
         </div>
       ) : (

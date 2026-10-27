@@ -305,7 +305,8 @@ export function CasForm({
                       : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
                 </button>
                 <span className="muted small">
-                  Untick anything that is wrong; approve a suggestion or pick another answer where I ask. What you leave unticked or unanswered is left as it is.
+                  Untick anything that is wrong; approve a suggestion or pick another answer where I
+                  ask. What you leave unticked or unanswered is left as it is.
                 </span>
               </div>
               <BusyNote active={applying}>
@@ -469,7 +470,8 @@ export function FundCsvForm({
                       : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
                 </button>
                 <span className="muted small">
-                  Untick anything that is wrong; approve a suggestion or pick another answer where I ask. What you leave unticked or unanswered is left as it is.
+                  Untick anything that is wrong; approve a suggestion or pick another answer where I
+                  ask. What you leave unticked or unanswered is left as it is.
                 </span>
               </div>
               <BusyNote active={committing}>

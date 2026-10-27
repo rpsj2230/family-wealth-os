@@ -62,18 +62,28 @@ const stmt = (o: Partial<StatementFund> = {}): StatementFund => ({
   match: { status: 'ambiguous' },
   ...o,
 });
-const prompt = (s: StatementFund, onFile: OnFileFund[], siblings: { folioLast4: string; units: number | null }[] = []) =>
-  ambiguousPrompt({ key: 'k', s, candidates: null, onFile, siblings, tolerance: TOL });
+const prompt = (
+  s: StatementFund,
+  onFile: OnFileFund[],
+  siblings: { folioLast4: string; units: number | null }[] = [],
+) => ambiguousPrompt({ key: 'k', s, candidates: null, onFile, siblings, tolerance: TOL });
 
 describe('scheme names', () => {
   it('are the same scheme when the words agree, whatever the spelling of "fund", "growth" or "large cap"', () => {
     expect(sameSchemeName('Axis Large Cap Fund - Direct Growth', 'Axis Large Cap')).toBe(true);
-    expect(sameSchemeName('Axis Large-Cap Fund Direct Plan Growth', 'AXIS LARGECAP FUND')).toBe(true);
+    expect(sameSchemeName('Axis Large-Cap Fund Direct Plan Growth', 'AXIS LARGECAP FUND')).toBe(
+      true,
+    );
     expect(sameSchemeName('Axis Large Cap Fund', 'Axis Mid Cap Fund')).toBe(false);
   });
   it('are different schemes when both name a plan and the plans differ', () => {
-    expect(sameSchemeName('Axis Large Cap - Direct Growth', 'Axis Large Cap - Regular Growth')).toBe(false);
-    expect(nameParts('Axis Large Cap Fund - Direct Growth')).toEqual({ core: 'axis largecap', plan: 'direct' });
+    expect(
+      sameSchemeName('Axis Large Cap - Direct Growth', 'Axis Large Cap - Regular Growth'),
+    ).toBe(false);
+    expect(nameParts('Axis Large Cap Fund - Direct Growth')).toEqual({
+      core: 'axis largecap',
+      plan: 'direct',
+    });
   });
   it('are remembered under the ISIN, or the name when there is none', () => {
     expect(schemeLinkKey({ isin: 'INF846K01131', name: 'x' })).toBe('inf846k01131');
@@ -103,18 +113,31 @@ describe('picking a candidate', () => {
     evidence: { isin: false, folio: false, units: false, combined: false, name: false, ...o },
   });
   it('prefers ISIN with folio over everything', () => {
-    expect(pickCandidate([e({ isin: true, units: true }), e({ isin: true, folio: true })])).toEqual({
-      index: 1,
-      tier: 'folio',
-    });
+    expect(pickCandidate([e({ isin: true, units: true }), e({ isin: true, folio: true })])).toEqual(
+      {
+        index: 1,
+        tier: 'folio',
+      },
+    );
   });
   it('then ISIN with the units equal, then the combined units, then a name only one fund has', () => {
-    expect(pickCandidate([e({ isin: true }), e({ isin: true, units: true })])).toEqual({ index: 1, tier: 'units' });
-    expect(pickCandidate([e({ isin: true }), e({ isin: true, combined: true })])).toEqual({ index: 1, tier: 'combined' });
-    expect(pickCandidate([e({ isin: true }), e({ isin: true, name: true })])).toEqual({ index: 1, tier: 'name' });
+    expect(pickCandidate([e({ isin: true }), e({ isin: true, units: true })])).toEqual({
+      index: 1,
+      tier: 'units',
+    });
+    expect(pickCandidate([e({ isin: true }), e({ isin: true, combined: true })])).toEqual({
+      index: 1,
+      tier: 'combined',
+    });
+    expect(pickCandidate([e({ isin: true }), e({ isin: true, name: true })])).toEqual({
+      index: 1,
+      tier: 'name',
+    });
   });
   it('points nowhere when the evidence is equal, or there is none', () => {
-    expect(pickCandidate([e({ isin: true, name: true }), e({ isin: true, name: true })])).toBeNull();
+    expect(
+      pickCandidate([e({ isin: true, name: true }), e({ isin: true, name: true })]),
+    ).toBeNull();
     expect(pickCandidate([e({ isin: true }), e({ isin: true })])).toBeNull();
     expect(pickCandidate([])).toBeNull();
   });
@@ -143,7 +166,7 @@ describe('the prompt for a folio that could be several funds', () => {
     expect(p.start).toBe('leave'); // nothing happens until it is approved
   });
 
-  it('ISIN with the units equal: the folio is not on file yet, the units are the statement\'s closing units', () => {
+  it("ISIN with the units equal: the folio is not on file yet, the units are the statement's closing units", () => {
     const p = prompt(stmt(), [
       fund('a', { folioLast4: '8540', units: 700 }),
       fund('b', { name: 'Axis Large Cap', folioLast4: null, units: 3047.333 }),
@@ -186,7 +209,9 @@ describe('the prompt for a folio that could be several funds', () => {
     );
     expect(p.suggestion.recommended).toBe('link:a');
     expect(p.suggestion.suggest).toContain('Combine them into one holding');
-    expect(p.suggestion.why).toContain('Folios …3820 and …8540 on this statement are one scheme and hold 1,700 units together');
+    expect(p.suggestion.why).toContain(
+      'Folios …3820 and …8540 on this statement are one scheme and hold 1,700 units together',
+    );
   });
 
   it('no evidence: says it cannot tell, offers no Approve, and still lists every choice', () => {
@@ -198,9 +223,13 @@ describe('the prompt for a folio that could be several funds', () => {
     expect(s.recommended).toBeNull();
     expect(s.approve).toBeNull();
     expect(s.suggest).toBe('I cannot tell which it is, so I am not guessing: please choose.');
-    expect(s.why).toContain('nothing (the folio, the units or the name) points to just one of them');
+    expect(s.why).toContain(
+      'nothing (the folio, the units or the name) points to just one of them',
+    );
     expect(s.options.map((o) => o.id)).toEqual(['link:a', 'link:b', 'new', 'leave']);
-    expect(s.options[0]!.label).toBe('Same as Axis Large Cap, folio …2200, 100 units, since 5 Mar 2021');
+    expect(s.options[0]!.label).toBe(
+      'Same as Axis Large Cap, folio …2200, 100 units, since 5 Mar 2021',
+    );
   });
 
   it('describes each candidate by folio, units and start date, so two funds of one name can be told apart', () => {
@@ -209,7 +238,9 @@ describe('the prompt for a folio that could be several funds', () => {
       fund('b', { folioLast4: '8540', units: 700 }),
     ]);
     const labels = p.suggestion.options.map((o) => o.label);
-    expect(labels.some((l) => l.includes('no folio on file, 3,047.333 units, since 5 Mar 2021, closed'))).toBe(true);
+    expect(
+      labels.some((l) => l.includes('no folio on file, 3,047.333 units, since 5 Mar 2021, closed')),
+    ).toBe(true);
     expect(labels.some((l) => l.includes('folio …8540, 700 units'))).toBe(true);
   });
 
@@ -260,7 +291,11 @@ describe('the prompt for a fund the statement does not list', () => {
 });
 
 describe('the prompt for a SIP that could not be judged', () => {
-  const sip = { kind: 'cannot_tell', before: 3000, why: 'Cannot tell yet: the instalment is late.' } as SipChange;
+  const sip = {
+    kind: 'cannot_tell',
+    before: 3000,
+    why: 'Cannot tell yet: the instalment is late.',
+  } as SipChange;
   it('suggests keeping the SIP as recorded, or marking it stopped from a date', () => {
     const p = sipPrompt({ name: 'Bond Fund', sip, stopFrom: '2026-10-24' });
     expect(p.suggestion.suggest).toBe('Keep the SIP as recorded (₹3,000 a month).');
@@ -287,12 +322,14 @@ describe('the prompt for folios of someone else', () => {
     expect(p.suggestion.suggest).toBe('Skip these folios.');
     expect(p.suggestion.recommended).toBe('skip');
     expect(p.suggestion.found).toContain('not any person in your family list');
-    expect(p.suggestion.links).toEqual([{ href: '/settings?tab=people', text: 'Add this person in Settings > People' }]);
+    expect(p.suggestion.links).toEqual([
+      { href: '/settings?tab=people', text: 'Add this person in Settings > People' },
+    ]);
     expect(p.suggestion.options.map((o) => o.id)).toEqual(['skip', 'mine']);
   });
   it('names the family member whose folios they are, and has no Add link', () => {
     const p = foreignPrompt({ ...g, member: 'Beena' });
-    expect(p.suggestion.suggest).toBe("Skip these folios here; they belong to Beena.");
+    expect(p.suggestion.suggest).toBe('Skip these folios here; they belong to Beena.');
     expect(p.suggestion.links).toEqual([]);
     expect(p.suggestion.why).toContain('import this statement again under Beena');
   });

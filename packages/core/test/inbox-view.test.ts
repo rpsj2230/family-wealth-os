@@ -146,7 +146,12 @@ describe('read again and the marked number', () => {
 });
 
 describe('inboxProposal: what I suggest for a balance waiting for review', () => {
-  const acc = (id: string, last4: string | null, bank = 'HDFC Bank', currency = 'INR'): AccountChoice => ({
+  const acc = (
+    id: string,
+    last4: string | null,
+    bank = 'HDFC Bank',
+    currency = 'INR',
+  ): AccountChoice => ({
     id,
     label: `${bank} ···${last4 ?? ''} (${id})`,
     currency,
@@ -181,10 +186,15 @@ describe('inboxProposal: what I suggest for a balance waiting for review', () =>
   });
 
   it('says it cannot tell when two accounts fit, or none does', () => {
-    const two = ask({ reason: 'more than one account matches' }, [acc('x', '1234'), acc('y', '1234')]);
+    const two = ask({ reason: 'more than one account matches' }, [
+      acc('x', '1234'),
+      acc('y', '1234'),
+    ]);
     expect(two.accountId).toBeNull();
     expect(two.proposal.approve).toBeNull();
-    expect(two.proposal.suggest).toBe('I cannot tell which it is, so I am not guessing: please choose.');
+    expect(two.proposal.suggest).toBe(
+      'I cannot tell which it is, so I am not guessing: please choose.',
+    );
     expect(two.proposal.options.map((o) => o.id)).toEqual(['record:x', 'record:y', 'ignore']);
     const none = ask({ reason: 'no single account matches' }, [acc('x', '9999')]);
     expect(none.accountId).toBeNull();
@@ -193,9 +203,10 @@ describe('inboxProposal: what I suggest for a balance waiting for review', () =>
   });
 
   it('warns when the amount is far from the current value', () => {
-    const p = ask({ assetId: 'y', reason: 'amount is far from the current value; please confirm' }, [
-      acc('y', '1234'),
-    ]);
+    const p = ask(
+      { assetId: 'y', reason: 'amount is far from the current value; please confirm' },
+      [acc('y', '1234')],
+    );
     expect(p.proposal.why).toContain('very different from the value you have now');
   });
 

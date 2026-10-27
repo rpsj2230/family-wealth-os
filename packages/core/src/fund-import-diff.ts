@@ -1345,12 +1345,12 @@ export function storedChanges(
   maxLines = 40,
 ): StoredChange[] {
   return items.filter(isListed).map((i) => {
-      const { write, ...rest } = i;
-      void write;
-      return {
-        ...rest,
-        lines: { ...rest.lines, newLines: rest.lines.newLines.slice(0, maxLines) },
-        applied: applied.funds.has(i.key) || applied.sips.has(i.key),
-      };
-    });
+    const { write, ...rest } = i;
+    void write;
+    return {
+      ...rest,
+      lines: { ...rest.lines, newLines: rest.lines.newLines.slice(0, maxLines) },
+      applied: applied.funds.has(i.key) || applied.sips.has(i.key),
+    };
+  });
 }

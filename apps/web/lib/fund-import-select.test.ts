@@ -69,7 +69,9 @@ describe('what can be ticked in a preview', () => {
 
 describe('the questions in a preview', () => {
   const ask = (p: typeof anil, name: string) =>
-    questionsOf([p!]).find((q) => p!.diff.items.find((i) => i.key === q.itemKey)!.name.includes(name))!;
+    questionsOf([p!]).find((q) =>
+      p!.diff.items.find((i) => i.key === q.itemKey)!.name.includes(name),
+    )!;
   const valueKeys = () =>
     questionsOf([beena!])
       .filter((q) => q.prompt.kind === 'ambiguous' && q.prompt.statement?.name.includes('Value'))
@@ -80,7 +82,11 @@ describe('the questions in a preview', () => {
     expect(kinds.filter((k) => k === 'ambiguous')).toHaveLength(3);
     expect(kinds.filter((k) => k === 'absent')).toHaveLength(2); // Anil's sold fund, Chitra's dormant fund
     expect(kinds.filter((k) => k === 'sip')).toHaveLength(1);
-    expect(questionsOf([chitra!]).find((q) => q.prompt.kind === 'sip')!.key.endsWith('#sip')).toBe(true);
+    expect(
+      questionsOf([chitra!])
+        .find((q) => q.prompt.kind === 'sip')!
+        .key.endsWith('#sip'),
+    ).toBe(true);
   });
 
   it('every question starts on its starting answer; a folio waits for the person to approve it', () => {
@@ -113,10 +119,17 @@ describe('the questions in a preview', () => {
     const noTicks = selectionOf([beena!], new Set(none.take), initialAnswers([beena!]));
     expect(hasWork(noTicks)).toBe(false);
     const k = valueKeys()[0]!;
-    const answered = { ...initialAnswers([beena!]), [k]: { option: 'link:v1', input: null, confirmed: true } };
+    const answered = {
+      ...initialAnswers([beena!]),
+      [k]: { option: 'link:v1', input: null, confirmed: true },
+    };
     const sel = selectionOf([beena!], new Set(none.take), answered);
     expect(hasWork(sel)).toBe(true);
-    expect(sel.choices.find((c) => c.key === k)).toEqual({ key: k, option: 'link:v1', input: null });
+    expect(sel.choices.find((c) => c.key === k)).toEqual({
+      key: k,
+      option: 'link:v1',
+      input: null,
+    });
     expect(sel.count).toBe(1);
   });
 
@@ -146,7 +159,13 @@ describe('the questions in a preview', () => {
 
   it('ignores an answer that is not well formed', () => {
     const fd = new FormData();
-    for (const bad of ['not json', '[1,2,3]', '["k"]', '["k","o",5]', JSON.stringify(['k', 'x'.repeat(200), null])])
+    for (const bad of [
+      'not json',
+      '[1,2,3]',
+      '["k"]',
+      '["k","o",5]',
+      JSON.stringify(['k', 'x'.repeat(200), null]),
+    ])
       fd.append('choice', bad);
     fd.append('choice', JSON.stringify(['ok', 'leave', null]));
     expect([...selectionFromForm(fd)!.choices!.keys()]).toEqual(['ok']);

@@ -111,7 +111,10 @@ test.describe('Bank emails (public sample)', () => {
 
   test('a sample apply says it is a sample', async ({ page }) => {
     await page.goto('/demo/inbox');
-    await page.getByRole('button', { name: /^Approve: record/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Approve: record/ })
+      .first()
+      .click();
     await expect(page.getByRole('alert').filter({ hasText: /sample/ })).toBeVisible();
   });
 
@@ -120,7 +123,9 @@ test.describe('Bank emails (public sample)', () => {
   }) => {
     await page.goto('/demo/inbox');
     const card = page.locator('article.inbox-card', { hasText: 'account ending 4455' });
-    await expect(card).toContainText('I cannot tell which it is, so I am not guessing: please choose.');
+    await expect(card).toContainText(
+      'I cannot tell which it is, so I am not guessing: please choose.',
+    );
     await expect(card.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
     await expect(card.getByRole('button', { name: 'Apply' })).toBeVisible();
     // a statement the reader could not finish says what to do instead of "needs a look"

@@ -101,9 +101,7 @@ const units3 = (n: number | null) =>
 const folioWord = (f4: string | null) => (f4 ? `folio …${f4}` : 'no folio on file');
 const quote = (s: string) => `"${s}"`;
 const list = (xs: string[]) =>
-  xs.length <= 1
-    ? (xs[0] ?? '')
-    : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+  xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
 
 const NOISE = new Set([
   'fund',
@@ -150,7 +148,9 @@ export function nameParts(name: string): { core: string; plan: 'direct' | 'regul
 export function sameSchemeName(a: string, b: string): boolean {
   const x = nameParts(a);
   const y = nameParts(b);
-  return x.core !== '' && x.core === y.core && (x.plan === null || y.plan === null || x.plan === y.plan);
+  return (
+    x.core !== '' && x.core === y.core && (x.plan === null || y.plan === null || x.plan === y.plan)
+  );
 }
 
 /** What a statement folio is remembered under: its ISIN, or its name when it has none. */
@@ -212,7 +212,11 @@ export function pickCandidate(
 }
 
 const score = (e: Evidence) =>
-  (e.folio ? 8 : 0) + (e.units ? 4 : 0) + (e.combined ? 3 : 0) + (e.name ? 2 : 0) + (e.isin ? 1 : 0);
+  (e.folio ? 8 : 0) +
+  (e.units ? 4 : 0) +
+  (e.combined ? 3 : 0) +
+  (e.name ? 2 : 0) +
+  (e.isin ? 1 : 0);
 
 const describe = (c: PromptCandidate) =>
   `${c.name}, ${folioWord(c.folioLast4)}, ${units3(c.units)} units${c.startedOn ? `, since ${longDate(c.startedOn)}` : ''}${c.status !== 'active' ? `, ${c.status}` : ''}`;
@@ -241,12 +245,13 @@ export function ambiguousPrompt(a: AmbiguousArgs): FundPrompt {
         (!!s.amfiCode && f.amfiCode === s.amfiCode) ||
         sameSchemeName(s.name, f.name),
     );
-  const together = a.siblings.length > 0
-    ? a.siblings.reduce<number | null>(
-        (t, x) => (t === null || x.units === null ? null : t + x.units),
-        s.closingUnits,
-      )
-    : null;
+  const together =
+    a.siblings.length > 0
+      ? a.siblings.reduce<number | null>(
+          (t, x) => (t === null || x.units === null ? null : t + x.units),
+          s.closingUnits,
+        )
+      : null;
   const ranked: PromptCandidate[] = pool
     .map((f) => ({
       assetId: f.assetId,
@@ -404,7 +409,14 @@ export function sipPrompt(a: {
       },
     ],
   });
-  return { kind: 'sip', statement: null, candidates: [], suggestion: s, start: 'keep', outcomes: {} };
+  return {
+    kind: 'sip',
+    statement: null,
+    candidates: [],
+    suggestion: s,
+    start: 'keep',
+    outcomes: {},
+  };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -426,10 +438,14 @@ export function foreignPrompt(g: ForeignGroup): FundPrompt {
       : 'Skip these folios.',
     why: g.member
       ? `To record them, import this statement again under ${g.member} (choose ${g.member} in "Whose statement").`
-      : 'They are not this person\'s, so adding them would put someone else\'s money in this household. If this person should be in the family list, add them in Settings and import the statement again.',
+      : "They are not this person's, so adding them would put someone else's money in this household. If this person should be in the family list, add them in Settings and import the statement again.",
     recommended: 'skip',
     options: [
-      { id: 'skip', label: 'Skip these folios', action: `skip these ${n} folio${n === 1 ? '' : 's'}` },
+      {
+        id: 'skip',
+        label: 'Skip these folios',
+        action: `skip these ${n} folio${n === 1 ? '' : 's'}`,
+      },
       {
         id: 'mine',
         label: "They are this person's too: import them",
@@ -438,5 +454,12 @@ export function foreignPrompt(g: ForeignGroup): FundPrompt {
     ],
     links: g.member ? [] : [PEOPLE_LINK],
   });
-  return { kind: 'foreign', statement: null, candidates: [], suggestion: s, start: 'skip', outcomes: {} };
+  return {
+    kind: 'foreign',
+    statement: null,
+    candidates: [],
+    suggestion: s,
+    start: 'skip',
+    outcomes: {},
+  };
 }

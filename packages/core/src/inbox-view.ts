@@ -243,7 +243,11 @@ export interface AccountChoice {
 }
 
 /** How well an account fits a reading: the one already matched (8), the same last four digits (4), the same bank (2). */
-export function accountScore(r: InboxReading, matchedAssetId: string | null, a: AccountChoice): number {
+export function accountScore(
+  r: InboxReading,
+  matchedAssetId: string | null,
+  a: AccountChoice,
+): number {
   return (
     (a.id === matchedAssetId ? 8 : 0) +
     (r.last4 && a.last4 === r.last4 ? 4 : 0) +
@@ -305,11 +309,17 @@ export function inboxProposal(m: InboxEntry, accounts: AccountChoice[]): InboxPr
     const top = ranked[0]!;
     const second = ranked[1];
     const withDigits = ranked.filter((a) => !!r.last4 && a.last4 === r.last4);
-    const withBank = ranked.filter((a) => score(a) >= 2 && !(r.last4 && a.last4 && a.last4 !== r.last4));
+    const withBank = ranked.filter(
+      (a) => score(a) >= 2 && !(r.last4 && a.last4 && a.last4 !== r.last4),
+    );
     if (withDigits.length === 1) {
       pick = withDigits[0]!;
       because = `It is the only ${r.currency} account ending ${r.last4}${top.id === pick.id && score(pick) >= 6 ? ' at that bank' : ''}.`;
-    } else if (withDigits.length === 0 && withBank.length === 1 && (!second || score(top) > score(second))) {
+    } else if (
+      withDigits.length === 0 &&
+      withBank.length === 1 &&
+      (!second || score(top) > score(second))
+    ) {
       pick = withBank[0]!;
       because = `It is the only ${r.currency} account at ${r.bank || 'that bank'}${r.last4 ? `, and none ends ${r.last4}, so check the digits` : ''}.`;
     }

@@ -346,7 +346,8 @@ export function conflictText(c: HistoryConflict): string {
  * picked; the replaced value stays in the history, marked as replaced.
  */
 export function conflictProposal(c: HistoryConflict): Proposal {
-  const unconfirmed = c.existing.confidence === 'estimated' || c.existing.confidence === 'imported_unverified';
+  const unconfirmed =
+    c.existing.confidence === 'estimated' || c.existing.confidence === 'imported_unverified';
   const cur = c.currency === 'INR' ? 'INR' : c.currency;
   const f = (n: number) =>
     cur === 'INR' ? formatInr(n, { decimals: n % 1 ? 2 : 0 }) : `S$${n.toLocaleString('en-IN')}`;

@@ -323,7 +323,9 @@ export function sourceStatus(
     return {
       ...base,
       health: attention ? 'warn' : 'ok',
-      headline: attention ? 'Read, but some rates differ from the bank page.' : 'Read successfully.',
+      headline: attention
+        ? 'Read, but some rates differ from the bank page.'
+        : 'Read successfully.',
       fix: attention
         ? {
             text: 'Check the rates marked “page says” below and accept the page’s figure or keep yours.',
