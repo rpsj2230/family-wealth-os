@@ -176,3 +176,10 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Accounts | `accounts.total`, `accounts.profit`, `accounts.today`, `accounts.journey`, `accounts.where`, `accounts.deposits`, `accounts.cash`, `accounts.toEarn`, `accounts.next`, `accounts.soon`, `accounts.largestBank`, `accounts.cover`, `accounts.updated`, `accounts.people`, `accounts.types`, `accounts.grand` |
 | Deposits | `deposits.total`, `deposits.profit`, `deposits.today`, `deposits.journey`, `deposits.banks`, `deposits.ladder`, `deposits.invested`, `deposits.maturity`, `deposits.toEarn`, `deposits.next`, `deposits.soon`, `deposits.toConfirm`, `deposits.largest`, `deposits.cover`, `deposits.people`, `deposits.types` |
 | Cash | `cash.total`, `cash.sinceLast`, `cash.today`, `cash.earns`, `cash.banks`, `cash.interestYear`, `cash.largestBalance`, `cash.largestBank`, `cash.stale`, `cash.people`, `cash.types` |
+| Reports | `reports.fdCount`, `reports.fdPrincipal`, `reports.fdMaturity`, `reports.fdInterest`, `reports.fdRate`, `reports.fdNext`, `reports.fundCount`, `reports.fundInvested`, `reports.fundValue`, `reports.fundGain`, `reports.fundXirr`, `reports.fundSip`, `reports.table` (a general note; each table also has its own "?" built from the table itself) |
+| Tax | `tax.allowance`, `tax.sell`, `tax.losses`, `tax.costs`, `tax.refunds`, `tax.simulator` |
+| Monthly update | `monthly.status`, `monthly.freshness` |
+| New money | `newmoney.options`, `newmoney.better`, `newmoney.room` |
+| Rates | `rates.freshness`, `rates.best` |
+
+Not yet covered (no "?" on these pages): Goals, I need money (Raise), Can I retire now, Lent, policies and property (Others), the Tax filing papers, Settings, the Import pages, the AI cost page, the monthly grid's per-row estimates and the per-bank pages. They show the same figures as the covered pages in places (net worth, deposit values) but their own derived numbers have no explainer yet.

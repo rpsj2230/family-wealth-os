@@ -20,6 +20,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
+import { Why } from '@/components/Why';
+import { ratesExplain } from '@/lib/explain-rates';
 import { loadContext } from '@/lib/data';
 import { loadBoardOffers, loadRateEvents, loadRateSources } from '@/lib/rates-view';
 import { plannerRedirect } from '@/lib/rates-redirect';
@@ -122,13 +124,22 @@ export default async function RatesPage({
   const held = (bank: string) =>
     rc.holdings.some((h) => !h.needsConfirmation && sameBank(h.bank, bank));
 
+  const ex = ratesExplain({
+    offers,
+    today,
+    staleDays: prefs.staleDays,
+    unreadable: unreadable.length,
+    banks: everyCard.length,
+    sample: false,
+  });
+
   return (
     <>
       <PageHead
         title="Rates"
         subtitle="What each bank pays, where every figure came from and when it was last checked. Deciding where to put money against these rates is on New money."
         pills={[
-          { label: `${offers.length} rates on file`, tone: 'info' },
+          { label: `${offers.length} rates on file`, tone: 'info', why: ex['rates.freshness'] },
           ...(newest ? [{ label: `newest check ${niceDay(newest)}` }] : []),
           ...(stale > 0
             ? [{ label: `${stale} older than ${prefs.staleDays} days`, tone: 'warn' as const }]
@@ -159,14 +170,20 @@ export default async function RatesPage({
 
       <section className="kpis" aria-label="Rates at a glance">
         <article className="kpi main">
-          <div className="kpi-label">Best NRE deposit, banks shown</div>
+          <div className="kpi-label">
+            Best NRE deposit, banks shown
+            <Why explain={ex['rates.best']} />
+          </div>
           <div className="kpi-value">{bestFd ? ratePct(bestFd.bestFd!.rate) : '–'}</div>
           <div className="kpi-sub muted">
             {bestFd ? `${bestFd.bank}, ${tenureText(bestFd.bestFd!)}` : 'no deposit rate on file'}
           </div>
         </article>
         <article className="kpi">
-          <div className="kpi-label">Best savings</div>
+          <div className="kpi-label">
+            Best savings
+            <Why explain={ex['rates.best']} />
+          </div>
           <div className="kpi-value">{bestSav ? ratePct(bestSav.bestSaving!.rate) : '–'}</div>
           <div className="kpi-sub muted">
             {bestSav
@@ -175,7 +192,10 @@ export default async function RatesPage({
           </div>
         </article>
         <article className="kpi">
-          <div className="kpi-label">Needs a look</div>
+          <div className="kpi-label">
+            Needs a look
+            <Why explain={ex['rates.freshness']} />
+          </div>
           <div className="kpi-value">{needLook}</div>
           <div className="kpi-sub muted">
             {differs > 0

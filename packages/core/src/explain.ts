@@ -368,6 +368,25 @@ export const FIGURES = {
     'cash.people',
     'cash.types',
   ],
+  reports: [
+    'reports.fdCount',
+    'reports.fdPrincipal',
+    'reports.fdMaturity',
+    'reports.fdInterest',
+    'reports.fdRate',
+    'reports.fdNext',
+    'reports.fundCount',
+    'reports.fundInvested',
+    'reports.fundValue',
+    'reports.fundGain',
+    'reports.fundXirr',
+    'reports.fundSip',
+    'reports.table',
+  ],
+  tax: ['tax.allowance', 'tax.sell', 'tax.losses', 'tax.costs', 'tax.refunds', 'tax.simulator'],
+  monthly: ['monthly.status', 'monthly.freshness'],
+  newmoney: ['newmoney.options', 'newmoney.better', 'newmoney.room'],
+  rates: ['rates.freshness', 'rates.best'],
 } as const;
 
 export type FigurePage = keyof typeof FIGURES;

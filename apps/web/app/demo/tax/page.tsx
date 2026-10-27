@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { TaxSimulator } from '@/components/TaxSimulator';
+import { taxExplainBare } from '@/lib/explain-tax';
 
 export const metadata: Metadata = {
   title: 'Sample: tax simulator',
@@ -14,7 +15,7 @@ export default function DemoTax() {
         <Link href="/login">← Sign in</Link>
       </p>
       <h1>Tax simulator (sample)</h1>
-      <TaxSimulator sample />
+      <TaxSimulator sample why={taxExplainBare(true)['tax.simulator']} />
     </main>
   );
 }

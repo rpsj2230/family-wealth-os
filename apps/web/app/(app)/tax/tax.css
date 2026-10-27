@@ -350,3 +350,12 @@
 .tx-check .stepper li {
   font-size: 0.95rem;
 }
+
+.tx-costsrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.tx-costsrow .tx-costs {
+  min-width: 0;
+}

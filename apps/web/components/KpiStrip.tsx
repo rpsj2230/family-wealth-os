@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import type { Explain } from '@fwos/core';
+import { Why } from './Why';
 import '@/app/holdings.css';
 
 export interface Kpi {
@@ -12,6 +14,8 @@ export interface Kpi {
   main?: boolean;
   /** makes the whole tile a link to where the figure is explained */
   href?: string;
+  /** the "?" that says how the figure was worked out */
+  why?: Explain | undefined;
 }
 
 /** The row of headline figures under a page title (the `.kpis` pattern of the dashboard and Tax pages). Six tiles at most. */
@@ -43,6 +47,11 @@ export function KpiStrip({
               </Link>
             ) : (
               body
+            )}
+            {k.why && (
+              <span className="kpi-why">
+                <Why explain={k.why} />
+              </span>
             )}
           </article>
         );

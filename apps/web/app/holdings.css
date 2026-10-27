@@ -114,3 +114,26 @@
   float: left;
   margin-right: 10px;
 }
+
+/* a tile's "?" sits in its top-right corner, outside the tile's link */
+.kpi {
+  position: relative;
+}
+.kpi-why {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  line-height: 0;
+}
+.kpi-why .why-btn {
+  margin: 0;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .kpi-why {
+    top: -6px;
+    right: -6px;
+  }
+}
+.kpi:has(.kpi-why) .kpi-label {
+  padding-right: 24px;
+}

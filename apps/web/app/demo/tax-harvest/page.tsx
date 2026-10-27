@@ -13,6 +13,7 @@ import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
 import { Checklist, CostsNote, niceDate, PersonHarvest } from '@/app/(app)/tax/Parts';
+import { taxExplain } from '@/lib/explain-tax';
 
 export const metadata: Metadata = {
   title: 'Sample tax harvest',
@@ -152,6 +153,14 @@ export default function DemoTaxHarvest() {
     config: DEFAULT_CONFIG.harvest,
   });
   const styles = personStyles(Object.entries(names).map(([id, name]) => ({ id, name })));
+  const ex = taxExplain({
+    view,
+    plan,
+    today: TODAY,
+    refunds: [],
+    incomeLimit: DEFAULT_CONFIG.refunds.incomeLimit,
+    sample: true,
+  });
   return (
     <div className="shell">
       <Sidebar email="sample@example.com" signOut={noSignOut} />
@@ -188,10 +197,10 @@ export default function DemoTaxHarvest() {
             ]}
           />
           {view.people.map((pv) => (
-            <PersonHarvest key={pv.ownerId} pv={pv} person={styles[pv.ownerId]} />
+            <PersonHarvest key={pv.ownerId} pv={pv} person={styles[pv.ownerId]} ex={ex} />
           ))}
           <Checklist view={view} />
-          <CostsNote view={view} />
+          <CostsNote view={view} why={ex['tax.costs']} />
         </main>
       </div>
       <BottomNav />

@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { Explain } from '@fwos/core';
+import { Why } from './Why';
 
 /** The top of every page: title, one line of what it is for, status pills and the main actions. */
 export function PageHead({
@@ -9,7 +11,7 @@ export function PageHead({
 }: {
   title: string;
   subtitle?: ReactNode;
-  pills?: { label: string; tone?: 'ok' | 'warn' | 'bad' | 'info' }[];
+  pills?: { label: string; tone?: 'ok' | 'warn' | 'bad' | 'info'; why?: Explain }[];
   actions?: ReactNode;
 }) {
   return (
@@ -21,6 +23,7 @@ export function PageHead({
             {pills.map((p) => (
               <span key={p.label} className={`pill ${p.tone ?? ''}`}>
                 {p.label}
+                {p.why && <Why explain={p.why} />}
               </span>
             ))}
           </div>

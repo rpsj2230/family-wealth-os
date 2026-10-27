@@ -159,6 +159,12 @@ test.describe('the "?" explainer (public sample)', () => {
       ['/demo/accounts', 'accounts.profit', /÷/],
       ['/demo/deposits', 'deposits.journey', /÷/],
       ['/demo/cash', 'cash.interestYear', /tax at source/],
+      ['/demo/reports', 'reports.fdRate', /weighted|Σ/],
+      ['/demo/reports?tab=funds', 'reports.fundXirr', /average/],
+      ['/demo/tax-harvest', 'tax.allowance', /still free/],
+      ['/demo/monthly', 'monthly.status', /up to date/],
+      ['/demo/new-money?amount=1500000', 'newmoney.options', /a year/],
+      ['/demo/rates', 'rates.freshness', /rates? on file/],
     ] as const) {
       await page.goto(path);
       const b = btn(page, id);
@@ -236,6 +242,11 @@ test.describe('the "?" explainer (public sample)', () => {
         '/demo/accounts',
         '/demo/deposits',
         '/demo/cash',
+        '/demo/reports',
+        '/demo/tax-harvest',
+        '/demo/monthly',
+        '/demo/new-money?amount=1500000',
+        '/demo/rates',
       ]) {
         await page.goto(path);
         await page.addStyleTag({ content: WIDE_FONT });

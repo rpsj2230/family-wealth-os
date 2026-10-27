@@ -67,3 +67,5 @@ export * from './explain-perf';
 export * from './explain-fund';
 export * from './explain-money';
 export * from './explain-home';
+export * from './explain-reports';
+export * from './explain-more';
