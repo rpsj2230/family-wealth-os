@@ -180,24 +180,13 @@ export function planSync(
     } else if (ex.sourceKind === 'ai') {
       if (same(ex.rate, f.rate)) plan.confirm.push(ex.id);
       else plan.change.push({ id: ex.id, from: ex.rate, to: f.rate });
-    } else if (ex.aiRate !== null) {
-      if (same(f.rate, ex.rate)) plan.resolved.push(ex.id);
-      else if (same(f.rate, ex.aiRate))
-        plan.stillMisread.push({
-          id: ex.id,
-          wrong: ex.aiRate,
-          right: ex.rate,
-          diagnosis: diagnoseMisread({
-            slot: ex,
-            wrong: ex.aiRate,
-            right: ex.rate,
-            fetched,
-            reason: ex.correctionReason,
-          }),
-        });
-      else plan.pageMoved.push({ id: ex.id, pageRate: f.rate });
-    } else if (same(f.rate, ex.rate)) plan.pageAgrees.push(ex.id);
-    else plan.pageDiffers.push({ id: ex.id, pageRate: f.rate });
+    } else if (same(ex.rate, f.rate)) {
+      // a rate you typed that the bank's page now confirms: it becomes a read rate
+      plan.resolved.push(ex.id);
+    } else {
+      // a typed rate may be old: what the bank's own page says today always wins
+      plan.change.push({ id: ex.id, from: ex.rate, to: f.rate });
+    }
   }
   if (opts.replaceAbsent)
     for (const e of existing)
