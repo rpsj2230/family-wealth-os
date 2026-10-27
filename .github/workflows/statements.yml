@@ -1,0 +1,48 @@
+name: Read fund statements from Gmail
+# Looks through your whole Gmail (read only) for fund statements that CAMS, KFintech, NSDL and CDSL e-mailed you and imports them
+# with the rule-based reader: no AI is used. Settings > Gmail statements holds the senders, the look-back and the limits.
+#
+# The job starts every 6 hours but does the work only when it is due: at the first start of the day (the Settings "not more often than
+# every N hours", default 20), or when someone pressed "Scan now" in the app (which leaves a request the next start picks up), or when
+# you run it by hand here (Actions > Read fund statements from Gmail > Run workflow), which always scans at once.
+# Needs IMAP switched on in Gmail and the same app password as the other mail jobs (SMTP_USER, SMTP_APP_PASSWORD).
+on:
+  schedule:
+    - cron: '40 0,6,12,18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: statements
+  cancel-in-progress: false
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+      STATEMENTS_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in SUPABASE_SERVICE_ROLE_KEY SMTP_USER SMTP_APP_PASSWORD; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then echo "::notice::Gmail statement reading is waiting for GitHub secrets:$missing (docs/NEEDS-FROM-YOU.md A8)"; exit 0; fi
+          echo ready=1 >> "$GITHUB_ENV"
+      - if: env.ready == '1'
+        uses: pnpm/action-setup@v4
+      - if: env.ready == '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: env.ready == '1'
+        run: pnpm install --frozen-lockfile
+      - if: env.ready == '1'
+        run: pnpm --filter @fwos/workers statements

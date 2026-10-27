@@ -1,5 +1,6 @@
 import type { FundRangeKey, FundTaxPanel } from '@fwos/core';
 import { pageAll } from '@fwos/data';
+import type { ReplacedRow } from '@/components/invest/ReplacedLines';
 import { loadContext } from './data';
 import { buildFundDetail, NAV_POINTS, type FundDetail } from './fund-detail-model';
 import { buildFundTax } from './fund-tax';
@@ -17,6 +18,8 @@ export async function loadFundDetail(
   detail: FundDetail;
   /** exit load, short and long term units and the harvest advice for this fund */
   tax: FundTaxPanel;
+  /** lines a fund statement replaced: kept out of every figure, listed on the Transactions tab */
+  replaced: ReplacedRow[];
 } | null> {
   const { supabase } = await loadContext();
   const view = await loadInvestmentView(supabase, undefined, null, range);
@@ -33,7 +36,28 @@ export async function loadFundDetail(
       )
     : [];
   const navs = rows.map((n) => ({ date: n.nav_date, nav: Number(n.nav) }));
+  const setAside = await pageAll<Record<string, unknown>>((from, to) =>
+    supabase
+      .from('mf_transactions')
+      .select('id, txn_on, kind, amount, units, source, superseded_on, superseded_statement_on')
+      .eq('asset_id', assetId)
+      .not('superseded_on', 'is', null)
+      .order('txn_on')
+      .order('id')
+      .range(from, to),
+  );
+  const replaced: ReplacedRow[] = setAside.map((r) => ({
+    id: r.id as string,
+    date: r.txn_on as string,
+    kind: r.kind as string,
+    amount: Number(r.amount),
+    units: Number(r.units),
+    source: (r.source as string | null) ?? 'manual',
+    statementOn: (r.superseded_statement_on as string | null) ?? null,
+    replacedOn: (r.superseded_on as string | null) ?? null,
+  }));
   return {
+    replaced,
     fund,
     view,
     today: view.today,

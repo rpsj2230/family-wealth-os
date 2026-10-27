@@ -95,6 +95,7 @@ export default async function AssetPage({
           colour={d.person?.colour ?? 'var(--viz-1)'}
           tax={fundView.tax}
           taxHref="/tax"
+          replaced={fundView.replaced}
           overview={(ex) => (
             <FundDetailPanel
               ex={ex}

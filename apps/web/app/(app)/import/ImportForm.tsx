@@ -185,7 +185,8 @@ export function CasForm({
   const shown = done && apply.stage !== 'idle' ? apply : preview;
   const busy = previewing || applying;
   const people = useMemo(
-    () => (shown.stage === 'previewed' && shown.person ? [shown.person] : []),
+    () =>
+      shown.stage === 'previewed' ? (shown.people ?? (shown.person ? [shown.person] : [])) : [],
     [shown],
   );
 
@@ -279,6 +280,21 @@ export function CasForm({
       {shown.stage === 'previewed' && (
         <>
           <FundChanges people={people} owners={owners} disabled={busy} onSelection={setSel} />
+          {shown.skipped && shown.skipped.length > 0 && (
+            <div className="notice warn" role="status">
+              <p>
+                <strong>Folios of someone not in your family list: skipped.</strong>
+              </p>
+              <ul className="list small">
+                {shown.skipped.map((k) => (
+                  <li key={k.panLast4 ?? 'none'}>
+                    {k.holder ? `${k.holder}, ` : ''}PAN ending {k.panLast4 ?? 'unknown'}:{' '}
+                    {k.schemes.length} scheme{k.schemes.length === 1 ? '' : 's'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {shown.warnings && shown.warnings.length > 0 && (
             <ul className="list small">
               {shown.warnings.map((w) => (

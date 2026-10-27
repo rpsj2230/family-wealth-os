@@ -8,6 +8,7 @@ import {
   saveDigestSettings,
   saveInboxLabel,
 } from './actions';
+import { DOC_KIND_LABEL, DOC_KINDS } from '@fwos/core';
 import type { RateCheck } from '@fwos/ingest';
 import { Field, SaveRow, Tick, useForm } from './fields';
 
@@ -72,10 +73,22 @@ export function RateSourceForm() {
           <input name="bank" required />
         </Field>
         <Field
-          label="Address of the bank’s rate page"
-          hint="The full address, starting with https://, of the page that lists its deposit rates."
+          label="Address of the bank’s own rate page"
+          hint="The full address, starting with https://, of the bank’s own page (or PDF) that lists its rates. Rates are read only from the bank’s own pages."
         >
           <input name="url" inputMode="url" placeholder="https://" required />
+        </Field>
+        <Field
+          label="Which rates are on it"
+          hint="Some banks publish savings and deposit rates on different pages: add each page and say which."
+        >
+          <select name="kind" defaultValue="both">
+            {DOC_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {DOC_KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
         </Field>
       </div>
       <SaveRow label="Add page" pending={pending} res={res} />
@@ -137,9 +150,9 @@ export function PastePageBox({ id, bank }: { id: string; bank: string }) {
     <details className="pastepage">
       <summary>Paste the page instead</summary>
       <p className="small muted">
-        Open {bank}&apos;s rate page in your own browser, press Ctrl+A (Cmd+A on a Mac), Ctrl+C, and
-        paste below. The rates are read from the text and saved; a rate you typed is never
-        overwritten.
+        Open {bank}&apos;s rate page in your own browser, expand every section (collapsed sections
+        are not copied), press Ctrl+A (Cmd+A on a Mac), Ctrl+C, and paste below. The rates are read
+        from the text and saved, marked as pasted by you; a rate you typed is never overwritten.
       </p>
       <textarea
         value={text}

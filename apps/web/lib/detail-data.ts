@@ -110,6 +110,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
           .from('mf_transactions')
           .select('id, txn_on, kind, amount, units, nav, balance_units, description')
           .eq('asset_id', id)
+          .is('superseded_on', null)
           .order('txn_on')
           .order('id')
           .range(from, to),

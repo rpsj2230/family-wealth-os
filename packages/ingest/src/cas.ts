@@ -44,6 +44,8 @@ export interface CasScheme {
   /** the holder named on the folio and the PAN printed on it: a statement can hold the folios of several people */
   holder?: string | null;
   folioPan?: string | null;
+  /** why this scheme was not read cleanly (a name that is statement text, no name, no closing balance); absent when it was */
+  unclear?: string | null;
 }
 
 export interface CasStatement {
@@ -57,7 +59,16 @@ export interface CasStatement {
   periodTo: string | null;
   schemes: CasScheme[];
   warnings: string[];
+  /**
+   * The statement speaks of demat (depository) holdings. A combined CAMS + KFintech statement can list funds held in demat form in a
+   * section this reader does not take apart, so a fund missing from it is not proof that it was sold.
+   */
+  dematMention?: boolean;
 }
+
+/** Any mention of "demat" other than the "Non-Demat" printed beside each folio's ISIN. */
+export const mentionsDemat = (text: string): boolean =>
+  /demat/i.test(text.replace(/non[-\s]?demat/gi, ' '));
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
@@ -301,6 +312,12 @@ export function parseCas(raw: string): CasStatement {
     }
   }
 
+  for (const sc of schemes) {
+    if (sc.name.endsWith('…') || sc.name === 'Unnamed scheme')
+      sc.unclear = 'the scheme name could not be read cleanly';
+    else if (sc.closingUnits === null) sc.unclear = 'no closing balance was found';
+  }
+
   if (schemes.length === 0) {
     // holdings statements (demat): ISIN, name, units, NAV, value
     const hold =
@@ -336,6 +353,7 @@ export function parseCas(raw: string): CasStatement {
     periodTo: period ? casDate(period[2]!) : null,
     schemes,
     warnings,
+    dematMention: mentionsDemat(t),
   };
 }
 

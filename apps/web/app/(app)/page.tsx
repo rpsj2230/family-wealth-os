@@ -84,17 +84,7 @@ export default async function Dashboard({
                 tone: late > 0 ? 'bad' : 'warn',
               },
         ]}
-        actions={
-          <>
-            <Link href="/raise" className="btn primary cta">
-              I need money
-            </Link>
-            <Link href="/retire" className="btn cta">
-              Can I retire now?
-            </Link>
-            <WhatsAppButton />
-          </>
-        }
+        actions={<WhatsAppButton icon />}
       />
       <SetupChecklist items={setup} compact max={4} title="Finish setting up" />
       <HomeView m={home} />

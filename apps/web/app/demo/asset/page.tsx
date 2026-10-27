@@ -19,6 +19,7 @@ import {
 import { fundEditRows } from '@/lib/invest-ledger';
 import { FundEditProvider } from '@/components/invest/FundEdit';
 import { FundPage, parseFundTab } from '@/components/invest/FundPage';
+import type { ReplacedRow } from '@/components/invest/ReplacedLines';
 import { buildFundDetail, NAV_POINTS } from '@/lib/fund-detail-model';
 import { buildFundTax } from '@/lib/fund-tax';
 import type { FundRow } from '@/lib/investments';
@@ -209,6 +210,30 @@ const audit: AuditIn[] = [
   },
 ];
 
+/** Invented lines a fund statement replaced, to show the collapsed list on the Transactions tab. */
+const DEMO_REPLACED: ReplacedRow[] = [
+  {
+    id: 'r1',
+    date: '2026-04-20',
+    kind: 'purchase',
+    amount: 5000,
+    units: 50,
+    source: 'csv',
+    statementOn: '2026-10-25',
+    replacedOn: '2026-10-26T04:00:00Z',
+  },
+  {
+    id: 'r2',
+    date: '2026-06-05',
+    kind: 'sip',
+    amount: 10000,
+    units: 100,
+    source: 'estimate',
+    statementOn: '2026-10-25',
+    replacedOn: '2026-10-26T04:00:00Z',
+  },
+];
+
 export default async function DemoAsset({
   searchParams,
 }: {
@@ -306,6 +331,7 @@ export default async function DemoAsset({
             colour={owner.colour}
             tax={buildFundTax(all, sample.row)}
             taxHref="/demo/tax-harvest"
+            replaced={DEMO_REPLACED}
             overview={(ex) => (
               <FundDetailPanel
                 ex={ex}

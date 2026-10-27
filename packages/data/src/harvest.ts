@@ -74,6 +74,7 @@ export async function loadHarvestPositions(
     const tq = db
       .from('mf_transactions')
       .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description, source')
+      .is('superseded_on', null)
       .order('txn_on', { ascending: true })
       .order('id');
     return (opts.householdId ? tq.eq('household_id', opts.householdId) : tq).range(from, to);

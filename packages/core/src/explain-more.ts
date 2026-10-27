@@ -494,7 +494,7 @@ export function buildRatesExplain(i: RatesExplainInput): ExplainSet<'rates'> {
       id: 'rates.freshness',
       title: 'How fresh the rates are',
       what: 'How many rates are on file, when the newest was checked and how many are older than the limit.',
-      how: `${exPlural(o.count, 'rate')} on file from ${exPlural(i.banks, 'bank')}; checked between ${exDate(o.oldest)} and ${exDate(o.newest)}. ${o.stale} ${o.stale === 1 ? 'is' : 'are'} older than ${exPlural(o.staleDays, 'day')} (a Setting).${i.unreadable > 0 ? ` ${exPlural(i.unreadable, 'bank page')} could not be read by the weekly refresh.` : ''}`,
+      how: `${exPlural(o.count, 'rate')} on file from ${exPlural(i.banks, 'bank')}; checked between ${exDate(o.oldest)} and ${exDate(o.newest)}. ${o.stale} ${o.stale === 1 ? 'is' : 'are'} older than ${exPlural(o.staleDays, 'day')} (a Setting).${i.unreadable > 0 ? ` ${exPlural(i.unreadable, 'bank page')} could not be read by the monthly refresh.` : ''}`,
       inputs: [
         {
           label: 'Rates on file',

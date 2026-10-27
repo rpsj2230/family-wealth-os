@@ -461,7 +461,7 @@ export function placeNewMoney(args: {
     );
   if (args.offers.length === 0)
     notes.push(
-      'No rates are on file yet. Add them on this page or let the weekly refresh read your banks’ rate pages.',
+      'No rates are on file yet. Add them on this page or let the monthly refresh read your banks’ rate pages.',
     );
   if (kind === 'NRO')
     notes.push('Rates are shown after tax: interest on NRO accounts is taxed in India.');
@@ -532,4 +532,15 @@ export function tenureText(o: {
   const t = o.tenureTo || o.tenureFrom;
   const fmt = (m: number) => (m >= 12 && m % 6 === 0 ? `${m / 12} yr` : `${m} mo`);
   return f === 0 && t === 0 ? '–' : f === t ? fmt(f) : `${f}–${t} mo`;
+}
+
+/**
+ * Is today the day the bank rate pages are read? Once a month, on `syncDay`; in a month that has no such day, on its last day.
+ * `force` (a run started by hand) is always due.
+ */
+export function rateSyncDue(todayIso: string, syncDay: number, force = false): boolean {
+  if (force) return true;
+  const [y, m, d] = todayIso.split('-').map(Number) as [number, number, number];
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return d === Math.min(Math.max(1, Math.round(syncDay)), last);
 }

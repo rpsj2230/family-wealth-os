@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { parseHomeRange } from '@fwos/core';
 import { HomeView } from '@/app/(app)/dashboard/HomeView';
 import { DemoShell } from '@/components/DemoShell';
@@ -36,16 +35,6 @@ export default async function DemoDashboard({
                 tone: late > 0 ? 'bad' : 'warn',
               },
         ]}
-        actions={
-          <>
-            <Link href="/demo/raise" className="btn primary cta">
-              I need money
-            </Link>
-            <Link href="/demo/retire" className="btn cta">
-              Can I retire now?
-            </Link>
-          </>
-        }
       />
       <HomeView m={home} sample />
     </DemoShell>

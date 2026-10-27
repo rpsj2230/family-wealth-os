@@ -10,7 +10,8 @@
     "digest": "tsx src/digest.ts",
     "inbox": "tsx src/inbox.ts",
     "selftest": "tsx src/selftest.ts",
-    "rates": "tsx src/rates.ts"
+    "rates": "tsx src/rates.ts",
+    "statements": "tsx src/statements.ts"
   },
   "dependencies": {
     "@fwos/core": "workspace:*",

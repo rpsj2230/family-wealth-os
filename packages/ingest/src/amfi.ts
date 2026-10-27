@@ -131,6 +131,65 @@ export function coreTokens(name: string): string[] {
   return s.split(/[\s-]+/).filter((t) => t && !NOISE.has(t));
 }
 
+/** Words that only decorate a scheme name on one statement or another. */
+const KEY_NOISE = new Set([
+  'dir',
+  'gr',
+  'reg',
+  'ltd',
+  'limited',
+  'erstwhile',
+  'formerly',
+  'fka',
+  'demat',
+  'payout',
+  'reinvestment',
+  'etf',
+]);
+
+export interface SchemeKey {
+  /** the words that identify the scheme, sorted: "Edelweiss Mid Cap Growth Direct Plan" and "Edelweiss Mid Cap Fund - Direct Plan - Growth" are the same */
+  tokens: string[];
+  /** Direct and Regular are different funds with different ISINs; null when the name does not say */
+  plan: 'direct' | 'regular' | null;
+  /** Growth and IDCW (dividend) are different too */
+  option: 'growth' | 'idcw' | null;
+  key: string;
+}
+
+/**
+ * A tolerant key for a scheme name: the identifying words (case, order, "Fund", "Plan", "Option", hyphens and brackets do not matter;
+ * "Mid Cap" is "Midcap", "Bluechip" is "Large Cap"), plus the plan and the option kept apart, because those change the fund.
+ */
+export function schemeKey(name: string): SchemeKey {
+  const bare = name.toLowerCase().replace(/\(.*?\)/g, ' ');
+  const plan = /\bdirect\b|\bdir\b/.test(bare)
+    ? 'direct'
+    : /\bregular\b|\breg\b/.test(bare)
+      ? 'regular'
+      : null;
+  const option = /\b(idcw|dividend|payout|reinvest\w*)\b/.test(bare)
+    ? 'idcw'
+    : /\bgrowth\b|\bgr\b/.test(bare)
+      ? 'growth'
+      : null;
+  const tokens = [
+    ...new Set(
+      coreTokens(name)
+        .filter((t) => !KEY_NOISE.has(t))
+        .map((t) => (t === 'bluechip' ? 'largecap' : t)),
+    ),
+  ].sort();
+  return { tokens, plan, option, key: tokens.join(' ') };
+}
+
+/** False when the two names say different things about the plan or the option (so they cannot be the same fund). */
+export function schemeKeysCompatible(a: SchemeKey, b: SchemeKey): boolean {
+  return (
+    (!a.plan || !b.plan || a.plan === b.plan) && (!a.option || !b.option || a.option === b.option)
+  );
+}
+
 export interface Candidate {
   scheme: AmfiScheme;
   score: number;

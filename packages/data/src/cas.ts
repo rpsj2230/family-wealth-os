@@ -1,17 +1,18 @@
 import type { FundImportDiff, OnFileState } from '@fwos/core';
 import {
   applyFundDiff,
-  casPdfText,
   fundCsvToStatement,
-  isPasswordError,
-  parseCas,
+  mergeReports,
+  openStatement,
   planCasImport,
   type CasFund,
   type CasIo,
   type CasReport,
   type CasStatement,
+  type PasswordCandidate,
   type PlanConfig,
   type Selection,
+  type SkippedFolios,
   type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -43,7 +44,7 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         await db
           .from('mf_positions')
           .select(
-            'asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on, units, invested, sip_monthly, sip_stopped',
+            'asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on, units, invested, sip_monthly, sip_stopped, cas_detail_from, cas_detail_to',
           )
           .eq('household_id', hh)
           .in('asset_id', ids),
@@ -218,7 +219,30 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       );
       return a.id;
     },
-    async save({ assetId, transactions, position, valuation, closed, sip }) {
+    async save({ assetId, transactions, lineSource, replace, position, valuation, closed, sip }) {
+      // lines the statement replaces are set aside first, so nothing is counted twice at any moment (they are never deleted)
+      if (replace)
+        for (let i = 0; i < replace.keys.length; i += 200) {
+          const r = await db.rpc('supersede_fund_lines', {
+            p_household: hh,
+            p_asset: assetId,
+            p_refs: replace.keys.slice(i, i + 200),
+            p_statement_ref: replace.statementRef,
+            p_statement_on: replace.statementOn || null,
+            p_reason: replace.reason,
+          });
+          if (r.error) throw new Error(`set aside replaced lines: ${r.error.message}`);
+        }
+      // a statement that has a line which an earlier statement had set aside brings it back as its own
+      if (lineSource === 'cas' && transactions.length > 0)
+        for (let i = 0; i < transactions.length; i += 200) {
+          const r = await db.rpc('restore_fund_lines', {
+            p_household: hh,
+            p_asset: assetId,
+            p_refs: transactions.slice(i, i + 200).map((t) => t.key),
+          });
+          if (r.error) throw new Error(`restore lines: ${r.error.message}`);
+        }
       // only the lines that are not stored yet arrive here; each carries the reference it is stored under
       const rows = transactions.map((t) => ({
         household_id: hh,
@@ -230,7 +254,7 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         nav: t.nav,
         balance_units: t.balance,
         description: t.description,
-        source: 'cas',
+        source: lineSource,
         source_ref: t.key,
       }));
       let added = 0;
@@ -253,6 +277,10 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       if (position.startedOn) upd.started_on = position.startedOn;
       if (position.folioLast4) upd.folio_last4 = position.folioLast4;
       if (position.casAsOf) upd.cas_as_of = position.casAsOf;
+      if (position.coverTo) {
+        upd.cas_detail_from = position.coverFrom ?? null;
+        upd.cas_detail_to = position.coverTo;
+      }
       if (position.isin) upd.isin = position.isin;
       if (position.amfiCode) upd.amfi_code = position.amfiCode;
       if (position.units !== undefined && position.unitsAsOf) {
@@ -357,108 +385,52 @@ async function planRules(db: SupabaseClient, hh: string): Promise<Partial<PlanCo
 
 export interface CasPdfResult {
   outcome: 'imported' | 'partial' | 'failed';
+  /** the first person the statement was applied to (the one whose password opened it when it names nobody) */
   ownerId: string | null;
+  /** one report for everyone in the file */
   report: CasReport | null;
+  /** the report of each person in the file */
+  people?: { ownerId: string; report: CasReport }[];
+  /** folios of someone who is not in the family list: named, not applied */
+  skipped?: SkippedFolios[];
   detail: string;
   /** "2 funds updated: +5 transactions; 1 SIP stopped; 1 fund sold" */
   summary: string;
 }
 
-type Candidate = { ownerId: string; passwords: string[]; panLast4: string | null };
-
-type Opened =
-  | { ok: true; stmt: CasStatement; ownerId: string }
-  | { ok: false; ownerId: string | null; detail: string };
+type Candidate = PasswordCandidate;
 
 /**
- * Opens a fund statement with each candidate's passwords (the PAN, or the password chosen when the statement was requested)
- * until one fits, and checks the statement belongs to that person. No password or PAN is logged or returned.
+ * A fund statement that lists balances held with a depository only, or that mentions demat holdings (a combined CAMS + KFintech
+ * statement can carry a demat section), cannot show that a fund was sold, so it is not complete.
  */
-async function openStatement(pdf: Uint8Array, candidates: Candidate[]): Promise<Opened> {
-  let text: string | null = null;
-  let owner: string | null = null;
-  let panLast4: string | null = null;
-  let lastError: unknown = null;
-  // an unprotected statement opens without a password
-  try {
-    text = await casPdfText(pdf);
-  } catch (e) {
-    lastError = e;
-  }
-  if (text === null)
-    outer: for (const c of candidates) {
-      for (const pw of c.passwords) {
-        try {
-          text = await casPdfText(pdf, pw);
-          owner = c.ownerId;
-          panLast4 = c.panLast4;
-          break outer;
-        } catch (e) {
-          lastError = e;
-          if (!isPasswordError(e)) break outer;
-        }
-      }
-    }
-  if (text === null)
-    return {
-      ok: false,
-      ownerId: null,
-      detail: isPasswordError(lastError)
-        ? candidates.some((c) => c.passwords.length > 0)
-          ? 'The password did not open the statement. Use the password you chose when you requested it (CAMS and KFintech let you choose one; if you chose your PAN, type it in capital letters).'
-          : 'The statement is password-protected: type its password (the one you chose when requesting it, or your PAN).'
-        : `The PDF could not be read (${(lastError as Error | null)?.message ?? 'unknown error'}).`,
-    };
-  const stmt = parseCas(text);
-  if (owner === null) {
-    const hit = candidates.filter(
-      (c) => c.panLast4 && stmt.pan && c.panLast4 === stmt.pan.slice(-4),
-    );
-    if (hit.length === 1) {
-      owner = hit[0]!.ownerId;
-      panLast4 = hit[0]!.panLast4;
-    }
-  }
-  if (owner === null)
-    return {
-      ok: false,
-      ownerId: null,
-      detail:
-        'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
-    };
-  if (stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
-    return {
-      ok: false,
-      ownerId: owner,
-      detail:
-        'This statement belongs to a different person than the one chosen (the PAN on it does not match).',
-    };
-  if (stmt.schemes.length === 0)
-    return {
-      ok: false,
-      ownerId: owner,
-      detail: stmt.warnings.join(' ') || 'Nothing recognised.',
-    };
-  return { ok: true, stmt, ownerId: owner };
-}
+const isComplete = (stmt: CasStatement) =>
+  !stmt.schemes.some((s) => s.holdingsOnly) && !stmt.dematMention;
 
-/** A fund statement that lists balances held with a depository only cannot show that a fund was sold, so it is not complete. */
-const isComplete = (stmt: CasStatement) => !stmt.schemes.some((s) => s.holdingsOnly);
+const skippedLine = (k: SkippedFolios) =>
+  `${k.schemes.length} scheme${k.schemes.length === 1 ? '' : 's'} on folios of someone not in your family list (PAN ending ${k.panLast4 ?? 'unknown'}): skipped`;
 
 export type CasPreview =
   | { ok: false; detail: string }
   | {
       ok: true;
+      /** the first person in the file, and the comparison for them */
       ownerId: string;
       diff: FundImportDiff;
+      /** one comparison for every person whose folios are in the file */
+      people: { ownerId: string; diff: FundImportDiff }[];
+      /** folios of someone who is not in the family list: named, and not applied */
+      skipped: SkippedFolios[];
+      basis: 'email' | 'pan' | 'unknown';
       warnings: string[];
       periodFrom: string | null;
       periodTo: string | null;
     };
 
 /**
- * What a statement would change, without writing anything: opens it (the password is used here and nowhere kept), reads what is on
- * file and compares. A fund statement for the whole PAN lists everything held, so a fund missing from it has been sold.
+ * What a statement would change, without writing anything: opens it (the password is used here and nowhere kept), splits it by
+ * person (the PAN on each folio), reads what is on file and compares. Only a statement keyed on a PAN lists everything a person
+ * holds, so only that kind can show a fund as sold by leaving it out.
  */
 export async function previewCasPdf(
   db: SupabaseClient,
@@ -469,15 +441,25 @@ export async function previewCasPdf(
 ): Promise<CasPreview> {
   const o = await openStatement(pdf, candidates);
   if (!o.ok) return { ok: false, detail: o.detail };
-  const diff = await planCasImport(o.ownerId, o.stmt, casIo(db, hh), {
-    ...(await planRules(db, hh)),
-    today: opts.today,
-    complete: isComplete(o.stmt),
-  });
+  const rules = await planRules(db, hh);
+  const io = casIo(db, hh);
+  const people: { ownerId: string; diff: FundImportDiff }[] = [];
+  for (const g of o.groups)
+    people.push({
+      ownerId: g.ownerId,
+      diff: await planCasImport(g.ownerId, g.stmt, io, {
+        ...rules,
+        today: opts.today,
+        complete: isComplete(g.stmt),
+      }),
+    });
   return {
     ok: true,
-    ownerId: o.ownerId,
-    diff,
+    ownerId: people[0]!.ownerId,
+    diff: people[0]!.diff,
+    people,
+    skipped: o.skipped,
+    basis: o.stmt.basis ?? 'unknown',
     warnings: o.stmt.warnings,
     periodFrom: o.stmt.periodFrom,
     periodTo: o.stmt.periodTo,
@@ -491,15 +473,22 @@ function changeRecord(report: CasReport, diffNotes: string[]) {
 
 /**
  * Opens a fund statement, compares it with what is on file and writes only what is new or changed: all of it (the mailbox job), or
- * only the items in `select` (the person's choice at the preview). The statement is logged in `cas_imports` (once per source) with
- * the full list of changes.
+ * only the items in `select` (the person's choice at the preview). Each person's folios in the file are applied to that person. The
+ * statement is logged in `cas_imports` (once per source) with the full list of changes.
  */
 export async function importCasPdf(
   db: SupabaseClient,
   hh: string,
   pdf: Uint8Array,
   candidates: Candidate[],
-  opts: { sourceRef: string; today: string; receivedOn?: string; select?: Selection },
+  opts: {
+    sourceRef: string;
+    today: string;
+    receivedOn?: string;
+    select?: Selection;
+    /** the statement came by e-mail: a password that fits none of the saved ones is explained for that case */
+    fromMail?: boolean;
+  },
 ): Promise<CasPdfResult> {
   const done = async (
     res: Omit<CasPdfResult, 'summary'> & { summary?: string },
@@ -522,26 +511,40 @@ export async function importCasPdf(
     );
     return out;
   };
-  const o = await openStatement(pdf, candidates);
+  const o = await openStatement(pdf, candidates, opts.fromMail);
   if (!o.ok) return done({ outcome: 'failed', ownerId: o.ownerId, report: null, detail: o.detail });
   const io = casIo(db, hh);
-  const diff = await planCasImport(o.ownerId, o.stmt, io, {
-    ...(await planRules(db, hh)),
-    today: opts.today,
-    complete: isComplete(o.stmt),
-  });
-  const report = await applyFundDiff(diff, io, opts.select ?? null);
+  const rules = await planRules(db, hh);
+  const people: { ownerId: string; report: CasReport }[] = [];
+  const notes: string[] = [];
+  for (const g of o.groups) {
+    const diff = await planCasImport(g.ownerId, g.stmt, io, {
+      ...rules,
+      today: opts.today,
+      complete: isComplete(g.stmt),
+    });
+    const report = await applyFundDiff(diff, io, opts.select ?? null, {
+      statementRef: opts.sourceRef,
+    });
+    people.push({ ownerId: g.ownerId, report });
+    notes.push(...diff.notes);
+  }
   await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
+  const report = mergeReports(people.map((p) => p.report));
+  const skippedLines = o.skipped.map(skippedLine);
   const partial = report.needsReview.length > 0;
+  await markRequestsArrived(db, hh, o.ownerId, opts.today);
   return done(
     {
       outcome: partial ? 'partial' : 'imported',
-      ownerId: o.ownerId,
+      ownerId: people[0]!.ownerId,
       report,
+      people,
+      skipped: o.skipped,
       summary: report.summary,
-      detail: [report.summary, ...report.lines, ...o.stmt.warnings].join('\n'),
+      detail: [report.summary, ...report.lines, ...skippedLines, ...o.stmt.warnings].join('\n'),
     },
-    changeRecord(report, diff.notes),
+    changeRecord(report, [...notes, ...skippedLines]),
   );
 }
 
@@ -577,4 +580,124 @@ export async function importFundCsv(
   if (report)
     await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   return { ownerId, diff, notes: [...notes, ...statement.warnings], report };
+}
+
+/**
+ * A statement for this person has been read: the requests for a full statement that were still waiting for them are now arrived. A
+ * failure here never fails the import (the request note is a convenience).
+ */
+export async function markRequestsArrived(
+  db: SupabaseClient,
+  hh: string,
+  ownerId: string,
+  today: string,
+): Promise<void> {
+  try {
+    const done = await db
+      .from('statement_requests')
+      .update({ status: 'arrived', arrived_on: today })
+      .eq('household_id', hh)
+      .eq('owner_id', ownerId)
+      .eq('status', 'asked')
+      .select('task_id');
+    // the reminder left for a late request is no longer needed
+    const tasks = ((done.data ?? []) as { task_id: string | null }[])
+      .map((r) => r.task_id)
+      .filter((x): x is string => !!x);
+    if (tasks.length > 0)
+      await db
+        .from('tasks')
+        .update({ status: 'done', done_at: new Date().toISOString() })
+        .in('id', tasks)
+        .eq('status', 'open');
+  } catch {
+    /* the import itself is done */
+  }
+}
+
+/**
+ * Everyone's passwords for opening statements, for the background jobs (service role only): the saved PAN in capitals and in small
+ * letters, then any extra statement passwords the person saved. Nothing here is ever logged or returned to a page.
+ */
+export async function loadStatementCandidates(
+  db: SupabaseClient,
+  hh: string,
+): Promise<Candidate[]> {
+  const pans = must(
+    await db.from('owner_pan').select('owner_id, pan').eq('household_id', hh),
+    'saved PANs',
+  ) as { owner_id: string; pan: string }[];
+  const extra = must(
+    await db.from('statement_passwords').select('owner_id, password').eq('household_id', hh),
+    'statement passwords',
+  ) as { owner_id: string; password: string }[];
+  const byOwner = new Map<string, string[]>();
+  for (const e of extra) byOwner.set(e.owner_id, [...(byOwner.get(e.owner_id) ?? []), e.password]);
+  return pans.map((p) => ({
+    ownerId: p.owner_id,
+    passwords: [...new Set([p.pan, p.pan.toLowerCase(), ...(byOwner.get(p.owner_id) ?? [])])],
+    panLast4: p.pan.slice(-4),
+  }));
+}
+
+export interface CasMailResult {
+  outcome: 'imported' | 'partial' | 'failed';
+  reason: string;
+  /** whose statement it was (the people the attachments opened for) */
+  ownerIds: string[];
+  funds: number;
+  transactions: number;
+}
+
+/**
+ * Imports the PDF attachments of one e-mail as fund statements: the same safety as the label job (it was extracted from there so
+ * both jobs share it). The reason is one line, with no password and no PAN in it.
+ */
+export async function importCasAttachments(
+  db: SupabaseClient,
+  hh: string,
+  m: {
+    messageId: string;
+    receivedOn: string;
+    attachments: { filename: string; content: Uint8Array }[];
+  },
+  today: string,
+): Promise<CasMailResult> {
+  const candidates = await loadStatementCandidates(db, hh);
+  const results: CasPdfResult[] = [];
+  for (const a of m.attachments)
+    results.push(
+      await importCasPdf(db, hh, a.content, candidates, {
+        sourceRef: `${m.messageId}|${a.filename}`,
+        today,
+        receivedOn: m.receivedOn,
+        fromMail: true,
+      }),
+    );
+  const ok = results.filter((r) => r.outcome !== 'failed');
+  if (ok.length === 0)
+    return {
+      outcome: 'failed',
+      reason: results
+        .map((r) => r.detail)
+        .join(' ')
+        .slice(0, 300),
+      ownerIds: [],
+      funds: 0,
+      transactions: 0,
+    };
+  const review = ok.flatMap((r) => r.report?.needsReview ?? []);
+  // what changed, in one line (the full list is kept with the import: Import > Fund statement, recent statements)
+  const changed = ok.map((r) => r.summary).filter((x) => x.length > 0);
+  return {
+    outcome: review.length > 0 ? 'partial' : 'imported',
+    reason: `${changed.join(' | ')}${review.length ? `; check: ${review.join(', ')}` : ''}`,
+    ownerIds: [
+      ...new Set(
+        ok.flatMap((r) => r.people?.map((p) => p.ownerId) ?? (r.ownerId ? [r.ownerId] : [])),
+      ),
+    ],
+    funds: ok.reduce((n, r) => n + (r.report?.statementFunds ?? 0), 0),
+    transactions: ok.reduce((n, r) => n + (r.report?.transactionsAdded ?? 0), 0),
+  };
 }

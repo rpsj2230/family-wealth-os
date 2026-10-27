@@ -101,7 +101,7 @@ test.describe('the "?" explainer (public sample)', () => {
     await page.goto('/demo/investments');
     const hero = page.getByRole('region', { name: 'Mutual funds at a glance' });
     await expect(hero).toContainText(/\d+% of today’s value is growth/);
-    await expect(hero).toContainText(/on the ₹[\d.]+ (L|Cr) put in/);
+    await expect(hero).toContainText(/on ₹[\d.]+ (L|Cr) invested/);
     // the rounded amounts carry the exact rupees
     await expect(hero.locator('dd.v[title^="₹"]').first()).toHaveAttribute('title', /₹[\d,]+/);
     await btn(page, 'invest.ring').scrollIntoViewIfNeeded();

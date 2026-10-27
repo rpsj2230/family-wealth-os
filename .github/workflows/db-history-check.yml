@@ -1,0 +1,38 @@
+name: Database history check (read-only)
+# Manual: prints counts only (no balances, names or account numbers) to show whether the history import left its records in the live
+# database and which migrations are applied. Changes nothing.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Counts
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=0 <<'SQL'
+          \echo '== migrations applied (last 8)'
+          select version from supabase_migrations.schema_migrations order by version desc limit 8;
+          \echo '== history columns exist'
+          select table_name, column_name from information_schema.columns where table_schema='public' and column_name in ('ended_on','from_history','start_estimated');
+          \echo '== assets by type and status; added from history'
+          select type, status, from_history, count(*) from public.assets group by 1,2,3 order by 1,2,3;
+          \echo '== deposits with an end date'
+          select count(*) filter (where ended_on is not null) as with_end_date, count(*) as deposits, min(booked_on) as earliest_booked from public.fixed_deposits;
+          \echo '== observations by source (not superseded)'
+          select source, count(*), min(as_of) as first_as_of, max(as_of) as last_as_of from public.observations where superseded_by is null group by 1 order by 1;
+          \echo '== observations written by the history import, by month'
+          select to_char(as_of,'YYYY-MM') as month, count(*) from public.observations where source_ref like 'hist:%' and superseded_by is null group by 1 order by 1;
+          \echo '== all balance observations by month (not superseded)'
+          select to_char(as_of,'YYYY-MM') as month, count(*) from public.observations where kind='balance' and superseded_by is null group by 1 order by 1;
+          \echo '== snapshots'
+          select source, count(*), min(taken_on) as first_day, max(taken_on) as last_day from public.snapshots group by 1 order by 1;
+          \echo '== fund ledger lines by source'
+          select source, count(*), min(txn_on) as first_day, max(txn_on) as last_day from public.mf_transactions group by 1 order by 1;
+          SQL

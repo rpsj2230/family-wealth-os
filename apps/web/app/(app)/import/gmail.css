@@ -1,0 +1,183 @@
+/* Import > Fund statement: the "Read my fund statements from Gmail" card. Compact, readable at 390px, no sideways overflow. */
+.gm {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gm-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: start;
+}
+.gm-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.gm-head p {
+  margin: 2px 0 0;
+}
+.gm-icon {
+  color: var(--primary);
+  margin-top: 2px;
+}
+@media (max-width: 520px) {
+  .gm-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .gm-head .statuspill {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+.gm-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 0;
+}
+.gm-chips li {
+  font-size: 0.78rem;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--primary-soft);
+}
+.gm-facts {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+}
+.gm-senders {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gm-sender {
+  font-size: 0.78rem;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.gm-actions {
+  margin: 10px 0;
+}
+.gm-actionset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.gm-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.gm-result {
+  margin: 0;
+  flex-basis: 100%;
+}
+.gm-result.ok {
+  color: var(--ok-fg);
+}
+.gm-result.fail {
+  color: var(--fail);
+}
+.gm-sub {
+  margin: 16px 0 6px;
+  font-size: 1rem;
+}
+.gm-table td .small {
+  margin-top: 2px;
+}
+.gm-help {
+  margin-top: 12px;
+}
+.gm-choose {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.gm-choose li {
+  margin: 3px 0;
+}
+.gm-request {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+  min-width: 0;
+}
+.gm-pick {
+  display: grid;
+  gap: 2px;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.gm-pick.grow {
+  flex: 1 1 200px;
+}
+.gm-pick select,
+.gm-pick input {
+  max-width: 100%;
+  min-width: 0;
+}
+.gm-ways {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.gm-ways li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+}
+.gm-requests {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.gm-requests li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.gm-requests li .small {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.gm-pw {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.gm-pwrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: end;
+}
+.gm-saved {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.gm-saved li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}

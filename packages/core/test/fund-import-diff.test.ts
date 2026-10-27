@@ -750,6 +750,19 @@ describe('SIP verdicts', () => {
     expect(v.why).toContain('cancelled on 12 Oct 2026');
   });
 
+  it('a new fund whose SIP ended in a cancellation says so, not that an instalment was missed', () => {
+    const cancelled = stFund({
+      match: { status: 'none' },
+      lines: lines('5678', monthly('2026-01-05', 10, 10000)),
+      sipCancelled: { on: '2026-10-26' },
+    });
+    const sip = diffFundImport(input({ funds: [cancelled] })).items[0]!.sip!;
+    expect(sip.kind).toBe('stopped');
+    expect(sip.effectiveOn).toBe('2026-10-26');
+    expect(sip.why).toContain('cancelled on 26 Oct 2026');
+    expect(sip.why).not.toContain('none came');
+  });
+
   it('SIP resumed: stopped on file, instalments again after the stop date', () => {
     const f = withSip({
       sipStopped: true,

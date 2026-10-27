@@ -198,7 +198,7 @@ describe('settings fields', () => {
   it('a document saved before the list existed counts a group as confirmed when it differs from the built-in numbers', () => {
     const raw = { deposits: { insuranceLimit: 700000 } };
     expect(confirmedGroups(raw, configFromJson(raw))).toEqual(['deposits']);
-    expect(RULE_GROUPS).toHaveLength(10);
+    expect(RULE_GROUPS).toHaveLength(11);
   });
 });
 

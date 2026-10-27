@@ -217,7 +217,7 @@ export function BankCardView({
         (s.health === 'warn' && card.differs === 0 && card.misread === 0)) && (
         <div className={`rt-note ${s.health === 'bad' ? 'bad' : 'warn'}`} role="status">
           <p>
-            <b>Weekly refresh:</b> {s.headline}
+            <b>Monthly refresh:</b> {s.headline}
           </p>
           {s.fix && (
             <p>

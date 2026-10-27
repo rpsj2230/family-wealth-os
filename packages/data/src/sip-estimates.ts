@@ -76,6 +76,7 @@ export async function syncSipEstimates(
       .from('mf_transactions')
       .select('id, asset_id, txn_on, source, source_ref, amount')
       .in('asset_id', ids)
+      .is('superseded_on', null)
       .order('txn_on')
       .order('id')
       .range(from, to),
