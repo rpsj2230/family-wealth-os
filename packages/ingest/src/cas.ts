@@ -41,10 +41,18 @@ export interface CasScheme {
   holdingsOnly: boolean;
   /** the scheme's transaction table says its SIP was cancelled or terminated (and on which date, when it says) */
   sipCancelled?: { on: string | null } | null;
+  /** the holder named on the folio and the PAN printed on it: a statement can hold the folios of several people */
+  holder?: string | null;
+  folioPan?: string | null;
 }
 
 export interface CasStatement {
   pan: string | null;
+  /**
+   * What the statement says its consolidation is keyed on. 'email': every folio registered with that email address (it can hold
+   * several people's folios and can miss folios registered under another email). 'pan': the holder's PAN. 'unknown': not stated.
+   */
+  basis?: 'email' | 'pan' | 'unknown';
   periodFrom: string | null;
   periodTo: string | null;
   schemes: CasScheme[];
@@ -146,6 +154,17 @@ function parseSchemeBody(
       balance: casNumber(m[6]!),
     });
   }
+  // "dd-Mon-yyyy ***Cancelled***" / "***Cancellation***" in the table is a SIP cancelled on that date; a SIP started again afterwards
+  // ("Instalment No - 1" later) is a replacement, not a stop
+  const table = closeAtEarly(t);
+  const markers = [
+    ...table.matchAll(
+      new RegExp(String.raw`(${DATE})\s+\*{3}\s*Cancell?(?:ed|ation)\s*\*{3}`, 'gi'),
+    ),
+  ];
+  const lastMarker = markers.length ? casDate(markers[markers.length - 1]![1]!) : null;
+  const restarted =
+    lastMarker !== null && txns.some((x) => x.kind === 'sip' && x.date > lastMarker);
   const digits = folio.replace(/[^0-9A-Za-z]/g, '');
   // only the transaction table is read: the notes after the closing balance are general terms, not this scheme's history
   const closeAt = t.search(/Closing Unit Balance/i);
@@ -172,8 +191,18 @@ function parseSchemeBody(
     marketValue: mv,
     transactions: txns,
     holdingsOnly: false,
-    ...(cancel ? { sipCancelled: { on: cancelDate ? casDate(cancelDate[0]) : null } } : {}),
+    ...(lastMarker && !restarted
+      ? { sipCancelled: { on: lastMarker } }
+      : cancel
+        ? { sipCancelled: { on: cancelDate ? casDate(cancelDate[0]) : null } }
+        : {}),
   };
+}
+
+/** The transaction table of a scheme: what comes before its closing balance. */
+function closeAtEarly(t: string): string {
+  const i = t.search(/Closing Unit Balance/i);
+  return i > 0 ? t.slice(0, i) : t;
 }
 
 export function parseCas(raw: string): CasStatement {
@@ -198,6 +227,15 @@ export function parseCas(raw: string): CasStatement {
     // Some statements come out of the PDF with each scheme's title and ISIN after its own table (the title was drawn last). Then the
     // table is what lies before the ISIN, and the name is the text after the table's last total.
     const titleLast = /Opening Unit Balance/i.test(section.slice(0, isins[0]!.index!));
+    // who holds the folio and under which PAN: printed on the folio's header lines, and the only reliable way to tell whose folio it is
+    // when one statement holds several people's folios
+    const headLine = t.slice(f.index!, f.index! + 500);
+    const hm =
+      /Folio No\s*:?\s*\S+(?:\s*\/\s*\S+)?\s+PAN\s*:\s*([A-Z]{5}\d{4}[A-Z])\s+(?:KYC\s*:\s*\S+\s+)?PAN\s*:\s*\S+\s+((?:[A-Za-z.'&]+\s+){0,8}?)(?=[A-Z0-9]{2,10}-[A-Za-z])/.exec(
+        headLine,
+      );
+    const folioPan = hm?.[1] ?? /PAN\s*:\s*([A-Z]{5}\d{4}[A-Z])/.exec(headLine)?.[1] ?? null;
+    const holder = hm?.[2]?.trim() || null;
     isins.forEach((im, j) => {
       if (titleLast) {
         const from = j === 0 ? 0 : isins[j - 1]!.index! + isins[j - 1]![0].length;
@@ -213,7 +251,7 @@ export function parseCas(raw: string): CasStatement {
         const amc = /([A-Z][A-Za-z&.' ]+ Mutual Fund)/.exec(tail)?.[1] ?? null;
         const sc = parseSchemeBody(seg, f[1]!.trim(), name || 'Unnamed scheme', im[1]!, amc);
         if (sc.closingUnits === null) warnings.push(`${sc.name}: no closing balance found.`);
-        schemes.push(sc);
+        schemes.push({ ...sc, holder: null, folioPan });
         return;
       }
       const nameFrom = j === 0 ? 0 : isins[j]!.index! - 0;
@@ -226,7 +264,15 @@ export function parseCas(raw: string): CasStatement {
           ? head
           : head.replace(/^.*?Market Value on [^:]*:\s*(?:INR|Rs\.?)?\s*[\d,]+\.\d+/i, '');
       void nameFrom;
-      const name = cleanSchemeName(afterPrev);
+      let name = cleanSchemeName(afterPrev);
+      if (j === 0 && holder && name.toLowerCase().startsWith(holder.toLowerCase())) {
+        // the holder's name and the registrar's scheme code come before the scheme's own name
+        name = name
+          .slice(holder.length)
+          .trim()
+          .replace(/^[A-Z0-9]{2,10}-(?=[A-Za-z])/, '')
+          .trim();
+      }
       const bodyStart = im.index! + im[0].length;
       const bodyEnd = j + 1 < isins.length ? isins[j + 1]!.index! : section.length;
       const amc =
@@ -241,7 +287,7 @@ export function parseCas(raw: string): CasStatement {
         amc,
       );
       if (s.closingUnits === null) warnings.push(`${s.name}: no closing balance found.`);
-      schemes.push(s);
+      schemes.push({ ...s, holder, folioPan });
     });
   });
 
@@ -282,8 +328,10 @@ export function parseCas(raw: string): CasStatement {
       );
     else warnings.push('No folios or holdings were recognised in this statement.');
   }
+  const basisM = /consolidation has been carried out based on the (email|PAN)/i.exec(t);
   return {
     pan,
+    basis: basisM ? (basisM[1]!.toLowerCase() === 'email' ? 'email' : 'pan') : 'unknown',
     periodFrom: period ? casDate(period[1]!) : null,
     periodTo: period ? casDate(period[2]!) : null,
     schemes,
