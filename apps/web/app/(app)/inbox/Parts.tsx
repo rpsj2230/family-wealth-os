@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import {
   explainEntry,
+  inboxProposal,
   longDate,
   rankAccounts,
   certainAccount,
@@ -45,6 +46,8 @@ export function ReviewCard({
   const r = entry.reading;
   const ranked = r ? rankAccounts(r, entry.assetId, accounts) : [];
   const sure = r ? certainAccount(r, entry.assetId, accounts) : null;
+  const prop = inboxProposal(entry, accounts);
+  const suggestedId = prop?.accountId ?? sure?.id ?? '';
   const busy = applying || dismissing || restoring;
 
   if (applied?.ok)
@@ -87,7 +90,29 @@ export function ReviewCard({
         <strong>{e.headline}</strong>
       </p>
       <p className="why small">{e.why}</p>
-      <p className="next small">{e.next}</p>
+      {prop ? (
+        <div className="inbox-ask" role="group" aria-label={`Suggestion for ${entry.subject || 'this message'}`}>
+          <p className="small">
+            <span className="ask-lead">What I suggest</span> {prop.proposal.suggest}{' '}
+            <span className="muted">{prop.proposal.why}</span>
+          </p>
+          {prop.accountId && prop.proposal.approve && (
+            <form action={applyAction} className="inbox-actions">
+              <input type="hidden" name="id" value={entry.id} />
+              <input type="hidden" name="asset" value={prop.accountId} />
+              <input type="hidden" name="amount" value={r?.amount ?? ''} />
+              <button className="btn primary inbox-approve" disabled={busy}>
+                {applying ? 'Recording…' : prop.proposal.approve}
+              </button>
+            </form>
+          )}
+          <p className="muted small">
+            {prop.accountId ? 'Or choose another account, correct the amount, or ignore it:' : 'Choose the account below (and correct the amount if it is wrong), or ignore it:'}
+          </p>
+        </div>
+      ) : (
+        <p className="next small">{e.next}</p>
+      )}
       <form action={applyAction} className="inbox-actions">
         <input type="hidden" name="id" value={entry.id} />
         {r && (
@@ -95,7 +120,7 @@ export function ReviewCard({
             <select
               name="asset"
               aria-label={`Record the balance of ${entry.subject || 'this message'} on`}
-              defaultValue={sure?.id ?? ''}
+              defaultValue={suggestedId}
               required
             >
               <option value="" disabled>
@@ -116,7 +141,7 @@ export function ReviewCard({
               style={{ width: '9.5rem', textAlign: 'right' }}
             />
             <button className="btn primary" disabled={busy}>
-              {applying ? 'Recording…' : sure ? 'Apply to this account' : 'Apply'}
+              {applying ? 'Recording…' : suggestedId ? 'Apply to the chosen account' : 'Apply'}
             </button>
           </>
         )}

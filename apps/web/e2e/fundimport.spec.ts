@@ -60,9 +60,9 @@ test.describe('Preview changes for a fund statement (public sample)', () => {
 
     const sold = row(page, 'Sample Old Fund');
     await expect(sold.locator('.fc-chip', { hasText: 'Sold' })).toBeVisible();
-    await expect(sold).toContainText(
-      'Not on the statement dated 25 Oct 2026, which lists all your funds.',
-    );
+    await expect(sold).toContainText('is on file, but is not on the statement dated 25 Oct 2026');
+    await expect(sold).toContainText('The statement lists all your funds, and this one is not among them.');
+    await expect(sold.getByRole('button', { name: /^Approve: mark .* as sold on 25 Oct 2026/ })).toBeVisible();
 
     // a fund with nothing new is folded away, not listed as a row
     await expect(page.locator('li.fc-row', { hasText: 'Sample Balanced' })).toHaveCount(0);
@@ -125,14 +125,144 @@ test.describe('Preview changes for a fund statement (public sample)', () => {
   });
 });
 
+test.describe('Questions the preview asks (public sample)', () => {
+  const valueRows = (page: Page) => person(page, 'Beena').locator('li.fc-row', { hasText: 'Sample Value Fund' });
+
+  test('a folio that could be several funds: what I found, what I suggest and why, Approve, and the other choices', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=cas');
+    const first = valueRows(page).nth(0);
+    await expect(first.locator('.fc-chip', { hasText: 'Your decision' })).toBeVisible();
+    await expect(first).toContainText('What I found');
+    await expect(first).toContainText('folio …8540, 700 units, ₹70,000 invested');
+    await expect(first).toContainText('What I suggest');
+    await expect(first).toContainText('Apply folio …8540 to your fund "Sample Value Fund - Direct Growth".');
+    await expect(first).toContainText('only "Sample Value Fund - Direct Growth" has folio …8540 on file');
+    await expect(
+      first.getByRole('button', {
+        name: 'Approve: link folio …8540 to "Sample Value Fund - Direct Growth"',
+      }),
+    ).toBeVisible();
+    // the other choices, each fund told apart by folio and units
+    const choices = first.getByRole('group', { name: 'Or choose another answer' });
+    await expect(choices.getByRole('radio')).toHaveCount(4);
+    await expect(choices).toContainText('no folio on file, 3,047.333 units');
+    await expect(choices.getByLabel('A new fund')).toBeVisible();
+    await expect(choices.getByLabel('Leave it alone for now')).toBeChecked();
+    // the old red "Needs a look" is gone
+    await expect(page.getByText('Needs a look')).toHaveCount(0);
+  });
+
+  test('Approve takes the suggestion, shows what the fund becomes, and can be changed', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=cas');
+    const second = valueRows(page).nth(1);
+    await second
+      .getByRole('button', { name: /^Approve: link folio …3820 to "Sample Value Fund/ })
+      .click();
+    await expect(second.getByRole('status')).toContainText('Approved: link folio …3820');
+    await expect(second.getByRole('status')).toContainText('It is applied when you press Apply.');
+    await expect(second.getByLabel(/Same as .*no folio on file, 3,047.333 units/)).toBeChecked();
+    await expect(second.locator('.fc-after')).toContainText('Nothing else changes; only the link is remembered.');
+    // another answer: a new fund, with its changes shown, and Approve is offered again
+    await second.getByLabel('A new fund').check();
+    await expect(second.locator('.fc-after .fc-chip', { hasText: 'New fund' })).toBeVisible();
+    await expect(second.locator('.fc-after')).toContainText('3,047.333');
+    await expect(second.getByRole('button', { name: /^Approve: link folio …3820/ })).toBeVisible();
+    // leaving it alone shows no change
+    await second.getByLabel('Leave it alone for now').check();
+    await expect(second.locator('.fc-after')).toHaveCount(0);
+  });
+
+  test('with no evidence it says it cannot tell, has no Approve, and a chosen fund shows its changes', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=cas');
+    const hybrid = person(page, 'Beena').locator('li.fc-row', { hasText: 'Sample Hybrid Fund' });
+    await expect(hybrid).toContainText('I cannot tell which it is, so I am not guessing: please choose.');
+    await expect(hybrid.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
+    await hybrid.getByLabel(/folio …2200, 100 units/).check();
+    await expect(hybrid.locator('.fc-after .fc-nums')).toContainText('410.5');
+    await expect(hybrid.locator('.fc-after .fc-nums')).toContainText('100');
+  });
+
+  test('a fund the statement does not list: leave it (e-mail-keyed statement) or mark it sold on a date', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=cas');
+    const dormant = row(page, 'Sample Dormant');
+    await expect(dormant.locator('.fc-chip', { hasText: 'Not on this statement' })).toBeVisible();
+    await expect(dormant).toContainText('Leave it as it is.');
+    await expect(dormant).toContainText('keyed on an e-mail address and may not list every folio');
+    await expect(dormant.getByLabel('Leave as it is')).toBeChecked();
+    await expect(dormant.getByLabel('Sold on')).toHaveCount(0);
+    await dormant.getByLabel('Mark as sold').check();
+    const date = dormant.getByLabel('Sold on');
+    await expect(date).toHaveValue('2026-10-25');
+    await date.fill('2026-10-20');
+    await expect(date).toHaveValue('2026-10-20');
+    await dormant.getByLabel('Leave as it is').check();
+    await expect(dormant.getByLabel('Sold on')).toHaveCount(0);
+    // a statement of everything the person holds: suggested sold, with the date
+    const old = row(page, 'Sample Old Fund');
+    await expect(old.getByLabel('Mark as sold')).toBeChecked();
+    await expect(old.getByLabel('Sold on')).toHaveValue('2026-10-25');
+  });
+
+  test('a SIP that cannot be judged: keep it as recorded, or mark it stopped from a date', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=cas');
+    const bond = row(page, 'Sample Bond');
+    await expect(bond.locator('.fc-chip', { hasText: 'SIP: your decision' })).toBeVisible();
+    await expect(bond).toContainText('Keep the SIP as recorded (₹3,000 a month).');
+    await expect(bond.getByRole('button', { name: 'Approve: keep the SIP as recorded' })).toBeVisible();
+    await bond.getByLabel('Mark the SIP as stopped').check();
+    await expect(bond.getByLabel('Stopped from')).toHaveValue('2026-10-24');
+    await bond.getByRole('button', { name: 'Approve: keep the SIP as recorded' }).click();
+    await expect(bond.getByRole('status')).toContainText('Approved: keep the SIP as recorded');
+    await expect(bond.getByLabel('Stopped from')).toHaveCount(0);
+  });
+});
+
 test.describe('The preview fits the screen', () => {
-  for (const width of [412, 810]) {
+  for (const width of [390, 412, 810]) {
     test(`no sideways scroll at ${width}px, also in a wide font`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/demo/import?tab=cas');
       await expect(person(page, 'Anil')).toBeVisible();
       for (const d of await page.locator('details.fc-lines').all())
         await d.locator('summary').click();
+      await noSideways(page);
+      await noSidewaysWide(page);
+    });
+
+    test(`no sideways scroll at ${width}px with answers open (approved, a date, a new fund)`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/demo/import?tab=cas');
+      const beena = person(page, 'Beena');
+      await beena
+        .locator('li.fc-row', { hasText: 'Sample Value Fund' })
+        .nth(0)
+        .getByRole('button', { name: /^Approve/ })
+        .click();
+      await beena
+        .locator('li.fc-row', { hasText: 'Sample Value Fund' })
+        .nth(1)
+        .getByLabel('A new fund')
+        .check();
+      await beena
+        .locator('li.fc-row', { hasText: 'Sample Hybrid Fund' })
+        .getByLabel(/folio …2200/)
+        .check();
+      const dormant = row(page, 'Sample Dormant');
+      await dormant.getByLabel('Mark as sold').check();
+      await row(page, 'Sample Bond').getByLabel('Mark the SIP as stopped').check();
+      await expect(dormant.getByLabel('Sold on')).toBeVisible();
       await noSideways(page);
       await noSidewaysWide(page);
     });

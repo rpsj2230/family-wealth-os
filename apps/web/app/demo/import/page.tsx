@@ -35,6 +35,7 @@ const DATA: ImportData = {
   owners: [
     { id: 'p1', name: 'Anil', panLast4: '234F', hasDob: true },
     { id: 'p2', name: 'Beena', panLast4: null, hasDob: false },
+    { id: 'p3', name: 'Chitra', panLast4: '567H', hasDob: true },
   ],
   workbook: {
     at: '2026-10-20T08:00:00Z',

@@ -33,6 +33,26 @@ say where each figure came from, and make the next action obvious. Follow this w
 - **Accessibility**: real headings in order, labels on inputs, `role="status"` / `role="alert"` on results, contrast from the CSS variables.
 - **No hard-coded rules or numbers**: anything a person might change (rates, limits, days) is a Setting with a default in `packages/core/src/config.ts`.
 
+## Suggest, do not hand back ("needs a look" is not allowed on its own)
+
+When the app cannot be sure, it must not push the work back to the person with "Needs a look", "needs review" or "please check". It works out the most likely answer from the evidence it has, **says it as a concrete suggestion with the reason**, and asks the person to approve it, pick another answer or type the missing input. Then it applies the decision. Every such prompt has the same four parts, in this order, built with `suggestion({ found, suggest, why, options, recommended })` (`packages/core/src/suggestion.ts`):
+
+1. **What I found** (`found`): one plain sentence with the facts (the scheme, folio last four digits, units and amount; the balance, bank and date).
+2. **What I suggest, and why** (`suggest`, `why`): the action as a sentence and the evidence behind it ("Folio …3820 is not on file yet, but your fund "Axis Large Cap" has 3,047.333 units, which equal the statement's closing units"). With no evidence it says so ("I cannot tell which it is, so I am not guessing: please choose.") and offers no Approve button.
+3. **Approve**: one button, "Approve: link folio …3820 to "Axis Large Cap"". Pressing it takes the suggestion; it is shown as approved with where it is applied, and can be changed.
+4. **Other choices or input**: radio options (each fund told apart by folio and units, "A new fund", "Leave it alone for now"), a field where an answer needs a date ("Sold on", "Stopped from", filled with the date I would use), and a link where the person may need another page ("Add this person in Settings > People").
+
+Rules:
+
+- **Evidence ranks the suggestion; ties suggest nothing.** The strongest evidence that points to exactly one answer wins (for a fund statement folio: ISIN and folio, then ISIN with equal units, then the folios of one scheme together holding the units of one fund, then a name only one fund has). Two equally good answers are "I cannot tell".
+- **Nothing happens until the person decides**, unless the suggestion is how things already go (a fund missing from a statement of everything held is suggested sold and starts ticked, as before). The answer is part of the same selection as the ticks and is applied by the same button; the server accepts only an answer the prompt offered.
+- **Show what the answer would do.** Where an answer turns the item into an ordinary fund, the changes it would make are shown under it before Apply.
+- **Remember the answer, never delete.** An approved folio-to-fund answer is written once (`fund_folio_links`), so the same question is not asked again; "leave it alone" writes nothing. Applying the same answers again changes nothing.
+- **Plain words, same labels.** "Your decision" (a chip, warn tone), never a red "Needs a look". Keep the four labels ("What I found", "What I suggest") so every prompt reads the same.
+- Where the prompt is a form with a default (an inbox balance, a history conflict), the default is the suggestion and says so ("(suggested)").
+
+Where it is used: fund statement preview (`FundChanges.tsx`, `fund-review.ts`: folio that could be several funds, fund not on the statement, SIP that cannot be judged, folios of someone else), bank-email inbox (`inboxProposal` in `inbox-view.ts`), history import conflicts (`conflictProposal` in `lib/history-view.ts`). Tests check the words (`fund-review.test.ts`, `suggestion.test.ts`, `inbox-view.test.ts`, `history-view.test.ts`) and the pages (`e2e/fundimport.spec.ts`).
+
 ## Where things live
 
 - Shared components: `apps/web/components/`. Shared pure logic: `packages/core`. Database access: `packages/data` and `apps/web/lib`.

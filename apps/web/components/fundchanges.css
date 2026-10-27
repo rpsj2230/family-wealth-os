@@ -224,3 +224,116 @@
     justify-content: flex-end;
   }
 }
+
+/* A question with my suggestion: what I found, what I suggest and why, Approve, and the other choices. */
+.fc-ask {
+  margin: 8px 0 0 32px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn-fg);
+  border-radius: 10px;
+  background: var(--soft);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.fc-ask p {
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.fc-lead {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.fc-approve {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.fc-approve .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.fc-approved {
+  color: var(--ok-fg);
+}
+.fc-choices {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.fc-choices legend {
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.fc-opt {
+  min-width: 0;
+}
+.fc-opt > label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.fc-opt input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  flex: none;
+  accent-color: var(--primary);
+}
+.fc-in {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  margin: 4px 0 0 26px;
+  font-size: 0.85rem;
+}
+.fc-in input {
+  max-width: 100%;
+}
+.fc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fc-after {
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+  min-width: 0;
+}
+.fc-after ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.fc-after li {
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+.fc-after .fc-nums {
+  margin-left: 0;
+}
+@media (max-width: 719px) {
+  .fc-ask {
+    margin-left: 0;
+  }
+}

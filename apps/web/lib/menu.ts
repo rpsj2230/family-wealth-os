@@ -79,7 +79,7 @@ export const MENU: MenuGroup[] = [
       {
         href: '/inbox',
         label: 'Bank e-mail inbox',
-        hint: 'Balances read from forwarded e-mails, and the ones that need a look.',
+        hint: 'Balances read from forwarded e-mails, and the ones waiting for your decision, with my suggestion.',
         icon: Inbox,
       },
       {

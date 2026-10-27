@@ -71,7 +71,7 @@ export function changeRecord(raw: unknown): ImportData['cas'][number]['changes']
 
 const OUTCOME = {
   imported: { tone: 'ok', text: 'Imported' },
-  partial: { tone: 'warn', text: 'Check some items' },
+  partial: { tone: 'warn', text: 'Waiting for your decision' },
   failed: { tone: 'bad', text: 'Could not be read' },
 } as const;
 
@@ -125,7 +125,7 @@ export function ImportHub({
             <p className="small">
               {casReview.length ? (
                 <strong>
-                  {casReview.length} need{casReview.length === 1 ? 's' : ''} a look
+                  {casReview.length} waiting for you: open it for my suggestion
                 </strong>
               ) : (
                 <span className="muted">
@@ -285,8 +285,10 @@ export function ImportHub({
               <h2>What a preview looks like (sample)</h2>
               <p className="muted small">
                 After you choose the file, the app compares it with what you already have and lists
-                only what is new or changed. Everything starts ticked; untick what is wrong. Nothing
-                is written until you press the button.
+                only what is new or changed. Everything starts ticked; untick what is wrong. Where
+                the app cannot be sure, it says what it found, what it suggests and why: approve the
+                suggestion, pick another answer or type what is missing. Nothing is written until you
+                press the button.
               </p>
               <FundChanges people={demoChanges} owners={data.owners} />
               <div className="fc-actions">
@@ -368,8 +370,10 @@ export function ImportHub({
               <h2>What a preview looks like (sample)</h2>
               <p className="muted small">
                 After you choose the file, the app compares it with what you already have and lists
-                only what is new or changed. Everything starts ticked; untick what is wrong. Nothing
-                is written until you press the button.
+                only what is new or changed. Everything starts ticked; untick what is wrong. Where
+                the app cannot be sure, it says what it found, what it suggests and why: approve the
+                suggestion, pick another answer or type what is missing. Nothing is written until you
+                press the button.
               </p>
               <FundChanges people={demoChanges} owners={data.owners} />
               <div className="fc-actions">
@@ -447,11 +451,21 @@ export function ImportHub({
               </table>
             )}
             {casReview.length > 0 && (
-              <p className="notice warn" role="note" style={{ marginTop: 12 }}>
-                {casReview.length} statement{casReview.length === 1 ? ' needs' : 's need'} a look. A
-                statement that could not be opened is usually protected by a different password:
-                upload it here and type that password.
-              </p>
+              <div className="notice warn" role="note" style={{ marginTop: 12 }}>
+                <p>
+                  <strong>
+                    {casReview.length} statement{casReview.length === 1 ? ' is' : 's are'} waiting
+                    for you.
+                  </strong>
+                </p>
+                <p className="small">
+                  I suggest you upload {casReview.length === 1 ? 'it' : 'each'} again in the box
+                  above. If it could not be opened, it is usually protected by a different password:
+                  type that password (the one you chose when you requested it, or your PAN). If it
+                  was read but a question was left open, the preview shows my suggested answer, and
+                  you approve it or pick another.
+                </p>
+              </div>
             )}
           </section>
         </div>

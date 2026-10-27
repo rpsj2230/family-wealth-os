@@ -9,7 +9,8 @@ import {
   asOfText,
   checkText,
   conflictsOf,
-  conflictText,
+  conflictDefault,
+  conflictProposal,
   dateChoices,
   defaultSelection,
   headline,
@@ -122,7 +123,7 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
         continue;
       }
       const mine: Record<string, ConflictChoice> = {};
-      for (const c of view.conflicts) if (c.tab === tab) mine[c.id] = choices[c.id] ?? 'keep';
+      for (const c of view.conflicts) if (c.tab === tab) mine[c.id] = choices[c.id] ?? conflictDefault(c);
       try {
         const r = await importHistoryMonth(form({ tab, choices: JSON.stringify(mine) }));
         if (r.ok && r.result)
@@ -318,35 +319,38 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
             <section className="hist-block" aria-labelledby="hist-conf">
               <h3 id="hist-conf">Values that disagree with what is on file ({picked.length})</h3>
               <p className="muted small">
-                Nothing is replaced unless you choose the sheet&rsquo;s value. A value on a later
-                date is never touched.
+                Each one says what I suggest and why, and starts on that answer; the value on file is
+                only replaced when the answer is the sheet&rsquo;s value. A value on a later date is
+                never touched.
               </p>
               <ul className="hist-conflicts">
-                {picked.map((c) => (
-                  <li key={c.id}>
-                    <fieldset>
-                      <legend className="small">{conflictText(c)}</legend>
-                      <label>
-                        <input
-                          type="radio"
-                          name={`c-${c.id}`}
-                          checked={(choices[c.id] ?? 'keep') === 'keep'}
-                          onChange={() => setChoices({ ...choices, [c.id]: 'keep' })}
-                        />{' '}
-                        Keep what is on file
-                      </label>
-                      <label>
-                        <input
-                          type="radio"
-                          name={`c-${c.id}`}
-                          checked={choices[c.id] === 'sheet'}
-                          onChange={() => setChoices({ ...choices, [c.id]: 'sheet' })}
-                        />{' '}
-                        Use the sheet
-                      </label>
-                    </fieldset>
-                  </li>
-                ))}
+                {picked.map((c) => {
+                  const p = conflictProposal(c);
+                  const now = choices[c.id] ?? conflictDefault(c);
+                  return (
+                    <li key={c.id}>
+                      <fieldset>
+                        <legend className="small">{p.found}</legend>
+                        <p className="small hist-suggest">
+                          <strong>What I suggest:</strong> {p.suggest}{' '}
+                          <span className="muted">{p.why}</span>
+                        </p>
+                        {p.options.map((o) => (
+                          <label key={o.id}>
+                            <input
+                              type="radio"
+                              name={`c-${c.id}`}
+                              checked={now === o.id}
+                              onChange={() => setChoices({ ...choices, [c.id]: o.id as ConflictChoice })}
+                            />{' '}
+                            {o.label}
+                            {o.id === p.recommended ? ' (suggested)' : ''}
+                          </label>
+                        ))}
+                      </fieldset>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}

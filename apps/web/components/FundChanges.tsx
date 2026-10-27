@@ -1,24 +1,34 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   chipsOf,
   fmtUnits,
   formatInr,
+  isListed,
   longDate,
   personStyles,
   sipChip,
   sipIsChange,
   sipKey,
   type Chip,
+  type FundPrompt,
 } from '@fwos/core';
 import type { ItemView, PersonPreview } from '@/lib/fund-import';
 import { MAX_LINES_SHOWN } from '@/lib/fund-import';
 import {
   fundSelectable,
+  initialAnswers,
+  initialOff,
+  inputOf,
+  isQuiet,
   isTaken,
   selectionOf,
   sipDependsOnFund,
+  tickedByAnswer,
+  type Answer,
+  type Answers,
   type FundSelection,
 } from '@/lib/fund-import-select';
 import { PersonBadge } from '@/components/Person';
@@ -56,16 +66,200 @@ function Chips({ chips }: { chips: Chip[] }) {
   );
 }
 
+/** Units, amount invested, value and first purchase, each from what is on file to what the statement says. */
+function Nums({ item }: { item: ItemView }) {
+  const hasNums = item.units || item.invested || item.value || item.startedOn;
+  if (!hasNums) return null;
+  return (
+    <dl className="fc-nums">
+      {item.units && (
+        <div>
+          <dt>Units</dt>
+          <dd>
+            {arrow(
+              item.units.before === null ? null : fmtUnits(item.units.before),
+              fmtUnits(item.units.after),
+            )}
+          </dd>
+        </div>
+      )}
+      {item.invested && (
+        <div>
+          <dt>Invested</dt>
+          <dd>
+            {arrow(
+              item.invested.before === null ? null : formatInr(item.invested.before),
+              formatInr(item.invested.after),
+            )}
+          </dd>
+        </div>
+      )}
+      {item.value && (
+        <div>
+          <dt>Value on {longDate(item.value.asOf)}</dt>
+          <dd>
+            {arrow(
+              item.value.before === null ? null : formatInr(item.value.before),
+              formatInr(item.value.after),
+            )}
+          </dd>
+        </div>
+      )}
+      {item.startedOn && (
+        <div>
+          <dt>First purchase</dt>
+          <dd>
+            {arrow(
+              item.startedOn.before ? longDate(item.startedOn.before) : null,
+              longDate(item.startedOn.after),
+            )}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+/**
+ * A question with the answer I think most likely: what was found, what I suggest and why, a one-click Approve, and the other choices
+ * (radio options; a field where an answer needs a date). Nothing is written here: the answer is part of the preview's selection and
+ * is applied with Apply. Where the answer would make a folio an ordinary fund, the fund's changes are shown under it.
+ */
+function Ask({
+  prompt,
+  answer,
+  onAnswer,
+  disabled,
+  subject,
+}: {
+  prompt: FundPrompt;
+  answer: Answer;
+  onAnswer: (a: Answer) => void;
+  disabled: boolean;
+  subject: string;
+}) {
+  const id = useId();
+  const s = prompt.suggestion;
+  const rec = s.recommended ? s.options.find((o) => o.id === s.recommended)! : null;
+  const chosen = s.options.find((o) => o.id === answer.option) ?? null;
+  const approved = !!rec && answer.confirmed && answer.option === rec.id;
+  // the suggestion is how things already go: it applies unless the person chooses otherwise
+  const byDefault = !!rec && rec.id === prompt.start;
+  const outs = !isQuiet(answer.option) ? (prompt.outcomes[answer.option] ?? []) : [];
+  const pick = (optionId: string, confirmed: boolean) =>
+    onAnswer({ option: optionId, input: inputOf(prompt, optionId), confirmed });
+  const asOfMax = prompt.kind === 'absent' ? (inputOf(prompt, 'sold') ?? undefined) : undefined;
+  return (
+    <div className="fc-ask" role="group" aria-label={`Decision: ${subject}`}>
+      <p className="fc-found">
+        <span className="fc-lead">What I found</span> {s.found}
+      </p>
+      <p className="fc-suggest">
+        <span className="fc-lead">What I suggest</span> {s.suggest}{' '}
+        <span className="muted">{s.why}</span>
+      </p>
+      {rec && s.approve && (
+        <div className="fc-approve">
+          {approved ? (
+            <p className="fc-approved" role="status">
+              <span aria-hidden="true">✓ </span>
+              {s.approve.replace(/^Approve: /, 'Approved: ')}.{' '}
+              <span className="muted">
+                {isQuiet(rec.id) && byDefault
+                  ? 'Nothing is changed.'
+                  : 'It is applied when you press Apply.'}
+              </span>
+            </p>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={disabled}
+                onClick={() => pick(rec.id, true)}
+              >
+                {s.approve}
+              </button>
+              {byDefault && !isQuiet(rec.id) && (
+                <span className="muted small">Applied with the other changes unless you choose otherwise.</span>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      <fieldset className="fc-choices" disabled={disabled}>
+        <legend>{rec ? 'Or choose another answer' : 'Choose'}</legend>
+        {s.options.map((o) => (
+          <div key={o.id} className="fc-opt">
+            <label>
+              <input
+                type="radio"
+                name={`${id}-r`}
+                checked={answer.option === o.id}
+                onChange={() => pick(o.id, true)}
+              />{' '}
+              <span>{o.label}</span>
+            </label>
+            {o.input && answer.option === o.id && (
+              <label className="fc-in">
+                {o.input.label}{' '}
+                <input
+                  type={o.input.kind}
+                  value={answer.input ?? ''}
+                  required={o.input.required}
+                  {...(asOfMax ? { max: asOfMax } : {})}
+                  onChange={(e) => onAnswer({ ...answer, input: e.target.value, confirmed: true })}
+                />
+              </label>
+            )}
+          </div>
+        ))}
+      </fieldset>
+      {s.links.length > 0 && (
+        <p className="fc-links">
+          {s.links.map((l) => (
+            <Link key={l.href} className="btn compact" href={l.href}>
+              {l.text}
+            </Link>
+          ))}
+        </p>
+      )}
+      {outs.length > 0 && (
+        <div className="fc-after" aria-live="polite">
+          <p className="small muted">
+            After you press Apply{chosen ? ` (${chosen.action})` : ''}:
+          </p>
+          <ul>
+            {outs.map((o) => (
+              <li key={o.key}>
+                <strong>{o.name}</strong> <Chips chips={chipsOf(o)} />
+                <Nums item={o} />
+                {!o.changed && o.lines.newCount === 0 && (
+                  <span className="muted small"> Nothing else changes; only the link is remembered.</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Row({
   item,
   off,
   onToggle,
+  answers,
+  onAnswer,
   people,
   disabled,
 }: {
   item: ItemView;
   off: ReadonlySet<string>;
   onToggle: (key: string, on: boolean) => void;
+  answers: Answers;
+  onAnswer: (key: string, a: Answer, itemKey?: string) => void;
   people: Pick<PersonPreview, 'diff'>[];
   disabled: boolean;
 }) {
@@ -77,8 +271,12 @@ function Row({
   const chips = chipsOf(item);
   const sipChange = sipIsChange(sip) ? sip : null;
   const sipLocked = sipChange && sipDependsOnFund(item) && !fundOn;
-  const selectable = fundSelectable(item);
-  const hasNums = item.units || item.invested || item.value || item.startedOn;
+  // a question's answer decides a fund the statement does not list, so it has no tick of its own
+  const asked = tickedByAnswer(item);
+  const selectable = fundSelectable(item) && !asked;
+  const prompt = item.prompt ?? null;
+  const fundAnswer = answers[item.key];
+  const sipAnswer = answers[sipK];
   return (
     <li className={`fc-row ${item.kind}${selectable && !fundOn ? ' off' : ''}`}>
       <div className="fc-head">
@@ -97,61 +295,29 @@ function Row({
         <label htmlFor={selectable ? `${id}-f` : undefined} className="fc-name">
           {item.name}
         </label>
-        {chips.length > 0 && (
-          <Chips chips={chips.filter((c) => !(sipChange && c.label.startsWith('SIP')))} />
+        {(chips.length > 0 || item.sipPrompt) && (
+          <Chips
+            chips={[
+              ...chips.filter((c) => !(sipChange && c.label.startsWith('SIP'))),
+              ...(item.sipPrompt ? [{ label: 'SIP: your decision', tone: 'warn' as const }] : []),
+            ]}
+          />
         )}
       </div>
 
-      {item.why && <p className="fc-why">{item.why}</p>}
+      {!prompt && item.why && <p className="fc-why">{item.why}</p>}
 
-      {hasNums && (
-        <dl className="fc-nums">
-          {item.units && (
-            <div>
-              <dt>Units</dt>
-              <dd>
-                {arrow(
-                  item.units.before === null ? null : fmtUnits(item.units.before),
-                  fmtUnits(item.units.after),
-                )}
-              </dd>
-            </div>
-          )}
-          {item.invested && (
-            <div>
-              <dt>Invested</dt>
-              <dd>
-                {arrow(
-                  item.invested.before === null ? null : formatInr(item.invested.before),
-                  formatInr(item.invested.after),
-                )}
-              </dd>
-            </div>
-          )}
-          {item.value && (
-            <div>
-              <dt>Value on {longDate(item.value.asOf)}</dt>
-              <dd>
-                {arrow(
-                  item.value.before === null ? null : formatInr(item.value.before),
-                  formatInr(item.value.after),
-                )}
-              </dd>
-            </div>
-          )}
-          {item.startedOn && (
-            <div>
-              <dt>First purchase</dt>
-              <dd>
-                {arrow(
-                  item.startedOn.before ? longDate(item.startedOn.before) : null,
-                  longDate(item.startedOn.after),
-                )}
-              </dd>
-            </div>
-          )}
-        </dl>
+      {prompt && fundAnswer && (
+        <Ask
+          prompt={prompt}
+          answer={fundAnswer}
+          disabled={disabled}
+          subject={item.name}
+          onAnswer={(a) => onAnswer(item.key, a, prompt.kind === 'absent' ? item.key : undefined)}
+        />
       )}
+
+      <Nums item={item} />
 
       {item.lines.newCount > 0 && (
         <details className="fc-lines">
@@ -211,6 +377,15 @@ function Row({
           </div>
         </div>
       )}
+      {item.sipPrompt && sipAnswer && (
+        <Ask
+          prompt={item.sipPrompt}
+          answer={sipAnswer}
+          disabled={disabled}
+          subject={`${item.name}, SIP`}
+          onAnswer={(a) => onAnswer(sipK, a)}
+        />
+      )}
       {sip && sip.kind === 'ignored' && <p className="fc-note">{sip.why}</p>}
       {item.notes.map((n) => (
         <p key={n} className="fc-note">
@@ -223,8 +398,10 @@ function Row({
 
 /**
  * What a statement or file would change, person by person and fund by fund, as compact rows with chips and a tick for each fund and
- * each SIP verdict. Nothing is written here: the ticks decide what the apply step does. With `inputs` the ticked and shown items are
- * also written into the enclosing form (the name "take" and "seen"); `onSelection` reports them for a form that builds its own data.
+ * each SIP verdict. Where the app cannot be sure (a folio that could be several funds, a fund the statement does not list, a SIP it
+ * could not judge, someone else's folios) the row says what it found, what it suggests and why, with an Approve button and the other
+ * choices. Nothing is written here: the ticks and answers decide what the apply step does. With `inputs` the ticked and shown
+ * items and the answers are also written into the enclosing form; `onSelection` reports them for a form that builds its own data.
  */
 export function FundChanges({
   people,
@@ -239,15 +416,17 @@ export function FundChanges({
   disabled?: boolean;
   onSelection?: (s: FundSelection) => void;
 }) {
-  const [off, setOff] = useState<ReadonlySet<string>>(new Set());
-  // a new preview starts with everything ticked again
+  const [off, setOff] = useState<ReadonlySet<string>>(() => initialOff(people));
+  const [answers, setAnswers] = useState<Answers>(() => initialAnswers(people));
+  // a new preview starts with everything ticked again and every question on its suggested starting answer
   const [shownFor, setShownFor] = useState(people);
   if (shownFor !== people) {
     setShownFor(people);
-    setOff(new Set());
+    setOff(initialOff(people));
+    setAnswers(initialAnswers(people));
   }
   const styles = useMemo(() => personStyles(owners), [owners]);
-  const sel = useMemo(() => selectionOf(people, off), [people, off]);
+  const sel = useMemo(() => selectionOf(people, off, answers), [people, off, answers]);
   useEffect(() => {
     onSelection?.(sel);
   }, [sel, onSelection]);
@@ -258,6 +437,11 @@ export function FundChanges({
       else next.add(key);
       return next;
     });
+  /** An answer is kept; where the answer is the tick (a fund the statement does not list), the tick follows it. */
+  const answer = (key: string, a: Answer, tickKey?: string) => {
+    setAnswers((prev) => ({ ...prev, [key]: a }));
+    if (tickKey) toggle(tickKey, a.option === 'sold');
+  };
 
   return (
     <div className="fc">
@@ -269,13 +453,20 @@ export function FundChanges({
           {sel.take.map((k) => (
             <input key={`take-${k}`} type="hidden" name="take" value={k} />
           ))}
+          {sel.choices.map((c) => (
+            <input
+              key={`choice-${c.key}`}
+              type="hidden"
+              name="choice"
+              value={JSON.stringify([c.key, c.option, c.input])}
+            />
+          ))}
         </>
       )}
       {people.map((p) => {
-        const changed = p.diff.items.filter(
-          (i) => i.changed || sipIsChange(i.sip) || i.kind === 'review',
-        );
+        const changed = p.diff.items.filter(isListed);
         const quiet = p.diff.items.filter((i) => !changed.includes(i) && i.assetId);
+        const asking = changed.filter((i) => i.kind === 'review' || i.sipPrompt).length;
         const style = styles[p.ownerId];
         return (
           <section
@@ -295,6 +486,7 @@ export function FundChanges({
               {changed.length === 0
                 ? 'Nothing new.'
                 : `${changed.length} fund${changed.length === 1 ? '' : 's'} with something new or changed${quiet.length ? `, ${quiet.length} unchanged` : ''}.`}
+              {asking > 0 && ` ${asking} ${asking === 1 ? 'is' : 'are'} waiting for your decision, with my suggestion.`}
             </p>
             {changed.length === 0 ? (
               <p className="notice ok" role="status">
@@ -309,6 +501,8 @@ export function FundChanges({
                     item={i}
                     off={off}
                     onToggle={toggle}
+                    answers={answers}
+                    onAnswer={answer}
                     people={people}
                     disabled={disabled}
                   />
@@ -386,7 +580,12 @@ export function AppliedChanges({
           ))}
         </ul>
       )}
-      {needsReview.length > 0 && <p className="small">Please check: {needsReview.join(', ')}.</p>}
+      {needsReview.length > 0 && (
+        <p className="small">
+          Still waiting for your decision: {needsReview.join(', ')}. Preview the statement again to
+          see my suggestion for {needsReview.length === 1 ? 'it' : 'each'}.
+        </p>
+      )}
     </div>
   );
 }

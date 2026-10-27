@@ -25,6 +25,16 @@
 import { sipAmountOn } from './estimate';
 import { formatInr } from './money';
 import { longDate } from './inbox-view';
+import {
+  absentPrompt,
+  ambiguousPrompt,
+  foreignPrompt,
+  schemeLinkKey,
+  sipPrompt,
+  type FolioLink,
+  type ForeignGroup,
+  type FundPrompt,
+} from './fund-review';
 
 const DAY = 86_400_000;
 const dayGap = (from: string, to: string) =>
@@ -95,7 +105,15 @@ export interface StatementFund {
   soldThisYear: boolean;
   /** the statement says this fund's SIP was cancelled, and when if it says */
   sipCancelled?: { on: string | null } | null;
-  match: { status: 'one'; assetId: string } | { status: 'none' } | { status: 'ambiguous' };
+  match:
+    | { status: 'one'; assetId: string }
+    | { status: 'none' }
+    /** `candidates`: the funds it could be (their asset ids); when absent every fund with the same ISIN or name is a candidate */
+    | { status: 'ambiguous'; candidates?: string[] };
+  /** statement folios that the person's choice (or a remembered one) linked to the fund this was matched to */
+  links?: FolioLink[];
+  /** the questions (by the key of their review item) whose answer matched or added this fund: it is applied with the answer, not by a tick */
+  chosen?: string[];
 }
 
 export interface OnFileState {
@@ -148,6 +166,10 @@ export interface FundImportInput {
   funds: StatementFund[];
   onFile: OnFileFund[];
   rules: ImportRules;
+  /** what the statement says it is keyed on: an 'email' statement may not list every folio, so a missing fund is not called sold */
+  basis?: 'email' | 'pan' | 'unknown';
+  /** folios of other people on the statement, left out of `funds`: each group is asked about once */
+  foreign?: ForeignGroup[];
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -256,6 +278,14 @@ export interface FundChangeItem {
   closed: boolean;
   /** what an unticked "sold" is remembered under, so it is not proposed again for the same statement */
   ignore: { verdict: IgnorableVerdict; basis: string } | null;
+  /** a question for the person with the answer I think most likely (kind 'review', and a fund the statement does not list) */
+  prompt?: FundPrompt | null;
+  /** the SIP could not be judged: keep it as recorded (suggested) or mark it stopped from a date */
+  sipPrompt?: FundPrompt | null;
+  /** the questions whose answer led to this item: it is applied with the answer, not by a tick */
+  chosen?: string[];
+  /** statement folios the person's choice linked to this fund: written once, so the same question is not asked again */
+  links?: FolioLink[];
 }
 
 export interface FundImportDiff {
@@ -645,6 +675,13 @@ const asView = (l: { date: string; kind: string; amount: number; units: number }
   units: l.units,
 });
 
+/** What the person's choice added to a fund's item: that it is applied with the choice, and which folios were linked to it. */
+function carry(item: FundChangeItem, s: StatementFund): FundChangeItem {
+  if (s.chosen && s.chosen.length > 0) item.chosen = s.chosen;
+  if (s.links && s.links.length > 0) item.links = s.links;
+  return item;
+}
+
 function emptyLines(): FundChangeItem['lines'] {
   return { newCount: 0, duplicateCount: 0, newLines: [], keptNotOnStatement: 0 };
 }
@@ -663,13 +700,31 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
   for (const s of input.funds) {
     if (s.match.status === 'ambiguous') {
       unmatchedScheme.push(s.name);
+      const cands = s.match.candidates;
+      const siblings = input.funds
+        .filter(
+          (x) =>
+            x !== s &&
+            x.match.status === 'ambiguous' &&
+            schemeLinkKey(x) === schemeLinkKey(s) &&
+            x.folioLast4 !== s.folioLast4,
+        )
+        .map((x) => ({ folioLast4: x.folioLast4, units: x.closingUnits }));
+      const prompt = ambiguousPrompt({
+        key: `${input.ownerId}|review:${s.folioLast4}|${schemeLinkKey(s)}`,
+        s,
+        candidates: cands ? input.onFile.filter((f) => cands.includes(f.assetId)) : null,
+        onFile: input.onFile,
+        siblings,
+        tolerance: input.rules.unitTolerance,
+      });
       items.push({
-        key: `${input.ownerId}|review:${s.isin ?? s.name}`,
+        key: `${input.ownerId}|review:${s.folioLast4}|${schemeLinkKey(s)}`,
         ownerId: input.ownerId,
         assetId: null,
         name: s.name,
         kind: 'review',
-        why: 'More than one of your funds could be this one, so it is left alone. Open the fund and check its ISIN or folio.',
+        why: prompt.suggestion.found,
         lines: emptyLines(),
         units: null,
         invested: null,
@@ -681,6 +736,7 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
         changed: false,
         ignore: null,
         closed: false,
+        prompt,
       });
       continue;
     }
@@ -695,11 +751,37 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
       }
       // a fund held on the statement that is none of yours might be a missing one under another name; one sold in full cannot stand in for it
       if (s.held) unmatchedScheme.push(s.name);
-      items.push(newFundItem(input, s, end));
+      items.push(carry(newFundItem(input, s, end), s));
       continue;
     }
     claimed.add(f.assetId);
-    items.push(existingFundItem(input, s, f, end, ignored));
+    items.push(carry(existingFundItem(input, s, f, end, ignored), s));
+  }
+
+  // folios of other people: one question for each person, and no fund is called sold while they are unanswered
+  for (const g of input.foreign ?? []) {
+    unmatchedScheme.push(...g.folios.map((x) => x.name));
+    const prompt = foreignPrompt(g);
+    items.push({
+      key: `${input.ownerId}|review:${g.key}`,
+      ownerId: input.ownerId,
+      assetId: null,
+      name: g.holder ? `Folios of ${g.holder}` : `Folios of PAN ending ${g.panLast4 ?? '?'}`,
+      kind: 'review',
+      why: prompt.suggestion.found,
+      lines: emptyLines(),
+      units: null,
+      invested: null,
+      startedOn: null,
+      value: null,
+      sip: null,
+      notes: [],
+      write: null,
+      changed: false,
+      ignore: null,
+      closed: false,
+      prompt,
+    });
   }
 
   // funds on file that the statement does not list
@@ -771,6 +853,7 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
           changed: !skip,
           closed: !skip,
           ignore: { verdict: 'sold', basis: asOf },
+          prompt: skip ? null : absentPrompt({ f, asOf, basis: input.basis ?? 'unknown' }),
         });
       }
     }
@@ -789,7 +872,7 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
 
 /** One remark for the SIPs a short statement could not judge. */
 function sipNotes(items: FundChangeItem[]): string[] {
-  const n = items.filter((i) => i.sip?.kind === 'cannot_tell');
+  const n = items.filter((i) => i.sip?.kind === 'cannot_tell' && !i.sipPrompt);
   if (n.length === 0) return [];
   return [
     `${n.length} SIP${n.length === 1 ? '' : 's'} could not be judged from this statement (${n
@@ -985,10 +1068,11 @@ function existingFundItem(
   }
 
   // SIP
+  const sipReadNow = readSip(s.lines, st?.lines ?? [], rules);
   let sip =
     f.status === 'active' && !sold
       ? judgeSip({
-          read: readSip(s.lines, st?.lines ?? [], rules),
+          read: sipReadNow,
           end,
           periodFrom: input.periodFrom,
           rules,
@@ -1117,6 +1201,10 @@ function existingFundItem(
     changed,
     closed: sold,
     ignore: fullySold ? { verdict: 'sold', basis: asOf! } : null,
+    sipPrompt:
+      sip && sip.kind === 'cannot_tell' && s.lines.length > 0 && !s.holdingsOnly
+        ? sipPrompt({ name: f.name, sip, stopFrom: sipStanding(sipReadNow, end)?.nextDue ?? end })
+        : null,
   };
 }
 
@@ -1157,8 +1245,13 @@ export function chipsOf(i: Omit<FundChangeItem, 'write'>): Chip[] {
   const out: Chip[] = [];
   if (i.kind === 'new')
     out.push({ label: i.closed ? 'New fund, already sold' : 'New fund', tone: 'info' });
-  if (i.kind === 'sold') out.push({ label: 'Sold', tone: 'bad' });
-  if (i.kind === 'review') out.push({ label: 'Needs a look', tone: 'bad' });
+  if (i.kind === 'sold')
+    out.push(
+      i.prompt?.start === 'keep'
+        ? { label: 'Not on this statement', tone: 'warn' }
+        : { label: 'Sold', tone: 'bad' },
+    );
+  if (i.kind === 'review') out.push({ label: 'Your decision', tone: 'warn' });
   if (i.lines.newCount > 0)
     out.push({
       label: `+${i.lines.newCount} transaction${i.lines.newCount === 1 ? '' : 's'}`,
@@ -1169,9 +1262,16 @@ export function chipsOf(i: Omit<FundChangeItem, 'write'>): Chip[] {
   return out;
 }
 
-/** The items that have something to apply, in the order they are shown. */
-export const changedItems = (d: FundImportDiff) =>
-  d.items.filter((i) => i.changed || sipIsChange(i.sip) || i.kind === 'review');
+/** A question is waiting for the person: a fund that could be several, someone else's folios, or a SIP that could not be judged. */
+export const needsAnswer = (i: Pick<FundChangeItem, 'kind' | 'sipPrompt'>) =>
+  i.kind === 'review' || !!i.sipPrompt;
+
+/** An item is listed when it has something to apply or a question to answer. */
+export const isListed = (i: Omit<FundChangeItem, 'write'>) =>
+  i.changed || sipIsChange(i.sip) || needsAnswer(i);
+
+/** The items that have something to apply or ask, in the order they are shown. */
+export const changedItems = (d: FundImportDiff) => d.items.filter(isListed);
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -1228,7 +1328,7 @@ export function changeLines(items: Omit<FundChangeItem, 'write'>[]): string[] {
       bits.push(
         `${c.label.toLowerCase().replace(/^sip/, 'SIP')} from ${i.sip.effectiveOn ? longDate(i.sip.effectiveOn) : '–'}`,
       );
-    if (i.kind === 'review') bits.push('needs a look');
+    if (i.kind === 'review') bits.push('waiting for your decision');
     if (bits.length > 0) out.push(`${i.name}: ${bits.join('; ')}`);
   }
   return out;
@@ -1244,9 +1344,7 @@ export function storedChanges(
   applied: { funds: Set<string>; sips: Set<string> },
   maxLines = 40,
 ): StoredChange[] {
-  return items
-    .filter((i) => i.changed || sipIsChange(i.sip) || i.kind === 'review')
-    .map((i) => {
+  return items.filter(isListed).map((i) => {
       const { write, ...rest } = i;
       void write;
       return {

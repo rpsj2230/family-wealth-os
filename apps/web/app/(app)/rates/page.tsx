@@ -196,7 +196,7 @@ export default async function RatesPage({
         </article>
         <article className="kpi">
           <div className="kpi-label">
-            Needs a look
+            Rates to settle
             <Why explain={ex['rates.freshness']} />
           </div>
           <div className="kpi-value">{needLook}</div>

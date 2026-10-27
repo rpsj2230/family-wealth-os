@@ -4,7 +4,9 @@
  */
 import {
   diffFundImport,
+  schemeLinkKey,
   statementLineKeys,
+  type FundImportDiff,
   type FundImportInput,
   type OnFileFund,
   type OnFileState,
@@ -68,13 +70,19 @@ function state(o: Partial<OnFileState>): OnFileState {
   };
 }
 
-function onFile(id: string, name: string, isin: string, s: Partial<OnFileState>): OnFileFund {
+function onFile(
+  id: string,
+  name: string,
+  isin: string,
+  s: Partial<OnFileState>,
+  folio: string | null = '5678',
+): OnFileFund {
   return {
     assetId: id,
     name,
     isin,
     amfiCode: null,
-    folioLast4: '5678',
+    folioLast4: folio,
     status: 'active',
     unitsAsOf: '2026-09-30',
     startedOn: '2021-03-05',
@@ -102,7 +110,12 @@ function stmt(id: string, name: string, isin: string, o: Partial<StatementFund>)
   };
 }
 
-function build(ownerId: string, funds: StatementFund[], files: OnFileFund[]): FundImportInput {
+function build(
+  ownerId: string,
+  funds: StatementFund[],
+  files: OnFileFund[],
+  basis: 'email' | 'pan' = 'pan',
+): FundImportInput {
   return {
     ownerId,
     source: 'statement',
@@ -113,7 +126,47 @@ function build(ownerId: string, funds: StatementFund[], files: OnFileFund[]): Fu
     funds,
     onFile: files,
     rules: RULES,
+    basis,
   };
+}
+
+/**
+ * The real comparison, plus (as the app's planner does) what each folio would become under each answer, so the sample can show the
+ * changes after an answer. Here only the folio being answered is changed; the real planner also keeps the other suggestions.
+ */
+function planWithOutcomes(input: FundImportInput): FundImportDiff {
+  const base = diffFundImport(input);
+  for (const item of base.items) {
+    const p = item.prompt;
+    if (!p || p.kind !== 'ambiguous') continue;
+    const at = input.funds.findIndex(
+      (f) =>
+        f.match.status === 'ambiguous' &&
+        `${input.ownerId}|review:${f.folioLast4}|${schemeLinkKey(f)}` === item.key,
+    );
+    const sf = input.funds[at];
+    if (!sf) continue;
+    for (const o of p.suggestion.options) {
+      if (!o.id.startsWith('link:') && o.id !== 'new') continue;
+      const forced: StatementFund = {
+        ...sf,
+        match: o.id === 'new' ? { status: 'none' } : { status: 'one', assetId: o.id.slice(5) },
+        chosen: [item.key],
+      };
+      const after = diffFundImport({
+        ...input,
+        funds: input.funds.map((f, n) => (n === at ? forced : f)),
+      });
+      p.outcomes[o.id] = after.items
+        .filter((x) => x.chosen?.includes(item.key))
+        .map((x) => {
+          const { write, ...rest } = x;
+          void write;
+          return { ...rest, sip: null, sipPrompt: null, prompt: null };
+        });
+    }
+  }
+  return base;
 }
 
 /** Anil: a fund with new lines, a SIP that stopped, a SIP raised, a new SIP, a fund that is gone and two that are unchanged. */
@@ -189,7 +242,11 @@ export function demoFundPreview(): PersonPreview[] {
       ],
     ),
   );
-  const beena = diffFundImport(
+  // Beena's statement is keyed on an e-mail address. One fund of hers is on file twice with the same ISIN, so two statement folios
+  // could each be either: the folio settles one and the units settle the other. A third scheme has no evidence at all.
+  const VALUE = 'INF000V10ST1';
+  const HYBRID = 'INF000Y11UV2';
+  const beena = planWithOutcomes(
     build(
       'p2',
       [
@@ -203,6 +260,24 @@ export function demoFundPreview(): PersonPreview[] {
           closingUnits: 90,
           invested: 9_000,
         }),
+        stmt('', 'Sample Value Fund - Direct Growth', VALUE, {
+          folioLast4: '8540',
+          closingUnits: 700,
+          invested: 70_000,
+          match: { status: 'ambiguous', candidates: ['v1', 'v2'] },
+        }),
+        stmt('', 'Sample Value Fund - Direct Growth', VALUE, {
+          folioLast4: '3820',
+          closingUnits: 3_047.333,
+          invested: 300_000,
+          match: { status: 'ambiguous', candidates: ['v1', 'v2'] },
+        }),
+        stmt('', 'Sample Hybrid Fund - Direct Growth', HYBRID, {
+          folioLast4: '6601',
+          closingUnits: 410.5,
+          invested: 41_000,
+          match: { status: 'ambiguous', candidates: ['h1', 'h2'] },
+        }),
       ],
       [
         onFile('g1', 'Sample Gilt Fund - Direct Growth', 'INF000K09QR9', {
@@ -211,11 +286,87 @@ export function demoFundPreview(): PersonPreview[] {
           latestValue: { asOf: END, amount: 10_800 },
           snapshots: [{ asOf: END, value: 10_800, units: 90 }],
         }),
+        onFile(
+          'v1',
+          'Sample Value Fund - Direct Growth',
+          VALUE,
+          { units: 700, invested: 70_000 },
+          '8540',
+        ),
+        onFile(
+          'v2',
+          'Sample Value Fund - Direct Growth',
+          VALUE,
+          { units: 3_047.333, invested: 300_000 },
+          null,
+        ),
+        onFile(
+          'h1',
+          'Sample Hybrid Fund - Direct Growth',
+          HYBRID,
+          { units: 100, invested: 10_000 },
+          '2200',
+        ),
+        onFile(
+          'h2',
+          'Sample Hybrid Fund - Direct Growth',
+          HYBRID,
+          { units: 200, invested: 20_000 },
+          '2201',
+        ),
       ],
+      'email',
+    ),
+  );
+
+  // Chitra's statement is also keyed on an e-mail address. A SIP is a few days late (it has been before, so it cannot be called
+  // stopped yet), and a dormant fund of hers is not listed (the statement may simply not include that folio).
+  const late = toLines(
+    '4455',
+    ['2026-04-23', '2026-05-26', '2026-06-23', '2026-07-25', '2026-08-23', '2026-09-23'].map(
+      (date) => ({ date, kind: 'sip', amount: 3_000, units: 30 }),
+    ),
+  );
+  const chitra = diffFundImport(
+    build(
+      'p3',
+      [
+        stmt('b1', 'Sample Bond Fund - Direct Growth', 'INF000B12WX3', {
+          folioLast4: '4455',
+          lines: late,
+          closingUnits: 400,
+          invested: 40_000,
+        }),
+      ],
+      [
+        onFile(
+          'b1',
+          'Sample Bond Fund - Direct Growth',
+          'INF000B12WX3',
+          {
+            units: 400,
+            invested: 40_000,
+            sipMonthly: 3_000,
+            lines: stored(late),
+            latestValue: { asOf: END, amount: 48_000 },
+            snapshots: [{ asOf: END, value: 48_000, units: 400 }],
+          },
+          '4455',
+        ),
+        onFile(
+          'd1',
+          'Sample Dormant Fund - Direct Growth',
+          'INF000D13YZ4',
+          { units: 50, invested: 5_000 },
+          '9001',
+        ),
+      ],
+      'email',
     ),
   );
   return [
     { ownerId: 'p1', name: 'Anil', files: [], diff: toView(anil), notes: [] },
     { ownerId: 'p2', name: 'Beena', files: [], diff: toView(beena), notes: [] },
+    { ownerId: 'p3', name: 'Chitra', files: [], diff: toView(chitra), notes: [] },
   ];
 }

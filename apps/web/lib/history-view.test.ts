@@ -12,6 +12,8 @@ import {
   sharedLines,
   sharedState,
   checkText,
+  conflictDefault,
+  conflictProposal,
   conflictsOf,
   conflictText,
   dateChoices,
@@ -198,5 +200,31 @@ describe('history view', () => {
       const w = applyPins(v, { 'Mar 2022|F12': 'a-nre-9999' });
       expect(w.months.find((m) => m.tab === 'Mar 2022')!.identities[0]!.state).toBe('ambiguous');
     });
+  });
+});
+
+describe('conflictProposal: what I suggest when a value disagrees with what is on file', () => {
+  const c = (confidence: string, source = 'manual') => ({
+    ...demoHistoryView().conflicts[0]!,
+    existing: { id: 'o', amount: 18_500, source, confidence },
+  });
+  it('keeps a confirmed value on file, and says why', () => {
+    const p = conflictProposal(c('manual_confirmed'));
+    expect(p.recommended).toBe('keep');
+    expect(p.suggest).toBe('Keep what is on file, ₹18,500.');
+    expect(p.why).toContain('entered by hand');
+    expect(p.why).toContain('differs by ₹500');
+    expect(p.approve).toBe('Approve: keep what is on file');
+    expect(conflictDefault(c('verified', 'statement'))).toBe('keep');
+  });
+  it('suggests the sheet when what is on file was only estimated or read without a check', () => {
+    expect(conflictProposal(c('estimated', 'calculated')).suggest).toBe("Use the sheet's value, ₹18,000.");
+    expect(conflictProposal(c('estimated', 'calculated')).why).toContain('only estimated');
+    expect(conflictDefault(c('imported_unverified', 'email'))).toBe('sheet');
+    expect(conflictProposal(c('imported_unverified', 'email')).why).toContain('without a check');
+  });
+  it('offers both answers, the suggested one first', () => {
+    expect(conflictProposal(c('estimated')).options.map((o) => o.id)).toEqual(['sheet', 'keep']);
+    expect(conflictProposal(c('manual_confirmed')).found).toBe(conflictText(c('manual_confirmed')));
   });
 });

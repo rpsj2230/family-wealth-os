@@ -71,3 +71,5 @@ export * from './explain-money';
 export * from './explain-home';
 export * from './explain-reports';
 export * from './explain-more';
+export * from './suggestion';
+export * from './fund-review';

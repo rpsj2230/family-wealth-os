@@ -170,6 +170,40 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
           'record value',
         );
     },
+    async links(ownerId) {
+      const r = must(
+        await db
+          .from('fund_folio_links')
+          .select('asset_id, folio_last4, scheme_key')
+          .eq('household_id', hh)
+          .eq('owner_id', ownerId),
+        'folio links',
+      ) as { asset_id: string; folio_last4: string; scheme_key: string }[];
+      return r.map((x) => ({
+        assetId: x.asset_id,
+        folioLast4: x.folio_last4,
+        schemeKey: x.scheme_key,
+      }));
+    },
+    async linkFolios({ ownerId, assetId, links }) {
+      // one row for each statement folio and scheme; saying the same thing again changes nothing
+      must(
+        await db
+          .from('fund_folio_links')
+          .upsert(
+            links.map((l) => ({
+              household_id: hh,
+              owner_id: ownerId,
+              asset_id: assetId,
+              folio_last4: l.folioLast4,
+              scheme_key: l.schemeKey.slice(0, 200),
+            })),
+            { onConflict: 'household_id,owner_id,folio_last4,scheme_key' },
+          )
+          .select('id'),
+        'link folios',
+      );
+    },
     async isinToAmfi(isin) {
       const r = must(
         await db
@@ -354,6 +388,24 @@ async function planRules(db: SupabaseClient, hh: string): Promise<Partial<PlanCo
   };
 }
 
+/** This person's saved PAN (last four) and the rest of the family's, to tell whose folios an e-mail-keyed statement lists. */
+async function peopleOf(
+  db: SupabaseClient,
+  hh: string,
+  ownerId: string,
+): Promise<NonNullable<PlanConfig['people']>> {
+  const rows = must(
+    await db.from('owners').select('id, display_name, pan_last4').eq('household_id', hh),
+    'family',
+  ) as { id: string; display_name: string; pan_last4: string | null }[];
+  return {
+    own: rows.find((o) => o.id === ownerId)?.pan_last4 ?? null,
+    family: rows
+      .filter((o) => o.id !== ownerId)
+      .map((o) => ({ ownerId: o.id, name: o.display_name, panLast4: o.pan_last4 })),
+  };
+}
+
 export interface CasPdfResult {
   outcome: 'imported' | 'partial' | 'failed';
   ownerId: string | null;
@@ -400,6 +452,7 @@ export async function previewCasPdf(
     ...(await planRules(db, hh)),
     today: opts.today,
     complete: isComplete(o.stmt),
+    people: await peopleOf(db, hh, o.ownerId),
   });
   return {
     ok: true,
@@ -459,12 +512,19 @@ export async function importCasPdf(
   const o = await openStatement(pdf, candidates, opts.fromMail);
   if (!o.ok) return done({ outcome: 'failed', ownerId: o.ownerId, report: null, detail: o.detail });
   const io = casIo(db, hh);
-  const diff = await planCasImport(o.ownerId, o.stmt, io, {
-    ...(await planRules(db, hh)),
-    today: opts.today,
-    complete: isComplete(o.stmt),
-  });
-  const report = await applyFundDiff(diff, io, opts.select ?? null);
+  const diff = await planCasImport(
+    o.ownerId,
+    o.stmt,
+    io,
+    {
+      ...(await planRules(db, hh)),
+      today: opts.today,
+      complete: isComplete(o.stmt),
+      people: await peopleOf(db, hh, o.ownerId),
+    },
+    opts.select?.choices,
+  );
+  const report = await applyFundDiff(diff, io, opts.select ?? null, { today: opts.today });
   await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   const partial = report.needsReview.length > 0;
   await markRequestsArrived(db, hh, o.ownerId, opts.today);
@@ -503,12 +563,20 @@ export async function importFundCsv(
 ): Promise<FundCsvOwnerResult> {
   const { statement, notes } = fundCsvToStatement(rows, opts.today);
   const io = casIo(db, hh);
-  const diff = await planCasImport(ownerId, statement, io, {
-    ...(await planRules(db, hh)),
-    today: opts.today,
-    source: 'file',
-  });
-  const report = opts.apply ? await applyFundDiff(diff, io, opts.select ?? null) : null;
+  const diff = await planCasImport(
+    ownerId,
+    statement,
+    io,
+    {
+      ...(await planRules(db, hh)),
+      today: opts.today,
+      source: 'file',
+    },
+    opts.select?.choices,
+  );
+  const report = opts.apply
+    ? await applyFundDiff(diff, io, opts.select ?? null, { today: opts.today })
+    : null;
   if (report)
     await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   return { ownerId, diff, notes: [...notes, ...statement.warnings], report };
@@ -623,7 +691,7 @@ export async function importCasAttachments(
   const changed = ok.map((r) => r.summary).filter((x) => x.length > 0);
   return {
     outcome: review.length > 0 ? 'partial' : 'imported',
-    reason: `${changed.join(' | ')}${review.length ? `; check: ${review.join(', ')}` : ''}`,
+    reason: `${changed.join(' | ')}${review.length ? `; waiting for your decision: ${review.join(', ')} (upload that statement under Import > Fund statement to see my suggestion)` : ''}`,
     ownerIds: [...new Set(ok.map((r) => r.ownerId).filter((x): x is string => !!x))],
     funds: ok.reduce((n, r) => n + (r.report?.statementFunds ?? 0), 0),
     transactions: ok.reduce((n, r) => n + (r.report?.transactionsAdded ?? 0), 0),

@@ -3,7 +3,14 @@
  * The planner keeps every line it would write; the browser only ever gets this lighter view (the server plans again from the file
  * for each month it imports).
  */
-import { describeMonths, formatInr, longDate, monthLabel } from '@fwos/core';
+import {
+  describeMonths,
+  formatInr,
+  longDate,
+  monthLabel,
+  suggestion,
+  type Proposal,
+} from '@fwos/core';
 import type {
   HistoryConflict,
   HistoryMonth,
@@ -331,6 +338,38 @@ export function conflictText(c: HistoryConflict): string {
     cur === 'INR' ? formatInr(n, { decimals: n % 1 ? 2 : 0 }) : `S$${n.toLocaleString('en-IN')}`;
   return `${c.assetLabel}, ${longDate(c.asOf)}: on file ${f(c.existing.amount)} (${sourceWord(c.existing.source)}); the sheet says ${f(c.sheetAmount)}.`;
 }
+
+/**
+ * What I suggest for a value that disagrees with what is on file. The value on file is kept when it was confirmed (checked against a
+ * statement or by you) because replacing a confirmed figure with a typed one is rarely right; the sheet's value is suggested when what
+ * is on file was only worked out or read without a check. The suggestion is the answer the form starts on, and either answer can be
+ * picked; the replaced value stays in the history, marked as replaced.
+ */
+export function conflictProposal(c: HistoryConflict): Proposal {
+  const unconfirmed = c.existing.confidence === 'estimated' || c.existing.confidence === 'imported_unverified';
+  const cur = c.currency === 'INR' ? 'INR' : c.currency;
+  const f = (n: number) =>
+    cur === 'INR' ? formatInr(n, { decimals: n % 1 ? 2 : 0 }) : `S$${n.toLocaleString('en-IN')}`;
+  const diff = Math.abs(c.sheetAmount - c.existing.amount);
+  return suggestion({
+    found: conflictText(c),
+    suggest: unconfirmed
+      ? `Use the sheet's value, ${f(c.sheetAmount)}.`
+      : `Keep what is on file, ${f(c.existing.amount)}.`,
+    why: unconfirmed
+      ? `What is on file was ${c.existing.confidence === 'estimated' ? 'only estimated' : 'read from an email or statement without a check'}, and the sheet is the figure you recorded yourself (${f(diff)} apart). The value on file stays in the history, marked as replaced.`
+      : `It was ${sourceWord(c.existing.source)} and has been confirmed; the sheet differs by ${f(diff)}. If the sheet is right, choose it and the value on file stays in the history, marked as replaced.`,
+    recommended: unconfirmed ? 'sheet' : 'keep',
+    options: [
+      { id: 'keep', label: 'Keep what is on file', action: 'keep what is on file' },
+      { id: 'sheet', label: 'Use the sheet', action: "use the sheet's value" },
+    ],
+  });
+}
+
+/** The answer a conflict starts on: the one I suggest. */
+export const conflictDefault = (c: HistoryConflict): 'keep' | 'sheet' =>
+  conflictProposal(c).recommended === 'sheet' ? 'sheet' : 'keep';
 
 function sourceWord(s: string): string {
   return (

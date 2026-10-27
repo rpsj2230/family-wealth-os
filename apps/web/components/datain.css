@@ -583,3 +583,33 @@ table.upd2 .newbal input.bal.fx {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+/* A balance waiting for review: what I suggest and why, one-click Approve, then the other choices. */
+.inbox-ask {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--soft);
+  min-width: 0;
+}
+.inbox-ask p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ask-lead {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.inbox-approve {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}

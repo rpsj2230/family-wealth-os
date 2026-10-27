@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canReadAgain,
+  inboxProposal,
   certainAccount,
   markAmount,
   explainEntry,
@@ -141,5 +142,72 @@ describe('read again and the marked number', () => {
     expect(markAmount('nothing here 12', 99).some((p) => p.hit)).toBe(false);
     expect(markAmount('abc', null)).toEqual([{ text: 'abc', hit: false }]);
     expect(markAmount('', 5)).toEqual([{ text: '', hit: false }]);
+  });
+});
+
+describe('inboxProposal: what I suggest for a balance waiting for review', () => {
+  const acc = (id: string, last4: string | null, bank = 'HDFC Bank', currency = 'INR'): AccountChoice => ({
+    id,
+    label: `${bank} ···${last4 ?? ''} (${id})`,
+    currency,
+    last4,
+    bank,
+  });
+  const ask = (o: Partial<InboxEntry>, accounts: AccountChoice[]) =>
+    inboxProposal(msg(o), accounts)!;
+
+  it('suggests the account the reader matched, with the amount, the date and the reason', () => {
+    const p = ask({ assetId: 'y', reason: 'sender is not confirmed as the bank' }, [
+      acc('x', '9999'),
+      acc('y', '1234'),
+    ]);
+    expect(p.accountId).toBe('y');
+    expect(p.proposal.suggest).toBe('Record ₹12,000 on HDFC Bank ···1234 (y), as of 25 Oct 2026.');
+    expect(p.proposal.why).toContain('The reader matched it to this account');
+    expect(p.proposal.why).toContain('approve only if you trust the message');
+    expect(p.proposal.why).toContain('hdfcbank.net');
+    expect(p.proposal.approve).toBe('Approve: record ₹12,000 on HDFC Bank ···1234 (y)');
+    expect(p.proposal.found).toContain('Balance ₹12,000');
+  });
+
+  it('suggests the only account with the same last four digits when the reader matched none', () => {
+    const p = ask({ reason: 'no single account matches this bank and last four digits' }, [
+      acc('x', '9999'),
+      acc('y', '1234', 'Other Bank'),
+      acc('z', '1234', 'Bank', 'SGD'),
+    ]);
+    expect(p.accountId).toBe('y');
+    expect(p.proposal.why).toContain('only INR account ending 1234');
+  });
+
+  it('says it cannot tell when two accounts fit, or none does', () => {
+    const two = ask({ reason: 'more than one account matches' }, [acc('x', '1234'), acc('y', '1234')]);
+    expect(two.accountId).toBeNull();
+    expect(two.proposal.approve).toBeNull();
+    expect(two.proposal.suggest).toBe('I cannot tell which it is, so I am not guessing: please choose.');
+    expect(two.proposal.options.map((o) => o.id)).toEqual(['record:x', 'record:y', 'ignore']);
+    const none = ask({ reason: 'no single account matches' }, [acc('x', '9999')]);
+    expect(none.accountId).toBeNull();
+    const noAccount = ask({}, [acc('x', '1234', 'HDFC Bank', 'SGD')]);
+    expect(noAccount.proposal.why).toContain('You have no account in INR');
+  });
+
+  it('warns when the amount is far from the current value', () => {
+    const p = ask({ assetId: 'y', reason: 'amount is far from the current value; please confirm' }, [
+      acc('y', '1234'),
+    ]);
+    expect(p.proposal.why).toContain('very different from the value you have now');
+  });
+
+  it('is only for a message with a balance that is waiting', () => {
+    expect(inboxProposal(msg({ reading: null }), [])).toBeNull();
+    expect(inboxProposal(msg({ outcome: 'applied' }), [])).toBeNull();
+    expect(inboxProposal(msg({ resolvedAt: '2026-10-26T01:00:00Z' }), [])).toBeNull();
+  });
+
+  it('a statement the reader could not finish says what to do, not just "needs a look"', () => {
+    const e = explainEntry(msg({ reading: null, reason: 'something odd' }));
+    expect(e.headline).toBe('A statement could not be finished');
+    expect(e.next).toContain('I suggest');
   });
 });

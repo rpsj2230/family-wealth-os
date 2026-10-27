@@ -96,15 +96,35 @@ test.describe('Bank emails (public sample)', () => {
     );
     await expect(page.getByText(/read from an email/).first()).toBeVisible();
     await expect(page.getByText(/not recorded without your say-so/)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Apply to this account' })).toBeVisible();
+    // a suggestion with its reason and a one-click Approve, then the other choices
+    const first = page.locator('article.inbox-card', { hasText: 'account ending 1117' });
+    await expect(first.getByText('What I suggest')).toBeVisible();
+    await expect(first).toContainText('Record ₹1,31,250 on Cash-NRE-1117, as of 25 Oct 2026.');
+    await expect(first).toContainText('approve only if you trust the message');
+    await expect(
+      first.getByRole('button', { name: /^Approve: record ₹1,31,250 on Cash-NRE-1117/ }),
+    ).toBeVisible();
+    await expect(first.getByRole('button', { name: 'Apply to the chosen account' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Ignore' }).first()).toBeVisible();
     await noOverflow(page);
   });
 
   test('a sample apply says it is a sample', async ({ page }) => {
     await page.goto('/demo/inbox');
-    await page.getByRole('button', { name: 'Apply to this account' }).click();
+    await page.getByRole('button', { name: /^Approve: record/ }).first().click();
     await expect(page.getByRole('alert').filter({ hasText: /sample/ })).toBeVisible();
+  });
+
+  test('when no account fits it says so and asks you to choose, with no Approve button', async ({
+    page,
+  }) => {
+    await page.goto('/demo/inbox');
+    const card = page.locator('article.inbox-card', { hasText: 'account ending 4455' });
+    await expect(card).toContainText('I cannot tell which it is, so I am not guessing: please choose.');
+    await expect(card.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
+    await expect(card.getByRole('button', { name: 'Apply' })).toBeVisible();
+    // a statement the reader could not finish says what to do instead of "needs a look"
+    await expect(page.getByText('A statement needs a look')).toHaveCount(0);
   });
 
   test('skipped messages say why, and the filter narrows them by reason', async ({ page }) => {
@@ -275,8 +295,9 @@ test.describe('Import (public sample)', () => {
     await page.goto('/demo/import?tab=cas');
     await expect(page.getByText('Password.', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/PAN on file/)).toBeVisible();
-    await expect(page.getByText('Check some items')).toBeVisible();
-    await expect(page.getByText(/need a look/)).toBeVisible();
+    await expect(page.getByText('Waiting for your decision').first()).toBeVisible();
+    await expect(page.getByText(/statements are waiting/)).toBeVisible();
+    await expect(page.getByText(/I suggest you upload each again/)).toBeVisible();
     await expect(page.getByText(/ends 234F/)).toBeVisible();
     await noOverflow(page);
   });

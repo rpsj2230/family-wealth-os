@@ -990,3 +990,101 @@ describe('words', () => {
     expect(summariseChanges(d.items)).toBe('1 new fund: +4 transactions; 1 SIP new');
   });
 });
+
+describe('questions with a suggested answer', () => {
+  const gone = () =>
+    onFile({
+      assetId: 'gone',
+      name: 'Fund Not On The Statement',
+      isin: 'INF999Z99ZZ9',
+      folioLast4: '9001',
+    });
+
+  it('a fund missing from a statement of everything held is suggested sold, and ticked as before', () => {
+    const d = diffFundImport(
+      input({
+        funds: [stFund()],
+        onFile: [onFile(), gone()],
+        basis: 'pan',
+      }),
+    );
+    const sold = d.items.find((i) => i.assetId === 'gone')!;
+    expect(sold.kind).toBe('sold');
+    expect(sold.changed).toBe(true);
+    expect(sold.prompt!.kind).toBe('absent');
+    expect(sold.prompt!.start).toBe('sold');
+    expect(sold.prompt!.suggestion.suggest).toBe('Mark it as sold on 25 Oct 2026.');
+    expect(chipsOf(sold)[0]!.label).toBe('Sold');
+  });
+
+  it('on a statement keyed on an e-mail address the suggestion is to leave it, and the chip does not say sold', () => {
+    const d = diffFundImport(
+      input({ funds: [stFund()], onFile: [onFile(), gone()], basis: 'email' }),
+    );
+    const sold = d.items.find((i) => i.assetId === 'gone')!;
+    expect(sold.prompt!.start).toBe('keep');
+    expect(sold.prompt!.suggestion.suggest).toBe('Leave it as it is.');
+    expect(chipsOf(sold).map((c) => c.label)).toContain('Not on this statement');
+    expect(chipsOf(sold).map((c) => c.label)).not.toContain('Sold');
+  });
+
+  it('a fund the person already chose to keep has no question', () => {
+    const f = gone();
+    f.state!.ignored = [{ verdict: 'sold', basis: '2026-10-25' }];
+    const d = diffFundImport(input({ funds: [stFund()], onFile: [onFile(), f] }));
+    const it = d.items.find((i) => i.assetId === 'gone')!;
+    expect(it.kind).toBe('unchanged');
+    expect(it.prompt).toBeNull();
+  });
+
+  it('a SIP that cannot be told yet becomes a question: keep it (suggested) or mark it stopped from a date', () => {
+    // instalments up to a few days late before, and the next is a day overdue on the statement date
+    const dates = [
+      '2026-04-23',
+      '2026-05-26',
+      '2026-06-23',
+      '2026-07-25',
+      '2026-08-23',
+      '2026-09-23',
+    ];
+    const ls = lines(
+      '5678',
+      dates.map((d) => raw(d, 'sip', 3000)),
+    );
+    const f = onFile({ state: state({ sipMonthly: 3000, lines: [] }) });
+    const d = diffFundImport(
+      input({ funds: [stFund({ lines: ls, closingUnits: 100 })], onFile: [f] }),
+    );
+    const it = d.items[0]!;
+    expect(it.sip!.kind).toBe('cannot_tell');
+    expect(it.sipPrompt!.suggestion.suggest).toBe('Keep the SIP as recorded (₹3,000 a month).');
+    expect(it.sipPrompt!.suggestion.options[1]!.input!.value).toBe('2026-10-24');
+    expect(changedItems(d)).toContain(it);
+    expect(chipsOf(it).map((c) => c.label)).not.toContain('Needs a look');
+    // the question replaces the statement-wide remark
+    expect(d.notes.join(' ')).not.toContain('could not be judged');
+  });
+
+  it('folios of someone else are one question for each person, and no fund is called sold meanwhile', () => {
+    const d = diffFundImport(
+      input({
+        funds: [stFund()],
+        onFile: [onFile(), gone()],
+        foreign: [
+          {
+            key: 'foreign:567H',
+            holder: 'Chitra Example',
+            panLast4: '567H',
+            member: null,
+            folios: [{ name: 'Sample Bond Fund', folioLast4: '4455', units: 10, invested: 1000 }],
+          },
+        ],
+      }),
+    );
+    const f = d.items.find((i) => i.prompt?.kind === 'foreign')!;
+    expect(f.kind).toBe('review');
+    expect(f.name).toBe('Folios of Chitra Example');
+    expect(f.prompt!.suggestion.recommended).toBe('skip');
+    expect(d.items.some((i) => i.kind === 'sold')).toBe(false);
+  });
+});

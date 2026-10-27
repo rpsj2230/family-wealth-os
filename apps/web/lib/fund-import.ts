@@ -3,7 +3,7 @@
  * statement would change (a preview that writes nothing), the items the person ticked, and what was written. Plain data only.
  */
 import type { FundChangeItem, FundImportDiff } from '@fwos/core';
-import type { CasReport, Selection } from '@fwos/ingest';
+import type { CasReport, Decision, Selection } from '@fwos/ingest';
 
 /** A comparison as the browser needs it: the write sets stay on the server, and a long list of new lines is cut. */
 export type ItemView = Omit<FundChangeItem, 'write'>;
@@ -15,14 +15,26 @@ export interface DiffView extends Omit<FundImportDiff, 'items'> {
 export const MAX_LINES_SHOWN = 60;
 
 export function toView(diff: FundImportDiff, maxLines = MAX_LINES_SHOWN): DiffView {
+  const cut = <T extends { lines: ItemView['lines'] }>(x: T): T => ({
+    ...x,
+    lines: { ...x.lines, newLines: x.lines.newLines.slice(0, maxLines) },
+  });
   return {
     ...diff,
-    items: diff.items.map((i) => {
+    items: diff.items.map((i): ItemView => {
       const { write, ...rest } = i;
       void write;
+      const view = cut(rest);
+      // what each answer would make of the fund is cut the same way
+      if (!view.prompt) return view;
       return {
-        ...rest,
-        lines: { ...rest.lines, newLines: rest.lines.newLines.slice(0, maxLines) },
+        ...view,
+        prompt: {
+          ...view.prompt,
+          outcomes: Object.fromEntries(
+            Object.entries(view.prompt.outcomes).map(([k, v]) => [k, v.map(cut)]),
+          ),
+        },
       };
     }),
   };
@@ -75,6 +87,30 @@ export interface FundCsvState {
  */
 export function selectionFromForm(f: FormData): Selection | null {
   const seen = f.getAll('seen').map(String);
-  if (seen.length === 0) return null;
-  return { take: new Set(f.getAll('take').map(String)), seen: new Set(seen) };
+  const choices = choicesFromForm(f);
+  if (seen.length === 0 && choices.size === 0) return null;
+  return { take: new Set(f.getAll('take').map(String)), seen: new Set(seen), choices };
+}
+
+/** The answers to the preview's questions: each `choice` field is `[key, option, input]`. A malformed one is ignored. */
+export function choicesFromForm(f: FormData): Map<string, Decision> {
+  const out = new Map<string, Decision>();
+  for (const raw of f.getAll('choice')) {
+    try {
+      const v: unknown = JSON.parse(String(raw));
+      if (
+        Array.isArray(v) &&
+        typeof v[0] === 'string' &&
+        typeof v[1] === 'string' &&
+        (v[2] === null || typeof v[2] === 'string') &&
+        v[0].length <= 300 &&
+        v[1].length <= 80 &&
+        (v[2] ?? '').length <= 80
+      )
+        out.set(v[0], { option: v[1], input: v[2] });
+    } catch {
+      /* not an answer */
+    }
+  }
+  return out;
 }

@@ -6,7 +6,7 @@ import { BusyNote, ResultNote } from '@/components/BusyNote';
 import { FilePicker } from '@/components/FilePicker';
 import { AppliedChanges, FundChanges } from '@/components/FundChanges';
 import type { CasState, FundCsvState } from '@/lib/fund-import';
-import { appendSelection, type FundSelection } from '@/lib/fund-import-select';
+import { appendSelection, hasWork, type FundSelection } from '@/lib/fund-import-select';
 import { guessOwner, plainCountName } from '@/lib/import-detect';
 import { commitImport, previewImport, syncLayout, type ImportState } from './actions';
 import { commitFundCsv, importCas, previewCas, previewFundCsv } from './fund-actions';
@@ -157,7 +157,7 @@ const casIdle: CasState = { stage: 'idle' };
 
 /** The file and the choices of a fund-statement form: held here (not in a native form), so a preview does not empty them. */
 function useSelectionState() {
-  const [sel, setSel] = useState<FundSelection>({ seen: [], take: [], count: 0 });
+  const [sel, setSel] = useState<FundSelection>({ seen: [], take: [], choices: [], count: 0 });
   return [sel, setSel] as const;
 }
 
@@ -286,13 +286,13 @@ export function CasForm({
               ))}
             </ul>
           )}
-          {sel.seen.length > 0 && (
+          {(sel.seen.length > 0 || sel.choices.length > 0) && (
             <>
               <div className="fc-actions">
                 <button
                   type="button"
                   className="btn primary"
-                  disabled={busy || sel.take.length === 0}
+                  disabled={busy || !hasWork(sel)}
                   onClick={() => {
                     setDone(true);
                     send(applyAct, true);
@@ -300,12 +300,12 @@ export function CasForm({
                 >
                   {applying
                     ? 'Applying…'
-                    : sel.take.length === 0
+                    : !hasWork(sel)
                       ? 'Nothing selected'
                       : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
                 </button>
                 <span className="muted small">
-                  Untick anything that is wrong. What you untick is left as it is.
+                  Untick anything that is wrong; approve a suggestion or pick another answer where I ask. What you leave unticked or unanswered is left as it is.
                 </span>
               </div>
               <BusyNote active={applying}>
@@ -450,13 +450,13 @@ export function FundCsvForm({
               ))}
             </ul>
           )}
-          {sel.seen.length > 0 && (
+          {(sel.seen.length > 0 || sel.choices.length > 0) && (
             <>
               <div className="fc-actions">
                 <button
                   type="button"
                   className="btn primary"
-                  disabled={busy || sel.take.length === 0}
+                  disabled={busy || !hasWork(sel)}
                   onClick={() => {
                     setDone(true);
                     send(commitAct, true);
@@ -464,12 +464,12 @@ export function FundCsvForm({
                 >
                   {committing
                     ? 'Applying…'
-                    : sel.take.length === 0
+                    : !hasWork(sel)
                       ? 'Nothing selected'
                       : `Apply the selected changes (${sel.count} fund${sel.count === 1 ? '' : 's'})`}
                 </button>
                 <span className="muted small">
-                  Untick anything that is wrong. What you untick is left as it is.
+                  Untick anything that is wrong; approve a suggestion or pick another answer where I ask. What you leave unticked or unanswered is left as it is.
                 </span>
               </div>
               <BusyNote active={committing}>

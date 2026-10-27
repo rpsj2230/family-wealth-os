@@ -111,7 +111,7 @@ test.describe('One bank’s rates (public sample)', () => {
 
     await page.getByRole('link', { name: /How it is read/ }).click();
     await expect(page).toHaveURL(/tab=reading/);
-    await expect(page.getByText('Read, but some rates need a look.')).toBeVisible();
+    await expect(page.getByText('Read, but some rates differ from the bank page.')).toBeVisible();
     await expect(page.getByRole('heading', { name: /What the refresh has learned/ })).toBeVisible();
     await expect(page.getByText(/read the regular \(non-senior\) column/)).toBeVisible();
     await expect(page.getByText('Ignore the table headed Special Deposits.')).toBeVisible();

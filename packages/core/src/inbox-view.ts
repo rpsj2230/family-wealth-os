@@ -4,6 +4,7 @@
  * sentences a person can act on.
  */
 import { formatInr } from './money';
+import { suggestion, type Proposal } from './suggestion';
 
 export interface InboxReading {
   bank: string;
@@ -222,9 +223,9 @@ export function explainEntry(m: InboxEntry): Explained {
     };
   if (!r)
     return {
-      headline: 'A statement needs a look',
+      headline: 'A statement could not be finished',
       why: reason || 'The reader could not finish this one by itself.',
-      next: 'Check the figures on the Import page, then ignore this.',
+      next: 'I suggest you open the Import page and compare its figures with the statement, then ignore this message.',
     };
   return {
     headline: found ?? 'Balance found',
@@ -241,6 +242,15 @@ export interface AccountChoice {
   bank: string;
 }
 
+/** How well an account fits a reading: the one already matched (8), the same last four digits (4), the same bank (2). */
+export function accountScore(r: InboxReading, matchedAssetId: string | null, a: AccountChoice): number {
+  return (
+    (a.id === matchedAssetId ? 8 : 0) +
+    (r.last4 && a.last4 === r.last4 ? 4 : 0) +
+    (a.bank && r.bank && a.bank.toLowerCase().includes(r.bank.toLowerCase().slice(0, 4)) ? 2 : 0)
+  );
+}
+
 /**
  * The accounts a reading could belong to, best first: the one already matched, then the same currency with the same last
  * four digits, then the same bank, then the rest of that currency. Other currencies are never offered.
@@ -250,10 +260,7 @@ export function rankAccounts(
   matchedAssetId: string | null,
   accounts: AccountChoice[],
 ): AccountChoice[] {
-  const score = (a: AccountChoice) =>
-    (a.id === matchedAssetId ? 8 : 0) +
-    (r.last4 && a.last4 === r.last4 ? 4 : 0) +
-    (a.bank && r.bank && a.bank.toLowerCase().includes(r.bank.toLowerCase().slice(0, 4)) ? 2 : 0);
+  const score = (a: AccountChoice) => accountScore(r, matchedAssetId, a);
   return accounts
     .filter((a) => a.currency === r.currency)
     .map((a, i) => ({ a, i, s: score(a) }))
@@ -269,4 +276,69 @@ export function certainAccount(
 ): AccountChoice | null {
   if (!matchedAssetId) return null;
   return accounts.find((a) => a.id === matchedAssetId && a.currency === r.currency) ?? null;
+}
+
+export interface InboxProposal {
+  proposal: Proposal;
+  /** the account to record on when the person approves; null when nothing points to one account */
+  accountId: string | null;
+}
+
+/**
+ * What I suggest for a balance waiting for review: the account it most likely belongs to (the one the reader matched, else the only
+ * account with the same last four digits, else the only one of that bank) and the amount, with the reason, one-click Approve, and the
+ * other choices (another account, a corrected amount, ignore). With no clear account it says it cannot tell. Only for a message that
+ * has a balance read from it.
+ */
+export function inboxProposal(m: InboxEntry, accounts: AccountChoice[]): InboxProposal | null {
+  const r = m.reading;
+  if (!r || queueOf(m) !== 'review') return null;
+  const e = explainEntry(m);
+  const ranked = rankAccounts(r, m.assetId, accounts);
+  const sure = certainAccount(r, m.assetId, accounts);
+  const score = (a: AccountChoice) => accountScore(r, m.assetId, a);
+  let pick: AccountChoice | null = sure;
+  let because = sure
+    ? `The reader matched it to this account (${r.bank ? `${r.bank}, ` : ''}${r.last4 ? `last four digits ${r.last4}` : 'same currency'}).`
+    : '';
+  if (!pick && ranked.length > 0) {
+    const top = ranked[0]!;
+    const second = ranked[1];
+    const withDigits = ranked.filter((a) => !!r.last4 && a.last4 === r.last4);
+    const withBank = ranked.filter((a) => score(a) >= 2 && !(r.last4 && a.last4 && a.last4 !== r.last4));
+    if (withDigits.length === 1) {
+      pick = withDigits[0]!;
+      because = `It is the only ${r.currency} account ending ${r.last4}${top.id === pick.id && score(pick) >= 6 ? ' at that bank' : ''}.`;
+    } else if (withDigits.length === 0 && withBank.length === 1 && (!second || score(top) > score(second))) {
+      pick = withBank[0]!;
+      because = `It is the only ${r.currency} account at ${r.bank || 'that bank'}${r.last4 ? `, and none ends ${r.last4}, so check the digits` : ''}.`;
+    }
+  }
+  const amount = readingAmount(r);
+  const when = longDate(r.asOf);
+  const caution = /sender is not confirmed/.test(m.reason ?? '')
+    ? ` It did not come from the bank’s own address${m.fromDomain ? ` (it came from ${m.fromDomain})` : ''}, so approve only if you trust the message.`
+    : /far from the current value/.test(m.reason ?? '')
+      ? ' The amount is very different from the value you have now: compare it with your bank, and correct it below if it was misread.'
+      : '';
+  const options = [
+    ...ranked.slice(0, 4).map((a) => ({
+      id: `record:${a.id}`,
+      label: `Record it on ${a.label}`,
+      action: `record ${amount} on ${a.label}`,
+    })),
+    { id: 'ignore', label: 'Ignore this message', action: 'ignore this message' },
+  ];
+  const proposal = suggestion({
+    found: e.headline,
+    suggest: pick ? `Record ${amount} on ${pick.label}, as of ${when}.` : null,
+    why: pick
+      ? `${because}${caution}`
+      : ranked.length === 0
+        ? `You have no account in ${r.currency}. Add one in the Monthly update first.`
+        : `More than one account could be this one, or none fits the bank and digits well enough to say.`,
+    recommended: pick ? `record:${pick.id}` : null,
+    options,
+  });
+  return { proposal, accountId: pick?.id ?? null };
 }

@@ -60,6 +60,10 @@ test.describe('Import: history from all monthly tabs (public sample)', () => {
     ).toBeVisible();
     const keep = page.getByRole('radio', { name: 'Keep what is on file' });
     await expect(keep).toBeChecked();
+    // it says what it suggests and why, and the suggested answer is the one it starts on
+    await expect(page.getByText('What I suggest:')).toContainText('Keep what is on file, ₹18,500.');
+    await expect(page.getByText(/has been confirmed; the sheet differs by ₹500/)).toBeVisible();
+    await expect(page.getByText('Keep what is on file (suggested)')).toBeVisible();
     await page.getByRole('radio', { name: 'Use the sheet' }).check();
     await expect(page.getByRole('radio', { name: 'Use the sheet' })).toBeChecked();
 
