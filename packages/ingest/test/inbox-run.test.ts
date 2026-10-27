@@ -266,7 +266,7 @@ describe('runInbox: tax statements', () => {
 describe('runInbox: a balance email in a format the rules do not know', () => {
   const forwarded = msg({
     messageId: 'fwd1',
-    from: 'Me <me@gmail.com>',
+    from: 'Me <me@mail.example.test>',
     subject: 'Fwd: Balance Change Alert',
     text: 'Dear Customer, the balance in your HDFC Bank account ending 7240 is INR 12,345.67 as of 26 Oct 2026.',
   });
@@ -382,16 +382,16 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
 });
 
 describe('runInbox: bank alerts forwarded from your own mailbox', () => {
-  const body = `---------- Forwarded message ---------\nFrom: HDFC Bank <alerts@hdfcbank.bank.in>\nDate: Mon, 26 Oct 2026\nSubject: Alert\nTo: <me@gmail.com>\n\n${HDFC}`;
+  const body = `---------- Forwarded message ---------\nFrom: HDFC Bank <alerts@hdfcbank.bank.in>\nDate: Mon, 26 Oct 2026\nSubject: Alert\nTo: <me@mail.example.test>\n\n${HDFC}`;
   const fwd = (over: Partial<InboxMessage> = {}) =>
     msg({
       messageId: 'f1',
-      from: 'Me <me@gmail.com>',
+      from: 'Me <me@mail.example.test>',
       subject: 'Fwd: Balance Change Alert',
       text: body,
       ...over,
     });
-  const cfg = { today: '2026-10-26', ai: null, trustedForwarders: ['me@gmail.com'] };
+  const cfg = { today: '2026-10-26', ai: null, trustedForwarders: ['me@mail.example.test'] };
 
   it('records the balance by itself when your own address forwarded a message from the bank', async () => {
     const { io, applied, rows } = fakeIo();
@@ -402,7 +402,7 @@ describe('runInbox: bank alerts forwarded from your own mailbox', () => {
   });
   it('sends it to review when the forwarder is not one of your addresses', async () => {
     const { io, applied } = fakeIo();
-    const r = await runInbox([fwd({ from: 'Someone <x@gmail.com>' })], io, cfg);
+    const r = await runInbox([fwd({ from: 'Someone <x@mail.example.test>' })], io, cfg);
     expect(applied).toHaveLength(0);
     expect(r.needsReview).toBe(1);
   });
