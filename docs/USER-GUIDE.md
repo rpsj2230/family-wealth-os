@@ -166,7 +166,23 @@ It never says "safe". A range of outcomes (market ups and downs) is shown next t
 
 ## Daily summary
 
-**Settings** turns the daily email on and adds up to five extra recipients. The email says plainly when no new bank balance has arrived, shows the date of every market input and never presents an estimate as a bank balance. **Share** gives a short version for WhatsApp.
+**Settings > Notifications** turns the daily email on, adds up to five extra recipients and chooses what it shows: **Include the goals view** and **Include the retirement view** (both on unless you switch them off). Who receives it is changed there too.
+
+The email is built to be read in a minute on a phone. In order, it shows:
+
+1. **The header**: the date, "values as of" the newest recorded value, and a chip saying how many inputs are late.
+2. **Net worth**, large, with **Today** (what the banks and deposits earned plus how the funds moved, in rupees and per cent) and the **overall profit or loss** on the money you put in. These are the same figures as the top of Home.
+3. **Four tiles**: in FDs, in savings, in mutual funds, in other. Each shows its amount, its share of the total and today's change; FDs and funds also show their overall profit and per cent. The four add up to net worth.
+4. **Goals**: one card per goal with the target and date, how much is saved so far, a progress bar and a chip: **On track**, **Ahead by** an amount, **Behind by** an amount (with about how many months late), or **Not enough data** (set a target amount and date). A sentence says what the current pace reaches by the date against what is needed, and for a goal that is behind, how much more to add each month. It uses the same arithmetic and assumptions as the Goals page.
+5. **Retirement**, as a goal: the corpus needed against what your savings and SIPs reach by the retirement age (both in today's money), whether that is on track, ahead or short, years to go, the chance the money lasts (the same 2,000-path run as "Can I retire now?") and about how much more to save each month to close a gap. It appears only when you have saved retirement assumptions.
+6. **Needs you** (the top five, ranked as on Home, each a link to the page where it is dealt with) and **What changed** (the biggest moves since a month ago, and the largest deposits paying out in the next 30 days).
+7. **The footer**: an Open the portal button, where the numbers come from (estimated or recorded, and the date of each market input), and where to change settings.
+
+It says plainly when no new bank balance has arrived, never presents an estimate as a bank balance and never prints a full account number. Matured deposits waiting to be confirmed are not counted, the same as on the portal. A phone in dark mode shows it in dark colours.
+
+The subject reads `Family Wealth Summary · 27 Oct 2026 · Net worth ₹4.82 Cr (+0.4% today) · 2 need you`. The day's percentage goes first when the line is too long for a phone, then the "need you" note; the date always stays. A Gmail filter or label can match "Family Wealth Summary".
+
+**Preview today's e-mail** (Settings > Notifications, or `/settings/notifications/preview`) shows today's message built now from your own figures, on a phone and on a laptop, without sending anything. A sample with invented figures is at `/demo/digest`. To get a real test in your own inbox, see `docs/runbooks/daily-summary.md` ("digest test"). **Share** gives a short version for WhatsApp, with the same numbers as the Telegram message.
 
 ## Family emergency guide
 

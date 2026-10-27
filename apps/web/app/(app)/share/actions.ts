@@ -1,6 +1,6 @@
 'use server';
 
-import { buildDigest } from '@fwos/core';
+import { DEFAULT_APP_URL, buildDigest } from '@fwos/core';
 import { buildDigestInput } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
@@ -14,7 +14,7 @@ export async function whatsappSummary(): Promise<{ ok: boolean; text: string }> 
   const input = await buildDigestInput(supabase as unknown as SupabaseClient, {
     date,
     householdName: (h.data as { name: string } | null)?.name ?? 'Household',
-    appUrl: 'https://family-wealth-os-nine.vercel.app',
+    appUrl: DEFAULT_APP_URL,
   });
   return { ok: true, text: buildDigest(input).whatsapp };
 }

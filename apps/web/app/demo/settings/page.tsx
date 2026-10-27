@@ -178,7 +178,13 @@ export default async function DemoSettings({
           {tab === 'tax' && <TaxSection years={years} currentFy="2026-27" />}
           {tab === 'notifications' && (
             <NotificationsSection
-              digest={{ enabled: true, extra: ['family@example.com'], includeRetirement: true }}
+              digest={{
+                enabled: true,
+                extra: ['family@example.com'],
+                includeRetirement: true,
+                includeGoals: true,
+              }}
+              previewHref="/demo/digest"
               telegram={{ isSet: false, chatIds: '' }}
               deliveries={[
                 {
