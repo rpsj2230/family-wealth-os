@@ -146,7 +146,7 @@ export function ReviewCard({
               className="numinput"
               style={{ width: '9.5rem', textAlign: 'right' }}
             />
-            <button className="btn primary" disabled={busy}>
+            <button className={`btn${suggestedId ? '' : ' primary'}`} disabled={busy}>
               {applying ? 'Recording…' : suggestedId ? 'Apply to the chosen account' : 'Apply'}
             </button>
           </>
