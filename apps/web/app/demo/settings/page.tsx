@@ -215,6 +215,7 @@ export default async function DemoSettings({
                   id: 'r1',
                   bank: 'Sample Equity Bank',
                   url: 'https://bank.example.com/rates/fixed-deposits-and-savings-account-interest-rates',
+                  kind: 'both',
                   lastRunOn: '2026-10-19',
                   lastResult: '12 rates read',
                 },

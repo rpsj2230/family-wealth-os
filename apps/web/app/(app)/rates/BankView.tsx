@@ -50,6 +50,7 @@ export function BankView({
   held,
   actions,
   toggleHint,
+  syncHref = '/rates/sync',
 }: {
   bank: string;
   offers: BoardOffer[];
@@ -66,6 +67,8 @@ export function BankView({
   held: number;
   actions?: RateRowActions | undefined;
   toggleHint?: ((f: FormData) => Promise<void>) | undefined;
+  /** the Sync bank rates page (the public sample has its own) */
+  syncHref?: string;
 }) {
   const sum = bankSummary(offers, events, bank);
   const diffs = pageDifferences(offers);
@@ -121,6 +124,9 @@ export function BankView({
             <a className="btn primary" href="#add">
               Add a rate
             </a>
+            <Link className="btn" href={syncHref}>
+              Sync rates
+            </Link>
             <Link className="btn ghost" href={`${backHref}?tab=add`}>
               Paste from notes
             </Link>

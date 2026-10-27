@@ -30,7 +30,8 @@ import {
 } from './PeopleForms';
 import { LiquidityForm, RuleGroupForm, TaxRuleForm, type TaxValues } from './RuleForms';
 import { TelegramForm } from './TelegramForm';
-import { deleteRateSource } from './actions';
+import { DOC_KIND_LABEL, DOC_KINDS, type DocKind } from '@fwos/core';
+import { deleteRateSource, updateRateSourceKind } from './actions';
 import { GoogleSheetCard } from './GoogleSheetCard';
 import type { GsheetTestState } from '../gsheet/actions';
 import type { SheetSyncInfo } from '@/lib/sheet-sync-status';
@@ -423,6 +424,8 @@ export interface RateSourceRow {
   id: string;
   bank: string;
   url: string;
+  /** which rates the page carries */
+  kind: DocKind;
   lastRunOn: string | null;
   lastResult: string | null;
 }
@@ -480,10 +483,14 @@ export function ConnectionsSection({
       <section className="card" id="rates" aria-labelledby="rates-h">
         <h3 id="rates-h">Bank rate pages</h3>
         <p className="muted small">
-          List the page where each bank publishes its deposit rates. Every Monday the app reads them
-          with your AI keys (in the order you set) and keeps the rates with the date it checked.
+          List the bank&apos;s own page where it publishes its rates. Rates are only ever read from
+          the bank&apos;s own pages, never from comparison websites. Every Monday the app reads them
+          (together with the bank&apos;s own rate sheets it already knows) with your AI keys, in the
+          order you set, and keeps the rates with the date it checked. A bank may have several
+          pages, for example savings on one and deposits on another: say which rates each carries.
           Rates you type on the <Link href="/rates">Rates page</Link> are never overwritten. To
-          refresh now: GitHub &gt; Actions &gt; Refresh interest rates &gt; Run workflow.
+          refresh now, open <Link href="/rates/sync">Sync bank rates</Link>. If a bank&apos;s page
+          cannot be read the app says so plainly and you can paste the page text instead.
         </p>
         {!ai.keys.some((k) => k.enabled) && sources.length > 0 && (
           <p className="notice warn small">
@@ -515,6 +522,21 @@ export function ConnectionsSection({
                     <div className="small muted" style={{ wordBreak: 'break-all' }}>
                       {r.url}
                     </div>
+                    <form action={updateRateSourceKind} className="row small" style={{ gap: 6 }}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <select
+                        name="kind"
+                        defaultValue={r.kind}
+                        aria-label={`Which rates ${r.bank} ${r.url} carries`}
+                      >
+                        {DOC_KINDS.map((k) => (
+                          <option key={k} value={k}>
+                            {DOC_KIND_LABEL[k]}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn compact ghost">Save</button>
+                    </form>
                   </td>
                   <td className="small muted" data-label="Last read">
                     {r.lastRunOn

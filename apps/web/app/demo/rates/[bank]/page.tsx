@@ -57,6 +57,7 @@ export default async function DemoBank({
         base={`/demo/rates/${slugify(bank)}`}
         backHref="/demo/rates"
         newMoneyHref="/demo/new-money"
+        syncHref="/demo/rates/sync"
         held={DEMO_HOLDINGS.filter((h) => sameBank(h.bank, bank)).reduce(
           (t, h) => t + h.current,
           0,

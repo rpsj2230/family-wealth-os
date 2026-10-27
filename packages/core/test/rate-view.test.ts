@@ -13,6 +13,7 @@ import {
   slabLadder,
   slabShort,
   slotText,
+  isThirdPartyNote,
   sourceStatus,
   withRunAge,
   type RateSourceRow,
@@ -112,6 +113,45 @@ describe('sourceStatus', () => {
     const gone = sourceStatus(src({ lastResult: 'could not refresh: page answered 404' }), t);
     expect(gone.headline).toMatch(/not found/);
     expect(gone.fix?.href).toBe('/settings#rates');
+  });
+  it('reads the plain “Cannot read” sentence of the Sync page and points to the paste box there', () => {
+    const s = sourceStatus(
+      src({
+        lastResult:
+          'Cannot read: ESAF Bank’s site refused the automated visit (403 Access Denied). Rates are only read from the bank’s own pages. Paste the page text instead.',
+      }),
+      t,
+    );
+    expect(s.health).toBe('bad');
+    expect(s.headline).toBe(
+      'Cannot read: ESAF Bank’s site refused the automated visit (403 Access Denied).',
+    );
+    expect(s.fix?.href).toBe('/rates/sync');
+    expect(s.fix?.text).toMatch(/expand every section/);
+  });
+  it('reads the new wording of a saved read and of an unchanged page as fine', () => {
+    expect(
+      sourceStatus(src({ lastResult: '14 rates saved: 2 new, 3 changed, 9 unchanged' }), t).health,
+    ).toBe('ok');
+    expect(
+      sourceStatus(
+        src({
+          lastResult:
+            '14 rates saved: 0 new, 0 changed, 14 unchanged; 1 typed rates differ from the page',
+        }),
+        t,
+      ).health,
+    ).toBe('warn');
+    expect(
+      sourceStatus(src({ lastResult: 'Unchanged since 2026-10-20: not read again' }), t).health,
+    ).toBe('ok');
+  });
+  it('knows the rates once saved from comparison websites by their note', () => {
+    expect(isThirdPartyNote('Reference only, from comparison.example.test (third party)')).toBe(
+      true,
+    );
+    expect(isThirdPartyNote('Read from bank.example.test')).toBe(false);
+    expect(isThirdPartyNote(null)).toBe(false);
   });
   it('tells a script-built page and an empty answer apart', () => {
     expect(

@@ -182,6 +182,25 @@ export function whereFrom(o: RateOffer): {
   };
 }
 
+/** The kind of rates a bank page or document carries: savings slabs, fixed deposit terms, or both. */
+export type DocKind = 'savings' | 'fd' | 'both';
+export const DOC_KINDS: readonly DocKind[] = ['both', 'savings', 'fd'];
+export const isDocKind = (v: unknown): v is DocKind =>
+  v === 'savings' || v === 'fd' || v === 'both';
+export const DOC_KIND_LABEL: Record<DocKind, string> = {
+  both: 'Savings and fixed deposits',
+  savings: 'Savings',
+  fd: 'Fixed deposits',
+};
+
+/**
+ * Rates once saved from comparison websites carry a note starting with this. Nothing reads such sites any more; the marker is kept
+ * only to find the rows saved earlier, so they can be replaced by the bank's own figures or removed.
+ */
+export const THIRD_PARTY_NOTE = 'Reference only';
+export const isThirdPartyNote = (note: string | null | undefined): boolean =>
+  !!note && note.startsWith(THIRD_PARTY_NOTE);
+
 // ---- did the weekly refresh read the bank's page? -------------------------------------------------------------------
 
 export interface RateSourceRow {
@@ -204,7 +223,19 @@ export interface SourceStatus {
 }
 
 const PASTE_FIX =
-  'Open the page in your browser, copy the rates and paste them under Add or import.';
+  'Open the page in your own browser, expand every section, select all, copy, and paste it into “Paste the page” on the Sync bank rates page.';
+
+/** What a sync writes in `last_result` when the rates were saved ("14 rates saved ...", or the older "read 14 rates: ..."). */
+export const isSavedResult = (lower: string): boolean =>
+  lower.startsWith('read ') || /^\d+ rates saved/.test(lower);
+/** What a sync writes when the bank's page could not be read. */
+export const isCannotReadResult = (lower: string): boolean =>
+  lower.startsWith('cannot read') ||
+  lower.startsWith('could not refresh') ||
+  lower.startsWith('could not sync') ||
+  lower.startsWith('not read') ||
+  lower.startsWith('not reached') ||
+  lower.startsWith('pasted page not read');
 
 /** Turns the worker's last_result into a plain explanation and the way out. */
 export function sourceStatus(
@@ -268,7 +299,26 @@ export function sourceStatus(
         text: 'Only banks you use are read. Type or paste the rates if you want them on file anyway.',
       },
     };
-  if (lower.startsWith('read ')) {
+  if (lower.startsWith('unchanged since'))
+    return {
+      ...base,
+      health: 'ok',
+      headline:
+        'Unchanged: the bank’s page is the same as at the last read, so the rates were confirmed as checked.',
+      fix: null,
+    };
+  if (lower.startsWith('cannot read'))
+    return {
+      ...base,
+      health: 'bad',
+      headline: (r.split(/(?<=\.)\s/)[0] ?? r).replace(/^Cannot read: /i, 'Cannot read: '),
+      fix: {
+        text: PASTE_FIX,
+        href: '/rates/sync',
+        hrefLabel: 'Open Sync bank rates',
+      },
+    };
+  if (isSavedResult(lower)) {
     const attention = /still read wrongly|differ from the page/.test(lower);
     return {
       ...base,
