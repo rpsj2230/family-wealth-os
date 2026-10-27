@@ -1,97 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { planHistory, type HistoryExisting, type HistoryPlan } from '../src/history';
-import {
-  applyHistoryMonth,
-  type ConflictChoice,
-  type HistoryIo,
-  type MonthResult,
-  type NewHistoricalAsset,
-} from '../src/history-import';
+import { applyHistoryMonth, type ConflictChoice, type MonthResult } from '../src/history-import';
 import { planWorkbook } from '../src/workbook';
 import { buildHistoryWorkbook, type Fixture } from './history-fixture';
 import { existingFromPlan } from './history-existing';
+import { FakeDb } from './history-fake-db';
 
 const OWNERS = ['Asha', 'Vikram', 'Kiran'];
 const TODAY = '2026-10-27';
-
-/** A database in memory: what the importer wrote is what the next plan sees. */
-class FakeDb {
-  assets: HistoryExisting['assets'];
-  observations: HistoryExisting['observations'];
-  created: NewHistoricalAsset[] = [];
-  superseded: [string, string][] = [];
-  fills: [string, string][] = [];
-  failOn: ((a: NewHistoricalAsset) => boolean) | null = null;
-  private n = 0;
-  constructor(base: HistoryExisting) {
-    this.assets = [...base.assets];
-    this.observations = [...base.observations];
-  }
-  snapshot(): HistoryExisting {
-    return { assets: this.assets, observations: this.observations };
-  }
-  io(): HistoryIo {
-    return {
-      createAsset: async (a) => {
-        if (this.failOn?.(a)) return { error: 'not in this household' };
-        const id = `new-${++this.n}`;
-        this.created.push(a);
-        this.assets.push({
-          id,
-          type: a.type,
-          status: a.status,
-          nickname: a.nickname,
-          label: a.label,
-          last4: a.last4,
-          accountKind: a.accountKind,
-          joint: a.joint,
-          holderName: a.holderName,
-          currency: a.currency,
-          ownerName: a.ownerName,
-          bank: a.bank,
-          fd: a.fd
-            ? {
-                principal: a.fd.principal,
-                rate: a.fd.rate,
-                bookedOn: a.fd.bookedOn,
-                maturityOn: a.fd.maturityOn,
-                ref: a.fd.ref,
-                refLast4: null,
-              }
-            : null,
-        });
-        return { id };
-      },
-      insertObservation: async (o) => {
-        const id = `o-${this.observations.length + 1}`;
-        this.observations.push({
-          id,
-          assetId: o.assetId,
-          asOf: o.asOf,
-          amount: o.amount,
-          currency: o.currency,
-          source: 'workbook',
-          sourceRef: o.sourceRef,
-          confidence: 'imported_unverified',
-          supersededBy: null,
-        });
-        return id;
-      },
-      supersede: async (oldId, newId) => {
-        this.superseded.push([oldId, newId]);
-        const o = this.observations.find((x) => x.id === oldId)!;
-        o.supersededBy = newId;
-      },
-      fillFdNumber: async (assetId, ref) => {
-        const a = this.assets.find((x) => x.id === assetId);
-        if (!a?.fd || a.fd.ref) return false;
-        a.fd.ref = ref;
-        this.fills.push([assetId, ref]);
-        return true;
-      },
-    };
-  }
-}
 
 let fx: Fixture;
 let base: HistoryExisting;

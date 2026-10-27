@@ -3,8 +3,14 @@
  * shows the preview, the conflict choices, the progress and the coverage panel without any file being read or anything saved.
  */
 import { buildCoverage, type Coverage } from '@fwos/core';
-import type { HistoryConflict } from '@fwos/ingest';
-import type { HistoryView, ViewHistorical, ViewMonth } from './history-view';
+import type { AccountChoice, HistoryConflict, IdentityLine } from '@fwos/ingest';
+import {
+  applyPins,
+  type HistoryView,
+  type Pins,
+  type ViewHistorical,
+  type ViewMonth,
+} from './history-view';
 
 type Base = Pick<ViewMonth, 'tab' | 'month' | 'asOf' | 'asOfSource'>;
 
@@ -32,6 +38,8 @@ function month(
     created,
     unmatched,
     unmatchedRows: [],
+    identities: [],
+    assumed: { agree: 0, differ: 0, unchecked: 0 },
     checks: [
       {
         label: "The lines read add up to the tab's own total (F40)",
@@ -120,6 +128,121 @@ const HISTORICAL: ViewHistorical[] = [
   },
 ];
 
+const acct = (id: string, label: string, detail: string): AccountChoice => ({ id, label, detail });
+const NRE_1100 = acct('a-nre-1100', 'Cash-NRE-1100', 'NRE, ending 1100');
+const NRO_2200 = acct('a-nro-2200', 'Cash-NRO-2200', 'NRO, ending 2200');
+const NRE_3300 = acct('a-nre-3300', 'Cash-NRE-3300', 'NRE, ending 3300');
+const NRE_4400 = acct('a-nre-4400', 'Cash-NRE-4400', 'NRE, ending 4400');
+const NRO_4500 = acct('a-nro-4500', 'Cash-NRO-4500', 'NRO, ending 4500');
+const JOINT_0278 = acct('a-nre-0278', 'Cash-NRE JO-0278', 'NRE, joint, ending 0278');
+
+/** Invented lines the tabs do not identify: one of each kind of answer the real page gives. */
+const line = (
+  l: Partial<IdentityLine> & Pick<IdentityLine, 'id' | 'tab' | 'cell' | 'state'>,
+): IdentityLine => ({
+  label: 'Cash',
+  bank: 'Sample Bank',
+  owner: 'Anil',
+  amount: 700,
+  currency: 'INR',
+  position: 1,
+  of: 2,
+  accepted: l.state === 'certain',
+  account: null,
+  candidates: [],
+  others: [],
+  why: '',
+  fromTabs: [],
+  contradiction: null,
+  sameAs: [],
+  ...l,
+});
+
+const SEP_2021_LINES: IdentityLine[] = [
+  line({
+    id: 'Sep 2021|F10',
+    tab: 'Sep 2021',
+    cell: 'F10',
+    state: 'certain',
+    amount: 1_200,
+    account: NRE_1100,
+    candidates: [NRE_1100, NRO_2200],
+    why: 'Same position (1st of 2) in Sample Bank - Anil as in the June 2021 and Dec 2021 tabs, where it is the NRE account Cash-NRE-1100.',
+    fromTabs: ['June 2021', 'Dec 2021'],
+  }),
+  line({
+    id: 'Sep 2021|F11',
+    tab: 'Sep 2021',
+    cell: 'F11',
+    state: 'certain',
+    amount: 3_400,
+    position: 2,
+    account: NRO_2200,
+    candidates: [NRO_2200, NRE_1100],
+    why: 'Same position (2nd of 2) in Sample Bank - Anil as in the June 2021 and Dec 2021 tabs, where it is the NRO account Cash-NRO-2200.',
+    fromTabs: ['June 2021', 'Dec 2021'],
+  }),
+];
+const DEC_2021_LINES: IdentityLine[] = [
+  line({
+    id: 'Dec 2021|F12',
+    tab: 'Dec 2021',
+    cell: 'F12',
+    state: 'ambiguous',
+    amount: 650,
+    candidates: [NRE_1100, NRO_2200],
+    others: [JOINT_0278],
+    why: 'Could be the NRE account Cash-NRE-1100 or the NRO account Cash-NRO-2200. The order of the accounts in the Sep 2021 and Mar 2022 tabs does not settle it, and neither do the balances next door. Choose the account yourself.',
+    fromTabs: ['Sep 2021', 'Mar 2022'],
+    sameAs: ['Mar 2022|F12'],
+  }),
+  line({
+    id: 'Dec 2021|F14',
+    tab: 'Dec 2021',
+    cell: 'F14',
+    state: 'likely',
+    bank: 'Second Bank',
+    owner: 'Beena',
+    amount: 500,
+    position: 1,
+    of: 1,
+    account: NRE_3300,
+    candidates: [NRE_3300],
+    why: 'Second Bank - Beena has 1 line here against 1 in Sep 2021 and 2 in Mar 2022. Keeping the listed order and leaving out the account opened in between (the NRO account Cash-NRO-3400), this 1st line is the NRE account Cash-NRE-3300. Confirm it to use it.',
+    fromTabs: ['Sep 2021', 'Mar 2022'],
+  }),
+];
+const MAR_2022_LINES: IdentityLine[] = [
+  line({
+    id: 'Mar 2022|F12',
+    tab: 'Mar 2022',
+    cell: 'F12',
+    state: 'ambiguous',
+    amount: 700,
+    candidates: [NRE_1100, NRO_2200],
+    others: [JOINT_0278],
+    why: 'Could be the NRE account Cash-NRE-1100 or the NRO account Cash-NRO-2200. The order of the accounts in the Dec 2021 and Jan 2024 tabs does not settle it, and neither do the balances next door. Choose the account yourself.',
+    fromTabs: ['Dec 2021', 'Jan 2024'],
+    sameAs: ['Dec 2021|F12'],
+  }),
+  line({
+    id: 'Mar 2022|F20',
+    tab: 'Mar 2022',
+    cell: 'F20',
+    state: 'blocked',
+    bank: 'Third Bank',
+    amount: 4_200_000,
+    position: 1,
+    of: 2,
+    account: NRE_4400,
+    candidates: [NRE_4400, NRO_4500],
+    why: 'Not inferred. It would be the NRE account Cash-NRE-4400 (its place in the Dec 2021 and Jan 2024 tabs), but its balance of ₹42,00,000 is far from what the NRE account Cash-NRE-4400 held next door (₹800 in Dec 2021 and ₹900 in Jan 2024). Choose the account yourself.',
+    fromTabs: ['Dec 2021', 'Jan 2024'],
+    contradiction:
+      'Its balance of ₹42,00,000 is far from what the NRE account Cash-NRE-4400 held next door (₹800 in Dec 2021 and ₹900 in Jan 2024).',
+  }),
+];
+
 const BASE: HistoryView = {
   months: [
     month(
@@ -135,6 +258,7 @@ const BASE: HistoryView = {
       15,
       10,
       3,
+      { identities: SEP_2021_LINES },
     ),
     month(
       { tab: 'Dec 2021', month: '2021-12', asOf: '2021-12-31', asOfSource: 'month_end' },
@@ -142,7 +266,7 @@ const BASE: HistoryView = {
       16,
       11,
       3,
-      { verdict: 'mismatch', defaultSelected: false },
+      { verdict: 'mismatch', defaultSelected: false, identities: DEC_2021_LINES },
     ),
     month(
       { tab: 'Mar 2022', month: '2022-03', asOf: '2022-03-31', asOfSource: 'month_end' },
@@ -151,6 +275,7 @@ const BASE: HistoryView = {
       11,
       3,
       {
+        identities: MAR_2022_LINES,
         counts: { new: 16, identical: 0, conflicts: 1, copyDropped: 0, checks: 2 },
         unmatchedRows: [
           {
@@ -254,12 +379,17 @@ const BASE: HistoryView = {
     unmatched: 14,
     newValues: 71,
     identicalValues: 34,
+    identities: { certain: 0, likely: 0, pinned: 0, open: 0, blocked: 0, leftOut: 0 },
+    assumed: { agree: 0, differ: 0, unchecked: 0 },
   },
 };
 
 /** The sample preview; choosing a month for the tab in doubt makes it an ordinary month, as the real page does. */
-export function demoHistoryView(overrides: Record<string, string> = {}): HistoryView {
-  const v = structuredClone(BASE);
+export function demoHistoryView(
+  overrides: Record<string, string> = {},
+  pins: Pins = {},
+): HistoryView {
+  const v = applyPins(structuredClone(BASE), pins);
   for (const m of v.months) {
     const ym = overrides[m.tab];
     if (!ym) continue;

@@ -10,6 +10,8 @@
  *  - a tab that cannot be what its title says (out of order among the tabs, or holding deposits that start after the month it
  *    stands for) is flagged, left out of the timeline and not selected by default; a "Copy of" tab is never allowed to win over its
  *    original;
+ *  - a savings or cash line the tab does not identify (a plain "Cash" where the bank has an NRE and an NRO account) is identified from the
+ *    other tabs (history-identity.ts), or by what the person chose; see "pins";
  *  - nothing is invented: a deposit whose tab gives no start date keeps an empty start; a deposit that left is closed on the first
  *    month it is missing from, flagged as estimated; lines two accounts could be are listed, not written.
  */
@@ -30,7 +32,17 @@ import {
   type SummaryLine,
 } from './history-layout';
 import {
+  accountWords,
+  inferIdentities,
+  type IdentityBasis,
+  type IdentityFact,
+  type IdentityState,
+  type IdentLine,
+  type Inference,
+} from './history-identity';
+import {
   bankKey,
+  cashPool,
   fdKey,
   matchDeposits,
   matchOther,
@@ -74,6 +86,13 @@ export interface HistoryOptions {
   monthOverrides?: Record<string, string>;
   /** a deposit that starts more than this many days after the end of its tab's month makes the tab suspect (Settings) */
   startsAfterDays?: number;
+  /**
+   * The person's answers for savings or cash lines the tab does not identify: line id (`tab|cell`) to the id of the account on file,
+   * or '' to leave the line out. Sent back by the page with every request, so a re-import gives the same answer.
+   */
+  pins?: Record<string, string>;
+  /** Settings: how the other tabs are used to identify a line (defaults from the built-in configuration) */
+  identity?: { jumpFactor?: number; jumpFloor?: number; tieRatio?: number };
 }
 
 /** Source references: a value written by this importer is recognised by its reference. */
@@ -101,6 +120,56 @@ export interface UnmatchedRow {
   why: 'not_on_file' | 'ambiguous' | 'unread' | 'not_created';
 }
 
+/** How the account of a savings or cash line was found when the tab itself did not say which. */
+export interface FoundIdentity {
+  how: 'inferred' | 'pinned' | 'recorded';
+  basis: IdentityBasis | 'pin' | 'recorded';
+  /** the tabs the account was worked out from */
+  fromTabs: string[];
+  text: string;
+}
+
+/** A savings or cash line the tab does not identify, and what became of it. */
+export interface IdentityLine {
+  /** `tab|cell`: also the key of a person's answer */
+  id: string;
+  tab: string;
+  cell: string;
+  label: string;
+  bank: string | null;
+  owner: string;
+  amount: number | null;
+  currency: 'INR' | 'SGD';
+  /** place among that person's lines at the bank in this tab */
+  position: number;
+  of: number;
+  /**
+   * certain: worked out from the tabs on both sides and used; likely: worked out less surely, not used until accepted;
+   * pinned: chosen by the person; ambiguous: more than one account fits; blocked: a contradiction stopped the inference;
+   * left_out: the person left it out
+   */
+  state: IdentityState | 'pinned' | 'left_out';
+  /** the line is written to `account` when this month is imported */
+  accepted: boolean;
+  /** the account it is (certain, pinned, accepted) or is probably (likely) */
+  account: AccountChoice | null;
+  /** the accounts that fit, then the others the person may choose */
+  candidates: AccountChoice[];
+  others: AccountChoice[];
+  why: string;
+  fromTabs: string[];
+  contradiction: string | null;
+  /** the same label at the same position in other tabs, which the person may answer alike */
+  sameAs: string[];
+}
+
+export interface AccountChoice {
+  id: string;
+  label: string;
+  /** "NRE, joint, ending 0278" */
+  detail: string;
+}
+
 export interface WriteObs {
   /** tab and cell: stable */
   id: string;
@@ -120,6 +189,8 @@ export interface WriteObs {
   /** a fund's value kept only to check the statement against */
   check: boolean;
   status: 'new' | 'identical' | 'conflict' | 'copy_dropped';
+  /** the account was inferred from other tabs or chosen by the person: said on the stored value's note */
+  identity?: { how: 'inferred' | 'pinned'; note: string };
 }
 
 export interface HistoryConflict {
@@ -217,6 +288,10 @@ export interface HistoryMonth {
   defaultSelected: boolean;
   /** the historical accounts and deposits (keys in `historical`) this month's lines belong to */
   groupKeys: string[];
+  /** savings and cash lines the tab does not identify, and what the other tabs say about each */
+  identities: IdentityLine[];
+  /** lines matched only because they do not say "joint": whether the other tabs agree (a check; nothing is changed by it) */
+  assumed: { agree: number; differ: number; unchecked: number };
   /** rows to write: kept on the plan, left out of what is sent to the browser */
   writes: WriteObs[];
   fdRefFills: { assetId: string; ref: string; cell: string }[];
@@ -236,6 +311,17 @@ export interface HistorySummary {
   unmatched: number;
   newValues: number;
   identicalValues: number;
+  /** savings or cash lines the tabs do not identify, by what became of them (copies are not counted) */
+  identities: {
+    certain: number;
+    likely: number;
+    pinned: number;
+    open: number;
+    blocked: number;
+    leftOut: number;
+  };
+  /** lines matched only because they do not say "joint", by whether the other tabs agree */
+  assumed: { agree: number; differ: number; unchecked: number };
 }
 
 export interface HistoryPlan {
@@ -663,14 +749,22 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
     groupKey: string | null;
     why?: UnmatchedRow['why'];
     reason?: string;
+    /** a savings or cash line that could be more than one account: the ids of the accounts on file it could be */
+    candidates?: string[];
+    /** how the account was found when the line itself did not say which */
+    found?: FoundIdentity | undefined;
+    /** what the other tabs say about the line, whether or not it is used */
+    inference?: Inference;
+    /** the person chose to leave the line out */
+    leftOut?: boolean;
+    /** matched only because the line does not say "joint": the accounts it could have been */
+    assumedFrom?: string[];
+    assumption?: 'agree' | 'differ' | 'unchecked';
   }
-  const placed = new Map<string, Placed[]>();
-  const groups = new Map<
-    string,
-    { kind: 'fd' | 'cash'; rows: { t: TabRead; row: HistRow }[]; ambiguous: boolean }
-  >();
+  const cashLike = (r: HistRow) => r.kind === 'cash' || r.kind === 'cash_sg' || r.kind === 'held';
+  const lineIdOf = (tab: string, r: HistRow) => `${tab}|${r.cell}`;
+  const staged = new Map<string, Placed[]>();
   for (const t of read) {
-    const list: Placed[] = [];
     const deposits = matchDeposits(t.rows, existing.assets);
     // the same deposit number twice in one tab: neither line can be trusted to be which
     const refCount = new Map<string, number>();
@@ -731,7 +825,13 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
             reason: 'The Singapore dollar balance could not be read from the note.',
           };
         else if (m.status === 'matched') {
-          p = { row: r, status: 'matched', assetId: m.assetId, groupKey: null };
+          p = {
+            row: r,
+            status: 'matched',
+            assetId: m.assetId,
+            groupKey: null,
+            ...(m.assumedFrom ? { assumedFrom: m.assumedFrom } : {}),
+          };
           assignedTo.set(m.assetId, (assignedTo.get(m.assetId) ?? 0) + 1);
         } else if (m.status === 'ambiguous')
           p = {
@@ -741,8 +841,9 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
             groupKey: null,
             why: 'ambiguous',
             reason: m.reason,
+            ...(cashLike(r) && m.candidates ? { candidates: m.candidates } : {}),
           };
-        else if (r.kind === 'cash' || r.kind === 'cash_sg' || r.kind === 'held')
+        else if (cashLike(r))
           p = {
             row: r,
             status: 'group',
@@ -774,13 +875,16 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
           assetId: null,
           why: 'ambiguous',
           reason: 'Two lines of this tab fit the same account on file, so neither was used.',
+          ...(cashLike(p.row)
+            ? { candidates: cashPool(p.row, existing.assets).map((a) => a.id) }
+            : {}),
         } satisfies Partial<Placed>);
     // two lines that would make the same new account
     const seenGroup = new Map<string, number>();
     for (const p of stage)
       if (p.status === 'group' && p.groupKey?.startsWith('cash|'))
         seenGroup.set(p.groupKey, (seenGroup.get(p.groupKey) ?? 0) + 1);
-    for (const p of stage) {
+    for (const p of stage)
       if (p.status === 'group' && p.groupKey?.startsWith('cash|') && seenGroup.get(p.groupKey)! > 1)
         Object.assign(p, {
           status: 'unmatched',
@@ -789,7 +893,205 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
           reason:
             'Two lines of this tab look the same, so they cannot be followed from month to month.',
         } satisfies Partial<Placed>);
-      list.push(p);
+    staged.set(t.title, stage);
+  }
+
+  // ---- which account is a line the tab does not identify? ---------------------------------------
+  // A savings or cash line at a bank where several accounts fit is identified from the other tabs of the same workbook: first what the
+  // person chose (pins), then what an earlier import already wrote for that very cell, then the tabs around it (history-identity.ts).
+  const pins = opts.pins ?? {};
+  const refAsset = new Map<string, string>();
+  for (const o of existing.observations)
+    if ((o.sourceRef ?? '').startsWith(HIST_REF)) refAsset.set(o.sourceRef!, o.assetId);
+  const idCfg = {
+    jumpFactor: opts.identity?.jumpFactor ?? DEFAULT_CONFIG.estimates.historyJumpFactor,
+    jumpFloor: opts.identity?.jumpFloor ?? DEFAULT_CONFIG.estimates.historyJumpFloor,
+    tieRatio: opts.identity?.tieRatio ?? DEFAULT_CONFIG.estimates.historyTieRatio,
+  };
+  /** the accounts a person may choose for a line: every account of that bank and person that does not contradict what it states */
+  const poolOf = new Map<string, string[]>();
+  for (const t of read)
+    for (const p of staged.get(t.title)!) {
+      if (!p.candidates) continue;
+      const lineId = lineIdOf(t.title, p.row);
+      const pool = [
+        ...new Set([...p.candidates, ...cashPool(p.row, existing.assets).map((a) => a.id)]),
+      ];
+      poolOf.set(lineId, pool);
+      const ref = `${HIST_REF}${t.overridden ? formatMonthTitle(t.ym) : t.title}:${p.row.cell}`;
+      const pin = Object.hasOwn(pins, lineId) ? pins[lineId]! : undefined;
+      if (pin === '') {
+        p.leftOut = true;
+        p.reason = 'You chose to leave this line out.';
+      } else if (pin !== undefined && pool.includes(pin)) {
+        Object.assign(p, {
+          status: 'matched',
+          assetId: pin,
+          found: { how: 'pinned', basis: 'pin', fromTabs: [], text: '' },
+        } satisfies Partial<Placed>);
+      } else if (pin !== undefined) {
+        t.warnings.push(
+          `The account you chose for ${p.row.cell} no longer fits that line, so the choice was ignored.`,
+        );
+      }
+      const written = refAsset.get(ref);
+      if (p.status === 'unmatched' && !p.leftOut && written && pool.includes(written))
+        Object.assign(p, {
+          status: 'matched',
+          assetId: written,
+          found: { how: 'recorded', basis: 'recorded', fromTabs: [], text: '' },
+        } satisfies Partial<Placed>);
+    }
+
+  const existingById0 = new Map(existing.assets.map((a) => [a.id, a]));
+  const facts = new Map<string, IdentityFact>();
+  for (const a of existing.assets)
+    facts.set(`asset:${a.id}`, {
+      label: a.label ?? a.nickname,
+      accountKind: a.accountKind === 'NRE' || a.accountKind === 'NRO' ? a.accountKind : null,
+      last4: a.last4,
+      joint: a.joint,
+    });
+  const identLines: IdentLine[] = [];
+  const posOf = new Map<string, { pos: number; of: number; group: string; name: string }>();
+  const groupOf = (r: HistRow) =>
+    `${r.kind === 'held' ? 'held' : 'own'}|${bankKey(r.bank)}|${personKey(r.ownerAssumed ? '' : r.ownerName)}|${personKey(r.holderName)}|${r.currency}`;
+  for (const t of read) {
+    const next = new Map<string, number>();
+    const total = new Map<string, number>();
+    const stage = staged.get(t.title)!;
+    for (const p of stage)
+      if (cashLike(p.row)) total.set(groupOf(p.row), (total.get(groupOf(p.row)) ?? 0) + 1);
+    for (const p of stage) {
+      const r = p.row;
+      if (!cashLike(r)) continue;
+      const g = groupOf(r);
+      const pos = (next.get(g) ?? 0) + 1;
+      next.set(g, pos);
+      const lineId = lineIdOf(t.title, r);
+      const name = `${r.bank ?? 'Account'} - ${r.holderName ?? r.ownerName}`;
+      posOf.set(lineId, { pos, of: total.get(g)!, group: g, name });
+      let identity: string | null = null;
+      let specific = false;
+      if (p.status === 'matched') {
+        identity = `asset:${p.assetId}`;
+        specific = true;
+      } else if (p.status === 'group') {
+        identity = `group:${p.groupKey}`;
+        specific = !!(
+          r.accountKind ||
+          r.last4 ||
+          !['', 'cash'].includes(r.label.toLowerCase().replace(/[^a-z0-9]+/g, ''))
+        );
+        facts.set(identity, {
+          label: r.label,
+          accountKind: r.accountKind,
+          last4: r.last4,
+          joint: r.joint,
+        });
+      } else if (!p.candidates || p.leftOut) identity = `line:${lineId}`;
+      identLines.push({
+        id: lineId,
+        tab: t.title,
+        month: ymKey(t.ym),
+        witness: !t.copyOf && !t.doubt,
+        inferable: !t.doubt,
+        group: g,
+        groupName: name,
+        pos,
+        label: r.label,
+        amountInr: Number.isNaN(r.amount) ? 0 : r.amount * (r.fxRate ?? 1),
+        identity,
+        specific,
+        candidates: identity === null ? p.candidates!.map((id) => `asset:${id}`) : [],
+      });
+    }
+  }
+  const inferred = inferIdentities(identLines, { facts, ...idCfg });
+  for (const t of read)
+    for (const p of staged.get(t.title)!) {
+      if (p.status !== 'unmatched' || !p.candidates || p.leftOut) continue;
+      const inf = inferred.get(lineIdOf(t.title, p.row));
+      if (!inf) continue;
+      p.inference = inf;
+      if (inf.state === 'certain' && inf.identity?.startsWith('asset:'))
+        Object.assign(p, {
+          status: 'matched',
+          assetId: inf.identity.slice('asset:'.length),
+          found: { how: 'inferred', basis: inf.basis, fromTabs: inf.fromTabs, text: inf.why },
+        } satisfies Partial<Placed>);
+      else if (inf.state === 'likely' && inf.identity)
+        p.reason =
+          `${p.reason ?? ''} The other tabs suggest ${accountWords(inf.identity, facts)}: confirm it under "Which account is this?" to use it.`.trim();
+    }
+  // Lines matched only because they do not say "joint" rest on an assumption. Check it against the other tabs, without changing
+  // anything: where the tabs point to a different account the month says so.
+  const assumedIds = new Map<string, string[]>();
+  for (const t of read)
+    for (const p of staged.get(t.title)!)
+      if (p.assumedFrom && p.status === 'matched')
+        assumedIds.set(lineIdOf(t.title, p.row), p.assumedFrom);
+  if (assumedIds.size > 0) {
+    const shadow = inferIdentities(
+      identLines.map((l) =>
+        assumedIds.has(l.id)
+          ? {
+              ...l,
+              identity: null,
+              specific: false,
+              candidates: assumedIds.get(l.id)!.map((i) => `asset:${i}`),
+            }
+          : l,
+      ),
+      { facts, ...idCfg },
+    );
+    for (const t of read)
+      for (const p of staged.get(t.title)!) {
+        if (!p.assumedFrom || p.status !== 'matched') continue;
+        const sh = shadow.get(lineIdOf(t.title, p.row));
+        const sure = sh && (sh.state === 'certain' || sh.state === 'likely') && sh.identity;
+        if (!sure) p.assumption = 'unchecked';
+        else if (sh.identity === `asset:${p.assetId}`) p.assumption = 'agree';
+        else {
+          p.assumption = 'differ';
+          t.warnings.push(
+            `${p.row.cell}: matched to ${existingById0.get(p.assetId!)?.label ?? 'an account'} because the line does not say "joint", but the other tabs point to ${accountWords(sh.identity!, facts)} (${sh.fromTabs.join(', ')}). Check it.`,
+          );
+        }
+      }
+  }
+  // an account chosen or inferred for one line must not also belong to another line of the same tab
+  for (const t of read) {
+    const stage = staged.get(t.title)!;
+    const count = new Map<string, number>();
+    for (const p of stage)
+      if (p.status === 'matched' && p.assetId && p.row.kind !== 'fd')
+        count.set(p.assetId, (count.get(p.assetId) ?? 0) + 1);
+    for (const p of stage)
+      if (
+        p.found &&
+        p.found.how !== 'recorded' &&
+        p.status === 'matched' &&
+        (count.get(p.assetId!) ?? 0) > 1
+      )
+        Object.assign(p, {
+          status: 'unmatched',
+          assetId: null,
+          why: 'ambiguous',
+          reason:
+            'Another line of this tab already belongs to that account, so this one was not used.',
+          found: undefined,
+        } satisfies Partial<Placed>);
+  }
+
+  const placed = new Map<string, Placed[]>();
+  const groups = new Map<
+    string,
+    { kind: 'fd' | 'cash'; rows: { t: TabRead; row: HistRow }[]; ambiguous: boolean }
+  >();
+  for (const t of read) {
+    const list = staged.get(t.title)!;
+    for (const p of list)
       if (p.status === 'group' && !t.copyOf) {
         const g = groups.get(p.groupKey!) ?? {
           kind: p.row.kind === 'fd' ? ('fd' as const) : ('cash' as const),
@@ -799,7 +1101,6 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
         g.rows.push({ t, row: p.row });
         groups.set(p.groupKey!, g);
       }
-    }
     placed.set(t.title, list);
   }
 
@@ -935,6 +1236,38 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
     obsByAsset.set(o.assetId, [...(obsByAsset.get(o.assetId) ?? []), o]);
   const labelOf = new Map(existing.assets.map((a) => [a.id, a.label ?? a.nickname]));
   const existingById = new Map(existing.assets.map((a) => [a.id, a]));
+  const choiceOf = (id: string): AccountChoice => {
+    const a = existingById.get(id);
+    return {
+      id,
+      label: a?.label ?? a?.nickname ?? 'Account',
+      detail: [
+        a?.accountKind === 'NRE' || a?.accountKind === 'NRO' ? a.accountKind : null,
+        a?.joint ? 'joint' : null,
+        a?.last4 ? `ending ${a.last4}` : null,
+      ]
+        .filter(Boolean)
+        .join(', '),
+    };
+  };
+  const plainLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  // the same label at the same place in other tabs, which a person may answer alike
+  const sameIndex = new Map<string, string[]>();
+  for (const t of read)
+    for (const p of staged.get(t.title)!) {
+      if (!p.candidates || p.found?.how === 'recorded') continue;
+      const id = lineIdOf(t.title, p.row);
+      const at = posOf.get(id);
+      if (!at) continue;
+      const k = `${at.group}|${plainLabel(p.row.label)}|${at.pos}`;
+      sameIndex.set(k, [...(sameIndex.get(k) ?? []), id]);
+    }
+  const basisWords: Record<string, string> = {
+    position: 'same position in the group on both sides',
+    order: 'the order of the accounts',
+    balance: 'the closer balance',
+    relaxed: 'the accounts left over',
+  };
   const conflicts: HistoryConflict[] = [];
   const months: HistoryMonth[] = [];
   const originals = new Map<string, HistoryMonth>();
@@ -955,10 +1288,60 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
     const groupKeys = new Set<string>();
     const fdRefFills: HistoryMonth['fdRefFills'] = [];
     const planned = new Map<string, number>();
+    const identities: IdentityLine[] = [];
     for (const p of list) {
       const r = p.row;
       const assetId = p.assetId;
       let groupKey: string | null = null;
+      if (p.candidates && p.found?.how !== 'recorded') {
+        const id = lineIdOf(t.title, r);
+        const at = posOf.get(id)!;
+        const inf = p.inference;
+        const strip = (x: string) => x.replace(/^asset:/, '');
+        const state: IdentityLine['state'] = p.leftOut
+          ? 'left_out'
+          : p.found?.how === 'pinned'
+            ? 'pinned'
+            : p.found?.how === 'inferred'
+              ? 'certain'
+              : (inf?.state ?? 'ambiguous');
+        const fit =
+          inf && state !== 'pinned' && state !== 'left_out'
+            ? inf.candidates.map(strip)
+            : p.candidates;
+        const proposed =
+          p.status === 'matched' ? p.assetId : inf?.identity ? strip(inf.identity) : null;
+        const pool = poolOf.get(id) ?? [];
+        const k = `${at.group}|${plainLabel(r.label)}|${at.pos}`;
+        identities.push({
+          id,
+          tab: t.title,
+          cell: r.cell,
+          label: r.label,
+          bank: r.bank,
+          owner: r.holderName ?? r.ownerName,
+          amount: Number.isNaN(r.amount) ? null : r.amount,
+          currency: r.currency,
+          position: at.pos,
+          of: at.of,
+          state,
+          accepted: p.status === 'matched',
+          account: proposed ? choiceOf(proposed) : null,
+          candidates: fit.map(choiceOf),
+          others: pool.filter((x) => !fit.includes(x)).map(choiceOf),
+          why:
+            state === 'pinned'
+              ? 'You chose this account.'
+              : state === 'left_out'
+                ? 'You chose to leave this line out.'
+                : state === 'certain'
+                  ? p.found!.text
+                  : (inf?.why ?? p.reason ?? ''),
+          fromTabs: inf?.fromTabs ?? p.found?.fromTabs ?? [],
+          contradiction: inf?.contradiction ?? null,
+          sameAs: (sameIndex.get(k) ?? []).filter((x) => x !== id),
+        });
+      }
       if (p.status === 'group') {
         const hist = eligible.get(p.groupKey!);
         if (hist) {
@@ -1014,6 +1397,17 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
         asOf,
         check: isFund,
         status: 'new',
+        ...(p.found && p.found.how !== 'recorded'
+          ? {
+              identity: {
+                how: p.found.how,
+                note:
+                  p.found.how === 'pinned'
+                    ? `Account not stated on the sheet: chosen by you as ${labelOf.get(assetId!) ?? 'this account'} when importing the monthly tabs.`
+                    : `Account not stated on the sheet: inferred as ${labelOf.get(assetId!) ?? 'this account'} from the ${p.found.fromTabs.join(' and ')} tab${p.found.fromTabs.length > 1 ? 's' : ''} (${basisWords[p.found.basis] ?? p.found.basis}).`,
+              },
+            }
+          : {}),
       };
       const dupKey = `${assetId ?? groupKey}|${asOf}`;
       planned.set(dupKey, (planned.get(dupKey) ?? 0) + 1);
@@ -1150,6 +1544,12 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
       counts,
       selectable: true,
       defaultSelected: sel,
+      identities,
+      assumed: {
+        agree: list.filter((p) => p.assumption === 'agree').length,
+        differ: list.filter((p) => p.assumption === 'differ').length,
+        unchecked: list.filter((p) => p.assumption === 'unchecked').length,
+      },
       writes,
       groupKeys: [...groupKeys],
       fdRefFills,
@@ -1180,7 +1580,30 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
     unmatched: real.reduce((s, m) => s + m.unmatched, 0),
     newValues: real.reduce((s, m) => s + m.counts.new, 0),
     identicalValues: real.reduce((s, m) => s + m.counts.identical, 0),
+    identities: {
+      certain: 0,
+      likely: 0,
+      pinned: 0,
+      open: 0,
+      blocked: 0,
+      leftOut: 0,
+    },
+    assumed: {
+      agree: real.reduce((s, m) => s + m.assumed.agree, 0),
+      differ: real.reduce((s, m) => s + m.assumed.differ, 0),
+      unchecked: real.reduce((s, m) => s + m.assumed.unchecked, 0),
+    },
   };
+  for (const m of real)
+    for (const l of m.identities) {
+      const c = summary.identities;
+      if (l.state === 'certain') c.certain++;
+      else if (l.state === 'likely') c.likely++;
+      else if (l.state === 'pinned') c.pinned++;
+      else if (l.state === 'blocked') c.blocked++;
+      else if (l.state === 'left_out') c.leftOut++;
+      else c.open++;
+    }
   void titleOf;
   void isoDate;
   return { months, skipped, historical, conflicts, renewals, summary };

@@ -70,3 +70,13 @@ export * from './history';
 export * from './history-import';
 export { bankKey, fdKey, type ExistingAsset } from './history-match';
 export { ymKey } from './history-layout';
+export {
+  accountWords,
+  inferIdentities,
+  type IdentityBasis,
+  type IdentityFact,
+  type IdentityOptions,
+  type IdentityState,
+  type IdentLine,
+  type Inference,
+} from './history-identity';

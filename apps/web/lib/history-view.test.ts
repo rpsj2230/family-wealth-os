@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { demoCoverage, demoHistoryView } from './demo-history';
 import {
+  allIdentityLines,
+  applyPins,
   asOfText,
+  chooseAccount,
+  identityChip,
+  identityGroups,
+  identityHeading,
+  identityHeadline,
+  sharedLines,
+  sharedState,
   checkText,
   conflictsOf,
   conflictText,
@@ -105,5 +114,89 @@ describe('history view', () => {
     expect(c.totals.accounts).toBe(6);
     expect(c.totals.withGaps).toBeGreaterThan(0);
     expect(c.rows.find((r) => r.label === 'Cash-NRE-1100')!.gapMonths).toContain('2021-08');
+  });
+
+  describe('lines the tabs do not identify', () => {
+    it('lists the months that have some, oldest first, and counts what became of them in the sample', () => {
+      expect(identityGroups(v).map((g) => [g.tab, g.lines.length])).toEqual([
+        ['Sep 2021', 2],
+        ['Dec 2021', 2],
+        ['Mar 2022', 2],
+      ]);
+      expect(v.summary.identities).toEqual({
+        certain: 2,
+        likely: 1,
+        pinned: 0,
+        open: 2,
+        blocked: 1,
+        leftOut: 0,
+      });
+      expect(identityHeadline(v.summary.identities)).toBe(
+        '2 savings lines identified from the other tabs; 1 to confirm; 3 still need your choice',
+      );
+      expect(
+        identityHeadline({ certain: 0, likely: 0, pinned: 0, open: 0, blocked: 0, leftOut: 0 }),
+      ).toBeNull();
+    });
+
+    it('marks how each was found with a word, not only a colour', () => {
+      const word = (state: string) => identityChip({ state } as never).word;
+      expect(word('certain')).toBe('inferred');
+      expect(word('likely')).toBe('inferred, likely');
+      expect(word('ambiguous')).toBe('which account?');
+      expect(word('blocked')).toBe('not inferred');
+      expect(word('pinned')).toBe('chosen by you');
+    });
+
+    it('heads a line with its cell, bank, person, label and balance', () => {
+      const l = allIdentityLines(v).find((x) => x.id === 'Mar 2022|F12')!;
+      expect(identityHeading(l)).toBe('F12: Sample Bank (Anil), Cash, ₹700');
+    });
+
+    it('a choice for one line is applied to that line; for its twins only when asked', () => {
+      const a = allIdentityLines(v).find((x) => x.id === 'Mar 2022|F12')!;
+      expect(chooseAccount({}, v, a, 'a-nro-2200', false)).toEqual({
+        'Mar 2022|F12': 'a-nro-2200',
+      });
+      expect(chooseAccount({}, v, a, 'a-nro-2200', true)).toEqual({
+        'Mar 2022|F12': 'a-nro-2200',
+        'Dec 2021|F12': 'a-nro-2200',
+      });
+      // taking a choice back
+      expect(chooseAccount({ 'Mar 2022|F12': 'a-nro-2200' }, v, a, undefined, false)).toEqual({});
+      // an account that is not one of the twin's choices is not forced on it
+      expect(sharedLines(v, a, 'a-nre-3300')).toEqual([]);
+      expect(sharedState({ 'Mar 2022|F12': 'a-nro-2200' }, v, a)).toEqual({ count: 1, all: false });
+      expect(
+        sharedState({ 'Mar 2022|F12': 'a-nro-2200', 'Dec 2021|F12': 'a-nro-2200' }, v, a),
+      ).toEqual({ count: 1, all: true });
+    });
+
+    it('a sure line the person unticks is left out; a chosen account is used and counted as matched', () => {
+      const before = v.months.find((m) => m.tab === 'Sep 2021')!;
+      const w = applyPins(v, { 'Sep 2021|F10': '', 'Mar 2022|F12': 'a-nro-2200' });
+      const sep = w.months.find((m) => m.tab === 'Sep 2021')!;
+      expect(sep.identities[0]).toMatchObject({
+        state: 'left_out',
+        accepted: false,
+        account: null,
+      });
+      expect(sep.matched).toBe(before.matched - 1);
+      expect(sep.unmatched).toBe(before.unmatched + 1);
+      const mar = w.months.find((m) => m.tab === 'Mar 2022')!;
+      expect(mar.identities[0]).toMatchObject({
+        state: 'pinned',
+        accepted: true,
+        account: { id: 'a-nro-2200' },
+      });
+      expect(w.summary.identities).toMatchObject({ certain: 1, pinned: 1, leftOut: 1, open: 1 });
+      // the view it came from is not changed
+      expect(v.months.find((m) => m.tab === 'Mar 2022')!.identities[0]!.state).toBe('ambiguous');
+    });
+
+    it("ignores a choice that is not one of the line's accounts", () => {
+      const w = applyPins(v, { 'Mar 2022|F12': 'a-nre-9999' });
+      expect(w.months.find((m) => m.tab === 'Mar 2022')!.identities[0]!.state).toBe('ambiguous');
+    });
   });
 });

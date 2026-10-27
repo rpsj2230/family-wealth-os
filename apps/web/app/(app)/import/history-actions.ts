@@ -47,7 +47,29 @@ async function readSheet(formData: FormData) {
       error: 'The chosen months could not be read. Reload the page and try again.',
     } as const;
   }
-  return { bytes: Buffer.from(await file.arrayBuffer()), name: file.name, overrides } as const;
+  // the person's answers for lines the tabs do not identify: line id to account id, or '' to leave the line out
+  const pins: Record<string, string> = {};
+  try {
+    const raw = JSON.parse(String(formData.get('pins') ?? '{}')) as Record<string, unknown>;
+    for (const [id, v] of Object.entries(raw))
+      if (
+        typeof v === 'string' &&
+        id.length <= 140 &&
+        v.length <= 80 &&
+        (v === '' || /^[A-Za-z0-9_-]+$/.test(v))
+      )
+        pins[id] = v;
+  } catch {
+    return {
+      error: 'The chosen accounts could not be read. Reload the page and try again.',
+    } as const;
+  }
+  return {
+    bytes: Buffer.from(await file.arrayBuffer()),
+    name: file.name,
+    overrides,
+    pins,
+  } as const;
 }
 
 async function planFor(
@@ -55,6 +77,7 @@ async function planFor(
   householdId: string,
   bytes: Buffer,
   overrides: Record<string, string>,
+  pins: Record<string, string>,
 ): Promise<HistoryPlan> {
   const [{ existing, owners }, settings] = await Promise.all([
     loadHistoryExisting(supabase, householdId),
@@ -66,7 +89,13 @@ async function planFor(
     ...(owners[0] ? { defaultOwner: owners[0] } : {}),
     existing,
     monthOverrides: overrides,
+    pins,
     startsAfterDays: settings.config.estimates.historyStartsAfterDays,
+    identity: {
+      jumpFactor: settings.config.estimates.historyJumpFactor,
+      jumpFloor: settings.config.estimates.historyJumpFloor,
+      tieRatio: settings.config.estimates.historyTieRatio,
+    },
   });
 }
 
@@ -82,6 +111,7 @@ export async function previewHistory(formData: FormData): Promise<HistoryPreview
       householdId,
       f.bytes,
       f.overrides,
+      f.pins,
     );
     return { ok: true, fileName: f.name, view: toView(plan) };
   } catch {
@@ -109,7 +139,7 @@ export async function importHistoryMonth(formData: FormData): Promise<HistoryMon
   }
   const db = supabase as unknown as SupabaseClient;
   try {
-    const plan = await planFor(db, householdId, f.bytes, f.overrides);
+    const plan = await planFor(db, householdId, f.bytes, f.overrides, f.pins);
     const month = plan.months.find((m) => m.tab === tab);
     if (!month) return { ok: false, message: `The tab "${tab}" is not in this workbook.` };
     if (month.doubt)

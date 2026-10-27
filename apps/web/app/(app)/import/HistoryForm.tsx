@@ -17,8 +17,10 @@ import {
   importOrder,
   resultText,
   type HistoryView,
+  type Pins,
 } from '@/lib/history-view';
 import { finishHistory, importHistoryMonth, previewHistory } from './history-actions';
+import { HistoryIdentities } from './HistoryIdentities';
 import './history.css';
 
 type Stage = 'idle' | 'reading' | 'ready' | 'importing' | 'done';
@@ -45,27 +47,29 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [choices, setChoices] = useState<Record<string, ConflictChoice>>({});
+  const [pins, setPins] = useState<Pins>({});
   const [progress, setProgress] = useState({ done: 0, total: 0, current: '' });
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const stop = useRef(false);
 
-  const form = (extra: Record<string, string> = {}, ov = overrides) => {
+  const form = (extra: Record<string, string> = {}, ov = overrides, pn = pins) => {
     const fd = new FormData();
     fd.set('file', file);
     fd.set('overrides', JSON.stringify(ov));
+    fd.set('pins', JSON.stringify(pn));
     for (const [k, v] of Object.entries(extra)) fd.set(k, v);
     return fd;
   };
 
-  async function read(ov: Record<string, string>, changed?: string) {
+  async function read(ov: Record<string, string>, changed?: string, pn: Pins = pins) {
     setStage('reading');
     setError(null);
     let next: HistoryView;
     if (demo) {
       await wait(350);
-      next = demoHistoryView(ov);
+      next = demoHistoryView(ov, pn);
     } else {
-      const r = await previewHistory(form({}, ov));
+      const r = await previewHistory(form({}, ov, pn));
       if (!r.ok || !r.view) {
         setError(r.message ?? 'The file could not be read.');
         setStage(view ? 'ready' : 'idle');
@@ -93,6 +97,12 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
     else delete next[tab];
     setOverrides(next);
     void read(next, tab);
+  }
+
+  /** The person chose an account (or took the choice back): the plan is made again with it, so counts and writes follow. */
+  function choosePins(next: Pins) {
+    setPins(next);
+    void read(overrides, undefined, next);
   }
 
   async function runImport() {
@@ -301,6 +311,8 @@ export function HistoryForm({ file, demo = false }: { file: File; demo?: boolean
               })}
             </tbody>
           </table>
+
+          <HistoryIdentities view={view} pins={pins} busy={busy} onPins={choosePins} />
 
           {picked.length > 0 && (
             <section className="hist-block" aria-labelledby="hist-conf">

@@ -37,6 +37,12 @@ export interface AppConfig {
     sipMinInstalments: number;
     /** Import history: a monthly tab with a deposit that starts more than this many days after the month it is named for is flagged (probably a copy of a later month) */
     historyStartsAfterDays: number;
+    /** Import history: a line that sits where an account's balance in the neighbouring tabs is far from it is not matched to that account when its value is more than this many times higher or lower (and the difference is more than the floor) */
+    historyJumpFactor: number;
+    /** Import history: a difference of less than this many rupees is never called a jump */
+    historyJumpFloor: number;
+    /** Import history: of two accounts a line could be, the one whose neighbouring balances are at least this many times closer is taken as likely */
+    historyTieRatio: number;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -225,6 +231,9 @@ export const DEFAULT_CONFIG: AppConfig = {
     includeSip: true,
     sipMinInstalments: 3,
     historyStartsAfterDays: 62,
+    historyJumpFactor: 50,
+    historyJumpFloor: 100_000,
+    historyTieRatio: 3,
   },
   inbox: { trustedForwarders: [] },
   rates: {
@@ -434,6 +443,9 @@ export function configFromJson(raw: unknown): AppConfig {
       historyStartsAfterDays: Math.round(
         num(est.historyStartsAfterDays, d.estimates.historyStartsAfterDays, 0, 400),
       ),
+      historyJumpFactor: num(est.historyJumpFactor, d.estimates.historyJumpFactor, 2, 10_000),
+      historyJumpFloor: num(est.historyJumpFloor, d.estimates.historyJumpFloor, 0, 1_000_000_000),
+      historyTieRatio: num(est.historyTieRatio, d.estimates.historyTieRatio, 1, 100),
     },
     inbox: {
       trustedForwarders: (() => {

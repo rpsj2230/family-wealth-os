@@ -17,14 +17,31 @@ Writes are plain inserts, one marking an older value as replaced when the person
 - `observations`: `source = 'workbook'`, `confidence = 'imported_unverified'`, `source_ref = 'hist:<tab>:<cell>'` (the corrected month's name when the person chose the month of a tab: `hist:Feb 2026:F12`). A fund's figure uses `histfund:<tab>:<cell>`; `loadPortfolioData` leaves those out, so a fund's valuation never rests on the sheet. Read them for the "the sheet said" line with `source_ref like 'histfund:%'`.
 - `assets.from_history = true` for each closed account or deposit added; deposits also have `fixed_deposits.ended_on`, `ended_estimated` and `start_estimated` (migration `20261027000100_history.sql`). `ended_on` is read by the period gains (`endedOn`); other pages still use the maturity date for a closed deposit.
 
+## Identifying savings lines from other tabs
+
+`packages/ingest/src/history-identity.ts` (pure, tested in `history-identity.test.ts`; wired in `history.ts` right after the lines are matched).
+
+For each bank-and-person group, the cash lines of a tab are an ordered list. A tab whose lines are all identified (directly matched, or already written by an earlier import, or chosen by the person) is a witness. For a tab with a line the matcher left ambiguous (`candidates` = the accounts it narrowed to), the nearest witness before and after (by month, never a copy or a tab in doubt) decide:
+
+1. **Position, certain.** Same number of lines in both witnesses, listed the same way, so the line is the account at its position. Needs a witness on each side. One side only is *likely*.
+2. **Order with opened/closed accounts, likely.** Counts differ. Every assignment of accounts to the open lines is tried that gives the account present in both witnesses a line, uses only accounts present in either, and keeps the listed order; if one remains the line is likely. If none keeps the order or the must-have accounts, the same is tried without those two conditions (the line then says the order differs).
+3. **Balance tie-break, likely only.** Among the accounts still possible, the one whose neighbouring balances are closer by `estimates.historyTieRatio` (3) times.
+4. **Blocked, with the reason.** The position names an account the line itself rules out (stated NRE/NRO or last four); no assignment fits; or the balance is more than `estimates.historyJumpFactor` (50) times above or below what that account held in both neighbours **and** by more than `estimates.historyJumpFloor` (₹1,00,000). Blocked lines are listed and can still be chosen.
+
+Only *certain* lines are written without a decision. A person's answers travel as `pins` (line id `tab|cell` to account id, or `''` for "leave out") on every preview and import request; a pin is accepted only if the account is one of the accounts of that bank and person that do not contradict the line. A line whose `hist:<tab>:<cell>` value is already on file for one of those accounts keeps it (that is what makes a re-import give the same answer). The observation's note says the account was inferred or chosen (note text only).
+
+Separate check: a line matched only because it does not say "joint" (the matcher takes it to be an account that is not joint) is run through the same inference as a shadow; where the other tabs point to a different account the month's Notes say "Check it". Nothing is changed by it.
+
 ## Settings
 
 `estimates.historyStartsAfterDays` (Settings > Money rules > Estimated balances, default 62): how late after its month a deposit may start before a tab is flagged as probably a copy of a later month.
 
+`estimates.historyJumpFactor` (50), `estimates.historyJumpFloor` (₹1,00,000) and `estimates.historyTieRatio` (3): see above.
+
 ## When something looks wrong
 
 - **A month does not add up.** The line says by how much. Open the tab: usually a row the reader could not place (listed under "Lines that could not be matched" with its cell) or the sheet's own total is off. The month is not selected until you choose it yourself.
-- **A line is "ambiguous".** Two accounts or funds on file fit it (for example a plain "Cash" at a bank with an NRE and an NRO account). Give the account a last four digits or NRE/NRO on the sheet, or leave it.
+- **A line is "ambiguous".** Two accounts or funds on file fit it. For a savings or cash line (a plain "Cash" at a bank with an NRE and an NRO account) see "Identifying savings lines from other tabs" above. For a fund or a loan, give it a clearer name on the sheet, or leave it.
 - **A closed deposit that should not exist** (it was renewed, not closed). It is a record flagged `from_history`: open it on the Deposits page and correct its end date or status there. Nothing else refers to it.
 - **Undoing a month.** Values cannot be deleted (observations are append-only). Replace a wrong one by entering the right value for the same date in the Monthly update; the newer entry wins.
 

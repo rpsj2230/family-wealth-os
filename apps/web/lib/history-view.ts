@@ -4,7 +4,13 @@
  * for each month it imports).
  */
 import { describeMonths, formatInr, longDate, monthLabel } from '@fwos/core';
-import type { HistoryConflict, HistoryMonth, HistoryPlan, HistorySummary } from '@fwos/ingest';
+import type {
+  HistoryConflict,
+  HistoryMonth,
+  HistoryPlan,
+  HistorySummary,
+  IdentityLine,
+} from '@fwos/ingest';
 
 export type ViewMonth = Omit<HistoryMonth, 'writes' | 'fdRefFills' | 'groupKeys'>;
 
@@ -63,6 +69,175 @@ export function toView(plan: HistoryPlan): HistoryView {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+// ----------------------------------------------------------------------------------------------
+// Savings and cash lines the tab does not identify: what the other tabs say, and what the person chooses
+// ----------------------------------------------------------------------------------------------
+/** The person's answers: line id (`tab|cell`) to an account id, or '' for "leave this line out". Sent with every request. */
+export type Pins = Record<string, string>;
+
+export interface IdentityGroup {
+  tab: string;
+  month: string;
+  lines: IdentityLine[];
+}
+
+/** The months with lines to look at, oldest first. A copy of a tab is never imported, so its lines are not asked about. */
+export function identityGroups(v: HistoryView): IdentityGroup[] {
+  return v.months
+    .filter((m) => !m.copyOf && m.identities.length > 0)
+    .map((m) => ({ tab: m.tab, month: m.month, lines: m.identities }));
+}
+
+export const allIdentityLines = (v: HistoryView): IdentityLine[] =>
+  identityGroups(v).flatMap((g) => g.lines);
+
+/** The little label on a line: how the account was found, in words that do not need the colour. */
+export function identityChip(l: Pick<IdentityLine, 'state'>): {
+  word: string;
+  tone: 'ok' | 'info' | 'warn' | 'muted';
+} {
+  switch (l.state) {
+    case 'certain':
+      return { word: 'inferred', tone: 'ok' };
+    case 'likely':
+      return { word: 'inferred, likely', tone: 'info' };
+    case 'pinned':
+      return { word: 'chosen by you', tone: 'ok' };
+    case 'blocked':
+      return { word: 'not inferred', tone: 'warn' };
+    case 'left_out':
+      return { word: 'left out', tone: 'muted' };
+    default:
+      return { word: 'which account?', tone: 'warn' };
+  }
+}
+
+const amountText = (l: Pick<IdentityLine, 'amount' | 'currency'>): string =>
+  l.amount === null
+    ? 'no balance'
+    : l.currency === 'SGD'
+      ? `S$${l.amount.toLocaleString('en-IN')}`
+      : formatInr(l.amount, { decimals: l.amount % 1 ? 2 : 0 });
+
+/** "F29: ESAF (Rupash), Cash, ₹88" */
+export function identityHeading(l: IdentityLine): string {
+  return `${l.cell}: ${l.bank ?? 'Account'} (${l.owner}), ${l.label.trim() || 'Cash'}, ${amountText(l)}`;
+}
+
+/** The lines the same answer may be given to: same label at the same place in another tab, where the account is one of its choices. */
+export function sharedLines(v: HistoryView, l: IdentityLine, accountId: string): IdentityLine[] {
+  const ids = new Set(l.sameAs);
+  return allIdentityLines(v).filter(
+    (o) =>
+      ids.has(o.id) &&
+      [...o.candidates, ...o.others].some((c) => c.id === accountId) &&
+      o.state !== 'certain',
+  );
+}
+
+/** The answers after the person chooses an account for a line ('' leaves it out; undefined takes the choice back), and optionally for its twins. */
+export function chooseAccount(
+  pins: Pins,
+  v: HistoryView,
+  l: IdentityLine,
+  accountId: string | undefined,
+  alsoShared: boolean,
+): Pins {
+  const next = { ...pins };
+  const targets = [l, ...(alsoShared && accountId ? sharedLines(v, l, accountId) : [])];
+  for (const t of targets) {
+    if (accountId === undefined) delete next[t.id];
+    else next[t.id] = accountId;
+  }
+  return next;
+}
+
+/** Whether every twin of a line already has the same answer, and how many twins could take it. */
+export function sharedState(
+  pins: Pins,
+  v: HistoryView,
+  l: IdentityLine,
+): { count: number; all: boolean } {
+  const mine = pins[l.id];
+  if (!mine) return { count: 0, all: false };
+  const twins = sharedLines(v, l, mine);
+  return { count: twins.length, all: twins.length > 0 && twins.every((t) => pins[t.id] === mine) };
+}
+
+/** One sentence for the whole preview: what the other tabs settled and what is left for the person. */
+export function identityHeadline(s: HistorySummary['identities']): string | null {
+  const done = s.certain + s.pinned;
+  const todo = s.likely;
+  const open = s.open + s.blocked;
+  if (done + todo + open + s.leftOut === 0) return null;
+  const parts: string[] = [];
+  if (done > 0)
+    parts.push(
+      `${plural(done, 'savings line')} identified ${s.pinned > 0 && s.certain === 0 ? 'by you' : 'from the other tabs'}`,
+    );
+  if (todo > 0) parts.push(`${todo} to confirm`);
+  if (open > 0) parts.push(`${open} still need${open === 1 ? 's' : ''} your choice`);
+  if (s.leftOut > 0) parts.push(`${s.leftOut} left out`);
+  return parts.join('; ');
+}
+
+/**
+ * The public sample has no server to plan again, so a person's answers are applied to the sample's lines here: what a server would
+ * answer for the same choices. Counts of the month follow.
+ */
+export function applyPins(v: HistoryView, pins: Pins): HistoryView {
+  const out = structuredClone(v);
+  for (const m of out.months) {
+    for (const l of m.identities) {
+      const was = l.accepted;
+      const pin = Object.hasOwn(pins, l.id) ? pins[l.id]! : undefined;
+      if (pin === '') {
+        Object.assign(l, {
+          state: 'left_out',
+          accepted: false,
+          account: null,
+          why: 'You chose to leave this line out.',
+        });
+      } else if (pin !== undefined) {
+        const a = [...l.candidates, ...l.others].find((c) => c.id === pin);
+        if (a)
+          Object.assign(l, {
+            state: 'pinned',
+            accepted: true,
+            account: a,
+            why: 'You chose this account.',
+          });
+      }
+      if (l.accepted !== was) {
+        const d = l.accepted ? 1 : -1;
+        m.matched += d;
+        m.unmatched -= d;
+        m.counts.new += d;
+      }
+    }
+  }
+  out.summary = { ...out.summary, ...recount(out) };
+  return out;
+}
+
+function recount(v: HistoryView): Pick<HistorySummary, 'identities' | 'matched' | 'unmatched'> {
+  const c = { certain: 0, likely: 0, pinned: 0, open: 0, blocked: 0, leftOut: 0 };
+  for (const l of allIdentityLines(v)) {
+    if (l.state === 'certain') c.certain++;
+    else if (l.state === 'likely') c.likely++;
+    else if (l.state === 'pinned') c.pinned++;
+    else if (l.state === 'blocked') c.blocked++;
+    else if (l.state === 'left_out') c.leftOut++;
+    else c.open++;
+  }
+  const real = v.months.filter((m) => !m.copyOf);
+  return {
+    identities: c,
+    matched: real.reduce((s, m) => s + m.matched, 0),
+    unmatched: real.reduce((s, m) => s + m.unmatched, 0),
+  };
+}
 
 /** "28 months found, Jun 2021 to Oct 2026; 3 months do not add up; 12 closed deposits would be added; 5 conflicts". */
 export function headline(s: HistorySummary): string {

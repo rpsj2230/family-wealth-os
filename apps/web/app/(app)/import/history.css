@@ -147,6 +147,102 @@
   transition: width 0.2s ease;
 }
 
+/* ---- savings lines the tab does not identify ---- */
+.hist-ident-head {
+  font-weight: 600;
+  margin: 4px 0 8px;
+  overflow-wrap: anywhere;
+}
+.hist-ident-tab {
+  min-width: 0;
+}
+.hist-ident-tab summary {
+  overflow-wrap: anywhere;
+}
+.hist-ident-todo {
+  color: var(--warn-fg);
+}
+.hist-ident-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.hist-ident {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.hist-ident.blocked {
+  border-color: var(--warn-fg);
+}
+.hist-ident.ambiguous,
+.hist-ident.likely {
+  background: var(--soft);
+}
+.hist-ident p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.hist-ident-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+.hist-ident-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.hist-chip {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  background: var(--soft);
+  color: var(--muted);
+}
+.hist-chip.ok {
+  color: var(--ok-fg);
+  border-color: var(--ok-fg);
+}
+.hist-chip.info {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.hist-chip.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-fg);
+}
+.hist-ident-use,
+.hist-ident-also {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.hist-ident-pick {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.hist-ident-pick select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 /* ---- coverage panel ---- */
 .hist-cov {
   min-width: 0;

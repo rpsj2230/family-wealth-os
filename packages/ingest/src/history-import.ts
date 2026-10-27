@@ -13,8 +13,10 @@
 import {
   HIST_FUND_REF,
   type HistoricalAsset,
+  type HistoryConflict,
   type HistoryMonth,
   type HistoryPlan,
+  type WriteObs,
 } from './history';
 
 export interface NewHistoricalAsset {
@@ -131,6 +133,19 @@ function describe(h: HistoricalAsset): NewHistoricalAsset {
   };
 }
 
+/** The note stored with a value: why it replaces another, what a fund value is for, and that the account was not stated on the sheet. */
+function noteFor(w: WriteObs, conflict: HistoryConflict | undefined): string | null {
+  const parts = [
+    conflict
+      ? `Replaces ${inr(conflict.existing.amount)} (${conflict.existing.source}) on this date, as you chose when importing the monthly tabs.`
+      : w.ref.startsWith(HIST_FUND_REF)
+        ? 'The value in the monthly sheet, kept only to check the statement against.'
+        : null,
+    w.identity?.note ?? null,
+  ].filter((x): x is string => !!x);
+  return parts.length ? parts.join(' ') : null;
+}
+
 /**
  * Applies the month `tab` of `plan`. `choices` maps a conflict's id to the person's answer; a conflict with no answer keeps what is on
  * file. A failure on one line is reported and the rest of the month still goes in; running the month again finishes it.
@@ -210,11 +225,7 @@ export async function applyHistoryMonth(
         fxRate: w.fxRate,
         asOf: w.asOf,
         sourceRef: w.ref,
-        note: conflict
-          ? `Replaces ${inr(conflict.existing.amount)} (${conflict.existing.source}) on this date, as you chose when importing the monthly tabs.`
-          : w.ref.startsWith(HIST_FUND_REF)
-            ? 'The value in the monthly sheet, kept only to check the statement against.'
-            : null,
+        note: noteFor(w, conflict),
       });
       if (conflict) {
         await io.supersede(conflict.existing.id, id);

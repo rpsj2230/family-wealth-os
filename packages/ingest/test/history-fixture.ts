@@ -40,7 +40,7 @@ export interface TabSpec {
 
 export const sum = (rows: Spec[]) => rows.reduce((s, r) => s + (r.amount ?? 0), 0);
 
-function writeTab(wb: ExcelJS.Workbook, t: TabSpec) {
+export function writeTab(wb: ExcelJS.Workbook, t: TabSpec) {
   const ws = wb.addWorksheet(t.title);
   const set = (ref: string, v: ExcelJS.CellValue) => (ws.getCell(ref).value = v);
   if (t.era === 'old') {

@@ -81,9 +81,14 @@ export interface ExistingAsset {
 }
 
 export type Match =
-  | { status: 'matched'; assetId: string }
+  | {
+      status: 'matched';
+      assetId: string;
+      /** the account was chosen only because the line does not say "joint": the accounts it could have been (including joint ones) */
+      assumedFrom?: string[];
+    }
   | { status: 'none' }
-  | { status: 'ambiguous'; reason: string };
+  | { status: 'ambiguous'; reason: string; candidates?: string[] };
 
 /** "Yes Bank", "YES BANK Ltd." and "Yes" are one bank. */
 export function bankKey(name: string | null | undefined): string {
@@ -202,26 +207,32 @@ function pickOne(c: ExistingAsset[], what: string): Match {
       .slice(0, 4)
       .map((a) => a.label ?? a.nickname)
       .join('; ')}${c.length > 4 ? '; …' : ''}), so it was not guessed.`,
+    candidates: c.map((a) => a.id),
   };
 }
 
-function matchCash(row: HistRow, existing: ExistingAsset[]): Match {
+/**
+ * The accounts on file a savings or cash line could be, before anything is narrowed down: same bank, person and currency, and not an
+ * account whose last four digits or NRE/NRO kind differ from what the line states. Order is the order on file.
+ */
+export function cashPool(row: HistRow, existing: ExistingAsset[]): ExistingAsset[] {
   const wantType = row.kind === 'held' ? 'third_party_held' : 'bank_account';
-  let c = existing.filter(
+  return existing.filter(
     (a) =>
       a.type === wantType &&
       a.currency === row.currency &&
       bankKey(a.bank) === bankKey(row.bank) &&
       (row.kind === 'held'
         ? personKey(a.holderName) === personKey(row.holderName)
-        : row.ownerAssumed || personKey(a.ownerName) === personKey(row.ownerName)),
-  );
-  // an account whose last four digits or NRE/NRO kind differ from the line's is a different account, even when it is the only one
-  c = c.filter(
-    (a) =>
+        : row.ownerAssumed || personKey(a.ownerName) === personKey(row.ownerName)) &&
+      // an account whose last four digits or NRE/NRO kind differ from the line's is a different account, even when it is the only one
       !(row.last4 && a.last4 && a.last4 !== row.last4) &&
       !(row.accountKind && a.accountKind && a.accountKind !== row.accountKind),
   );
+}
+
+function matchCash(row: HistRow, existing: ExistingAsset[]): Match {
+  let c = cashPool(row, existing);
   if (c.length <= 1) return pickOne(c, 'accounts');
   // narrow by what the line says about itself, keeping the narrowing only while something is left
   if (row.last4) {
@@ -241,7 +252,13 @@ function matchCash(row: HistRow, existing: ExistingAsset[]): Match {
   }
   if (c.length > 1 && row.joint !== undefined) {
     const n = c.filter((a) => a.joint === row.joint);
-    if (n.length > 0) c = n;
+    if (n.length > 0) {
+      // a line that does not say "joint" is taken to be an account that is not; that is an assumption, and is reported as one
+      const assumed = !row.joint && n.length < c.length ? c.map((a) => a.id) : null;
+      c = n;
+      const m = pickOne(c, 'accounts');
+      return assumed && m.status === 'matched' ? { ...m, assumedFrom: assumed } : m;
+    }
   }
   return pickOne(c, 'accounts');
 }
