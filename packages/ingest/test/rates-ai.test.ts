@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRatesRequest, htmlToText, parseRatesResponse } from '../src/rates-ai';
+import { buildRatesRequest, focusRates, htmlToText, parseRatesResponse } from '../src/rates-ai';
 
 const wrap = (offers: unknown) => ({
   choices: [{ message: { content: JSON.stringify({ offers }) } }],
@@ -212,5 +212,29 @@ describe('the most you would put with one bank', () => {
   it('tells the reader about the ceiling', () => {
     const req = buildRatesRequest('groq', 'k', 'X', 'page', undefined, [], 10_000_000);
     expect(JSON.stringify(req.init.body)).toContain('1,00,00,000');
+  });
+});
+
+describe('reading a long bank page', () => {
+  const table = (title: string) =>
+    `<h3>${title}</h3><table>${Array.from({ length: 12 }, (_, i) => `<tr><td>${i + 1} year</td><td>6.${i}0%</td></tr>`).join('')}</table>`;
+  it('finds a rate table that sits far into a page full of menus', () => {
+    const html = `<html><title>FD rates</title><body>${'<li>Menu item and notices</li>'.repeat(3000)}${table('Below 3 Crore')}${'<p>Notice</p>'.repeat(500)}${table('3 Crore and above')}</body></html>`;
+    const text = htmlToText(html, 8000);
+    expect(text.length).toBeLessThanOrEqual(8200);
+    expect(text).toContain('Below 3 Crore');
+    expect(text).toContain('3 Crore and above');
+    expect(text).toContain('6.50%');
+  });
+  it('reads a table that the page carries as escaped markup in its text', () => {
+    const html =
+      '<div>&lt;table&gt;&lt;tr&gt;&lt;td class=&#34;x&#34;&gt;7 - 14 days&lt;/td&gt;&lt;td&gt;2.75%&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</div>';
+    const text = htmlToText(html);
+    expect(text).toContain('7 - 14 days');
+    expect(text).toContain('2.75%');
+    expect(text).not.toMatch(/<td|&#34;/);
+  });
+  it('leaves a short page alone', () => {
+    expect(focusRates('short 5% page', 1000)).toBe('short 5% page');
   });
 });

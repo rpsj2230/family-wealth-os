@@ -89,7 +89,20 @@ const TABLE: { bank: string; docs: RateDocs }[] = [
   {
     bank: 'HDFC Bank',
     docs: {
-      official: [],
+      // the bank's own pages: the fixed deposit page carries its rate tables in the page itself (inside escaped markup), and the rates hub lists the
+      // savings account slabs. They are read together with the page saved in Settings.
+      official: [
+        {
+          url: 'https://www.hdfcbank.com/personal/save/deposits/fixed-deposit-interest-rate',
+          label:
+            'HDFC Bank, official fixed deposit rate page. The tables for deposits below ₹3 crore apply to domestic, NRO and NRE (NRE from 1 year) deposits; use the general-public column and ignore the ₹3 crore and above table',
+        },
+        {
+          url: 'https://www.hdfcbank.com/personal/resources/rates',
+          label:
+            'HDFC Bank, official rates page (deposits, savings account interest rates and others). Use only the savings account interest rate slabs here',
+        },
+      ],
       reference: [
         {
           url: 'https://www.bankbazaar.com/fixed-deposit/hdfc-nri-fd-rates.html',
@@ -101,7 +114,17 @@ const TABLE: { bank: string; docs: RateDocs }[] = [
   {
     bank: 'IDFC First Bank',
     docs: {
-      official: [],
+      official: [
+        {
+          url: 'https://www.idfcfirstbank.com/personal-banking/deposits/fixed-deposit/fd-interest-rates',
+          label:
+            'IDFC FIRST Bank, official fixed deposit interest rate page. The table for deposits of less than ₹3 crore applies to domestic, NRO and NRE (minimum 1 year) deposits; use the General column',
+        },
+        {
+          url: 'https://www.idfcfirstbank.com/personal-banking/accounts/savings-account/interest-rates',
+          label: 'IDFC FIRST Bank, official savings account interest rate page (balance slabs)',
+        },
+      ],
       reference: [
         {
           url: 'https://www.bankbazaar.com/fixed-deposit/idfc-nri-fd-rates.html',

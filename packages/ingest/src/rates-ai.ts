@@ -18,22 +18,66 @@ export interface ParsedOffer {
   balanceTo: number | null;
 }
 
-/** Visible text of a page: scripts, styles and tags removed, entities decoded, whitespace collapsed, length capped. */
-export function htmlToText(html: string, max = 30_000): string {
-  return html
+const strip = (html: string): string =>
+  html
     .replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<\/(tr|p|div|li|h[1-6]|table)>/gi, '\n')
     .replace(/<\/(td|th)>/gi, ' | ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&(quot|#34);/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/&#8377;|&rupee;/g, '₹')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*\n+/g, '\n')
-    .trim()
-    .slice(0, max);
+    .replace(/&#8377;|&rupee;/g, '₹');
+
+/**
+ * The parts of a long page that hold the rates: the page title plus every stretch dense with percentages, in page order. A bank page is
+ * mostly menus and notices (HDFC's is over 100,000 characters, with several rate tables far in), so cutting its first stretch loses
+ * the tables. Stretches with only a stray percentage are left out.
+ */
+export function focusRates(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = text.slice(0, 1200);
+  const size = 800;
+  const dense = new Set<number>();
+  for (let at = 1200, n = 0; at < text.length; at += size, n++) {
+    const count = (text.slice(at, at + size).match(/\d\s?%/g) ?? []).length;
+    if (count >= 4) {
+      dense.add(n);
+      dense.add(n - 1); // the heading of a table sits just before its first rows
+    }
+  }
+  const parts: string[] = [head];
+  let used = head.length;
+  for (const n of [...dense].filter((x) => x >= 0).sort((x, y) => x - y)) {
+    const at = 1200 + n * size;
+    const piece = text.slice(at, at + size);
+    if (!piece) continue;
+    if (used + piece.length > max) break;
+    parts.push(piece);
+    used += piece.length;
+  }
+  // no stretch is dense with percentages: nothing to focus on, so the start of the page, as before
+  return parts.length === 1 ? text.slice(0, max) : parts.join('\n');
+}
+
+/**
+ * Visible text of a page: scripts, styles and tags removed, entities decoded, whitespace collapsed. Some pages carry their table as
+ * escaped markup inside an attribute (the tags then show up as text once decoded), so a second pass removes those too. A page longer
+ * than `max` is cut to the part that holds the rates.
+ */
+export function htmlToText(html: string, max = 30_000): string {
+  let t = strip(html);
+  if (/<\/?(t[dhr]|table|thead|tbody|div|p|br)\b/i.test(t)) t = strip(t);
+  return focusRates(
+    t
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n\s*\n+/g, '\n')
+      .trim(),
+    max,
+  );
 }
 
 const PROMPT = (

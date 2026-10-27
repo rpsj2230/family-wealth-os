@@ -14,9 +14,16 @@ describe('rateDocsFor', () => {
   it('lists public comparison pages, labelled third party, for banks that refuse automated visits', () => {
     for (const b of ['ESAF Bank', 'HDFC Bank', 'IDFC First Bank', 'IndusInd Bank', 'RBL Bank']) {
       const d = rateDocsFor(b);
-      expect(d.official).toEqual([]);
       expect(d.reference.length).toBeGreaterThan(0);
       for (const x of d.reference) expect(x.label).toContain('third party');
+    }
+  });
+  it('reads HDFC and IDFC FIRST from their own published pages first', () => {
+    for (const b of ['HDFC Bank', 'IDFC First Bank']) {
+      const d = rateDocsFor(b);
+      expect(d.official.length).toBeGreaterThanOrEqual(2);
+      for (const x of d.official)
+        expect(x.url).toMatch(/^https:\/\/www\.(hdfcbank|idfcfirstbank)\.com\//);
     }
   });
   it('only lists openly published https documents', () => {
