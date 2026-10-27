@@ -10,11 +10,12 @@ import {
 } from '@/lib/settings-fields';
 import { tabHref } from '@/lib/settings-tabs';
 import { WhatsAppButton } from '../share/WhatsAppButton';
+import type { AiKeyRow } from '@/lib/ai-key-view';
 import { AccessForm, EmergencyForm } from './AccessForms';
+import { AiKeys, AiKeysSample } from './AiKeysCard';
 import {
-  AiConnection,
   DigestForm,
-  IntegrationsForm,
+  InboxLabelForm,
   PastePageBox,
   RateCheckButton,
   RateSourceForm,
@@ -59,7 +60,7 @@ export function SetupSection({ items }: { items: SetupChecklistItem[] }) {
       </SectionIntro>
       <SetupChecklist items={items} title="What is set up" />
       <p className="muted small">
-        Secrets stay write-only: the AI key, the Telegram token and each PAN are never shown again
+        Secrets stay write-only: the AI keys, the Telegram token and each PAN are never shown again
         after saving; this list only says that one exists.
       </p>
     </>
@@ -434,12 +435,9 @@ export function ConnectionsSection({
   demo = false,
 }: {
   ai: {
-    provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
-    keySet: boolean;
+    /** the saved AI keys with their order, switch and status (never the keys themselves) */
+    keys: AiKeyRow[];
     label: string;
-    testedAt?: string | null;
-    testOk?: boolean | null;
-    testNote?: string | null;
   };
   sources: RateSourceRow[];
   gsheet: SheetSyncInfo;
@@ -455,37 +453,26 @@ export function ConnectionsSection({
       <section className="card" id="email" aria-labelledby="email-h">
         <div className="sectionhead">
           <h3 id="email-h">Bank e-mails and AI</h3>
-          <span className={`pill ${ai.keySet ? 'ok' : 'warn'}`}>
-            {ai.keySet ? 'AI key saved' : 'No AI key'}
-          </span>
         </div>
         <p className="muted small">
           Balance alerts from a bank’s own address are read by fixed rules and need no key. To read
           PDF statements and unfamiliar e-mails and the bank rate pages, add an Anthropic key
           (Claude Haiku: the most reliable; pay per use, a few dollars of credit lasts years at this
-          volume) or a free key from OpenRouter, Groq or Google AI Studio (Gemini). Account numbers
+          volume) or a free key from OpenRouter, Groq or Google AI Studio (Gemini). You can keep
+          several and put them in order, so that another takes over when one fails. Account numbers
           are removed before any text is sent. See what the reader did in the{' '}
           <Link href="/inbox">bank e-mail inbox</Link>.
         </p>
-        <AiConnection
-          demo={demo}
-          status={{
-            provider: ai.provider,
-            keySet: ai.keySet,
-            testedAt: ai.testedAt ?? null,
-            testOk: ai.testOk ?? null,
-            testNote: ai.testNote ?? null,
-          }}
-        />
+        {demo ? <AiKeysSample initial={ai.keys} /> : <AiKeys keys={ai.keys} />}
+        <h4>Gmail label for forwarded bank e-mails</h4>
         <ol className="stepper small">
           <li>
             In Gmail, create a label (for example FWOS/Inbox) and a filter that applies it to bank
             e-mails.
           </li>
           <li>Type the label’s name below, exactly as it appears in Gmail.</li>
-          <li>Paste an AI key. It is stored on the server and is never shown again.</li>
         </ol>
-        <IntegrationsForm provider={ai.provider} keySet={ai.keySet} label={ai.label} />
+        <InboxLabelForm label={ai.label} />
       </section>
 
       <GoogleSheetCard info={gsheet} demo={demo} {...(demoTest ? { demoTest } : {})} />
@@ -494,13 +481,13 @@ export function ConnectionsSection({
         <h3 id="rates-h">Bank rate pages</h3>
         <p className="muted small">
           List the page where each bank publishes its deposit rates. Every Monday the app reads them
-          with your AI key and keeps the rates with the date it checked. Rates you type on the{' '}
-          <Link href="/rates">Rates page</Link> are never overwritten. To refresh now: GitHub &gt;
-          Actions &gt; Refresh interest rates &gt; Run workflow.
+          with your AI keys (in the order you set) and keeps the rates with the date it checked.
+          Rates you type on the <Link href="/rates">Rates page</Link> are never overwritten. To
+          refresh now: GitHub &gt; Actions &gt; Refresh interest rates &gt; Run workflow.
         </p>
-        {!ai.keySet && sources.length > 0 && (
+        {!ai.keys.some((k) => k.enabled) && sources.length > 0 && (
           <p className="notice warn small">
-            Rate pages are read with the AI key above, and none is saved yet.
+            Rate pages are read with the AI keys above, and none is switched on yet.
           </p>
         )}
         {sources.length === 0 ? (

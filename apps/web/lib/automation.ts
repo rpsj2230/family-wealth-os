@@ -7,10 +7,10 @@ type Db = Ctx['supabase'];
 export async function loadAutomation(
   db: Db,
   today: string,
-): Promise<{ cards: AutomationCard[]; inboxWaiting: number }> {
+): Promise<{ cards: AutomationCard[]; inboxWaiting: number; aiReady: boolean }> {
   const weekAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString();
-  const [latest, week, waiting, settings, digestSet, digestLog, nav, fx, rates] = await Promise.all(
-    [
+  const [latest, week, waiting, settings, aiOn, digestSet, digestLog, nav, fx, rates] =
+    await Promise.all([
       db
         .from('inbox_messages')
         .select('created_at')
@@ -22,7 +22,8 @@ export async function loadAutomation(
         .select('id', { count: 'exact', head: true })
         .eq('outcome', 'needs_review')
         .is('resolved_at', null),
-      db.from('integration_settings').select('ai_key_set, inbox_label').maybeSingle(),
+      db.from('integration_settings').select('inbox_label').maybeSingle(),
+      db.from('ai_keys').select('provider', { count: 'exact', head: true }).eq('enabled', true),
       db.from('digest_settings').select('enabled').maybeSingle(),
       db
         .from('digest_log')
@@ -38,8 +39,7 @@ export async function loadAutomation(
         .order('rate_date', { ascending: false })
         .limit(1),
       db.from('rate_sources').select('last_run_on').eq('enabled', true),
-    ],
-  );
+    ]);
   const w = { applied: 0, needs_review: 0, ignored: 0, error: 0 };
   for (const r of week.data ?? []) {
     const o = r.outcome as keyof typeof w;
@@ -51,7 +51,8 @@ export async function loadAutomation(
     const v = r.last_run_on as string | null;
     return v && (!m || v > m) ? v : m;
   }, null);
-  const cfg = settings.data as { ai_key_set?: boolean; inbox_label?: string } | null;
+  const cfg = settings.data as { inbox_label?: string } | null;
+  const aiReady = (aiOn.count ?? 0) > 0;
   const inboxWaiting = waiting.count ?? 0;
   const cards = buildAutomationCards({
     today,
@@ -59,7 +60,7 @@ export async function loadAutomation(
       lastLoggedAt: (latest.data?.[0]?.created_at as string | undefined) ?? null,
       week: w,
       waiting: inboxWaiting,
-      aiKeySet: !!cfg?.ai_key_set,
+      aiReady,
       label: cfg?.inbox_label ?? 'FWOS/Inbox',
     },
     market: {
@@ -80,5 +81,5 @@ export async function loadAutomation(
     },
     rates: { sources: rateRows.length, lastRunOn: lastRun },
   });
-  return { cards, inboxWaiting };
+  return { cards, inboxWaiting, aiReady };
 }

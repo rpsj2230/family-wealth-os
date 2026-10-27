@@ -1,5 +1,7 @@
 import { Suspense } from 'react';
 import { configFromJson, fyOf, profileFromJson, RULES } from '@fwos/core';
+import { isAiProvider, type AiProvider } from '@fwos/ingest';
+import type { AiKeyRow } from '@/lib/ai-key-view';
 import type { TaxRuleRow } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -191,22 +193,34 @@ async function NotificationsTab({ db }: { db: SupabaseClient }) {
 }
 
 async function ConnectionsTab({ db }: { db: SupabaseClient }) {
-  const [integ, sources, gsheet] = await Promise.all([
+  const [integ, aiKeys, sources, gsheet] = await Promise.all([
+    db.from('integration_settings').select('inbox_label').maybeSingle(),
     db
-      .from('integration_settings')
-      .select('ai_provider, ai_key_set, inbox_label, ai_tested_at, ai_test_ok, ai_test_note')
-      .maybeSingle(),
+      .from('ai_keys')
+      .select(
+        'provider, priority, enabled, label, last_ok_at, last_model, last_error_at, last_error_status, last_error, tested_at, test_ok, test_note',
+      )
+      .order('priority'),
     db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
     loadSheetSyncInfo(db as unknown as Parameters<typeof loadSheetSyncInfo>[0]),
   ]);
-  const i = integ.data as {
-    ai_provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
-    ai_key_set: boolean;
-    inbox_label: string;
-    ai_tested_at: string | null;
-    ai_test_ok: boolean | null;
-    ai_test_note: string | null;
-  } | null;
+  const i = integ.data as { inbox_label: string } | null;
+  const keys: AiKeyRow[] = ((aiKeys.data ?? []) as unknown as Record<string, unknown>[])
+    .filter((r) => isAiProvider(r.provider))
+    .map((r) => ({
+      provider: r.provider as AiProvider,
+      priority: Number(r.priority),
+      enabled: !!r.enabled,
+      label: (r.label as string | null) ?? null,
+      lastOkAt: (r.last_ok_at as string | null) ?? null,
+      lastModel: (r.last_model as string | null) ?? null,
+      lastErrorAt: (r.last_error_at as string | null) ?? null,
+      lastErrorStatus: r.last_error_status === null ? null : Number(r.last_error_status),
+      lastError: (r.last_error as string | null) ?? null,
+      testedAt: (r.tested_at as string | null) ?? null,
+      testOk: (r.test_ok as boolean | null) ?? null,
+      testNote: (r.test_note as string | null) ?? null,
+    }));
   const rows: RateSourceRow[] = (sources.data ?? []).map((r) => ({
     id: r.id as string,
     bank: r.bank as string,
@@ -216,14 +230,7 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
   }));
   return (
     <ConnectionsSection
-      ai={{
-        provider: i?.ai_provider ?? null,
-        keySet: !!i?.ai_key_set,
-        label: i?.inbox_label ?? 'FWOS/Inbox',
-        testedAt: i?.ai_tested_at ?? null,
-        testOk: i?.ai_test_ok ?? null,
-        testNote: i?.ai_test_note ?? null,
-      }}
+      ai={{ keys, label: i?.inbox_label ?? 'FWOS/Inbox' }}
       sources={rows}
       gsheet={gsheet}
     />

@@ -26,7 +26,7 @@ const EXTRA: Hit[] = [
   { label: 'Change the order of banks', hint: 'Accounts', href: '/accounts/reorder' },
   { label: 'Move bank-level notes up to the bank', hint: 'Accounts', href: '/accounts/tidy-notes' },
   { label: 'Tax harvest: gains, losses and refunds', hint: 'Tax', href: '/tax' },
-  { label: 'AI key, Gmail label, bank rate pages', hint: 'Settings', href: '/settings#email' },
+  { label: 'AI keys, Gmail label, bank rate pages', hint: 'Settings', href: '/settings#email' },
   { label: 'Telegram daily summary', hint: 'Settings', href: '/settings#telegram' },
   { label: 'Tax rules per year', hint: 'Settings', href: '/settings#tax' },
   { label: 'People, dates of birth and PAN', hint: 'Settings', href: '/settings' },

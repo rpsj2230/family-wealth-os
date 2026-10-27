@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 /**
  * On demand: checks every link of the "read my email and statements" chain and says which one is broken.
- *  1. the AI key answers and a model it may use is found;
+ *  1. every AI key that is switched on answers and a model it may use is found (the keys are tried in order in the real jobs);
  *  2. a made-up bank balance alert is read back correctly by the same reader the inbox uses;
  *  3. Gmail opens over IMAP and the label exists, with how many messages it holds and how old they are;
  *  4. what the inbox has done with messages so far.
@@ -9,7 +9,8 @@
  */
 import { ImapFlow } from 'imapflow';
 import { createClient } from '@supabase/supabase-js';
-import { testAiConnection } from '@fwos/ingest';
+import { PROVIDER_NAME, testAiConnection, type AiProvider } from '@fwos/ingest';
+import { loadStoredAiKeys, recordAiTest } from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -36,36 +37,42 @@ async function checkAi(): Promise<void> {
   const id = hh.data?.[0]?.id as string | undefined;
   const cfg = await db
     .from('integration_settings')
-    .select('ai_provider, ai_api_key, inbox_label')
+    .select('inbox_label')
     .eq('household_id', id ?? '')
     .maybeSingle();
-  const s = cfg.data as {
-    ai_provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
-    ai_api_key: string | null;
-    inbox_label: string | null;
-  } | null;
-  label = s?.inbox_label ?? 'FWOS/Inbox';
+  label = (cfg.data as { inbox_label: string | null } | null)?.inbox_label ?? 'FWOS/Inbox';
   householdId = id ?? null;
-  if (!s?.ai_provider || !s.ai_api_key) {
+  const keys = id ? await loadStoredAiKeys(db, id, 'service') : [];
+  if (keys.length === 0) {
     bad(
-      'No AI key is saved. Add an Anthropic, OpenRouter, Groq or Gemini key in Settings > Bank emails and AI.',
+      'No AI key is switched on. Add an Anthropic, OpenRouter, Groq or Gemini key, or switch one on, in Settings > Connections.',
     );
     return;
   }
-  const r = await testAiConnection({ provider: s.ai_provider, key: s.ai_api_key, today });
-  for (const st of r.steps) (st.ok ? ok : bad)(st.text);
-  // the Settings page shows when the connection was last tested and how it went
-  await db
-    .from('integration_settings')
-    .update({
-      ai_tested_at: new Date().toISOString(),
-      ai_test_ok: r.ok,
-      ai_test_note: (r.ok
-        ? `Read a test alert with ${r.model ?? s.ai_provider}`
-        : (r.steps.find((x) => !x.ok)?.text ?? 'Failed')
-      ).slice(0, 300),
-    })
-    .eq('household_id', id ?? '');
+  // the real jobs try the keys in this order and go to the next when one fails; here each is tested on its own so a broken fallback shows too
+  const results: { provider: AiProvider; ok: boolean }[] = [];
+  for (const [n, k] of keys.entries()) {
+    const name = `${n + 1}. ${PROVIDER_NAME[k.provider]}`;
+    const r = await testAiConnection({ provider: k.provider, key: k.key, today });
+    for (const st of r.steps) (st.ok ? ok : bad)(`${name}: ${st.text}`);
+    results.push({ provider: k.provider, ok: r.ok });
+    // the Settings page shows when each key was last tested and how it went
+    await recordAiTest(
+      db,
+      id!,
+      'service',
+      k.provider,
+      r.ok,
+      r.ok
+        ? `Read a test alert with ${r.model ?? k.provider}`
+        : (r.steps.find((x) => !x.ok)?.text ?? 'Failed'),
+    );
+  }
+  const working = results.filter((r) => r.ok).length;
+  if (working > 0 && working < results.length)
+    console.log(
+      `INFO  ${working} of ${results.length} keys work; the jobs go on to the next key when one fails, but fix the others in Settings > Connections.`,
+    );
 }
 
 let label = 'FWOS/Inbox';

@@ -75,6 +75,16 @@ describe('explainEntry', () => {
     expect(why('more than one account matches')).toContain('More than one');
     expect(why('amount is far from the current value; please confirm')).toContain('very different');
     expect(why('statement found; add an AI key in Settings to read it', null)).toContain('no key');
+    // the wording since several keys can be saved, and the older wording still stored in the log
+    expect(
+      why('statement found; add an AI key in Settings, or switch one on, to read it', null),
+    ).toContain('no key is switched on');
+    expect(
+      why(
+        'balance email in a format the rules do not know; add an AI key (or switch one on) to read it',
+        null,
+      ),
+    ).toContain('no key switched on');
     expect(
       why('PDF could not be opened (bad password); it may be password-protected', null),
     ).toContain('password-protected');

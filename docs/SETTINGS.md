@@ -3,7 +3,7 @@
 Settings is split into sections, each with its own address: `/settings?tab=` `setup` (checklist of what is configured), `people`
 (people, income and spending), `rules` (Money rules: deposits, reminders, estimates, rate suggestions, NRO refunds, harvesting,
 "When I need money"), `tax` (rules per financial year), `notifications` (e-mail, Telegram, WhatsApp, deliveries), `connections`
-(AI key, Gmail label, bank rate pages) and `access` (emergency access and handbook content). Old links such as `/settings#tax`
+(AI keys with their order and on/off switch, Gmail label, bank rate pages) and `access` (emergency access and handbook content). Old links such as `/settings#tax`
 or `#email` are moved to the right section by a small script. Each Money rules card saves alone and is marked "Confirmed by you"
 once saved; until then it runs on the built-in numbers. The names below (for example "Limits and reminders") are the old section
 names; they now live under Money rules.

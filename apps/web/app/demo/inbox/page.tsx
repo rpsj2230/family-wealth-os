@@ -61,7 +61,7 @@ export default async function DemoInbox({
             accounts={DEMO_ACCOUNTS}
             automation={cards}
             label="FWOS/Inbox"
-            aiKeySet={false}
+            aiReady={false}
             demo
           />
         </main>

@@ -9,15 +9,18 @@ import {
   profileFromJson,
 } from '@fwos/core';
 import {
+  answeredBy,
   buildRatesRequest,
+  callAi,
   checkRateSource,
+  isAiProvider,
   parseRatesResponse,
-  prepareAi,
+  testAiChain,
   testAiConnection,
   type AiProvider,
   type RateCheck,
 } from '@fwos/ingest';
-import { saveRatesRead } from '@fwos/data';
+import { aiChainFor, loadStoredAiKeys, recordAiTest, saveRatesRead } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { CONFIG_GROUPS, mergeGroup, parseGroup, withConfirmed } from '@/lib/settings-fields';
@@ -62,93 +65,189 @@ export async function saveDigestSettings(_p: FormResult | null, f: FormData): Pr
   };
 }
 
-/** The AI key is write-only: it is saved here and read back only by the scheduled reader. */
-export async function saveIntegrations(_p: FormResult | null, f: FormData): Promise<FormResult> {
+/** The Gmail label the reader looks at. (The AI keys have their own actions below.) */
+export async function saveInboxLabel(_p: FormResult | null, f: FormData): Promise<FormResult> {
   const { supabase, householdId } = await loadContext();
   if (!householdId) return { ok: false, message: 'Create your household first.' };
-  const provider = String(f.get('provider') ?? '');
-  const key = String(f.get('key') ?? '').trim();
-  const clear = f.get('clear') === 'on';
-  if (key !== '' && (key.length < 8 || key.length > 300))
-    return { ok: false, message: 'That does not look like an API key. Paste the whole key.' };
   const label =
     String(f.get('label') ?? '')
       .trim()
       .slice(0, 100) || 'FWOS/Inbox';
   const { error } = await supabase.rpc('save_integrations', {
     p_household: householdId,
-    p_provider:
-      provider === 'anthropic' ||
-      provider === 'groq' ||
-      provider === 'gemini' ||
-      provider === 'openrouter'
-        ? provider
-        : null,
-    p_key: key === '' ? null : key,
+    p_provider: null,
+    p_key: null,
     p_label: label,
-    p_clear: clear,
+    p_clear: false,
+  });
+  if (error) return { ok: false, message: 'That could not be saved.' };
+  revalidatePath('/settings');
+  revalidatePath('/inbox');
+  return { ok: true, message: 'Saved.' };
+}
+
+/**
+ * The AI keys are write-only: a key is saved here and read back only by server code that asks the AI (the scheduled jobs and the
+ * actions below), never shown on a page. Several can be saved, one per service; they are tried in priority order and the next one
+ * answers when one fails.
+ */
+export async function saveAiKey(provider: string, key: string, label = ''): Promise<FormResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  if (!isAiProvider(provider)) return { ok: false, message: 'Choose a service.' };
+  const k = key.trim();
+  if (k.length < 8 || k.length > 300 || /\s/.test(k))
+    return { ok: false, message: 'That does not look like an API key. Paste the whole key.' };
+  const { error } = await supabase.rpc('save_ai_key', {
+    p_household: householdId,
+    p_provider: provider,
+    p_key: k,
+    p_label: label.trim().slice(0, 60) || null,
   });
   if (error) return { ok: false, message: 'That could not be saved.' };
   revalidatePath('/settings');
   revalidatePath('/inbox');
   return {
     ok: true,
-    message: clear
-      ? 'Saved. The AI key is removed.'
-      : key
-        ? 'Saved. The key is stored on the server and will not be shown again.'
-        : 'Saved.',
+    message: 'Saved. The key is stored on the server and will not be shown again.',
   };
+}
+
+export async function setAiKeyEnabled(provider: string, enabled: boolean): Promise<FormResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  if (!isAiProvider(provider)) return { ok: false, message: 'Unknown service.' };
+  const { error } = await supabase.rpc('set_ai_key_enabled', {
+    p_household: householdId,
+    p_provider: provider,
+    p_enabled: enabled,
+  });
+  if (error) return { ok: false, message: 'That could not be changed.' };
+  revalidatePath('/settings');
+  revalidatePath('/inbox');
+  return {
+    ok: true,
+    message: enabled ? 'Switched on.' : 'Switched off. The key is kept but not used.',
+  };
+}
+
+export async function moveAiKey(provider: string, direction: 'up' | 'down'): Promise<FormResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  if (!isAiProvider(provider) || (direction !== 'up' && direction !== 'down'))
+    return { ok: false, message: 'Unknown service.' };
+  const { error } = await supabase.rpc('move_ai_key', {
+    p_household: householdId,
+    p_provider: provider,
+    p_direction: direction,
+  });
+  if (error) return { ok: false, message: 'That could not be moved.' };
+  revalidatePath('/settings');
+  return { ok: true, message: direction === 'up' ? 'Moved up.' : 'Moved down.' };
+}
+
+export async function removeAiKey(provider: string): Promise<FormResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  if (!isAiProvider(provider)) return { ok: false, message: 'Unknown service.' };
+  const { error } = await supabase.rpc('remove_ai_key', {
+    p_household: householdId,
+    p_provider: provider,
+  });
+  if (error) return { ok: false, message: 'That could not be removed.' };
+  revalidatePath('/settings');
+  revalidatePath('/inbox');
+  return { ok: true, message: 'The key is removed.' };
 }
 
 export interface AiTestState {
   ran: boolean;
   ok: boolean;
-  steps: { ok: boolean; text: string }[];
+  steps: { ok: boolean; text: string; neutral?: boolean }[];
   ms: number;
+  /** the key tested on its own; absent for the whole chain */
+  provider?: AiProvider;
+  /** the key that answered, for the whole chain */
+  answeredBy?: AiProvider | null;
 }
 
 /**
- * Tests the saved AI key: the provider answers and a made-up bank alert is read back correctly. The key is fetched through a
- * member-only function, used once on the server and never returned; only the outcome goes to the page.
+ * Tests one saved key on its own, switched on or not: the provider answers and a made-up bank alert is read back correctly. The key is
+ * fetched through a member-only function, used once on the server and never returned; only the outcome goes to the page.
  */
-export async function testAi(): Promise<AiTestState> {
-  const { supabase, householdId } = await loadContext();
+export async function testAiKey(provider: string): Promise<AiTestState> {
   const fail = (text: string): AiTestState => ({
     ran: true,
     ok: false,
     steps: [{ ok: false, text }],
     ms: 0,
   });
+  const { supabase, householdId } = await loadContext();
   if (!householdId) return fail('Create your household first.');
-  const { data, error } = await supabase.rpc('ai_credentials_for_test', {
-    p_household: householdId,
-  });
-  const row = (data as { provider: AiProvider; api_key: string }[] | null)?.[0];
-  if (error) return fail('The saved key could not be read for the test.');
-  if (!row) return fail('No AI key is saved. Choose a service, paste a key and press Save first.');
+  if (!isAiProvider(provider)) return fail('Unknown service.');
+  let saved;
+  try {
+    saved = (
+      await loadStoredAiKeys(supabase as unknown as SupabaseClient, householdId, 'member', {
+        all: true,
+      })
+    ).find((k) => k.provider === provider);
+  } catch {
+    return fail('The saved key could not be read for the test.');
+  }
+  if (!saved) return fail('No key is saved for that service. Add it first.');
   const r = await testAiConnection({
-    provider: row.provider,
-    key: row.api_key,
+    provider,
+    key: saved.key,
     today: new Date().toISOString().slice(0, 10),
     // the page waits for this: keep it well inside the time the host allows
     limits: { listMs: 12_000, callMs: 15_000, tries: 3 },
   });
-  await supabase.rpc('record_ai_test', {
-    p_household: householdId,
-    p_ok: r.ok,
-    p_note: (r.ok
-      ? `Read a test alert with ${r.model ?? row.provider}`
-      : (r.steps.find((x) => !x.ok)?.text ?? 'Failed')
-    ).slice(0, 300),
-  });
+  await recordAiTest(
+    supabase as unknown as SupabaseClient,
+    householdId,
+    'member',
+    provider,
+    r.ok,
+    r.ok
+      ? `Read a test alert with ${r.model ?? provider}`
+      : (r.steps.find((x) => !x.ok)?.text ?? 'Failed'),
+  );
   revalidatePath('/settings');
-  return { ran: true, ok: r.ok, steps: r.steps, ms: r.ms };
+  return { ran: true, ok: r.ok, steps: r.steps, ms: r.ms, provider };
 }
 
 /**
- * Can this bank's rate page be synced? Reads the page and asks the saved AI to find the rates, then says what happened. Nothing is saved.
- * The key is fetched through the same member-only function as the AI test and never leaves the server.
+ * Tests the whole chain the way a job uses it: the keys that are switched on are asked in order with a made-up bank alert and the first
+ * that reads it back correctly answers. Says which key that is and what each earlier key did.
+ */
+export async function testAiKeys(): Promise<AiTestState> {
+  const fail = (text: string): AiTestState => ({
+    ran: true,
+    ok: false,
+    steps: [{ ok: false, text }],
+    ms: 0,
+    answeredBy: null,
+  });
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return fail('Create your household first.');
+  let chain;
+  try {
+    chain = await aiChainFor(supabase as unknown as SupabaseClient, householdId, 'member', {
+      // the page waits for this, for every key in turn
+      limits: { listMs: 8_000, callMs: 12_000, tries: 2 },
+    });
+  } catch {
+    return fail('The saved keys could not be read for the test.');
+  }
+  const r = await testAiChain(chain, new Date().toISOString().slice(0, 10));
+  revalidatePath('/settings');
+  return { ran: true, ok: r.ok, steps: r.steps, ms: r.ms, answeredBy: r.provider };
+}
+
+/**
+ * Can this bank's rate page be synced? Reads the page and asks the saved AI keys, in their order, to find the rates, then says what happened.
+ * Nothing is saved. The keys are fetched through the same member-only function as the AI test and never leave the server.
  */
 export async function checkRatePage(sourceId: string): Promise<RateCheck> {
   const fail = (text: string): RateCheck => ({
@@ -168,16 +267,16 @@ export async function checkRatePage(sourceId: string): Promise<RateCheck> {
     .maybeSingle();
   const row = src.data as { bank: string; url: string } | null;
   if (!row) return fail('This page is no longer in the list.');
-  const { data } = await supabase.rpc('ai_credentials_for_test', { p_household: householdId });
-  const cred = (data as { provider: AiProvider; api_key: string }[] | null)?.[0] ?? null;
-  return checkRateSource({
-    bank: row.bank,
-    url: row.url,
-    ai: cred ? { provider: cred.provider, key: cred.api_key } : null,
-    // the page waits for this: the host allows 60 seconds in all
-    limits: { listMs: 8_000, callMs: 30_000, tries: 2 },
-    pageMs: 12_000,
-  });
+  let ai;
+  try {
+    ai = await aiChainFor(supabase as unknown as SupabaseClient, householdId, 'member', {
+      // the page waits for this: the host allows 60 seconds in all
+      limits: { listMs: 8_000, callMs: 30_000, tries: 2 },
+    });
+  } catch {
+    return fail('The saved AI keys could not be read.');
+  }
+  return checkRateSource({ bank: row.bank, url: row.url, ai, pageMs: 12_000 });
 }
 
 export interface PasteResult {
@@ -207,9 +306,18 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
     .maybeSingle();
   const row = src.data as { id: string; bank: string; url: string } | null;
   if (!row) return fail('This page is no longer in the list.');
-  const { data } = await supabase.rpc('ai_credentials_for_test', { p_household: householdId });
-  const cred = (data as { provider: AiProvider; api_key: string }[] | null)?.[0];
-  if (!cred) return fail('No AI key is saved. Add one under Bank emails and AI first.');
+  let ai;
+  try {
+    ai = await aiChainFor(supabase as unknown as SupabaseClient, householdId, 'member', {
+      limits: { listMs: 8_000, callMs: 30_000, tries: 2 },
+    });
+  } catch {
+    return fail('The saved AI keys could not be read.');
+  }
+  if (ai.empty)
+    return fail(
+      'No AI key is switched on. Add one, or switch one on, under Bank emails and AI first.',
+    );
   const today = new Date().toISOString().slice(0, 10);
   const note = async (result: string) => {
     await supabase
@@ -220,38 +328,32 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
     revalidatePath('/rates');
   };
   try {
-    const rt = await prepareAi(cred.provider, cred.api_key, {
-      listMs: 8_000,
-      callMs: 30_000,
-      tries: 2,
-    });
     const hints = await supabase
       .from('rate_hints')
       .select('hint')
       .eq('active', true)
       .eq('bank', row.bank)
       .limit(20);
-    const req = buildRatesRequest(
-      cred.provider,
-      cred.api_key,
-      row.bank,
-      `### ${row.bank}: text pasted by the account holder from the bank's page\n${pasted.slice(0, 60_000)}`,
-      rt.model || undefined,
-      ((hints.data ?? []) as { hint: string }[]).map((h) => h.hint),
-    );
-    const res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
+    const hintTexts = ((hints.data ?? []) as { hint: string }[]).map((h) => h.hint);
+    const text = `### ${row.bank}: text pasted by the account holder from the bank's page\n${pasted.slice(0, 60_000)}`;
+    const res = await callAi(ai, {
+      build: (provider, key, model) =>
+        buildRatesRequest(provider, key, row.bank, text, model, hintTexts),
+      parse: (provider, json) => {
+        const offers = parseRatesResponse(provider, json, row.bank);
+        return offers.length > 0 ? offers : null;
+      },
+    });
     if (!res.ok) {
-      const msg = `The AI service answered ${res.status}. Try again in a minute.`;
-      await note(`pasted page not read: ${msg}`);
-      return fail(msg);
-    }
-    const read = parseRatesResponse(cred.provider, await res.json(), row.bank);
-    if (read.length === 0) {
+      // every key answered but found nothing: the pasted text is the problem, not the keys
       const msg =
-        'No rates could be found in the pasted text. Check it is the page with the rate table.';
-      await note(`pasted page not read: ${msg}`);
+        res.attempts.length > 0 && res.attempts.every((a) => a.status === 200)
+          ? 'No rates could be found in the pasted text. Check it is the page with the rate table.'
+          : res.reason;
+      await note(`pasted page not read: ${res.attempts.length > 0 ? res.brief : msg}`);
       return fail(msg);
     }
+    const read = res.value;
     const summary = await saveRatesRead({
       db: supabase as unknown as SupabaseClient,
       household: householdId,
@@ -264,7 +366,7 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
       sourceNote: `Pasted by you from the bank's page on ${today}`,
     });
     await note(`pasted by you: ${summary}`);
-    return { ok: true, message: `Saved: ${summary}.` };
+    return { ok: true, message: `Saved: ${summary}. ${answeredBy(res)}.` };
   } catch (e) {
     const msg = `Could not read the pasted page (${(e as Error).message}).`;
     await note(`pasted page not read: ${msg}`);

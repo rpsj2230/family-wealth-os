@@ -35,7 +35,7 @@ export function InboxBoard({
   accounts,
   automation,
   label,
-  aiKeySet,
+  aiReady,
   demo = false,
 }: {
   base: string;
@@ -45,7 +45,7 @@ export function InboxBoard({
   accounts: AccountChoice[];
   automation: AutomationCard[];
   label: string;
-  aiKeySet: boolean;
+  aiReady: boolean;
   demo?: boolean;
 }) {
   const review = entries.filter((m) => queueOf(m) === 'review');
@@ -164,10 +164,10 @@ export function InboxBoard({
                 by themselves; see <Link href="/import">Import</Link>.
               </li>
             </ol>
-            {!aiKeySet && (
+            {!aiReady && (
               <p className="small">
-                PDF bank statements need an AI key: add a free one in{' '}
-                <Link href="/settings#email">Settings, Email and AI</Link>.
+                PDF bank statements need an AI key that is switched on: add a free one in{' '}
+                <Link href="/settings#email">Settings, Connections</Link>.
               </p>
             )}
           </div>

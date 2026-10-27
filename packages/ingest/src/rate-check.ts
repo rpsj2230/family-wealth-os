@@ -3,9 +3,8 @@
  * and says what happened step by step. Nothing is saved. Used by the "Check" button in Settings and, for reading one document, by the
  * weekly refresh job, so both see a page the same way.
  */
-import { aiErrorHint } from './ai-models';
-import { prepareAi, type AiLimits } from './ai-runtime';
-import type { AiProvider } from './bank-email';
+import { briefOf, callAi, type AiChain } from './ai-chain';
+import { PROVIDER_NAME, PROVIDER_SHORT } from './ai-providers';
 import { casPdfText } from './cas-pdf';
 import { isPdf, rateDocsFor } from './rate-docs';
 import { buildRatesRequest, htmlToText, parseRatesResponse } from './rates-ai';
@@ -58,9 +57,8 @@ export interface RateCheck {
 export async function checkRateSource(args: {
   bank: string;
   url: string;
-  /** null: no key is saved */
-  ai: { provider: AiProvider; key: string } | null;
-  limits?: AiLimits;
+  /** the AI keys in their order; null or empty: no key is switched on */
+  ai: AiChain | null;
   /** milliseconds allowed for each page */
   pageMs?: number;
 }): Promise<RateCheck> {
@@ -109,59 +107,37 @@ export async function checkRateSource(args: {
       ok: true,
       text: 'The bank’s own page could not be read, so a public comparison page is used. Its rates are labelled as third-party and never remove a rate already on file.',
     });
-  if (!args.ai)
+  const ai = args.ai;
+  if (!ai || ai.empty)
     return done(
       false,
-      'Cannot sync yet: the page can be read, but no AI key is saved to read the rates from it.',
+      'Cannot sync yet: the page can be read, but no AI key is switched on to read the rates from it.',
     );
 
-  const rt = await prepareAi(args.ai.provider, args.ai.key, args.limits);
-  const req = buildRatesRequest(
-    args.ai.provider,
-    args.ai.key,
-    args.bank,
-    parts.join('\n\n'),
-    rt.model || undefined,
-    [],
-  );
-  let res;
-  try {
-    res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
-  } catch (e) {
-    steps.push({ ok: false, text: `The AI service did not answer (${(e as Error).message}).` });
-    return done(false, 'Cannot sync: the AI service did not answer. Try again in a minute.');
-  }
+  const text = parts.join('\n\n');
+  const res = await callAi(ai, {
+    build: (provider, key, model) => buildRatesRequest(provider, key, args.bank, text, model, []),
+    parse: (provider, json) => {
+      const offers = parseRatesResponse(provider, json, args.bank);
+      return offers.length > 0 ? offers : null;
+    },
+  });
+  for (const a of res.attempts)
+    steps.push({ ok: false, text: `${PROVIDER_NAME[a.provider]}: ${a.reason}` });
   if (!res.ok) {
-    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-    const hint = aiErrorHint(args.ai.provider, res.status, body);
-    steps.push({
-      ok: false,
-      text: `The AI service answered ${res.status}: ${body}${hint ? ` ${hint}` : ''}`,
-    });
-    return done(
-      false,
-      `Cannot sync: the AI service answered ${res.status}.${hint ? ` ${hint}` : ''}`,
-    );
+    // every key answered but found nothing: the page, not the AI, is the problem
+    if (res.attempts.length > 0 && res.attempts.every((a) => a.status === 200)) {
+      steps.push({ ok: false, text: 'The AI found no rates in the text.' });
+      return done(false, 'Cannot sync: no rates could be found on the page.');
+    }
+    return done(false, `Cannot sync: ${res.reason}`);
   }
-  let read;
-  try {
-    read = parseRatesResponse(args.ai.provider, await res.json(), args.bank);
-  } catch (e) {
-    steps.push({
-      ok: false,
-      text: `The AI answer could not be understood (${(e as Error).message}).`,
-    });
-    return done(false, 'Cannot sync: the AI answer could not be understood.');
-  }
-  if (read.length === 0) {
-    steps.push({ ok: false, text: 'The AI found no rates in the text.' });
-    return done(false, 'Cannot sync: no rates could be found on the page.');
-  }
+  const read = res.value;
   const fd = read.filter((o) => o.product === 'fd').length;
   const sv = read.filter((o) => o.product === 'savings').length;
   steps.push({
     ok: true,
-    text: `The AI found ${read.length} rates (${fd} fixed deposit, ${sv} savings) with ${rt.model ?? args.ai.provider}.`,
+    text: `${PROVIDER_SHORT[res.provider]} found ${read.length} rates (${fd} fixed deposit, ${sv} savings)${res.model ? ` with ${res.model}` : ''}${res.attempts.length > 0 ? ` after ${briefOf(res.attempts)}` : ''}.`,
   });
   return done(
     true,

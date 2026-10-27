@@ -7,7 +7,7 @@ const base: AutomationInput = {
     lastLoggedAt: '2026-10-25T08:20:00Z',
     week: { applied: 2, needs_review: 1, ignored: 3, error: 0 },
     waiting: 1,
-    aiKeySet: true,
+    aiReady: true,
     label: 'FWOS/Inbox',
   },
   market: { navLatest: '2026-10-23', fxLatest: '2026-10-26' },

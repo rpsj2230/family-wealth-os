@@ -33,7 +33,7 @@ export const SETTINGS_TABS = [
     key: 'connections',
     label: 'Connections',
     purpose:
-      'The AI key, the Gmail label for forwarded bank e-mails, the bank rate pages and the Google Sheet.',
+      'The AI keys and their order, the Gmail label for forwarded bank e-mails, the bank rate pages and the Google Sheet.',
   },
   {
     key: 'access',

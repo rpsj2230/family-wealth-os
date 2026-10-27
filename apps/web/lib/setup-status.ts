@@ -3,7 +3,7 @@
  * with ordinary (row-level-security) selects, so it only ever sees the signed-in household. Used by Settings > Setup and by the
  * compact checklist on the dashboard (components/SetupChecklist.tsx).
  *
- * Secrets are never read: the AI key and the Telegram token are only known to exist (`ai_key_set`, `telegram_set`).
+ * Secrets are never read: the AI keys and the Telegram token are only known to exist (`ai_keys` without its key column, `telegram_set`).
  */
 import { configFromJson, fyOf } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -27,7 +27,9 @@ export interface SetupFacts {
   /** the Money rules cards the household has not saved yet: they still run on the built-in numbers */
   unconfirmedRuleGroups: RuleGroup[];
   taxRules: { fy: string; verified: boolean }[];
-  aiKeySet: boolean;
+  /** AI keys saved, and how many of them are switched on (any one switched on means the AI is ready) */
+  aiKeysTotal: number;
+  aiKeysOn: number;
   /** a row of integration settings exists, so the Gmail label was saved at least once */
   integrationSaved: boolean;
   inboxLabel: string;
@@ -118,12 +120,17 @@ export function computeSetupStatus(f: SetupFacts): SetupItem[] {
     },
     {
       key: 'ai-key',
-      label: 'AI key saved',
-      done: f.aiKeySet,
+      label: 'AI key saved and switched on',
+      done: f.aiKeysOn > 0,
       href: '/settings?tab=connections#email',
-      hint: f.aiKeySet
-        ? 'Saved on the server; it cannot be shown again.'
-        : 'Lets the app read PDF statements and unfamiliar e-mails. An Anthropic (Claude Haiku) key, or a free OpenRouter, Groq or Gemini key, is enough.',
+      hint:
+        f.aiKeysOn > 0
+          ? f.aiKeysOn === 1
+            ? `One key is switched on${f.aiKeysTotal > 1 ? ` (${f.aiKeysTotal} saved)` : ''}; add a second as a fallback if you like. Keys are stored on the server and cannot be shown again.`
+            : `${f.aiKeysOn} keys are switched on, tried in the order you chose; the next one answers when one fails.`
+          : f.aiKeysTotal > 0
+            ? `${f.aiKeysTotal === 1 ? 'The saved key is' : `All ${f.aiKeysTotal} saved keys are`} switched off. Switch one on so the app can read PDF statements and unfamiliar e-mails.`
+            : 'Lets the app read PDF statements and unfamiliar e-mails. An Anthropic (Claude Haiku) key, or a free OpenRouter, Groq or Gemini key, is enough; add a second as a fallback.',
     },
     {
       key: 'gmail',
@@ -216,46 +223,49 @@ export async function loadSetupStatus(
     const r = await safe(supabase.from(table).select('*', { count: 'exact', head: true }));
     return r?.count ?? 0;
   };
-  const [owners, flows, cfg, tax, integ, inbox, sources, digest, profile, access, cas, stmts] =
-    await Promise.all([
-      safe(
-        supabase
-          .from('owners')
-          .select('display_name, dob, pan_last4, is_minor')
-          .order('created_at'),
-      ),
-      safe(supabase.from('cashflow_items').select('kind')),
-      safe(supabase.from('household_config').select('config').maybeSingle()),
-      safe(supabase.from('tax_rules').select('fy, verified')),
-      safe(
-        supabase
-          .from('integration_settings')
-          .select('ai_key_set, inbox_label, telegram_set')
-          .maybeSingle(),
-      ),
-      count('inbox_messages'),
-      count('rate_sources'),
-      safe(supabase.from('digest_settings').select('enabled').maybeSingle()),
-      safe(supabase.from('emergency_profile').select('content').maybeSingle()),
-      safe(supabase.from('emergency_access').select('mode').maybeSingle()),
-      safe(
-        supabase
-          .from('cas_imports')
-          .select('id', { count: 'exact', head: true })
-          .in('outcome', ['imported', 'partial']),
-      ),
-      safe(supabase.from('tax_statements').select('kind')),
-    ]);
+  const [
+    owners,
+    flows,
+    cfg,
+    tax,
+    integ,
+    aiKeys,
+    inbox,
+    sources,
+    digest,
+    profile,
+    access,
+    cas,
+    stmts,
+  ] = await Promise.all([
+    safe(
+      supabase.from('owners').select('display_name, dob, pan_last4, is_minor').order('created_at'),
+    ),
+    safe(supabase.from('cashflow_items').select('kind')),
+    safe(supabase.from('household_config').select('config').maybeSingle()),
+    safe(supabase.from('tax_rules').select('fy, verified')),
+    safe(supabase.from('integration_settings').select('inbox_label, telegram_set').maybeSingle()),
+    safe(supabase.from('ai_keys').select('enabled')),
+    count('inbox_messages'),
+    count('rate_sources'),
+    safe(supabase.from('digest_settings').select('enabled').maybeSingle()),
+    safe(supabase.from('emergency_profile').select('content').maybeSingle()),
+    safe(supabase.from('emergency_access').select('mode').maybeSingle()),
+    safe(
+      supabase
+        .from('cas_imports')
+        .select('id', { count: 'exact', head: true })
+        .in('outcome', ['imported', 'partial']),
+    ),
+    safe(supabase.from('tax_statements').select('kind')),
+  ]);
   const raw = (cfg?.data as { config?: unknown } | null)?.config;
   const config = configFromJson(raw);
   const confirmed = confirmedGroups(raw, config);
   const contacts = (profile?.data as { content?: { contacts?: unknown[] } } | null)?.content
     ?.contacts;
-  const ic = integ?.data as {
-    ai_key_set: boolean;
-    inbox_label: string;
-    telegram_set: boolean;
-  } | null;
+  const ic = integ?.data as { inbox_label: string; telegram_set: boolean } | null;
+  const aiRows = rows(aiKeys as Rows<{ enabled: boolean }>);
   const kinds = new Set(rows(stmts as Rows<{ kind: string }>).map((s) => s.kind));
   const flowRows = rows(flows as Rows<{ kind: string }>);
   const mode = (access?.data as { mode?: string } | null)?.mode;
@@ -278,7 +288,8 @@ export async function loadSetupStatus(
     spendingItems: flowRows.filter((f) => f.kind === 'expense').length,
     unconfirmedRuleGroups: RULE_GROUPS.filter((g) => !confirmed.includes(g)),
     taxRules: rows(tax as Rows<{ fy: string; verified: boolean }>),
-    aiKeySet: !!ic?.ai_key_set,
+    aiKeysTotal: aiRows.length,
+    aiKeysOn: aiRows.filter((k) => k.enabled).length,
     integrationSaved: !!ic,
     inboxLabel: ic?.inbox_label ?? 'FWOS/Inbox',
     emailsRead: inbox,

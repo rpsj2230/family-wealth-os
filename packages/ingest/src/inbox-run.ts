@@ -8,8 +8,12 @@
  *   - the reading is newer than the value on record,
  *   - an AI-read amount is within a plausible range of the current value (0.1x to 10x).
  * Everything else is logged for review with the reason. A failure on one message never stops the others.
+ *
+ * The AI is a chain of keys (see `ai-chain`): when one fails the next is asked, and a key refused earlier in the run is not asked again.
  */
+import { answeredBy, callAi, type AiChain } from './ai-chain';
 import {
+  aiJson,
   buildAiRequest,
   matchAccount,
   parseAiResponse,
@@ -17,7 +21,6 @@ import {
   parseBankEmail,
   senderDomain,
   senderMatchesBank,
-  type AiProvider,
   type BalanceReading,
   type KnownAccount,
 } from './bank-email';
@@ -55,10 +58,6 @@ export interface InboxIo {
     messageId: string;
     source: 'email' | 'statement';
   }): Promise<void>;
-  fetchJson(
-    url: string,
-    init: { method: 'POST'; headers: Record<string, string>; body: string },
-  ): Promise<unknown>;
   /** Imports a fund statement (CAS) attached to the message; absent when this run cannot do it. */
   casImport?(
     m: InboxMessage,
@@ -82,7 +81,7 @@ export interface InboxReport {
 export async function runInbox(
   messages: InboxMessage[],
   io: InboxIo,
-  cfg: { today: string; ai: { provider: AiProvider; key: string; model?: string } | null },
+  cfg: { today: string; ai: AiChain | null },
 ): Promise<InboxReport> {
   const report: InboxReport = {
     seen: 0,
@@ -94,6 +93,20 @@ export async function runInbox(
     lines: [],
   };
   const accounts = await io.accounts();
+  const chain = cfg.ai && !cfg.ai.empty ? cfg.ai : null;
+  /** The AI's readings of one message's text; throws with every key's reason when none could answer. */
+  const readWithAi = async (ai: AiChain, text: string, domain: string) => {
+    const res = await callAi(ai, {
+      build: (provider, key, model) => buildAiRequest(provider, key, text, model),
+      parse: (provider, json) =>
+        aiJson(provider, json) === null
+          ? null
+          : parseAiResponse(provider, json, { today: cfg.today }),
+    });
+    if (!res.ok) throw new Error(`AI service: ${res.brief}`);
+    report.lines.push(`ai: ${answeredBy(res)}`);
+    return res.value.map((r) => ({ ...r, senderVerified: senderMatchesBank(domain, r.bank) }));
+  };
 
   for (const m of messages) {
     report.seen++;
@@ -168,10 +181,10 @@ export async function runInbox(
           });
           continue;
         }
-        if (!cfg.ai) {
+        if (!chain) {
           await log({
             outcome: 'needs_review',
-            reason: 'statement found; add an AI key in Settings to read it',
+            reason: 'statement found; add an AI key in Settings, or switch one on, to read it',
             reading: null,
             assetId: null,
           });
@@ -189,43 +202,24 @@ export async function runInbox(
           });
           continue;
         }
-        const req = buildAiRequest(
-          cfg.ai.provider,
-          cfg.ai.key,
-          `${m.subject}\n${text}`,
-          cfg.ai.model,
-        );
-        const json = await io.fetchJson(req.url, req.init);
-        readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
-          ...r,
-          senderVerified: senderMatchesBank(domain, r.bank),
-        }));
+        readings = await readWithAi(chain, `${m.subject}\n${text}`, domain);
         if (readings.length === 0) note = 'the AI found no balance in the statement';
       } else if (!mentionsBalance(m.subject, m.text)) {
         await log({ outcome: 'ignored', reason: null, reading: null, assetId: null });
         continue;
-      } else if (!cfg.ai) {
+      } else if (!chain) {
         // it looks like a balance alert in a format the rules do not know: say so instead of calling it "not a balance email"
         await log({
           outcome: 'needs_review',
-          reason: 'balance email in a format the rules do not know; add an AI key to read it',
+          reason:
+            'balance email in a format the rules do not know; add an AI key (or switch one on) to read it',
           reading: null,
           assetId: null,
         });
         continue;
       } else {
         // an unfamiliar format: the AI reads it, and what it finds is still checked like any other reading (sender, account, size)
-        const req = buildAiRequest(
-          cfg.ai.provider,
-          cfg.ai.key,
-          `${m.subject}\n${m.text}`,
-          cfg.ai.model,
-        );
-        const json = await io.fetchJson(req.url, req.init);
-        readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
-          ...r,
-          senderVerified: senderMatchesBank(domain, r.bank),
-        }));
+        readings = await readWithAi(chain, `${m.subject}\n${m.text}`, domain);
         if (readings.length === 0) {
           await log({
             outcome: 'ignored',

@@ -9,14 +9,14 @@ import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { createClient } from '@supabase/supabase-js';
 import {
-  aiErrorHint,
-  prepareAi,
+  PROVIDER_SHORT,
   runInbox,
+  type AiAttempt,
   type InboxIo,
   type InboxMessage,
   type KnownAccount,
 } from '@fwos/ingest';
-import { importCasPdf, importTaxFile } from '@fwos/data';
+import { aiChainFor, importCasPdf, importTaxFile } from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -35,6 +35,8 @@ const must = <T>(r: { data: T | null; error: { message: string } | null }, what:
 };
 
 const today = new Date().toISOString().slice(0, 10);
+const logAiFailure = (a: AiAttempt) =>
+  console.log(`AI: ${a.brief}${a.detail ? ` - ${a.detail}` : ''}`);
 
 async function householdId(): Promise<string> {
   if (process.env.INBOX_HOUSEHOLD_ID) return process.env.INBOX_HOUSEHOLD_ID;
@@ -60,26 +62,20 @@ async function main() {
   const settings = must(
     await db
       .from('integration_settings')
-      .select('ai_provider, ai_api_key, inbox_label')
+      .select('inbox_label')
       .eq('household_id', hh)
       .maybeSingle(),
     'settings',
-  ) as {
-    ai_provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
-    ai_api_key: string | null;
-    inbox_label: string;
-  } | null;
+  ) as { inbox_label: string } | null;
   const label = settings?.inbox_label ?? 'FWOS/Inbox';
-  // providers retire models without notice, so the model is checked first; OpenRouter's free models fall back one to the next
-  const runtime =
-    settings?.ai_provider && settings.ai_api_key
-      ? await prepareAi(settings.ai_provider, settings.ai_api_key)
-      : null;
-  const model = runtime?.model ?? null;
-  const ai =
-    settings?.ai_provider && settings.ai_api_key
-      ? { provider: settings.ai_provider, key: settings.ai_api_key, ...(model ? { model } : {}) }
-      : null;
+  // the AI keys that are switched on, first choice first: when one fails the next is asked, and a key that was refused is not
+  // asked again in this run. Each key's model is checked when it is first needed (providers retire models without notice).
+  const ai = await aiChainFor(db, hh, 'service', { onFailure: logAiFailure });
+  console.log(
+    ai.empty
+      ? 'AI: no key is switched on (statements and unfamiliar e-mails are not read).'
+      : `AI keys, in order: ${ai.keys.map((k) => PROVIDER_SHORT[k.provider]).join(', ')}.`,
+  );
 
   const io: InboxIo = {
     async accounts() {
@@ -249,7 +245,6 @@ async function main() {
           const res = await importTaxFile(db, hh, { id: o.id, panLast4: o.pan_last4 }, a.content, {
             passwords,
             ai,
-            fetchJson: (url, init) => io.fetchJson(url, init),
           });
           if (res.ok) return { outcome: 'imported', reason: res.message };
           lastReason = res.message;
@@ -257,17 +252,6 @@ async function main() {
         }
       }
       return { outcome: 'failed', reason: lastReason };
-    },
-    async fetchJson(url, init) {
-      const res = runtime
-        ? await runtime.call(url, init as unknown as Record<string, unknown>)
-        : await fetch(url, init);
-      if (!res.ok) {
-        const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-        const hint = ai ? aiErrorHint(ai.provider, res.status, body) : null;
-        throw new Error(`AI service answered ${res.status}: ${body}${hint ? ` — ${hint}` : ''}`);
-      }
-      return res.json();
     },
     async pdfText(content) {
       const pdf = await getDocumentProxy(new Uint8Array(content));

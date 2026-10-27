@@ -155,14 +155,14 @@ export function explainEntry(m: InboxEntry): Explained {
   if (/balance email in a format the rules do not know/.test(reason))
     return {
       headline: 'A balance email in an unfamiliar format',
-      why: 'The fixed rules do not know this bank’s wording, and the AI reader that can read it has no key.',
-      next: 'Add an AI key in Settings (Bank e-mails and AI), then use Read again; or record the balance in Monthly update and ignore this.',
+      why: 'The fixed rules do not know this bank’s wording, and the AI reader that can read it has no key switched on.',
+      next: 'Add an AI key, or switch one on, in Settings (Bank e-mails and AI), then use Read again; or record the balance in Monthly update and ignore this.',
     };
   if (/add an AI key/.test(reason))
     return {
       headline: 'A statement is attached but was not read',
-      why: 'Reading a PDF statement needs the AI reader and no key is set.',
-      next: 'Add a free key in Settings (Email and AI), or record the balance in Monthly update, then ignore this.',
+      why: 'Reading a PDF statement needs the AI reader and no key is switched on.',
+      next: 'Add a free key, or switch one on, in Settings (Bank e-mails and AI), or record the balance in Monthly update, then ignore this.',
     };
   if (/PDF could not be opened/.test(reason))
     return {

@@ -183,7 +183,7 @@ export const MENU: MenuGroup[] = [
       {
         href: '/settings?tab=connections',
         label: 'Connections',
-        hint: 'AI key, Gmail label and bank rate pages.',
+        hint: 'AI keys, Gmail label and bank rate pages.',
         icon: Cable,
       },
       {
