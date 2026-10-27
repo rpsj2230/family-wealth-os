@@ -1,3 +1,4 @@
+import { liveLinesFilter } from './columns';
 import {
   allowanceUsed,
   approximateFlows,
@@ -70,11 +71,11 @@ export async function loadHarvestPositions(
     balance_units: number | null;
     description: string | null;
     source: string | null;
-  }>((from, to) => {
+  }>(async (from, to) => {
     const tq = db
       .from('mf_transactions')
       .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description, source')
-      .is('superseded_on', null)
+      .or(await liveLinesFilter(db))
       .order('txn_on', { ascending: true })
       .order('id');
     return (opts.householdId ? tq.eq('household_id', opts.householdId) : tq).range(from, to);

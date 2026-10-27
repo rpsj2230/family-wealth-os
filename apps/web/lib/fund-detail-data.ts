@@ -1,5 +1,6 @@
 import type { FundRangeKey, FundTaxPanel } from '@fwos/core';
-import { pageAll } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { columnExists, pageAll } from '@fwos/data';
 import type { ReplacedRow } from '@/components/invest/ReplacedLines';
 import { loadContext } from './data';
 import { buildFundDetail, NAV_POINTS, type FundDetail } from './fund-detail-model';
@@ -36,16 +37,23 @@ export async function loadFundDetail(
       )
     : [];
   const navs = rows.map((n) => ({ date: n.nav_date, nav: Number(n.nav) }));
-  const setAside = await pageAll<Record<string, unknown>>((from, to) =>
-    supabase
-      .from('mf_transactions')
-      .select('id, txn_on, kind, amount, units, source, superseded_on, superseded_statement_on')
-      .eq('asset_id', assetId)
-      .not('superseded_on', 'is', null)
-      .order('txn_on')
-      .order('id')
-      .range(from, to),
-  );
+  // nothing is set aside until the database update that adds the column has run
+  const setAside = !(await columnExists(
+    supabase as unknown as SupabaseClient,
+    'mf_transactions',
+    'superseded_on',
+  ))
+    ? []
+    : await pageAll<Record<string, unknown>>((from, to) =>
+        supabase
+          .from('mf_transactions')
+          .select('id, txn_on, kind, amount, units, source, superseded_on, superseded_statement_on')
+          .eq('asset_id', assetId)
+          .not('superseded_on', 'is', null)
+          .order('txn_on')
+          .order('id')
+          .range(from, to),
+      );
   const replaced: ReplacedRow[] = setAside.map((r) => ({
     id: r.id as string,
     date: r.txn_on as string,

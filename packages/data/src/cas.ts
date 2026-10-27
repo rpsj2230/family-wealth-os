@@ -43,9 +43,7 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       const pos = must(
         await db
           .from('mf_positions')
-          .select(
-            'asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on, units, invested, sip_monthly, sip_stopped, cas_detail_from, cas_detail_to',
-          )
+          .select('*') // every column: the statement-period ones are newer and may not exist yet
           .eq('household_id', hh)
           .in('asset_id', ids),
         'fund positions',
@@ -173,14 +171,14 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         );
     },
     async links(ownerId) {
-      const r = must(
-        await db
-          .from('fund_folio_links')
-          .select('asset_id, folio_last4, scheme_key')
-          .eq('household_id', hh)
-          .eq('owner_id', ownerId),
-        'folio links',
-      ) as { asset_id: string; folio_last4: string; scheme_key: string }[];
+      const res = await db
+        .from('fund_folio_links')
+        .select('asset_id, folio_last4, scheme_key')
+        .eq('household_id', hh)
+        .eq('owner_id', ownerId);
+      // the table comes with a database update: until it has run there are no links and the statement is matched without them
+      if (res.error) return [];
+      const r = (res.data ?? []) as { asset_id: string; folio_last4: string; scheme_key: string }[];
       return r.map((x) => ({
         assetId: x.asset_id,
         folioLast4: x.folio_last4,
@@ -189,22 +187,20 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
     },
     async linkFolios({ ownerId, assetId, links }) {
       // one row for each statement folio and scheme; saying the same thing again changes nothing
-      must(
-        await db
-          .from('fund_folio_links')
-          .upsert(
-            links.map((l) => ({
-              household_id: hh,
-              owner_id: ownerId,
-              asset_id: assetId,
-              folio_last4: l.folioLast4,
-              scheme_key: l.schemeKey.slice(0, 200),
-            })),
-            { onConflict: 'household_id,owner_id,folio_last4,scheme_key' },
-          )
-          .select('id'),
-        'link folios',
-      );
+      // not worth failing the import over: without the table the choice is simply asked again next time
+      await db
+        .from('fund_folio_links')
+        .upsert(
+          links.map((l) => ({
+            household_id: hh,
+            owner_id: ownerId,
+            asset_id: assetId,
+            folio_last4: l.folioLast4,
+            scheme_key: l.schemeKey.slice(0, 200),
+          })),
+          { onConflict: 'household_id,owner_id,folio_last4,scheme_key' },
+        )
+        .select('id');
     },
     async isinToAmfi(isin) {
       const r = must(

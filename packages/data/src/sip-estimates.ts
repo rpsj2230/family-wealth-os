@@ -1,3 +1,4 @@
+import { liveLinesFilter } from './columns';
 /**
  * Keeps the instalments a SIP is assumed to have made, since the units were last counted, in the transaction list as estimates
  * (source 'estimate', reference 'est:<date>', worded "Estimated"). They make lots, returns and graphs agree with the valuation, which
@@ -71,12 +72,12 @@ export async function syncSipEstimates(
     source: string;
     source_ref: string;
     amount: number;
-  }>((from, to) =>
+  }>(async (from, to) =>
     db
       .from('mf_transactions')
       .select('id, asset_id, txn_on, source, source_ref, amount')
       .in('asset_id', ids)
-      .is('superseded_on', null)
+      .or(await liveLinesFilter(db))
       .order('txn_on')
       .order('id')
       .range(from, to),

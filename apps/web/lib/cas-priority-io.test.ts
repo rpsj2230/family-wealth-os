@@ -155,10 +155,10 @@ describe('reading what is on file', () => {
     });
     const funds = await casIo(db, 'h1').funds('o1', { dates: [] });
     expect(funds[0]!.state!.cover).toEqual({ from: '1986-10-01', to: '2026-10-27' });
+    // the column is probed once (it can be missing until the database update has run), then the lines are read without the set-aside ones
     const reads = queries.filter((r) => r.table === 'mf_transactions');
-    expect(reads).toHaveLength(1);
     expect(
-      reads[0]!.ops.some(([o, a]) => o === 'is' && a[0] === 'superseded_on' && a[1] === null),
+      reads.some((r) => r.ops.some(([o, a]) => o === 'or' && a[0] === 'superseded_on.is.null')),
     ).toBe(true);
   });
   it('has no period for a fund no detailed statement has decided yet', async () => {

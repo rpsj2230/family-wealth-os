@@ -14,7 +14,7 @@ import {
 import type { ActivityItem } from '@/components/ActivityLog';
 import type { DetailTableData } from '@/components/DetailTable';
 import type { Fact } from '@/components/AssetFacts';
-import { loadSettings, pageAll } from '@fwos/data';
+import { loadSettings, pageAll, liveLinesFilter } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext, type Ctx } from './data';
 import {
@@ -105,12 +105,12 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
         .eq('asset_id', id)
         .maybeSingle(),
       // the API returns at most 1,000 rows a request, so a long ledger is read in pages (a plain limit would drop the newest lines)
-      pageAll<Record<string, unknown>>((from, to) =>
+      pageAll<Record<string, unknown>>(async (from, to) =>
         supabase
           .from('mf_transactions')
           .select('id, txn_on, kind, amount, units, nav, balance_units, description')
           .eq('asset_id', id)
-          .is('superseded_on', null)
+          .or(await liveLinesFilter(supabase as unknown as SupabaseClient))
           .order('txn_on')
           .order('id')
           .range(from, to),

@@ -1,3 +1,4 @@
+import { liveLinesFilter } from './columns';
 /**
  * What is stored for a person's funds, in the shape the statement comparison wants (`diffFundImport` in core): the position, the
  * dated SIP history, every real transaction line, the latest value, the stored values on the statement dates and the verdicts the
@@ -59,14 +60,14 @@ export async function loadFundStates(
     amount: number;
     units: number;
     source: string;
-  }>((from, to) =>
+  }>(async (from, to) =>
     db
       .from('mf_transactions')
       .select('asset_id, source_ref, txn_on, kind, amount, units, source')
       .eq('household_id', hh)
       .in('asset_id', assetIds)
       // lines a statement has replaced are set aside, not part of what is on file
-      .is('superseded_on', null)
+      .or(await liveLinesFilter(db))
       .order('id')
       .range(from, to),
   ))

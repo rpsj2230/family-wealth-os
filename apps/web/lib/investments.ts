@@ -45,7 +45,7 @@ import {
   type SeriesPoint,
   type TaxRuleSet,
 } from '@fwos/core';
-import { loadSettings, pageAll, type LoadedPortfolio } from '@fwos/data';
+import { liveLinesFilter, loadSettings, pageAll, type LoadedPortfolio } from '@fwos/data';
 import type { CasTxn } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fundLedger } from './fund-ledger';
@@ -207,6 +207,7 @@ export async function loadInvestmentView(
 ): Promise<InvestmentView> {
   const l = loaded ?? (await loadPortfolio(supabase));
   const codes = [...new Set(l.assetRows.map((a) => a.amfi_code).filter((c): c is string => !!c))];
+  const live = await liveLinesFilter(supabase as unknown as SupabaseClient);
   const [pos, tx, obsAll, snaps, navAll, goals, allocs, owners, schemes, settings] =
     await Promise.all([
       supabase
@@ -232,7 +233,7 @@ export async function loadInvestmentView(
           .select(
             'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source, source_ref',
           )
-          .is('superseded_on', null)
+          .or(live)
           .order('txn_on')
           .order('id')
           .range(from, to),

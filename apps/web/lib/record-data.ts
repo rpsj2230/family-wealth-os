@@ -1,5 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
-import { pageAll } from '@fwos/data';
+import { pageAll, liveLinesFilter } from '@fwos/data';
 import { describeAudit, formatInr, personStyles, sourceTag, type PersonStyle } from '@fwos/core';
 import type { Fact } from '@/components/AssetFacts';
 import type { ActivityItem } from '@/components/ActivityLog';
@@ -240,12 +241,12 @@ export async function loadTxnDetail(assetId: string, txnId: string): Promise<Rec
       .eq('id', txnId)
       .eq('asset_id', assetId)
       .maybeSingle(),
-    pageAll<Record<string, unknown>>((from, to) =>
+    pageAll<Record<string, unknown>>(async (from, to) =>
       supabase
         .from('mf_transactions')
         .select('id, txn_on, kind, amount, units, created_at')
         .eq('asset_id', assetId)
-        .is('superseded_on', null)
+        .or(await liveLinesFilter(supabase as unknown as SupabaseClient))
         .order('txn_on')
         .order('created_at')
         .order('id')

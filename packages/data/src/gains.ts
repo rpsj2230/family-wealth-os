@@ -1,3 +1,4 @@
+import { liveLinesFilter } from './columns';
 import { fyBounds, type RealisedRow } from '@fwos/core';
 import { pageAll } from './paging';
 import { fundLedger, type CasTxn } from '@fwos/ingest';
@@ -26,12 +27,12 @@ export async function loadRealisedGains(
       balance_units: number | null;
       description: string | null;
       source: string | null;
-    }>((from, to) =>
+    }>(async (from, to) =>
       sel(
         'mf_transactions',
         'asset_id, txn_on, kind, amount, units, nav, balance_units, description, source',
       )
-        .is('superseded_on', null)
+        .or(await liveLinesFilter(db))
         .order('txn_on', { ascending: true })
         .order('id')
         .range(from, to),
