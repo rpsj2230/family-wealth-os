@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { capacityLabel, formatInr, partnerMissing, type PersonStyle } from '@fwos/core';
 import './deposits.css';
 import { BankBadge } from '@/components/BankBadge';
+import { ConfirmMatured } from '@/components/ConfirmMatured';
+import { NoticeHost } from '@/components/NoticeHost';
 import { PersonBadge } from '@/components/Person';
 import { daysPhrase, niceDate } from '@/lib/dates';
 import type { DepositsView, FdLine } from '@/lib/deposits';
@@ -12,6 +14,7 @@ import {
   type DepositSummary,
   type MonthGroup,
 } from '@/lib/deposits-summary';
+import { NOT_COUNTED_NOTE } from '@/lib/matured-list';
 import { slugify } from '@/lib/slug';
 
 const KIND: Record<string, string> = {
@@ -63,13 +66,18 @@ export function RegisterTab({
   styles,
   links,
   group = 'none',
+  allHidden = false,
 }: {
   fds: FdLine[];
+  /** every deposit is hidden by the matured-deposit rule: say so instead of "no deposits yet" */
+  allHidden?: boolean;
   styles: Record<string, PersonStyle>;
   links: DepositLinks;
   /** one block of rows per bank or per person, each with its own subtotal, or one flat list */
   group?: 'none' | 'bank' | 'owner';
 }) {
+  if (fds.length === 0 && allHidden)
+    return <p className="empty">No running deposits to list. The matured ones are hidden.</p>;
   if (fds.length === 0)
     return (
       <p className="empty">
@@ -98,8 +106,11 @@ export function RegisterTab({
             b.list.reduce((x, f) => x + f.accruedToday, 0) -
             a.list.reduce((x, f) => x + f.accruedToday, 0),
         );
+  // a deposit that is not running (past its date, closed, renewed) is listed but is in none of the totals
+  const counted = fds.filter((f) => f.status === 'active' && !needsConfirmation(f));
   return (
     <section className="card" aria-labelledby="reg">
+      <NoticeHost />
       <div className="cardhead">
         <h2 id="reg">All fixed deposits</h2>
         <span className="small muted">Soonest maturity first. Open a deposit for its history.</span>
@@ -141,7 +152,14 @@ export function RegisterTab({
                 return (
                   <tr
                     key={f.id}
-                    className={f.status !== 'active' && !needsConfirmation(f) ? 'dim' : ''}
+                    className={
+                      f.listState === 'hidden' || (f.status !== 'active' && !needsConfirmation(f))
+                        ? 'dim'
+                        : ''
+                    }
+                    {...(f.status === 'active' && !needsConfirmation(f)
+                      ? {}
+                      : { 'data-nosum': '' })}
                   >
                     <td data-label="Deposit">
                       <PersonBadge p={styles[f.ownerId]} size={16} />{' '}
@@ -166,6 +184,12 @@ export function RegisterTab({
                           </>
                         )}
                       </div>
+                      {f.listState === 'confirm' && (
+                        <div className="small">
+                          <span className="muted">{NOT_COUNTED_NOTE}.</span>{' '}
+                          <ConfirmMatured assetId={f.id} name={f.bank} sample={links.sample} />
+                        </div>
+                      )}
                     </td>
                     <td className="nowrap" data-label="Created">
                       {niceDate(f.bookedOn)}
@@ -174,7 +198,14 @@ export function RegisterTab({
                       {rupee(f.principal)}
                     </td>
                     <td className="num" data-label="Value today">
-                      {rupee(f.accruedToday)}
+                      {f.status === 'active' && !needsConfirmation(f) ? (
+                        rupee(f.accruedToday)
+                      ) : (
+                        <span className="muted" title="Not counted: the deposit is past its date">
+                          {rupee(f.accruedToday)}
+                          <div className="small">not counted</div>
+                        </span>
+                      )}
                     </td>
                     <td data-label="Rate">{(f.rate * 100).toFixed(2)}%</td>
                     <td data-label="Matures">
@@ -208,19 +239,19 @@ export function RegisterTab({
         <tfoot>
           <tr data-totals className="sumrow">
             <th scope="row" data-count>
-              Total · <span data-count-n>{fds.length}</span> deposits
+              Total · <span data-count-n>{counted.length}</span> running deposits
             </th>
             <td />
             <td className="num" data-sum>
-              {rupee(fds.reduce((a, f) => a + f.principal, 0))}
+              {rupee(counted.reduce((a, f) => a + f.principal, 0))}
             </td>
             <td className="num" data-sum>
-              {rupee(fds.reduce((a, f) => a + f.accruedToday, 0))}
+              {rupee(counted.reduce((a, f) => a + f.accruedToday, 0))}
             </td>
-            <td data-wavg="2">{pctOf(fds)}</td>
+            <td data-wavg="2">{pctOf(counted)}</td>
             <td />
             <td className="num" data-sum>
-              {rupee(fds.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))}
+              {rupee(counted.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))}
             </td>
           </tr>
         </tfoot>
@@ -245,11 +276,15 @@ export function MaturitiesTab({
 }) {
   return (
     <>
+      <NoticeHost />
       {s.confirm.length > 0 && (
         <section className="card" aria-labelledby="conf">
           <div className="cardhead">
             <h2 id="conf">Confirm what happened ({s.confirm.length})</h2>
-            <span className="small muted">Not counted in net worth until you do.</span>
+            <span className="small muted">
+              Not counted anywhere: the money counts in the savings account or new deposit it went
+              to.
+            </span>
           </div>
           <ul className="list">
             {s.confirm.map((f) => (
@@ -262,9 +297,12 @@ export function MaturitiesTab({
                   · {f.nickname} matured on {niceDate(f.maturityOn)} ({daysPhrase(f.daysLeft)}).
                   Renewed, paid out or still waiting?
                 </span>
-                <Link className="btn compact" href={links.monthly(f)}>
-                  Set its status
-                </Link>
+                <span className="confirmrow">
+                  <ConfirmMatured assetId={f.id} name={f.bank} sample={links.sample} />
+                  <Link className="btn compact ghost" href={links.monthly(f)}>
+                    Renewed or other
+                  </Link>
+                </span>
               </li>
             ))}
           </ul>

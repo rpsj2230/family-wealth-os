@@ -104,17 +104,33 @@ describe('buildDeposits', () => {
     expect(esaf.find((r) => r.capacityKey === 'joint:r+?')!.insured).toBe(500_000);
   });
 
-  it('counts running deposits and matured ones not yet paid out, and states its assumptions', () => {
-    // a matured deposit is still money at the bank until it is paid out, so it still counts towards the limit
-    const row = view.cover.rows.find((r) => r.depositIds.includes('m'));
-    expect(row).toBeTruthy();
-    expect(row!.parts.find((p) => p.id === 'm')).toMatchObject({
-      kind: 'Fixed deposit',
-      status: 'matured_unconfirmed',
-    });
+  it('counts running deposits only: one past its date is not counted towards the limit, and the assumptions are stated', () => {
+    // once a deposit has matured its money is in a savings account or a new deposit, which are counted on their own
+    expect(view.cover.rows.some((r) => r.depositIds.includes('m'))).toBe(false);
     expect(view.cover.assumptions.join(' ')).toMatch(/added together/i);
     expect(view.cover.assumptions.join(' ')).toMatch(/ownership name/i);
     expect(view.cover.assumptions.join(' ')).toMatch(/no second name/i);
+  });
+
+  it('leaves a deposit that is still marked active but past its date out of the cover, and keeps one maturing today', () => {
+    const late = fd('late', 'yes', 'g', 'NRE', 400_000, 0.07, '2025-01-01', '2026-10-25');
+    const todayFd = fd('today', 'yes', 'g', 'NRE', 300_000, 0.07, '2025-10-26', '2026-10-26');
+    const set = [late, todayFd];
+    const v = buildDeposits(
+      set.map((x) => x.asset),
+      set.map((x) => x.valued),
+      set.map((x) => x.row),
+      banks,
+      owners,
+      today,
+      500_000,
+    );
+    const ids = v.cover.rows.flatMap((r) => r.depositIds);
+    expect(ids).toContain('today');
+    expect(ids).not.toContain('late');
+    // both are listed, the late one flagged to confirm
+    expect(v.fds.find((f) => f.id === 'late')!.listState).toBe('confirm');
+    expect(v.fds.find((f) => f.id === 'today')!.listState).toBe('show');
   });
 
   it('builds a maturity calendar of active FDs by month, excluding matured-unconfirmed ones', () => {

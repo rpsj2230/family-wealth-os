@@ -31,13 +31,17 @@ export default async function CashPage({
   const { p } = await searchParams;
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, settings, offers] =
-    await Promise.all([
-      loadPortfolio(supabase),
-      supabase.from('institutions').select('id, name'),
-      loadSettings(supabase as unknown as SupabaseClient),
-      loadOffers(supabase),
-    ]);
+  const [
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays },
+    inst,
+    settings,
+    offers,
+  ] = await Promise.all([
+    loadPortfolio(supabase),
+    supabase.from('institutions').select('id, name'),
+    loadSettings(supabase as unknown as SupabaseClient),
+    loadOffers(supabase),
+  ]);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = p && styles[p] ? p : null;
   const names = Object.fromEntries(
@@ -50,6 +54,7 @@ export default async function CashPage({
     portfolio,
     institutionNames: names,
     today,
+    hideMaturedAfterDays,
   });
   const blocks = cashBlocks(who ? filterBlocksByOwner(all, who) : all);
   const rates = cashRatesFor(

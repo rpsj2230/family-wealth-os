@@ -140,7 +140,8 @@ export function depositCover(i: {
     .filter(
       (a) =>
         (a.type === 'fixed_deposit' || a.type === 'bank_account') &&
-        (a.status === 'active' || a.status === 'matured_unconfirmed') &&
+        // a deposit past its maturity date is not counted (it is valued as unconfirmed): its money is elsewhere
+        (val.get(a.id)?.status ?? a.status) === 'active' &&
         a.institution_id &&
         !i.outside.has(a.institution_id),
     )

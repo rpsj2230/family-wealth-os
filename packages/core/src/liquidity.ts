@@ -180,6 +180,10 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
     if (v.type === 'fixed_deposit') {
       const fd = fdOf.get(v.assetId);
       if (!fd) continue;
+      // A deposit whose date has passed is no longer a deposit: the money went to a savings account or a new deposit, which are listed
+      // on their own. One maturing TODAY still pays out today.
+      if (fd.maturity_on < today || v.status === 'matured' || v.status === 'matured_unconfirmed')
+        continue;
       const matured = fd.maturity_on <= today;
       const atMaturity =
         fd.bank_maturity_amount ??
@@ -191,8 +195,8 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
           maturityOn: utc(fd.maturity_on),
           compounding: fd.compounding,
         });
-      if (!countedStatus && !(v.status === 'matured' || matured)) continue;
-      if (matured || v.status === 'matured') {
+      if (!countedStatus) continue;
+      if (matured) {
         out.push({
           ...base,
           kind: 'fd_maturing',
@@ -201,7 +205,7 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
           divisible: false,
           fixedCostRate: 0,
           steps: [
-            `${bank} ${code} has matured (about {amt}): ask for it to be paid into ${into} and do not renew it.`,
+            `${bank} ${code} matures today (about {amt}): ask for it to be paid into ${into} and do not renew it.`,
           ],
           notes: [
             'Confirm the credit with the bank; the record is not updated until you confirm it.',

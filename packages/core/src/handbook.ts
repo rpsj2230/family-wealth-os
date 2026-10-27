@@ -341,7 +341,11 @@ export function buildHandbook(i: HandbookInput): Handbook {
           s.rows.map((r) => [
             i.ownerName[s.ownerId] ?? '',
             r.code + (r.last4 ? '' : ''),
-            r.status !== 'active' && r.kind === 'fd' ? r.status.replace('_', ' ') : inr(r.current),
+            r.kind === 'fd' && (r.status !== 'active' || r.fd?.needsConfirmation)
+              ? r.fd?.needsConfirmation
+                ? 'matured, not counted'
+                : r.status.replace('_', ' ')
+              : inr(r.current),
             r.fd
               ? `${Number((r.fd.rate * 100).toFixed(2))}%, invested ${inr(r.fd.principal)}, matures ${long(r.fd.maturityOn)}${r.fd.maturityAmount ? ` for about ${inr(r.fd.maturityAmount)}` : ''}${r.fd.refLast4 ? `, FD number ends ${r.fd.refLast4}` : ''}`
               : r.asOf
@@ -476,7 +480,12 @@ export function buildHandbook(i: HandbookInput): Handbook {
       b.sections.flatMap((s) =>
         s.rows
           .filter(
-            (r) => r.fd && r.status === 'active' && r.fd.daysLeft >= 0 && r.fd.daysLeft <= 365,
+            (r) =>
+              r.fd &&
+              r.status === 'active' &&
+              !r.fd.needsConfirmation &&
+              r.fd.daysLeft >= 0 &&
+              r.fd.daysLeft <= 365,
           )
           .map((r) => ({
             bank: b.name,

@@ -22,12 +22,15 @@ export default async function EditAccountsPage({
   const { bank } = await searchParams;
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, jointHolders] =
-    await Promise.all([
-      loadPortfolio(supabase),
-      supabase.from('institutions').select('id, name').order('name'),
-      loadJointHolders(supabase as unknown as SupabaseClient),
-    ]);
+  const [
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays },
+    inst,
+    jointHolders,
+  ] = await Promise.all([
+    loadPortfolio(supabase),
+    supabase.from('institutions').select('id, name').order('name'),
+    loadJointHolders(supabase as unknown as SupabaseClient),
+  ]);
   const owners = [...ownerName.entries()].map(([id, name]) => ({ id, name }));
   const styles = personStyles(owners);
   const institutions = (inst.data ?? []).map((i) => ({
@@ -41,6 +44,7 @@ export default async function EditAccountsPage({
     portfolio,
     institutionNames: Object.fromEntries(institutions.map((i) => [i.id, i.name])),
     today,
+    hideMaturedAfterDays,
   });
   // /accounts/edit?bank=<id> shows one bank only (linked from that bank's page)
   const only = bank && UUID.test(bank) ? all.filter((b) => b.key === bank) : [];

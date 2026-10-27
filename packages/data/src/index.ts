@@ -34,6 +34,8 @@ export interface LoadedPortfolio {
   >;
   /** how each fund's price moved between its last two prices, by asset */
   fundDay: Record<string, { pct: number; from: string; to: string }>;
+  /** Settings: a deposit matured longer ago than this many days is hidden from the lists */
+  hideMaturedAfterDays: number;
 }
 
 export const todayDate = () => new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
@@ -272,6 +274,7 @@ export async function loadPortfolioData(
     fdRows,
     ownerName,
     portfolio: buildPortfolio(assetRows, obsRows, fdRows, today, market),
+    hideMaturedAfterDays: config.deposits.hideMaturedAfterDays,
     marketDates,
     fundDay,
     fundInfo,

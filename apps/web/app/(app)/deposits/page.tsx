@@ -10,6 +10,7 @@ import {
 } from '@fwos/core';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
@@ -19,6 +20,7 @@ import { loadContext } from '@/lib/data';
 import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { bankBase, depositsExplain } from '@/lib/explain-money';
+import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { saveForeignBanks } from './actions';
 import { DepositOverviewPanel } from './Overview';
@@ -31,25 +33,30 @@ const TABS = ['deposits', 'maturities', 'cover'] as const;
 export default async function DepositsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; p?: string; g?: string }>;
+  searchParams: Promise<{ tab?: string; p?: string; g?: string; matured?: string }>;
 }) {
   const sp = await searchParams;
+  const showAll = showsMatured(sp.matured);
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as (typeof TABS)[number])
     : 'deposits';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, portfolio, ownerName }, assets, banks, settings] =
-    await Promise.all([
-      loadPortfolio(supabase),
-      supabase
-        .from('assets')
-        .select(
-          'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
-        ),
-      supabase.from('institutions').select('id, name, deposit_insured'),
-      loadSettings(supabase as unknown as SupabaseClient),
-    ]);
+  const [
+    { today, assetRows, obsRows, fdRows, portfolio, ownerName, hideMaturedAfterDays },
+    assets,
+    banks,
+    settings,
+  ] = await Promise.all([
+    loadPortfolio(supabase),
+    supabase
+      .from('assets')
+      .select(
+        'id, owner_id, institution_id, type, status, nickname, account_kind, is_joint, joint_holder_id',
+      ),
+    supabase.from('institutions').select('id, name, deposit_insured'),
+    loadSettings(supabase as unknown as SupabaseClient),
+  ]);
   const depositAssets: DepositAsset[] = (assets.data ?? []).map((a) => ({
     id: a.id as string,
     ownerId: a.owner_id as string,
@@ -73,6 +80,7 @@ export default async function DepositsPage({
     new Set(
       (banks.data ?? []).filter((b) => b.deposit_insured === false).map((b) => b.id as string),
     ),
+    hideMaturedAfterDays,
   );
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = sp.p && styles[sp.p] ? sp.p : null;
@@ -81,6 +89,18 @@ export default async function DepositsPage({
   // the person filter narrows the lists and the figures; insurance cover is always the whole household
   const shown = tab === 'cover' || !who ? v.fds : v.fds.filter((f) => f.ownerId === who);
   const s = summariseDeposits(shown, windowDays);
+  // the register leaves out deposits that matured long ago or are confirmed (they are in no total); ?matured=all lists them, dimmed
+  const hiddenFds = shown.filter((f) => f.listState === 'hidden');
+  const registerFds = showAll ? shown : shown.filter((f) => f.listState !== 'hidden');
+  const hiddenCounts = {
+    hidden: hiddenFds.length,
+    confirmed: hiddenFds.filter((f) => ['matured', 'renewed', 'closed'].includes(f.status)).length,
+  };
+  const keepQuery = {
+    tab: tab === 'deposits' ? null : tab,
+    p: who,
+    g: group === 'none' ? null : group,
+  };
   const blocks = fixedDepositBlocks(
     buildBankBlocks({
       assets: assetRows,
@@ -89,6 +109,7 @@ export default async function DepositsPage({
       portfolio,
       institutionNames: Object.fromEntries(bankName),
       today,
+      hideMaturedAfterDays,
     }),
   );
   const scoped = who && tab !== 'cover' ? filterBlocksByOwner(blocks, who) : blocks;
@@ -192,7 +213,19 @@ export default async function DepositsPage({
                 { key: 'owner', label: 'By person' },
               ]}
             />
-            <RegisterTab fds={shown} styles={styles} links={liveLinks} group={group} />
+            <RegisterTab
+              fds={registerFds}
+              styles={styles}
+              links={liveLinks}
+              group={group}
+              allHidden={hiddenCounts.hidden > 0}
+            />
+            <HiddenDepositsNote
+              counts={hiddenCounts}
+              showAll={showAll}
+              showHref={maturedHref('/deposits', keepQuery, true)}
+              hideHref={maturedHref('/deposits', keepQuery, false)}
+            />
           </>
         )}
         {tab === 'maturities' && (

@@ -13,14 +13,18 @@ import { buildDeposits, type DepositAsset, type FdLine } from './deposits';
 import { loadInvestmentView, type InvestmentView } from './investments';
 import { loadPortfolio } from './portfolio-data';
 
-/** Deposits that count in the summaries: running, and matured ones waiting to be confirmed (closed and renewed ones are history). */
-const COUNTED = new Set(['active', 'matured_unconfirmed']);
+/**
+ * Deposits that count in the summaries: those still running. A deposit whose date has passed is not counted (its money is in a
+ * savings account or a new deposit, which are counted on their own), nor are closed, renewed or confirmed matured ones.
+ * One that matures today still counts until tomorrow.
+ */
+const counted = (l: FdLine) => l.status === 'active' && l.daysLeft >= 0;
 
 /** What each deposit puts in and pays out, as the summaries need it. The bank's maturity amount is used when it is recorded. */
 export function reportFds(lines: FdLine[], fdRows: FdRow[], ownerId: string | null): ReportFd[] {
   const by = new Map(fdRows.map((f) => [f.asset_id, f]));
   return lines
-    .filter((l) => COUNTED.has(l.status) && (!ownerId || l.ownerId === ownerId))
+    .filter((l) => counted(l) && (!ownerId || l.ownerId === ownerId))
     .map((l) => {
       const f = by.get(l.id);
       const compounding = f?.compounding ?? 'quarterly';

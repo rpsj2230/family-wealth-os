@@ -106,7 +106,7 @@ export function assembleDigest(s: DigestSources): DigestInput {
     counted.flatMap((v) => (s.portfolio.lines[v.assetId] ? [s.portfolio.lines[v.assetId]!] : [])),
   );
   const late = fresh.stale + fresh.missing;
-  const toConfirm = rows.filter((r) => r.fd?.needsConfirmation);
+  const toConfirm = rows.filter((r) => r.fd?.listState === 'confirm');
   const cover = s.cover;
   const items = attentionItems({
     today: s.date,

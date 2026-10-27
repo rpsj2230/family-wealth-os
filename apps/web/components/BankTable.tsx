@@ -8,9 +8,12 @@ import {
   type BankRow,
   type PersonStyle,
 } from '@fwos/core';
+import { NOT_COUNTED_NOTE } from '@/lib/matured-list';
 import type { CashRate } from '@/lib/rates-view';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
+import { ConfirmMatured } from './ConfirmMatured';
+import { NoticeHost } from './NoticeHost';
 import { PersonBadge } from './Person';
 import { EditButton } from './QuickEdit';
 import { slugify } from '@/lib/slug';
@@ -68,16 +71,26 @@ function Money({ v }: { v: number | null }) {
   return <>{v === null ? '–' : formatInr(Math.round(v))}</>;
 }
 
+/** The state of a deposit that is not running, in two or three words. */
+const stateWord = (r: BankRow) =>
+  r.status === 'matured_unconfirmed' || (r.status === 'active' && r.fd?.needsConfirmation)
+    ? 'matured'
+    : r.status.replace('_', ' ');
+
 function Row({
   r,
   soonDays,
   cashRate,
+  sample,
 }: {
   r: BankRow;
   soonDays: number;
   cashRate?: CashRate | undefined;
+  sample: boolean;
 }) {
   const fd = r.fd;
+  // matured within the window and not confirmed: shown, not counted, with the button; older or confirmed ones are dimmed
+  const toConfirm = fd?.listState === 'confirm';
   const note = cleanNote(r.notes);
   // what this line adds to the page total, read by the live total at the bottom (same rule as the overview)
   const fig = bankRowFigures(r);
@@ -89,7 +102,10 @@ function Row({
       }
     : {};
   return (
-    <tr className={`xlrow ${r.status !== 'active' ? 'dim' : ''}`} {...totals}>
+    <tr
+      className={`xlrow ${fd?.listState === 'hidden' || (r.status !== 'active' && !toConfirm) ? 'dim' : ''} ${toConfirm ? 'matured' : ''}`}
+      {...totals}
+    >
       <td className="code">
         <div className="codeline">
           <Link
@@ -112,6 +128,12 @@ function Row({
           <EditButton id={r.assetId} name={r.code} className="onlynarrow" />
         </div>
         {fd?.linkedTo && <div className="sub">↳ linked to {fd.linkedTo}</div>}
+        {toConfirm && (
+          <div className="sub notcounted">
+            {NOT_COUNTED_NOTE}
+            <ConfirmMatured assetId={r.assetId} name={r.code} sample={sample} />
+          </div>
+        )}
         {r.kind === 'cash' && <div className="sub">{r.source.label}</div>}
         {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
       </td>
@@ -167,8 +189,15 @@ function Row({
         )}
       </td>
       <td className="num cur">
-        {r.status !== 'active' && r.kind === 'fd' ? (
-          <span className="muted">{r.status.replace('_', ' ')}</span>
+        {toConfirm && fd ? (
+          <div className="maturedcell">
+            <span className="muted" title={NOT_COUNTED_NOTE}>
+              <Money v={fd.maturityAmount} />
+            </span>
+            <div className="small muted">matured, not counted</div>
+          </div>
+        ) : fd && (r.status !== 'active' || fd.needsConfirmation) ? (
+          <span className="muted">{stateWord(r)}</span>
         ) : (
           <Money v={r.current} />
         )}
@@ -180,7 +209,11 @@ function Row({
         {fd?.refLast4 && (
           <span className="chip tiny fdno">FD no. {fd.ref ?? `…${fd.refLast4}`}</span>
         )}{' '}
-        {note}
+        {note && (
+          <span className="notetxt" title={note}>
+            {note}
+          </span>
+        )}
       </td>
       <td className="editcol">
         <EditButton id={r.assetId} name={r.code} className="onlywide" />
@@ -221,6 +254,7 @@ export function BankTable({
   notes,
   saveNote,
   cashRates,
+  sample = false,
 }: {
   blocks: BankBlock[];
   styles: Record<string, PersonStyle>;
@@ -232,9 +266,12 @@ export function BankTable({
   saveNote?: (f: FormData) => Promise<void>;
   /** the interest rate each savings account earns, by asset (see cashRatesFor) */
   cashRates?: Record<string, CashRate>;
+  /** the public sample: "Confirm matured" is acted out and nothing is saved */
+  sample?: boolean;
 }) {
   return (
     <>
+      <NoticeHost />
       <AccordionControls />
       {blocks.map((b) => (
         <section
@@ -355,6 +392,7 @@ export function BankTable({
                         r={r}
                         soonDays={soonDays}
                         cashRate={cashRates?.[r.assetId]}
+                        sample={sample}
                       />
                     ))}
                   </tbody>
