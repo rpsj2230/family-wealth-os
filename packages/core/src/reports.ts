@@ -3,7 +3,8 @@
  * the way a pivot table in a workbook shows them. Pure: every figure comes from the rows passed in. A report is a plain table
  * (`ReportTable`), so one screen can show any of them and one function can export any of them.
  */
-import { fdValueOn, type Compounding } from './fd';
+import type { Compounding } from './fd';
+import { depositPeriod, spanBetween } from './period-gains';
 import { fyBoundsOf, fyOf } from './tax';
 
 export type ColKind = 'text' | 'date' | 'int' | 'money' | 'pct' | 'rate';
@@ -265,16 +266,12 @@ export function fdInterestByFy(fds: ReportFd[], today: string): ReportTable {
       const from = f.bookedOn > b.from ? f.bookedOn : b.from;
       const to = f.maturityOn < addDays(b.to, 1) ? f.maturityOn : addDays(b.to, 1);
       if (to <= from) continue;
-      const value = (d: string) =>
-        fdValueOn({
-          principal: f.principal,
-          annualRate: f.rate,
-          bookedOn: new Date(`${f.bookedOn}T00:00:00Z`),
-          asOf: new Date(`${d}T00:00:00Z`),
-          maturityOn: new Date(`${f.maturityOn}T00:00:00Z`),
-          compounding: f.compounding,
-        });
-      const interest = value(to) - value(from);
+      // the same interest the other pages show for a period: the shared figure for this deposit over the whole year
+      const interest = depositPeriod(
+        [{ assetId: f.id, ...f, held: true }],
+        spanBetween(b.from, addDays(b.to, 1), b.to),
+        today,
+      ).profit;
       const m = years.get(fy) ?? new Map<string, number>();
       m.set(f.owner, (m.get(f.owner) ?? 0) + interest);
       years.set(fy, m);

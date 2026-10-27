@@ -16,6 +16,7 @@ import {
   moveAmount,
   monthEnds,
   perfDates,
+  periodDates,
   returnsFor,
   trailingTable,
   type IndexPoint,
@@ -156,7 +157,10 @@ const SPECS: Spec[] = [
     phase: 0.9,
     lumps: [['2023-01-10', 600_000]],
     sip: { monthly: 10_000, start: '2023-02-05', stopAfter: '2025-06' },
-    sells: [['2026-02-12', 300]],
+    sells: [
+      ['2026-02-12', 300],
+      ['2026-10-14', 120],
+    ],
     goal: 'g1',
   },
   {
@@ -450,6 +454,9 @@ function buildRow(
           })
         : [],
     perf,
+    periodPoints: startedOn
+      ? fundSeries(hist, DEMO_TODAY, cur, periodDates(DEMO_TODAY, DEFAULT_CONFIG.home.changeDays))
+      : [],
     flows: fl.flows,
     flowsEstimated: fl.estimated,
     hasStatement: !hidden,

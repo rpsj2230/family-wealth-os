@@ -14,6 +14,7 @@ import { bankOverviewOptions } from './bank-overview-options';
 import { buildDeposits } from './deposits';
 import { loadGoalSummaries } from './goals-view';
 import { buildHome, type HomeInput, type HomeModel } from './home';
+import { periodInputs } from './home-periods';
 import { fundPace, loadInvestmentView } from './investments';
 import { loadPortfolio } from './portfolio-data';
 
@@ -171,6 +172,7 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       source: o.source,
     }));
   const planned = settingsFromJson(plan.data?.settings);
+  const periods = periodInputs({ assetRows, fdRows, obsRows, blocks, overview });
 
   const input: HomeInput = {
     today: todayIso,
@@ -204,6 +206,8 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       .map((t) => ({ id: t.id as string, title: t.title as string, dueOn: t.due_on as string })),
     openTasks: (tasks.data ?? []).length,
     inboxReview: inbox.count ?? 0,
+    deposits: periods.deposits,
+    accounts: periods.accounts,
     monthlySpending: planned.monthlySpendingToday,
     recent,
     newestRecorded: obsRows.reduce<string | null>(

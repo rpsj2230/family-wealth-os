@@ -33,7 +33,7 @@ test.describe('Deposits: the overview (public sample)', () => {
     ]) {
       await expect(p.getByText(label, { exact: false }).first()).toBeVisible();
     }
-    await expect(p.getByText('estimate', { exact: true })).toBeVisible();
+    await expect(p.getByText('est.', { exact: true })).toBeVisible();
     await expect(p.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
     expect(await p.getByTestId('dv-banks').locator('li').count()).toBeGreaterThan(0);
     expect(await p.getByTestId('dv-ladder').locator('li').count()).toBeGreaterThan(0);

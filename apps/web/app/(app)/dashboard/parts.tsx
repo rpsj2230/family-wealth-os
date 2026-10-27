@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { formatInr, formatInrCompact, formatPct } from '@fwos/core';
+import { Est } from '@/components/Est';
 
 /** Pages that also exist as public samples under /demo; any other link is drawn as plain text in the sample. */
 const SAMPLE_PAGES = [
   'accounts',
+  'cash',
   'deposits',
   'goals',
   'inbox',
@@ -91,7 +93,7 @@ export function CardHead({
 
 /**
  * A signed figure in one line: an arrow and a word as well as the colour, so a fall never reads as a rise by colour alone.
- * `estimate` adds the word "estimate" for figures worked out from rates rather than read from a statement.
+ * `estimate` adds the shared est. mark for figures worked out from rates rather than read from a statement.
  */
 export function Signed({
   label,
@@ -123,7 +125,7 @@ export function Signed({
       {pct !== null && pct !== undefined && (
         <span className="hm-signed-pct">{formatPct(Math.abs(pct), 2)}</span>
       )}
-      {estimate && <span className="bv-est">estimate</span>}
+      {estimate && <Est />}
     </span>
   );
 }

@@ -40,7 +40,7 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
       await expect(p.getByText(label, { exact: false }).first()).toBeVisible();
     }
     // today's earning says it is an estimate; profit is marked with an arrow and a word for a screen reader
-    await expect(p.getByText('estimate', { exact: true })).toBeVisible();
+    await expect(p.getByText('est.', { exact: true })).toBeVisible();
     await expect(p.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
     // the window for "maturing in" comes from Settings (30 days by default), it is not written into the page
     await expect(p.getByText(/Maturing in 30 days/)).toBeVisible();

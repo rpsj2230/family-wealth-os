@@ -13,6 +13,7 @@ import {
   type PortfolioPerformance,
 } from '@fwos/core';
 import type { FundRow, InvestmentView } from './investments';
+import { perfFundIn } from './fund-holdings';
 import type { Styles } from './invest-perf';
 
 /** What the profit and loss section compares: nothing, the latest period with the one before, one person with another, or fund with fund. */
@@ -42,13 +43,7 @@ export interface PlView {
   allEstimated: boolean;
 }
 
-const toIn = (f: FundRow): PerfFundIn => ({
-  assetId: f.assetId,
-  perf: f.perf,
-  flows: f.flows,
-  flowsEstimated: f.flowsEstimated,
-  value: f.value,
-});
+const toIn = (f: FundRow): PerfFundIn => perfFundIn(f);
 
 export function buildPl(
   view: InvestmentView,

@@ -161,11 +161,10 @@ describe('bankOverview: today’s change', () => {
     const expectedFd =
       fd1Day('2026-10-26') - fd1Day('2026-10-25') + (fd2Day('2026-10-26') - fd2Day('2026-10-25'));
     expect(ov.today.fd).toBeCloseTo(expectedFd, 6);
-    // INR savings only: the Singapore account and the friend's money earn nothing here
-    expect(ov.today.savings).toBeCloseTo(
-      ((e.current! + blocks[1]!.sections[0]!.rows[0]!.current!) * 0.03) / 365,
-      4,
-    );
+    // INR savings only: the Singapore account and the friend's money earn nothing here. A day's interest is the last recorded
+    // balance at the rate, the shared definition of period-gains, so it is the same figure on every page
+    const other = blocks[1]!.sections[0]!.rows[0]!;
+    expect(ov.today.savings).toBeCloseTo(((e.recorded! + other.recorded!) * 0.03) / 365, 8);
     expect(ov.today.change).toBeCloseTo(ov.today.fd + ov.today.savings, 9);
     expect(ov.today.basis).toBe('estimate');
   });

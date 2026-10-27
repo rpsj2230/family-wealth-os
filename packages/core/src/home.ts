@@ -4,12 +4,14 @@
  * values the other views already produce (net worth, bank overview, deposits, funds, snapshots), so every figure on Home can be
  * checked against the same figure on its own page. No I/O.
  */
+import type { OverviewPart } from './bank-overview';
 import { addDays as addIsoDays, type RaiseSource } from './liquidity';
 import { fdValueOn, type Compounding } from './fd';
 import { formatInr, formatInrCompact } from './money';
 import { isCounted, type AssetType, type ValuedAsset } from './networth';
 import type { AssetStatusLine } from './portfolio';
 import { pointsInRange, type Point, type RangeKey } from './snapshot';
+import { fyStartOn } from './period-gains';
 import { fyBoundsOf, fyOf } from './tax';
 
 const DAY = 86_400_000;
@@ -49,9 +51,7 @@ export function changeSinceDate(points: Point[], start: string): Change | null {
 }
 
 /** First day of the financial year that `today` falls in (India: 1 April). */
-export function fyStartOf(today: string): string {
-  return fyBoundsOf(fyOf(today))?.from ?? `${today.slice(0, 4)}-04-01`;
-}
+export const fyStartOf = fyStartOn;
 
 export interface NetWorthChanges {
   /** against the value `monthDays` ago */
@@ -402,6 +402,140 @@ export function depositInterest(
     if (d.maturityOn > today) ahead += Math.max(0, accrued(d, horizon) - accrued(d, today));
   }
   return { fy, fyStart, fyEnd, thisYear, ahead, aheadDays, deposits: deposits.length };
+}
+
+// ------------------------------------------------------------------------------------------------
+// The four kinds of holding, side by side
+// ------------------------------------------------------------------------------------------------
+export type ClassKey = 'fd' | 'funds' | 'cash' | 'others';
+
+export interface ClassCard {
+  key: ClassKey;
+  label: string;
+  /** holdings counted: deposits, funds, accounts; for Others only the holdings kept by hand are counted */
+  count: number;
+  /** the money put in: deposit principal, cost of the units still held, the last balance recorded, the amount recorded */
+  invested: number;
+  /** worth today */
+  current: number;
+  /** worth at maturity: what deposits pay on their dates; everything else at today's value */
+  maturity: number;
+  /** current less invested, and as a share of invested (null when nothing is invested) */
+  profit: number;
+  profitPct: number | null;
+  /** earned since the first record, counting interest already paid out and units already sold; null before anything is held */
+  earned: number | null;
+  /** what it earned in the last day (an estimate; zero for Others) */
+  today: number;
+  /** of net worth, 0 to 1 */
+  share: number;
+  /** the profit rests on an estimate: a rate, a plan, an instalment assumed */
+  estimated: boolean;
+  /** a deposit past its date waiting to be confirmed is counted here (in net worth) but not in the Deposits figures */
+  awaiting: { count: number; invested: number; current: number } | null;
+}
+
+export interface ClassCardsInput {
+  netWorth: number;
+  /** the deposits as Deposits counts them */
+  fd: OverviewPart;
+  /** their earnings in the last day */
+  fdToday: number;
+  /** deposits past their date that are still listed as running: in net worth, waiting to be confirmed */
+  awaiting: { count: number; invested: number; current: number };
+  /** savings and cash in banks as Cash counts them, and what they earned in the last day */
+  cash: OverviewPart;
+  cashToday: number;
+  /** money held by others and balances with no bank, as Accounts counts them under Other holdings */
+  othersHeld: OverviewPart;
+  /** the funds as Investments counts them; null when none is held */
+  funds: {
+    count: number;
+    invested: number;
+    value: number;
+    today: number;
+    /** funds with no statement: their cost is the amount entered, so the profit is approximate */
+    withoutStatement: number;
+  } | null;
+  /** earned since the start, by kind (from period-gains) */
+  earned: Partial<Record<ClassKey, number | null>>;
+}
+
+const CLASS_LABEL: Record<ClassKey, string> = {
+  fd: 'Fixed deposits',
+  funds: 'Mutual funds',
+  cash: 'Cash',
+  others: 'Others',
+};
+const CLASS_HREF: Record<ClassKey, string> = {
+  fd: '/deposits',
+  funds: '/investments',
+  cash: '/cash',
+  others: '/others',
+};
+export const classLabel = (k: ClassKey) => CLASS_LABEL[k];
+export const classHref = (k: ClassKey) => CLASS_HREF[k];
+
+/**
+ * The four cards under the headline: deposits, funds, cash and the rest. Together they are net worth exactly: what the other three
+ * hold is taken off the total and the remainder is Others (shares, property, money lent, held by others, pension accounts and any
+ * other counted asset), so a holding is never counted twice or missed. The deposits and cash are the figures of Deposits and Cash;
+ * the funds are those of Investments. Others has no cost to compare with: its profit is the difference between what is recorded
+ * and what is counted today, which is nothing unless a recorded value has been moved on.
+ */
+export function classCards(i: ClassCardsInput): ClassCard[] {
+  const fd = {
+    count: i.fd.count + i.awaiting.count,
+    invested: i.fd.invested + i.awaiting.invested,
+    current: i.fd.current + i.awaiting.current,
+    // a deposit past its date is worth its maturity amount, and earns nothing more
+    maturity: i.fd.maturity + i.awaiting.current,
+  };
+  const funds = i.funds
+    ? { count: i.funds.count, invested: i.funds.invested, current: i.funds.value }
+    : { count: 0, invested: 0, current: 0 };
+  const cash = { count: i.cash.count, invested: i.cash.invested, current: i.cash.current };
+  const restCurrent = i.netWorth - fd.current - funds.current - cash.current;
+  // what is recorded for the holdings kept by hand, plus the other kinds at the value counted
+  const others = {
+    count: i.othersHeld.count,
+    current: restCurrent,
+    invested: restCurrent - (i.othersHeld.current - i.othersHeld.invested),
+  };
+  const make = (
+    key: ClassKey,
+    v: { count: number; invested: number; current: number },
+    maturity: number,
+    today: number,
+    estimated: boolean,
+    awaiting: ClassCard['awaiting'] = null,
+  ): ClassCard => ({
+    key,
+    label: CLASS_LABEL[key],
+    count: v.count,
+    invested: v.invested,
+    current: v.current,
+    maturity,
+    profit: v.current - v.invested,
+    profitPct: v.invested > 0 ? v.current / v.invested - 1 : null,
+    earned: i.earned[key] ?? null,
+    today,
+    share: i.netWorth > 0 ? v.current / i.netWorth : 0,
+    estimated,
+    awaiting,
+  });
+  return [
+    make('fd', fd, fd.maturity, i.fdToday, false, i.awaiting.count > 0 ? i.awaiting : null),
+    make(
+      'funds',
+      funds,
+      funds.current,
+      i.funds?.today ?? 0,
+      !!i.funds && i.funds.withoutStatement > 0,
+    ),
+    make('cash', cash, cash.current, i.cashToday, cash.count > 0),
+    make('others', others, others.current, 0, false),
+  ];
 }
 
 // ------------------------------------------------------------------------------------------------

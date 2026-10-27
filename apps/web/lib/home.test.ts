@@ -13,7 +13,8 @@ describe('Home model for the sample household', () => {
   it('every way of cutting the total adds up to the same total', () => {
     expect(h.total).toBe(nw.total);
     expect(h.allocation.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(nw.total, 2);
-    expect(h.byPerson.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(nw.total, 2);
+    // each person’s total is kept to the paisa, so the four of them can differ from the whole by a few paise
+    expect(h.byPerson.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(nw.total, 1);
     expect(h.trust.total).toBeCloseTo(nw.total, 2);
     expect(h.trust.confirmed + h.trust.calculated + h.trust.unconfirmed).toBeCloseTo(nw.total, 2);
     expect(h.trend.all[h.trend.all.length - 1]!.value).toBe(nw.total);
