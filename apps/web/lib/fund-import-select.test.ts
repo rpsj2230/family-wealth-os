@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { sipKey } from '@fwos/core';
+import { replaceKey, sipKey } from '@fwos/core';
 import { demoFundPreview } from './demo-fund-import';
 import { appendSelection, isTaken, selectableKeys, selectionOf } from './fund-import-select';
 
 const people = demoFundPreview();
-const [anil, beena] = people;
+const [anil, beena, charu] = people;
 const key = (p: typeof anil, name: string) => p!.diff.items.find((i) => i.name.includes(name))!.key;
 
 describe('what can be ticked in a preview', () => {
@@ -22,7 +22,7 @@ describe('what can be ticked in a preview', () => {
   it('starts with everything ticked', () => {
     const s = selectionOf(people, new Set());
     expect(s.take).toEqual(s.seen);
-    expect(s.count).toBe(5);
+    expect(s.count).toBe(6);
   });
 
   it('unticking a SIP verdict leaves the fund ticked, and the other way round', () => {
@@ -53,5 +53,29 @@ describe('what can be ticked in a preview', () => {
     expect(fd.getAll('seen')).toContain(key(anil, 'Old Fund'));
     expect(fd.getAll('take')).not.toContain(key(anil, 'Old Fund'));
     expect(fd.getAll('take')).toContain(key(anil, 'Flexi'));
+  });
+
+  it('gives the lines a statement replaces their own tick, which goes with the fund and not with the SIP', () => {
+    const flexi = key(anil, 'Flexi');
+    const r = replaceKey(flexi);
+    expect(selectableKeys(people)).toContain(r);
+    expect(selectionOf(people, new Set()).take).toContain(r);
+    // unticking only the replace part keeps the fund ticked, so the statement's own lines are still added
+    const only = selectionOf(people, new Set([r]));
+    expect(only.take).toContain(flexi);
+    expect(only.take).not.toContain(r);
+    expect(only.seen).toContain(r);
+    // unticking the fund takes the replace part with it
+    expect(isTaken(people, new Set([flexi]), r)).toBe(false);
+    // a fund with nothing to replace has no such tick
+    expect(selectableKeys(people)).not.toContain(replaceKey(key(anil, 'Index')));
+  });
+
+  it('offers no tick for a fund the statement does not list, and no sale for it', () => {
+    const keys = selectableKeys(people);
+    for (const i of charu!.diff.items.filter((x) => x.kind === 'review')) {
+      expect(keys).not.toContain(i.key);
+      expect(i.kind).toBe('review');
+    }
   });
 });

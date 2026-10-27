@@ -21,8 +21,16 @@
  *    in force on file on that date (read from the dated history). Unchanged. A fund with no instalments to read is not judged: its
  *    SIP stays as recorded, "not verified by a statement".
  * Every tolerance and threshold is passed in (Settings); nothing here is a fixed number.
+ *
+ * Which record wins (fund-precedence.ts, docs/USER-GUIDE.md "Which record wins"): a DETAILED statement is the most accurate record. For a
+ * fund on it that adds up (the lines lead from its opening units to its closing units), a stored line inside the statement's period that
+ * came from a lower source (app export, workbook, estimated, typed) and that the statement does not have is REPLACED: set aside, never
+ * deleted. A line outside the period, a line from an earlier statement, and everything when the statement does not add up, are kept.
+ * A statement older than the one already applied replaces and changes nothing in the period the newer one covers, and a later app
+ * export does not overwrite what a statement dated on or after it decided.
  */
 import { sipAmountOn } from './estimate';
+import { fromInception, olderThanApplied, statementOutranks } from './fund-precedence';
 import { formatInr } from './money';
 import { longDate } from './inbox-view';
 
@@ -95,7 +103,15 @@ export interface StatementFund {
   soldThisYear: boolean;
   /** the statement says this fund's SIP was cancelled, and when if it says */
   sipCancelled?: { on: string | null } | null;
+  /** why this scheme could not be read cleanly (a name that is statement text, no closing balance); null/absent when it was */
+  unclear?: string | null;
   match: { status: 'one'; assetId: string } | { status: 'none' } | { status: 'ambiguous' };
+}
+
+/** The period of the latest detailed statement that was applied to a fund. */
+export interface StatementCover {
+  from: string | null;
+  to: string;
 }
 
 export interface OnFileState {
@@ -111,6 +127,8 @@ export interface OnFileState {
   snapshots: { asOf: string; value: number; units: number | null }[];
   /** verdicts the person has overruled, so they are not proposed again */
   ignored: { verdict: IgnorableVerdict; basis: string }[];
+  /** the period of the latest detailed statement applied to this fund (null: none, or applied before this was recorded) */
+  cover?: StatementCover | null;
 }
 
 export interface OnFileFund {
@@ -148,6 +166,12 @@ export interface FundImportInput {
   funds: StatementFund[];
   onFile: OnFileFund[];
   rules: ImportRules;
+  /**
+   * What the statement's folios are keyed on. 'pan': one person's PAN, so it lists everything that person holds and a fund missing
+   * from it can be sold. 'email' or 'unknown': it lists the folios registered with one email address (it can hold several people's
+   * folios and miss some registered under another email), so a missing fund proves nothing. Absent: taken as 'pan'.
+   */
+  basis?: 'email' | 'pan' | 'unknown';
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -206,7 +230,14 @@ export interface FundWrite {
     folioLast4?: string;
     isin?: string;
     amfiCode?: string;
+    /** the period of the detailed statement that decided this fund (recorded so an older one cannot override it) */
+    coverFrom?: string;
+    coverTo?: string;
   };
+  /** where the new lines are stored from: a statement, or an app export */
+  lineSource?: 'cas' | 'csv';
+  /** stored lines the statement replaces (set aside, not deleted), by their stored reference */
+  replace?: { keys: string[]; reason: string } | null;
   valuation: {
     amount: number;
     asOf: string;
@@ -225,6 +256,23 @@ export interface FundWrite {
 
 export type FundChangeKind = 'new' | 'sold' | 'update' | 'unchanged' | 'review';
 
+export interface ReplacedLineView extends LineView {
+  source: string;
+}
+
+/** What the statement does with the lines already on file inside its period. */
+export interface ReplaceView {
+  /** lines on file the statement replaces (they are set aside in a hidden list, not deleted) */
+  count: number;
+  bySource: Record<string, number>;
+  /** the first few, for the list that opens */
+  views: ReplacedLineView[];
+  /** why nothing was replaced although lines on file are not on the statement (it does not add up, or a newer one is applied) */
+  blocked: string | null;
+  /** lines of an older statement or a file that fall inside the period a newer statement covers, so were not added */
+  coveredByStatement: number;
+}
+
 export interface FundChangeItem {
   /** `${ownerId}|${assetId}` for a fund on file, `${ownerId}|new:${isin or name}` for a new one */
   key: string;
@@ -239,8 +287,10 @@ export interface FundChangeItem {
     /** lines of the statement that are already on file */
     duplicateCount: number;
     newLines: LineView[];
-    /** stored lines inside the statement period that this statement does not have; they are kept */
+    /** stored lines inside the statement period that this statement does not have and does not replace (an earlier statement's); kept */
     keptNotOnStatement: number;
+    /** what the statement replaces on file; absent in a change list stored before statements took priority */
+    replace?: ReplaceView;
   };
   units: ValueChange<number> | null;
   invested: ValueChange<number> | null;
@@ -256,6 +306,8 @@ export interface FundChangeItem {
   closed: boolean;
   /** what an unticked "sold" is remembered under, so it is not proposed again for the same statement */
   ignore: { verdict: IgnorableVerdict; basis: string } | null;
+  /** for kind 'review': two funds could be this one, or the fund is not on the statement and may not be sold */
+  reviewKind?: 'ambiguous' | 'absent';
 }
 
 export interface FundImportDiff {
@@ -333,6 +385,47 @@ export function matchLines(
     duplicates: settled.size,
     unmatched: real.filter((_, i) => !taken.has(i)),
   };
+}
+
+/**
+ * Do the statement's own lines lead from the units it opens with to the units it closes with? Only a statement that adds up may
+ * replace anything on file. The opening units are the statement's, or (when it does not print them) the balance before its first line.
+ */
+export function statementReconciles(
+  s: Pick<StatementFund, 'lines' | 'openingUnits' | 'closingUnits' | 'holdingsOnly'>,
+  unitTolerance: number,
+): {
+  ok: boolean;
+  opening: number | null;
+  lines: number;
+  closing: number | null;
+  reason: string | null;
+} {
+  const closing = s.closingUnits;
+  const sum = s.lines.reduce((a, l) => a + l.units, 0);
+  const first = s.lines[0];
+  const opening =
+    s.openingUnits ?? (first && first.balance !== null ? first.balance - first.units : null);
+  if (s.holdingsOnly || s.lines.length === 0)
+    return { ok: false, opening, lines: sum, closing, reason: null };
+  if (closing === null || opening === null)
+    return {
+      ok: false,
+      opening,
+      lines: sum,
+      closing,
+      reason: 'it does not print both its opening and its closing units, so it cannot be checked',
+    };
+  const gap = opening + sum - closing;
+  if (Math.abs(gap) > unitTolerance + 1e-9)
+    return {
+      ok: false,
+      opening,
+      lines: sum,
+      closing,
+      reason: `its lines lead from ${r3(opening)} to ${r3(opening + sum)} units but it says it closes at ${r3(closing)}`,
+    };
+  return { ok: true, opening, lines: sum, closing, reason: null };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -669,6 +762,7 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
         assetId: null,
         name: s.name,
         kind: 'review',
+        reviewKind: 'ambiguous',
         why: 'More than one of your funds could be this one, so it is left alone. Open the fund and check its ISIN or folio.',
         lines: emptyLines(),
         units: null,
@@ -708,20 +802,80 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
   const absent = input.onFile.filter((f) => !claimed.has(f.assetId) && f.status === 'active');
   if (complete && absent.length > 0) {
     const asOf = input.periodTo!;
+    const plural1 = absent.length === 1;
     if (anyHoldingsOnly) {
       notes.push(
-        `${absent.length} fund${absent.length === 1 ? '' : 's'} on file ${absent.length === 1 ? 'is' : 'are'} not on this statement, but it lists only balances held with a depository, so nothing was marked as sold.`,
+        `${absent.length} fund${plural1 ? '' : 's'} on file ${plural1 ? 'is' : 'are'} not on this statement, but it lists only balances held with a depository, so nothing was marked as sold.`,
       );
     } else if (unmatchedScheme.length > 0) {
       notes.push(
-        `${absent.length} fund${absent.length === 1 ? '' : 's'} on file ${absent.length === 1 ? 'is' : 'are'} not on this statement, but nothing was marked as sold: ${unmatchedScheme.length === 1 ? 'a fund' : `${unmatchedScheme.length} funds`} on it (${unmatchedScheme.slice(0, 3).join(', ')}${unmatchedScheme.length > 3 ? ', …' : ''}) could not be matched to a fund you have, and a missing fund might be that one under another name.`,
+        `${absent.length} fund${plural1 ? '' : 's'} on file ${plural1 ? 'is' : 'are'} not on this statement, but nothing was marked as sold: ${unmatchedScheme.length === 1 ? 'a fund' : `${unmatchedScheme.length} funds`} on it (${unmatchedScheme.slice(0, 3).join(', ')}${unmatchedScheme.length > 3 ? ', …' : ''}) could not be matched to a fund you have, and a missing fund might be that one under another name.`,
       );
     } else {
-      for (const f of absent) {
-        // started after the statement ended, or counted after it: the statement could not know about it
-        if (f.startedOn && f.startedOn > asOf) continue;
-        if (f.unitsAsOf && f.unitsAsOf > asOf) continue;
-        const why = `Not on the statement dated ${longDate(asOf)}, which lists all your funds.`;
+      // started after the statement ended, or counted after it: the statement could not know about it
+      const couldKnow = (f: OnFileFund) =>
+        !(f.startedOn && f.startedOn > asOf) && !(f.unitsAsOf && f.unitsAsOf > asOf);
+      const eligible = absent.filter(couldKnow);
+      const activeKnown = input.onFile.filter((f) => f.status === 'active' && couldKnow(f)).length;
+      const unclear = input.funds.filter((x) => x.unclear);
+      const basis = input.basis ?? 'pan';
+      // a missing fund is evidence of a sale only when the statement lists everything the person holds (keyed on a PAN), every scheme
+      // on it was read cleanly and matched, and the missing funds are not most of what the person has
+      const doubt: { kind: 'basis' | 'unclear' | 'many'; text: string } | null =
+        basis !== 'pan'
+          ? {
+              kind: 'basis',
+              text:
+                basis === 'email'
+                  ? 'This statement lists the funds registered with one email address, so a fund registered under another email would not be on it. It is not marked as sold: check it, and close it yourself if you sold it.'
+                  : 'This statement does not say whose folios it lists, so a missing fund proves nothing. It is not marked as sold: check it, and close it yourself if you sold it.',
+            }
+          : unclear.length > 0
+            ? {
+                kind: 'unclear',
+                text: `${unclear.length === 1 ? 'A scheme' : `${unclear.length} schemes`} on this statement could not be read cleanly (${unclear
+                  .slice(0, 2)
+                  .map((x) => x.name)
+                  .join(
+                    ', ',
+                  )}${unclear.length > 2 ? ', …' : ''}), and a missing fund might be ${unclear.length === 1 ? 'it' : 'one of them'}. It is not marked as sold: check it.`,
+              }
+            : eligible.length * 2 > activeKnown
+              ? {
+                  kind: 'many',
+                  text: `${eligible.length} of your ${activeKnown} funds are missing from this statement. That is more likely a statement that does not list everything than that many sales, so it is not marked as sold: check it.`,
+                }
+              : null;
+      if (doubt && eligible.length > 0)
+        notes.push(
+          `${eligible.length} fund${eligible.length === 1 ? '' : 's'} on file ${eligible.length === 1 ? 'is' : 'are'} not on this statement, and none was marked as sold. ${doubt.text}`,
+        );
+      for (const f of eligible) {
+        const why = `Not on the statement dated ${longDate(asOf)}.`;
+        if (doubt) {
+          items.push({
+            key: `${input.ownerId}|${f.assetId}`,
+            ownerId: input.ownerId,
+            assetId: f.assetId,
+            name: f.name,
+            kind: 'review',
+            reviewKind: 'absent',
+            why: `${why} ${doubt.text}`,
+            lines: emptyLines(),
+            units: null,
+            invested: null,
+            startedOn: null,
+            value: null,
+            sip: null,
+            notes: [],
+            write: null,
+            changed: false,
+            closed: false,
+            ignore: null,
+          });
+          continue;
+        }
+        const soldWhy = `Not on the statement dated ${longDate(asOf)}, which lists all your funds.`;
         const skip = ignored(f, 'sold', asOf);
         const state = f.state;
         const stops = !!state && !!state.sipMonthly && !state.sipStopped;
@@ -731,7 +885,7 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
           assetId: f.assetId,
           name: f.name,
           kind: skip ? 'unchanged' : 'sold',
-          why: skip ? `${why} You chose to keep it, so it is left as it is.` : why,
+          why: skip ? `${soldWhy} You chose to keep it, so it is left as it is.` : soldWhy,
           lines: emptyLines(),
           units:
             skip || !state || state.units === null || state.units === 0
@@ -783,8 +937,23 @@ export function diffFundImport(input: FundImportInput): FundImportDiff {
     items,
     statementFunds: input.funds.length,
     skipped,
-    notes: [...notes, ...sipNotes(items)],
+    notes: [...notes, ...keptNotes(items), ...sipNotes(items)],
   };
+}
+
+/** One remark for the funds whose values a statement already decided and this older statement or file left alone. */
+function keptNotes(items: FundChangeItem[]): string[] {
+  const kept = items.filter((i) => i.notes.some((n) => n.startsWith('Kept:')));
+  if (kept.length === 0) return [];
+  const first = kept[0]!.notes.find((n) => n.startsWith('Kept:'))!;
+  return [
+    kept.length === 1
+      ? first
+      : `${first} The same for ${kept.length - 1} other fund${kept.length === 2 ? '' : 's'} (${kept
+          .slice(0, 4)
+          .map((i) => i.name)
+          .join(', ')}${kept.length > 4 ? ', …' : ''}).`,
+  ];
 }
 
 /** One remark for the SIPs a short statement could not judge. */
@@ -826,6 +995,15 @@ function newFundItem(input: FundImportInput, s: StatementFund, end: string): Fun
   position.folioLast4 = s.folioLast4;
   if (s.isin) position.isin = s.isin;
   if (s.amfiCode) position.amfiCode = s.amfiCode;
+  if (
+    input.source === 'statement' &&
+    input.periodFrom &&
+    input.periodTo &&
+    statementReconciles(s, input.rules.unitTolerance).ok
+  ) {
+    position.coverFrom = input.periodFrom;
+    position.coverTo = input.periodTo;
+  }
   const valuation = !asOf
     ? null
     : !s.held
@@ -881,13 +1059,28 @@ function newFundItem(input: FundImportInput, s: StatementFund, end: string): Fun
         closed: !s.held,
       },
       lines: fresh,
+      lineSource: input.source === 'statement' ? 'cas' : 'csv',
       position,
+      replace: null,
       valuation,
       close: !s.held,
       markSoldAsOf: null,
     },
     changed: true,
   };
+}
+
+const MAX_REPLACED_VIEWS = 40;
+
+/** The period a statement will cover once applied: joined to the one already on file when the two touch, else just its own. */
+function nextCover(
+  cover: StatementCover | null | undefined,
+  from: string,
+  to: string,
+): StatementCover {
+  if (cover && cover.from !== null && cover.from < from && from <= addDays(cover.to, 1))
+    return { from: cover.from, to };
+  return { from, to };
 }
 
 function existingFundItem(
@@ -903,7 +1096,41 @@ function existingFundItem(
   const asOf = s.value?.asOf ?? input.periodTo;
   const notes: string[] = [];
   const m = matchLines(s.lines, st?.lines ?? [], tol);
-  const inWindow =
+
+  // ---- who decides: a detailed statement over a file, a newer statement over an older one
+  const isStatement = input.source === 'statement';
+  const cover = st?.cover ?? null;
+  const coverText = cover ? longDate(cover.to) : '';
+  const inCover = (d: string) =>
+    !!cover && d <= cover.to && (cover.from === null || d >= cover.from);
+  const fileDate = !isStatement
+    ? (s.lines
+        .map((l) => l.date)
+        .sort()
+        .pop() ?? null)
+    : null;
+  // an older statement, or a file whose newest line is not after the statement already applied: that statement's values stay
+  const olderStatement = isStatement && !!cover && olderThanApplied(input.periodTo, cover.to);
+  const keepValues =
+    !!cover && (olderStatement || (!isStatement && fileDate !== null && cover.to >= fileDate));
+  const rec = statementReconciles(s, rules.unitTolerance);
+  const windowKnown = isStatement && !!input.periodFrom && !!input.periodTo;
+  const inWin = (d: string) => windowKnown && d >= input.periodFrom! && d <= input.periodTo!;
+
+  // lines of an older statement or of a file that fall inside what a newer statement covers are not added: it already decided them
+  let fresh = m.fresh;
+  let coveredByStatement = 0;
+  if (cover && (olderStatement || !isStatement)) {
+    fresh = m.fresh.filter((l) => !inCover(l.date));
+    coveredByStatement = m.fresh.length - fresh.length;
+  }
+
+  // ---- lines on file inside the period that the statement does not have
+  const estimatesInWindow =
+    s.lines.length === 0
+      ? []
+      : (st?.lines ?? []).filter((l) => l.source === 'estimate' && inWin(l.date));
+  const unmatchedInWindow =
     s.lines.length === 0
       ? []
       : m.unmatched.filter(
@@ -911,10 +1138,40 @@ function existingFundItem(
             (input.periodFrom ? l.date >= input.periodFrom : true) &&
             (input.periodTo ? l.date <= input.periodTo : true),
         );
-  if (inWindow.length > 0)
+  const lower = unmatchedInWindow.filter((l) => statementOutranks(l.source));
+  const candidates = isStatement ? [...estimatesInWindow, ...lower] : [];
+  let replacing: OnFileLine[] = [];
+  let blocked: string | null = null;
+  if (candidates.length > 0) {
+    if (olderStatement)
+      blocked = `A statement dated ${coverText} is already applied, so this older one replaces nothing.`;
+    else if (!windowKnown)
+      blocked =
+        'This statement does not say which period it covers, so nothing on file was replaced.';
+    else if (!rec.ok && !s.holdingsOnly)
+      blocked = `Nothing on file was replaced: ${rec.reason ?? 'the statement cannot be checked'}.`;
+    else if (!s.holdingsOnly) replacing = candidates;
+  }
+  const replacingKeys = new Set(replacing.map((l) => l.key));
+  const kept = unmatchedInWindow.filter((l) => !replacingKeys.has(l.key));
+  if (kept.length > 0)
     notes.push(
-      `${inWindow.length} line${inWindow.length === 1 ? '' : 's'} on file ${inWindow.length === 1 ? 'is' : 'are'} not on this statement; kept.`,
+      `${kept.length} line${kept.length === 1 ? '' : 's'} on file ${kept.length === 1 ? 'is' : 'are'} not on this statement; kept.`,
     );
+  if (blocked) notes.push(blocked);
+  const bySource: Record<string, number> = {};
+  for (const l of replacing) bySource[l.source] = (bySource[l.source] ?? 0) + 1;
+  const replace: ReplaceView = {
+    count: replacing.length,
+    bySource,
+    views: replacing
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, MAX_REPLACED_VIEWS)
+      .map((l) => ({ ...asView(l), source: l.source })),
+    blocked,
+    coveredByStatement,
+  };
 
   const first = s.lines.map((l) => l.date).sort()[0] ?? null;
   const realDates = (st?.lines ?? []).filter((l) => l.source !== 'estimate').map((l) => l.date);
@@ -922,12 +1179,15 @@ function existingFundItem(
     (realDates.length > 0 ? realDates : [f.startedOn ?? '']).filter((x) => x !== '').sort()[0] ??
     null;
   // the statement begins well after the fund did and holds nothing from before: it cannot be the whole history
+  // (a statement that runs from the beginning of the register is the whole history by definition)
   const startsLater =
     first !== null &&
     earliestOnFile !== null &&
     (s.openingUnits ?? 0) <= rules.unitTolerance &&
-    earliestOnFile < first;
+    earliestOnFile < first &&
+    !(isStatement && fromInception(input.periodFrom));
   const countNewer = !!f.unitsAsOf && !!asOf && f.unitsAsOf > asOf;
+  const frozen = countNewer || keepValues;
 
   const position: FundWrite['position'] = {};
   let units: ValueChange<number> | null = null;
@@ -941,7 +1201,7 @@ function existingFundItem(
     s.closingUnits !== null &&
     redeemed &&
     f.status === 'active' &&
-    !countNewer &&
+    !frozen &&
     !(f.startedOn && asOf && f.startedOn > asOf);
   const soldOn = fullySold
     ? (s.lines
@@ -954,7 +1214,15 @@ function existingFundItem(
   const sold = fullySold && !soldIgnored;
 
   const after = s.closingUnits === null ? null : s.held ? s.closingUnits : 0;
-  if (after !== null && asOf && !countNewer) {
+  if (keepValues)
+    notes.push(
+      `Kept: the fund statement dated ${coverText} is more accurate than ${olderStatement ? 'this older one' : 'this file'}, so units, amount invested and first purchase are left as they are.`,
+    );
+  if (coveredByStatement > 0)
+    notes.push(
+      `${coveredByStatement} line${coveredByStatement === 1 ? '' : 's'} of this ${isStatement ? 'statement' : 'file'} fall${coveredByStatement === 1 ? 's' : ''} inside the period of the statement dated ${coverText}, which decides that period, so ${coveredByStatement === 1 ? 'it was' : 'they were'} not added.`,
+    );
+  if (after !== null && asOf && !frozen) {
     const differs = !has(st?.units) || Math.abs(st.units - after) > rules.unitTolerance;
     if (differs) {
       if (startsLater && has(st?.units) && after < st.units - rules.unitTolerance)
@@ -967,26 +1235,41 @@ function existingFundItem(
         units = { before: st?.units ?? null, after };
       }
     }
-  } else if (countNewer && after !== null)
+  } else if (countNewer && !keepValues && after !== null)
     notes.push(
       `Your unit count dated ${longDate(f.unitsAsOf!)} is newer than this statement (${longDate(asOf!)}), so units and amount invested are left as they are.`,
     );
 
-  if (s.invested !== null && !countNewer) {
+  if (s.invested !== null && !frozen) {
     const differs = !has(st?.invested) || Math.abs(st.invested - s.invested) > rules.moneyTolerance;
     if (differs && !(startsLater && has(st?.invested) && s.invested < st.invested)) {
       position.invested = s.invested;
       invested = { before: st?.invested ?? null, after: s.invested };
     }
   }
-  if (s.startedOn && (!f.startedOn || s.startedOn < f.startedOn)) {
-    position.startedOn = s.startedOn;
-    startedOn = { before: f.startedOn, after: s.startedOn };
+  if (s.startedOn && !frozen) {
+    if (!f.startedOn || s.startedOn < f.startedOn) {
+      position.startedOn = s.startedOn;
+      startedOn = { before: f.startedOn, after: s.startedOn };
+    } else if (
+      isStatement &&
+      rec.ok &&
+      s.startedOn > f.startedOn &&
+      !startsLater &&
+      (s.openingUnits ?? 1) <= rules.unitTolerance &&
+      // the statement is where the fund starts: a start date on file that is earlier stands only if lines on file back it
+      !(st?.lines ?? []).some(
+        (l) => l.source !== 'estimate' && !replacingKeys.has(l.key) && l.date < s.startedOn!,
+      )
+    ) {
+      position.startedOn = s.startedOn;
+      startedOn = { before: f.startedOn, after: s.startedOn };
+    }
   }
 
   // SIP
   let sip =
-    f.status === 'active' && !sold
+    f.status === 'active' && !sold && !keepValues
       ? judgeSip({
           read: readSip(s.lines, st?.lines ?? [], rules),
           end,
@@ -1021,10 +1304,11 @@ function existingFundItem(
     };
 
   const lines = {
-    newCount: m.fresh.length,
+    newCount: fresh.length,
     duplicateCount: m.duplicates,
-    newLines: m.fresh.map(asView),
-    keptNotOnStatement: inWindow.length,
+    newLines: fresh.map(asView),
+    keptNotOnStatement: kept.length,
+    replace,
   };
 
   let why: string | null = null;
@@ -1039,18 +1323,27 @@ function existingFundItem(
     notes.push('The statement shows this fund fully redeemed; you chose to keep it as it is.');
   }
 
-  const other = lines.newCount > 0 || hasKeys(position) || sold;
-  if (other && asOf && !countNewer) position.casAsOf = asOf;
+  const other = lines.newCount > 0 || hasKeys(position) || sold || replacing.length > 0;
+  if (other && asOf && !frozen) position.casAsOf = asOf;
   if (other) {
     if (s.isin && f.isin !== s.isin) position.isin = s.isin;
     if (s.amfiCode && f.amfiCode !== s.amfiCode) position.amfiCode = s.amfiCode;
     if (s.folioLast4 && f.folioLast4 !== s.folioLast4) position.folioLast4 = s.folioLast4;
   }
+  // the period this statement decided is recorded (quietly when nothing else changes), so an older statement cannot override it
+  if (isStatement && windowKnown && !s.holdingsOnly && rec.ok && !olderStatement) {
+    const c = nextCover(cover, input.periodFrom!, input.periodTo!);
+    if (c.from !== (cover?.from ?? null) || c.to !== (cover?.to ?? null)) {
+      position.coverFrom = c.from!;
+      position.coverTo = c.to;
+    }
+  }
+  const bookkeeping = position.coverTo !== undefined && !other && !hasKeysExceptCover(position);
 
   // a value only goes in alongside other changes: the units times the live price already follows the market
   let valuation: FundWrite['valuation'] = null;
   let valueView: FundChangeItem['value'] = null;
-  if (other && asOf) {
+  if (other && asOf && !frozen) {
     const amount = sold ? 0 : s.value && s.held ? r2(s.value.amount) : null;
     const when = sold ? asOf : (s.value?.asOf ?? null);
     if (amount !== null && when) {
@@ -1083,17 +1376,25 @@ function existingFundItem(
   }
 
   const write: FundWrite | null =
-    other || valuation
+    other || valuation || bookkeeping
       ? {
           create: null,
-          lines: m.fresh,
+          lines: fresh,
+          lineSource: isStatement ? 'cas' : 'csv',
           position,
+          replace:
+            replacing.length > 0
+              ? {
+                  keys: replacing.map((l) => l.key),
+                  reason: `Replaced by the fund statement dated ${longDate(input.periodTo!)}`,
+                }
+              : null,
           valuation,
           close: sold,
           markSoldAsOf: null,
         }
       : null;
-  const changed = write !== null;
+  const changed = write !== null && !bookkeeping;
   if (f.status !== 'active' && s.held && (s.closingUnits ?? 0) > rules.unitTolerance)
     notes.push(
       'This fund is marked as closed on file but the statement shows units held; its status is left as it is.',
@@ -1120,6 +1421,14 @@ function existingFundItem(
   };
 }
 
+/** True when the position carries a field other than the recorded statement period. */
+function hasKeysExceptCover(p: FundWrite['position']): boolean {
+  const { coverFrom, coverTo, ...rest } = p;
+  void coverFrom;
+  void coverTo;
+  return hasKeys(rest);
+}
+
 // ------------------------------------------------------------------------------------------------
 // Words
 // ------------------------------------------------------------------------------------------------
@@ -1130,6 +1439,13 @@ export interface Chip {
 
 /** The key of the SIP part of an item, for choosing it separately from the fund. */
 export const sipKey = (itemKey: string) => `${itemKey}#sip`;
+
+/** The key of the replace part of an item (the lines on file the statement replaces), for choosing it separately from the fund. */
+export const replaceKey = (itemKey: string) => `${itemKey}#replace`;
+
+/** True when the statement replaces lines on file for this fund (something to tick or untick). */
+export const replaceIsChange = (i: { lines: { replace?: ReplaceView | undefined } }): boolean =>
+  (i.lines.replace?.count ?? 0) > 0;
 
 /** True when this SIP verdict is something to apply (and so to tick or untick). */
 export const sipIsChange = (s: SipChange | null | undefined): s is SipChange =>
@@ -1158,7 +1474,17 @@ export function chipsOf(i: Omit<FundChangeItem, 'write'>): Chip[] {
   if (i.kind === 'new')
     out.push({ label: i.closed ? 'New fund, already sold' : 'New fund', tone: 'info' });
   if (i.kind === 'sold') out.push({ label: 'Sold', tone: 'bad' });
-  if (i.kind === 'review') out.push({ label: 'Needs a look', tone: 'bad' });
+  if (i.kind === 'review')
+    out.push(
+      i.reviewKind === 'absent'
+        ? { label: 'Not on this statement: check', tone: 'warn' }
+        : { label: 'Needs a look', tone: 'bad' },
+    );
+  if (replaceIsChange(i))
+    out.push({
+      label: `${i.lines.replace!.count} replaced`,
+      tone: 'info',
+    });
   if (i.lines.newCount > 0)
     out.push({
       label: `+${i.lines.newCount} transaction${i.lines.newCount === 1 ? '' : 's'}`,
@@ -1180,7 +1506,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  */
 export function summariseChanges(
   items: Omit<FundChangeItem, 'write'>[],
-  applied?: { funds: Set<string>; sips: Set<string> },
+  applied?: { funds: Set<string>; sips: Set<string>; replaces?: Set<string> },
 ): string {
   const fundOk = (i: Omit<FundChangeItem, 'write'>) => (applied ? applied.funds.has(i.key) : true);
   const sipOk = (i: Omit<FundChangeItem, 'write'>) => (applied ? applied.sips.has(i.key) : true);
@@ -1196,10 +1522,16 @@ export function summariseChanges(
   const head: string[] = [];
   if (updated.length > 0) head.push(`${plural(updated.length, 'fund', 'funds')} updated`);
   if (created.length > 0) head.push(`${plural(created.length, 'new fund', 'new funds')}`);
+  const replaced = items
+    .filter((i) => fundOk(i) && replaceIsChange(i) && (!applied || applied.replaces?.has(i.key)))
+    .reduce((a, i) => a + (i.lines.replace?.count ?? 0), 0);
+  const txWords = [
+    ...(tx > 0 ? [`+${tx} transaction${tx === 1 ? '' : 's'}`] : []),
+    ...(replaced > 0 ? [`${replaced} replaced by the statement`] : []),
+  ].join(', ');
   const parts: string[] = [];
-  if (head.length > 0)
-    parts.push(head.join(', ') + (tx > 0 ? `: +${tx} transaction${tx === 1 ? '' : 's'}` : ''));
-  else if (tx > 0) parts.push(`+${tx} transaction${tx === 1 ? '' : 's'}`);
+  if (head.length > 0) parts.push(head.join(', ') + (txWords ? `: ${txWords}` : ''));
+  else if (txWords) parts.push(txWords);
   if (count('stopped') > 0) parts.push(`${count('stopped')} SIP stopped`);
   if (count('new') > 0) parts.push(`${count('new')} SIP new`);
   if (count('resumed') > 0) parts.push(`${count('resumed')} SIP resumed`);
@@ -1217,6 +1549,8 @@ export function changeLines(items: Omit<FundChangeItem, 'write'>[]): string[] {
     if (i.kind === 'sold') bits.push('sold');
     if (i.lines.newCount > 0)
       bits.push(`+${i.lines.newCount} transaction${i.lines.newCount === 1 ? '' : 's'}`);
+    if (replaceIsChange(i))
+      bits.push(`${i.lines.replace!.count} on file replaced by the statement`);
     if (i.units && i.kind !== 'new')
       bits.push(`units ${fmtUnits(i.units.before)} → ${fmtUnits(i.units.after)}`);
     if (i.invested && i.kind !== 'new')
@@ -1228,7 +1562,8 @@ export function changeLines(items: Omit<FundChangeItem, 'write'>[]): string[] {
       bits.push(
         `${c.label.toLowerCase().replace(/^sip/, 'SIP')} from ${i.sip.effectiveOn ? longDate(i.sip.effectiveOn) : '–'}`,
       );
-    if (i.kind === 'review') bits.push('needs a look');
+    if (i.kind === 'review')
+      bits.push(i.reviewKind === 'absent' ? 'not on this statement: check' : 'needs a look');
     if (bits.length > 0) out.push(`${i.name}: ${bits.join('; ')}`);
   }
   return out;
@@ -1241,7 +1576,7 @@ export const fmtUnits = (n: number | null) =>
 export type StoredChange = Omit<FundChangeItem, 'write'> & { applied: boolean };
 export function storedChanges(
   items: FundChangeItem[],
-  applied: { funds: Set<string>; sips: Set<string> },
+  applied: { funds: Set<string>; sips: Set<string>; replaces?: Set<string> },
   maxLines = 40,
 ): StoredChange[] {
   return items
@@ -1255,4 +1590,30 @@ export function storedChanges(
         applied: applied.funds.has(i.key) || applied.sips.has(i.key),
       };
     });
+}
+
+/** Totals over a preview, for the line at the top: what the statement replaces, adds and confirms. */
+export interface PriorityTotals {
+  /** funds the statement changes the ledger of by replacing lines */
+  funds: number;
+  replaced: number;
+  added: number;
+  confirmed: number;
+  bySource: Record<string, number>;
+}
+
+export function priorityTotals(items: Pick<FundChangeItem, 'lines' | 'kind'>[]): PriorityTotals {
+  const t: PriorityTotals = { funds: 0, replaced: 0, added: 0, confirmed: 0, bySource: {} };
+  for (const i of items) {
+    if (i.kind === 'review') continue;
+    t.added += i.lines.newCount;
+    t.confirmed += i.lines.duplicateCount;
+    const r = i.lines.replace;
+    if (r && r.count > 0) {
+      t.funds++;
+      t.replaced += r.count;
+      for (const [k, n] of Object.entries(r.bySource)) t.bySource[k] = (t.bySource[k] ?? 0) + n;
+    }
+  }
+  return t;
 }

@@ -66,7 +66,7 @@ function fakeIo(funds: CasFund[]) {
 }
 
 describe('only what is new or changed is written', () => {
-  const one = parseCas(TEXT);
+  const one = { ...parseCas(TEXT), basis: 'pan' as const };
   const scheme = one.schemes[0]!;
   const keys = statementLineKeys(scheme.folio, scheme.transactions);
   const stored = (n = 4) =>
@@ -104,6 +104,7 @@ describe('only what is new or changed is written', () => {
       latestValue: { asOf: '2026-10-25', amount: 107_345.44 },
       snapshots: [{ asOf: '2026-10-25', value: 107_345.44, units: 670.909 }],
       ignored: [],
+      cover: { from: '2023-01-01', to: '2026-10-25' },
       ...over,
     },
   });
@@ -158,7 +159,7 @@ describe('only what is new or changed is written', () => {
   });
 
   it('applies only the items chosen, and remembers the ones that were shown and not chosen', async () => {
-    const sipStmt = parseCas(SIP_TEXT);
+    const sipStmt = { ...parseCas(SIP_TEXT), basis: 'pan' as const };
     const sk = statementLineKeys(sipStmt.schemes[0]!.folio, sipStmt.schemes[0]!.transactions);
     const have = sipStmt.schemes[0]!.transactions.slice(0, 5).map((t, i) => ({
       key: sk[i]!,

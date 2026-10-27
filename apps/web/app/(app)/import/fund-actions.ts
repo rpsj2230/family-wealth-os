@@ -37,20 +37,28 @@ async function candidateFor(
   owner: string,
   typed: string,
 ) {
-  const { data: o } = await supabase
-    .from('owners')
-    .select('id, display_name, pan_last4')
-    .eq('id', owner)
-    .maybeSingle();
+  const { data: all } = await supabase.from('owners').select('id, display_name, pan_last4');
+  const o = (all ?? []).find((x) => x.id === owner);
   if (!o) return null;
   return {
     name: o.display_name as string,
-    candidate: {
-      ownerId: owner,
-      // as typed, then in capitals and in small letters (people differ on how they typed it when requesting)
-      passwords: [...new Set(typed ? [typed, typed.toUpperCase(), typed.toLowerCase()] : [])],
-      panLast4: (o.pan_last4 as string | null) ?? null,
-    },
+    // the chosen person first, with the typed password; everyone else only so each folio's PAN can be matched to its owner
+    candidates: [
+      {
+        ownerId: owner,
+        // as typed, then in capitals and in small letters (people differ on how they typed it when requesting)
+        passwords: [...new Set(typed ? [typed, typed.toUpperCase(), typed.toLowerCase()] : [])],
+        panLast4: (o.pan_last4 as string | null) ?? null,
+      },
+      ...(all ?? [])
+        .filter((x) => x.id !== owner)
+        .map((x) => ({
+          ownerId: x.id as string,
+          passwords: [] as string[],
+          panLast4: (x.pan_last4 as string | null) ?? null,
+        })),
+    ],
+    names: new Map((all ?? []).map((x) => [x.id as string, x.display_name as string])),
   };
 }
 
@@ -72,21 +80,30 @@ export async function previewCas(_p: CasState | null, f: FormData): Promise<CasS
       supabase as unknown as SupabaseClient,
       householdId,
       bytes,
-      [who.candidate],
+      who.candidates,
       {
         today,
       },
     );
     if (!res.ok) return { stage: 'error', message: res.detail };
+    const list = res.people ?? [{ ownerId: res.ownerId, diff: res.diff }];
+    const people: PersonPreview[] = list.map((p) => ({
+      ownerId: p.ownerId,
+      name: who.names.get(p.ownerId) ?? who.name,
+      files: [],
+      diff: toView(p.diff),
+      notes: [],
+    }));
     return {
       stage: 'previewed',
-      person: {
-        ownerId: res.ownerId,
-        name: who.name,
-        files: [],
-        diff: toView(res.diff),
-        notes: [],
-      },
+      person: people[0]!,
+      people,
+      skipped: (res.skipped ?? []).map((k) => ({
+        panLast4: k.panLast4,
+        holder: k.holder,
+        schemes: k.schemes,
+      })),
+      basis: res.basis ?? 'unknown',
       warnings: res.warnings,
     };
   } catch (e) {
@@ -119,7 +136,7 @@ export async function importCas(_p: CasState | null, f: FormData): Promise<CasSt
       supabase as unknown as SupabaseClient,
       householdId,
       bytes,
-      [who.candidate],
+      who.candidates,
       {
         sourceRef: `upload:${hash}`,
         today,
@@ -131,7 +148,12 @@ export async function importCas(_p: CasState | null, f: FormData): Promise<CasSt
     return {
       stage: 'applied',
       message: res.report.summary,
-      applied: { name: who.name, ...appliedView(res.report) },
+      applied: {
+        name: res.people?.length
+          ? res.people.map((p) => who.names.get(p.ownerId) ?? who.name).join(' and ')
+          : who.name,
+        ...appliedView(res.report),
+      },
     };
   } catch (e) {
     return {

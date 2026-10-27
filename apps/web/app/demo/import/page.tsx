@@ -25,6 +25,7 @@ const PEOPLE = Object.fromEntries(
     personStyles([
       { id: 'p1', name: 'Anil' },
       { id: 'p2', name: 'Beena' },
+      { id: 'p3', name: 'Charu' },
     ]),
   ).map((p) => [p.name, p]),
 );
@@ -35,6 +36,7 @@ const DATA: ImportData = {
   owners: [
     { id: 'p1', name: 'Anil', panLast4: '234F', hasDob: true },
     { id: 'p2', name: 'Beena', panLast4: null, hasDob: false },
+    { id: 'p3', name: 'Charu', panLast4: '567G', hasDob: false },
   ],
   workbook: {
     at: '2026-10-20T08:00:00Z',

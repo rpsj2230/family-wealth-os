@@ -51,10 +51,23 @@ export interface PersonPreview {
   applied?: AppliedView;
 }
 
+/** Folios in a statement that belong to someone who is not in the family list: named, not applied. */
+export interface SkippedFoliosView {
+  panLast4: string | null;
+  holder: string | null;
+  schemes: string[];
+}
+
 export interface CasState {
   stage: 'idle' | 'previewed' | 'applied' | 'error';
   message?: string;
+  /** the first person in the file (kept for callers that show one) */
   person?: PersonPreview;
+  /** every person whose folios are in the file, each with their own comparison */
+  people?: PersonPreview[];
+  skipped?: SkippedFoliosView[];
+  /** what the statement's folios are keyed on */
+  basis?: 'email' | 'pan' | 'unknown';
   /** what was written, once the chosen changes are applied */
   applied?: AppliedView & { name: string };
   /** the statement's own remarks (what could not be read) */
