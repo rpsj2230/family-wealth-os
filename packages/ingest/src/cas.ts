@@ -102,6 +102,8 @@ export function cleanSchemeName(raw: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   s = s.replace(/^(?:OK\s+)+/i, '').replace(/^[A-Z0-9]{2,10}\s*-\s+(?=[A-Za-z])/, '');
+  // a scheme code glued to the name ("128EFDGG-Axis Large Cap Fund", "GD340-Bandhan Small Cap Fund"): the code has a digit in it
+  s = s.replace(/^(?=[A-Z0-9]*\d)[A-Z0-9]{2,10}-(?=[A-Za-z])/, '');
   return s.replace(/[\s-]+$/, '').trim();
 }
 
@@ -193,7 +195,27 @@ export function parseCas(raw: string): CasStatement {
       warnings.push(`Folio ${f[1]}: no scheme ISIN found, skipped.`);
       return;
     }
+    // Some statements come out of the PDF with each scheme's title and ISIN after its own table (the title was drawn last). Then the
+    // table is what lies before the ISIN, and the name is the text after the table's last total.
+    const titleLast = /Opening Unit Balance/i.test(section.slice(0, isins[0]!.index!));
     isins.forEach((im, j) => {
+      if (titleLast) {
+        const from = j === 0 ? 0 : isins[j - 1]!.index! + isins[j - 1]![0].length;
+        const seg = section.slice(from, im.index!);
+        const totals = [
+          ...seg.matchAll(
+            /(?:Total Cost Value|Market Value on [^:]*)\s*:?\s*(?:INR|Rs\.?)?\s*[\d,]+\.\d+/gi,
+          ),
+        ];
+        const last = totals[totals.length - 1];
+        const tail = last ? seg.slice(last.index! + last[0].length) : '';
+        const name = cleanSchemeName(tail.replace(/^.*?\bMutual Fund\b\s*/i, ''));
+        const amc = /([A-Z][A-Za-z&.' ]+ Mutual Fund)/.exec(tail)?.[1] ?? null;
+        const sc = parseSchemeBody(seg, f[1]!.trim(), name || 'Unnamed scheme', im[1]!, amc);
+        if (sc.closingUnits === null) warnings.push(`${sc.name}: no closing balance found.`);
+        schemes.push(sc);
+        return;
+      }
       const nameFrom = j === 0 ? 0 : isins[j]!.index! - 0;
       const prevEnd =
         j === 0 ? 0 : section.slice(0, im.index!).lastIndexOf('Closing Unit Balance') + 1 || 0;
@@ -222,6 +244,16 @@ export function parseCas(raw: string): CasStatement {
       schemes.push(s);
     });
   });
+
+  // a name this long is statement text, not a scheme name: say so instead of showing a page of text as a fund
+  for (const sc of schemes) {
+    if (sc.name.length > 150) {
+      warnings.push(
+        `Folio ${sc.folio}: the scheme name could not be read cleanly (ISIN ${sc.isin ?? 'unknown'}); check this fund by its ISIN.`,
+      );
+      sc.name = `${sc.name.slice(0, 110).trim()}…`;
+    }
+  }
 
   if (schemes.length === 0) {
     // holdings statements (demat): ISIN, name, units, NAV, value
