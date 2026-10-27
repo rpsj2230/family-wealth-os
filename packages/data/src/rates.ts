@@ -64,6 +64,7 @@ export async function loadRatesContext(
     portfolio: l.portfolio,
     institutionNames: names,
     today: l.today,
+    hideMaturedAfterDays: l.hideMaturedAfterDays,
   });
   const ownRate = new Map(l.assetRows.map((a) => [a.id, a.interest_rate ?? a.listed_rate ?? null]));
   const holdings: RateHolding[] = [];

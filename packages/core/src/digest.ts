@@ -3,10 +3,11 @@
  * Rules from the brief: say plainly when no new verified bank balance has arrived, show the date of every market input,
  * and never present an estimate as a verified balance.
  */
-import { DEFAULT_CONFIG } from './config';
-import { formatInr, formatInrCompact } from './money';
+import { buildDigestEmail } from './digest-email';
+import type { DigestGoalCard } from './digest-goals';
+import type { DigestMaturity, DigestWealth } from './digest-wealth';
+import type { Change, ShareMove } from './home';
 import type { NetWorthResult } from './networth';
-import { sinceWords, type HeadlineTile } from './position';
 
 export interface DigestInput {
   date: string; // YYYY-MM-DD, Asia/Singapore date of the report
@@ -27,7 +28,35 @@ export interface DigestInput {
     tasksDue?: { title: string; dueOn: string }[];
   };
   market: { navLatest: string | null; fx: Record<string, { rate: number; date: string }> };
-  retirement?: { statusText: string; earliestAge: number | null } | null;
+  /** the retirement view; `card` is the goal-style card ("Can I retire now?" in the e-mail's format) */
+  retirement?: {
+    statusText: string;
+    earliestAge: number | null;
+    card?: DigestGoalCard | null;
+  } | null;
+  /** net worth, the day's change, the profit so far and the four kinds of holding, as Home shows them */
+  wealth?: DigestWealth | null;
+  /** the newest date a value was recorded on: "values as of" */
+  asOf?: string | null;
+  /** balances out of date or never recorded (Home's "late inputs") */
+  lateInputs?: number;
+  /** one card per goal, with how far it is and whether the pace gets there; undefined or null leaves the section out */
+  goals?: DigestGoalCard[] | null;
+  /** what needs the person, ranked as Home ranks it, each with the page where it is dealt with */
+  needsYou?: { text: string; href: string; tone: 'bad' | 'warn' | 'info' }[];
+  /** the change over the last Settings days, as Home shows it */
+  month?: Change | null;
+  /** the biggest moves since then, and the largest deposits paying out soon */
+  changes?: {
+    since: string;
+    partial: boolean;
+    kinds: ShareMove[];
+    people: ShareMove[];
+    maturities: DigestMaturity[];
+    maturityDays: number;
+  } | null;
+  /** list lengths from Settings (digest.needsYouMax) */
+  limits?: { needsYouMax: number };
   appUrl: string;
   /** how far ahead policy dates and tasks appear; from Settings (reminders) */
   reminders?: { policyDays: number; taskDays: number };
@@ -35,192 +64,23 @@ export interface DigestInput {
   rateIdeas?: string[];
   /** tax matters already worded: harvest deadline and amounts, refunds still to claim */
   taxIdeas?: string[];
-  /**
-   * What the holdings earned over the last N days and this financial year, from the same function Home uses (position.ts): interest,
-   * price moves and exchange-rate moves, not money added or taken out. When given it replaces the change since the previous snapshot,
-   * so the summary, the WhatsApp text and Home say the same thing.
-   */
-  gains?: { days: number; recent: HeadlineTile; fy: HeadlineTile } | null;
   /** on the first day of a month: how wealth moved since the same day last month, in total and per person */
   monthly?: { since: string; change: number; byPerson: { name: string; change: number }[] } | null;
 }
 
+/** Where the links in the summary lead when no APP_URL is set. */
+export const DEFAULT_APP_URL = 'https://family-wealth-os-nine.vercel.app';
+
 export interface Digest {
   subject: string;
+  /** compact plain text: the e-mail's text part and the Telegram message */
   text: string;
   html: string;
   whatsapp: string;
 }
 
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const signed = (n: number) => `${n < 0 ? '−' : '+'}${formatInr(Math.abs(n))}`;
-const daysBetween = (a: string, b: string) =>
-  Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
-const niceDate = (d: string) =>
-  new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-
+/** The daily summary in each form it is sent in. See `buildDigestEmail` for the layout. */
 export function buildDigest(i: DigestInput): Digest {
-  const nw = i.netWorth;
-  const lines: string[] = [];
-  const bullets: string[] = [];
-
-  const g = i.gains ?? null;
-  const change = g ? null : i.previous ? nw.total - i.previous.total : null;
-  const earnedOf = (t: HeadlineTile) => `${signed(t.amount)} (${sinceWords(t)})`;
-  const headline = `${i.householdName}: ${formatInrCompact(nw.total)} estimated net worth`;
-  lines.push(`${headline} on ${niceDate(i.date)}.`);
-  if (g) {
-    lines.push(
-      `Earned: last ${g.days} days ${earnedOf(g.recent)}; this financial year ${earnedOf(g.fy)}. Interest, fund price moves and exchange rates only: money added or taken out is not counted. It is an estimate.`,
-    );
-  } else if (change !== null && i.previous) {
-    lines.push(
-      `Since ${niceDate(i.previous.date)}: ${signed(change)}. This is mostly interest accruing and market movement, not new savings. It is an estimate.`,
-    );
-  } else {
-    lines.push('This is the first report, so there is nothing to compare with yet.');
-  }
-  if (i.monthly)
-    lines.push(
-      `Month in review (since ${niceDate(i.monthly.since)}): ${signed(i.monthly.change)}${
-        i.monthly.byPerson.length
-          ? `; ${i.monthly.byPerson.map((p) => `${p.name} ${signed(p.change)}`).join(' · ')}`
-          : ''
-      }. Mostly interest and market movement unless you added savings.`,
-    );
-  const people = Object.entries(nw.byOwner)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, v]) => `${i.ownerNames[id] ?? 'Unknown'} ${formatInrCompact(v)}`);
-  if (people.length) lines.push(`By person: ${people.join(' · ')}.`);
-  lines.push(
-    `Liquid ${formatInrCompact(nw.byLiquidity.liquid)} · Investments ${formatInrCompact(nw.byLiquidity.investable)} · Retirement accounts ${formatInrCompact(nw.byLiquidity.retirement)} · Illiquid ${formatInrCompact(nw.byLiquidity.illiquid)}.`,
-  );
-
-  // data freshness
-  const fresh: string[] = [];
-  if (!i.lastBankBalanceAsOf || daysBetween(i.lastBankBalanceAsOf, i.date) > 2) {
-    fresh.push(
-      `No new verified bank balance received.${i.lastBankBalanceAsOf ? ` The latest bank balance on record is dated ${niceDate(i.lastBankBalanceAsOf)}.` : ''}`,
-    );
-  } else {
-    fresh.push(`Latest bank balance on record is dated ${niceDate(i.lastBankBalanceAsOf)}.`);
-  }
-  fresh.push(
-    i.market.navLatest
-      ? `Fund values use the latest NAV, dated ${niceDate(i.market.navLatest)}.`
-      : 'Fund values are carried forward from your last recorded values (no NAV data yet).',
-  );
-  for (const [cur, v] of Object.entries(i.market.fx))
-    fresh.push(`${cur} converted at ₹${v.rate.toFixed(3)} (rate dated ${niceDate(v.date)}).`);
-  const e = nw.estimateTotals;
-  fresh.push(
-    `Of the total, ${formatInrCompact(e.byBasis.calculated)} is calculated from contracts or units, ${formatInrCompact(e.byBasis.estimated)} is estimated and ${formatInrCompact(e.byBasis.carried_forward)} is carried forward from your last entry.`,
-  );
-
-  // things to act on
-  const a = i.attention;
-  for (const m of a.maturedUnconfirmed.slice(0, 5))
-    bullets.push(`${m} has matured; confirm where the money went (not counted until you do).`);
-  for (const m of a.maturingSoon.slice(0, 5))
-    bullets.push(
-      `${m.name} matures in ${m.daysLeft} day${m.daysLeft === 1 ? '' : 's'} (${formatInr(m.amount)}).`,
-    );
-  for (const l of a.overdueLoans.slice(0, 5))
-    bullets.push(`${l.name} owes ${formatInr(l.outstanding)}, ${l.daysOverdue} days overdue.`);
-  const taskReminders = (a.tasksDue ?? [])
-    .map((t) => ({ ...t, daysLeft: daysBetween(i.date, t.dueOn) }))
-    .filter((t) => t.daysLeft <= (i.reminders?.taskDays ?? DEFAULT_CONFIG.reminders.taskDays))
-    .sort((x, y) => x.daysLeft - y.daysLeft);
-  for (const t of taskReminders.slice(0, 5)) {
-    const title = t.title.replace(/^\[Plan [\w-]+\]\s*/, '').slice(0, 140);
-    bullets.push(
-      t.daysLeft < 0
-        ? `Overdue by ${-t.daysLeft} day${t.daysLeft === -1 ? '' : 's'}: ${title}`
-        : t.daysLeft === 0
-          ? `Due today: ${title}`
-          : `Due ${niceDate(t.dueOn)} (in ${t.daysLeft} day${t.daysLeft === 1 ? '' : 's'}): ${title}`,
-    );
-  }
-  for (const idea of (i.rateIdeas ?? []).slice(0, 2)) bullets.push(`Better rate: ${idea}`);
-  for (const t of (i.taxIdeas ?? []).slice(0, 3)) bullets.push(t);
-  const policyReminders = (a.policyDates ?? [])
-    .map((p) => ({ ...p, daysLeft: daysBetween(i.date, p.on) }))
-    .filter((p) => p.daysLeft <= (i.reminders?.policyDays ?? DEFAULT_CONFIG.reminders.policyDays))
-    .sort((x, y) => x.daysLeft - y.daysLeft);
-  for (const p of policyReminders.slice(0, 5)) {
-    const what = p.kind === 'renewal' ? 'renewal' : 'cover ends';
-    bullets.push(
-      p.daysLeft < 0
-        ? `${p.insurer} ${what} date (${niceDate(p.on)}) has passed; confirm it was renewed and update the date.`
-        : `${p.insurer} ${what} on ${niceDate(p.on)} (${p.daysLeft === 0 ? 'today' : `in ${p.daysLeft} day${p.daysLeft === 1 ? '' : 's'}`}).`,
-    );
-  }
-  if (a.staleOrMissing > 0)
-    bullets.push(
-      `${a.staleOrMissing} records are stale or have no value; update them in Monthly update.`,
-    );
-  if (nw.excluded.some((x) => x.reason === 'no_valuation'))
-    bullets.push('Some assets have no recorded value and are not counted.');
-
-  const ret = i.retirement
-    ? `Retirement view: ${i.retirement.statusText}${i.retirement.earliestAge !== null ? `; earliest age that meets the plan under your assumptions: ${i.retirement.earliestAge}` : ''}. An estimate, not a guarantee.`
-    : null;
-
-  const text = [
-    lines.join('\n'),
-    '',
-    'DATA',
-    ...fresh.map((f) => `• ${f}`),
-    '',
-    bullets.length ? 'NEEDS YOUR ATTENTION' : 'NOTHING NEEDS YOUR ATTENTION TODAY',
-    ...bullets.map((b) => `• ${b}`),
-    ...(ret ? ['', ret] : []),
-    '',
-    `Open the app: ${i.appUrl}`,
-    'Figures are estimates built from your last recorded values, interest rates, NAVs and exchange rates. This message is not a bank statement.',
-  ].join('\n');
-
-  const li = (arr: string[]) =>
-    arr.length
-      ? `<ul style="padding-left:18px;margin:6px 0">${arr.map((x) => `<li style="margin:4px 0">${esc(x)}</li>`).join('')}</ul>`
-      : '';
-  const html = `<!doctype html><html><body style="margin:0;padding:16px;background:#f5f6f8;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1a1a1a">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:20px;line-height:1.5">
-<p style="margin:0 0 4px;color:#5f6368;font-size:13px">${esc(niceDate(i.date))}</p>
-<p style="margin:0;font-size:28px;font-weight:700">${esc(formatInrCompact(nw.total))}</p>
-<p style="margin:2px 0 12px;color:#5f6368;font-size:13px">${esc(i.householdName)} · estimated net worth · ${esc(formatInr(nw.total))}</p>
-${lines
-  .slice(1)
-  .map((l) => `<p style="margin:6px 0">${esc(l)}</p>`)
-  .join('')}
-<h3 style="font-size:14px;margin:16px 0 4px">Data</h3>${li(fresh)}
-<h3 style="font-size:14px;margin:16px 0 4px">${bullets.length ? 'Needs your attention' : 'Nothing needs your attention today'}</h3>${li(bullets)}
-${ret ? `<p style="margin:12px 0">${esc(ret)}</p>` : ''}
-<p style="margin:16px 0"><a href="${esc(i.appUrl)}" style="background:#1a1a1a;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Open the app</a></p>
-<p style="color:#5f6368;font-size:12px">Figures are estimates built from your last recorded values, interest rates, NAVs and exchange rates. This message is not a bank statement.</p>
-</div></body></html>`;
-
-  const wa = [
-    `*${i.householdName}* ${niceDate(i.date)}`,
-    `Net worth (estimate): ${formatInrCompact(nw.total)}${g ? ` (${signed(g.recent.amount)} earned in ${g.days} days)` : change !== null ? ` (${signed(change)} since ${niceDate(i.previous!.date)})` : ''}`,
-    people.join(' | '),
-    fresh[0]!,
-    ...bullets.slice(0, 3).map((b) => `• ${b}`),
-    i.appUrl,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  return {
-    subject: `${formatInrCompact(nw.total)} estimated${g ? ` (${g.recent.amount < 0 ? '−' : '+'}${formatInrCompact(Math.abs(g.recent.amount))} in ${g.days} days)` : change !== null ? ` (${change < 0 ? '−' : '+'}${formatInrCompact(Math.abs(change))})` : ''} · ${niceDate(i.date)}`,
-    text,
-    html,
-    whatsapp: wa,
-  };
+  const e = buildDigestEmail(i);
+  return { subject: e.subject, text: e.text, html: e.html, whatsapp: e.chat };
 }

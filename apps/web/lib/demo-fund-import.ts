@@ -43,14 +43,14 @@ const toLines = (folio: string, rows: Raw[]): StatementLine[] => {
     balance: null,
   }));
 };
-const stored = (ls: StatementLine[]) =>
+const stored = (ls: StatementLine[], source = 'cas') =>
   ls.map((l) => ({
     key: l.key,
     date: l.date,
     kind: l.kind,
     amount: l.amount,
     units: l.units,
-    source: 'cas',
+    source,
   }));
 
 function state(o: Partial<OnFileState>): OnFileState {
@@ -134,6 +134,9 @@ export function demoFundPreview(): PersonPreview[] {
       [
         stmt('f1', 'Sample Flexi Cap Fund - Direct Growth', 'INF000A01AB1', {
           lines: flexiNew,
+          // 650.5 units were held when the statement began, and its eight instalments add 800 more
+          openingUnits: 650.5,
+          startedOn: null,
           closingUnits: 1_450.5,
           invested: 180_000,
         }),
@@ -158,7 +161,18 @@ export function demoFundPreview(): PersonPreview[] {
           units: 1_200.25,
           invested: 150_000,
           sipMonthly: 10_000,
-          lines: stored(flexiOld),
+          // six lines the statement has, one from an app export and one worked out from the SIP that it does not
+          lines: [
+            ...stored(flexiOld),
+            ...stored(
+              toLines('5678', [{ date: '2026-04-20', kind: 'purchase', amount: 5_000, units: 50 }]),
+              'csv',
+            ),
+            ...stored(
+              toLines('5678', [{ date: '2026-06-20', kind: 'sip', amount: 10_000, units: 100 }]),
+              'estimate',
+            ),
+          ],
         }),
         onFile('f2', 'Sample Large Cap Fund - Direct Growth', 'INF000C03EF3', {
           units: 300,
@@ -214,8 +228,40 @@ export function demoFundPreview(): PersonPreview[] {
       ],
     ),
   );
+  // a statement keyed on an email address lists only what is registered under that email: two funds it does not list are not sold
+  const charu = diffFundImport({
+    ...build(
+      'p3',
+      [
+        stmt('h1', 'Sample Value Fund - Direct Growth', 'INF000R10ST0', {
+          lines: toLines('4455', monthly('2026-08-05', 3, 4_000)),
+          openingUnits: 100,
+          startedOn: null,
+          closingUnits: 220,
+          invested: 22_000,
+        }),
+      ],
+      [
+        onFile('h1', 'Sample Value Fund - Direct Growth', 'INF000R10ST0', {
+          units: 100,
+          invested: 10_000,
+          lines: [],
+        }),
+        onFile('h2', 'Sample Dividend Fund - Direct Growth', 'INF000S11UV1', {
+          units: 80,
+          invested: 8_000,
+        }),
+        onFile('h3', 'Sample Tax Saver Fund - Direct Growth', 'INF000T12WX2', {
+          units: 60,
+          invested: 6_000,
+        }),
+      ],
+    ),
+    basis: 'email',
+  });
   return [
     { ownerId: 'p1', name: 'Anil', files: [], diff: toView(anil), notes: [] },
     { ownerId: 'p2', name: 'Beena', files: [], diff: toView(beena), notes: [] },
+    { ownerId: 'p3', name: 'Charu', files: [], diff: toView(charu), notes: [] },
   ];
 }

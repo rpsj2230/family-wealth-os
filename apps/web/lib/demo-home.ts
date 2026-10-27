@@ -196,7 +196,7 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     monthly: number,
   ): GoalSummary => {
     const years = (Date.parse(targetDate) - Date.parse(TODAY)) / (365.25 * DAY);
-    const proj = projectGoal({
+    const plan = {
       targetToday,
       targetDate,
       inflation: DEFAULT_INFLATION[kind] ?? 0.055,
@@ -204,8 +204,20 @@ export function demoHomeInput(range: HomeRange): HomeInput {
       monthlyContribution: monthly,
       annualReturn: returnFor(years),
       today: TODAY,
-    });
-    return { id, name, kind, targetDate, allocated, monthly, futureCost: proj.futureCost, proj };
+    };
+    const proj = projectGoal(plan);
+    return {
+      id,
+      name,
+      kind,
+      targetDate,
+      allocated,
+      monthly,
+      futureCost: proj.futureCost,
+      proj,
+      targetToday,
+      plan,
+    };
   };
   const goals = [
     goal('g1', 'Education fund', 'education', 4_000_000, '2033-06-01', 2_100_000, 40_000),

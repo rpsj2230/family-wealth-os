@@ -1,3 +1,4 @@
+import { depositListState } from './deposit-state';
 import { daysBetween } from './fd';
 
 /** Used when no thresholds are supplied; the real ones come from Settings (deposits.maturityAlertDays). */
@@ -37,7 +38,26 @@ export function maturityAlerts(
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
-/** Matured but still marked active: needs the user to confirm renewal or credit. */
-export function overdueMaturities(fds: MaturingFd[], today: Date): MaturingFd[] {
-  return fds.filter((f) => f.status === 'active' && daysBetween(f.maturityOn, today) > 0);
+/**
+ * Matured but still marked active: needs the user to confirm renewal or credit. With `hideAfterDays` (Settings: deposits.hideMaturedAfterDays)
+ * one that matured longer ago than that is left out: it is hidden from the lists and no longer asked about.
+ */
+export function overdueMaturities(
+  fds: MaturingFd[],
+  today: Date,
+  hideAfterDays?: number,
+): MaturingFd[] {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return fds.filter(
+    (f) =>
+      f.status === 'active' &&
+      daysBetween(f.maturityOn, today) > 0 &&
+      (hideAfterDays === undefined ||
+        depositListState({
+          status: f.status,
+          maturityOn: iso(f.maturityOn),
+          today: iso(today),
+          hideAfterDays,
+        }) === 'confirm'),
+  );
 }

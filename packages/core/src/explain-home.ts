@@ -20,6 +20,7 @@ import {
   type ExplainSet,
 } from './explain';
 import type { BankOverview } from './bank-overview';
+import { maturedRuleText } from './deposit-state';
 import type { FreshnessSummary } from './dashboard';
 import type {
   AllocShare,
@@ -94,7 +95,7 @@ export interface HomeExplainInput {
   };
   attention: { tone: string }[];
   openTasks: number;
-  banks: { overview: BankOverview; topShare: number | null; maturedCounted: number };
+  banks: { overview: BankOverview; topShare: number | null; maturedNotCounted: number };
   deposits: {
     overview: BankOverview;
     interest: DepositInterest;
@@ -175,7 +176,7 @@ function netWorth(i: HomeExplainInput): Explain {
     level: estShare(i),
     completeness: `${exInr(b.calculated)} is calculated, ${exInr(b.estimated)} is estimated and ${exInr(b.carried_forward)} is carried forward from the last entry${i.trustDetail.assumptions > 0 ? `; ${exPlural(i.trustDetail.assumptions, 'account')} use an assumed savings rate` : ''}. ${f.fresh} of ${exPlural(f.total, 'holding')} are recorded within their refresh window.`,
     notes: [
-      'A deposit past its date that is still listed as running is counted at its maturity amount until you say where the money went; one marked unconfirmed is left out.',
+      maturedRuleText(),
       'Every kind below adds up to this figure, so nothing is counted twice.',
     ],
     fix: { label: 'Update balances', href: i.links.monthly },
@@ -349,7 +350,7 @@ function money(id: string, i: HomeExplainInput): Explain {
       level: 'partly_estimated',
       completeness:
         'Deposits are calculated from their terms; funds, cash and the rest have no maturity and stay at today’s value, so this is not a forecast.',
-      notes: ['A deposit past its date but unconfirmed is counted at its maturity amount.'],
+      notes: [maturedRuleText()],
     });
   if (id === 'home.profit')
     return explain({
@@ -497,7 +498,7 @@ function classCard(key: ClassCard['key'], id: string, i: HomeExplainInput): Expl
       ...(c.awaiting
         ? [
             {
-              label: 'Deposits past their date, waiting to be confirmed',
+              label: 'Deposits past their date, not counted (waiting to be confirmed)',
               value: exInr(c.awaiting.current),
               basis: 'missing' as const,
               count: COUNT(c.awaiting.count, 'deposits'),
@@ -513,7 +514,7 @@ function classCard(key: ClassCard['key'], id: string, i: HomeExplainInput): Expl
       : 'Worked out from recorded facts and contract terms.',
     notes: [
       c.awaiting
-        ? `Includes ${exInr(c.awaiting.current)} in ${exPlural(c.awaiting.count, 'deposit')} past their date, counted as in net worth.`
+        ? `Leaves out ${exInr(c.awaiting.current)} in ${exPlural(c.awaiting.count, 'deposit')} past their date: once a deposit has matured its money is in a savings account or a new deposit, which are counted on their own.`
         : null,
     ],
   });
@@ -653,7 +654,10 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
       level: 'partly_estimated',
       completeness:
         'Cash is the balance moved forward by estimated interest; deposits are calculated from their dates.',
-      notes: ['The window is the first “I need money” scenario day in Settings.'],
+      notes: [
+        'The window is the first “I need money” scenario day in Settings.',
+        'A deposit whose date has passed is not a deposit any more: its money is in a savings account or a new deposit, which are listed on their own.',
+      ],
       fix: { label: 'Open “I need money”', href: i.links.raise },
     }),
     'home.nextMaturity': explain({
@@ -899,7 +903,7 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
       level: 'partly_estimated',
       completeness:
         'Deposits are calculated from their dates; funds are valued at the latest price; before tax and penalties. Selling funds is taxed and breaking a deposit early loses interest.',
-      notes: [],
+      notes: [maturedRuleText()],
       fix: { label: 'Open “I need money”', href: i.links.raise },
     }),
     'home.banks': explain({
@@ -918,7 +922,7 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
       ],
       level: i.banks.overview.staleBalances > 0 ? 'partly_estimated' : 'complete',
       completeness:
-        `${exPlural(i.banks.overview.staleBalances, 'balance')} older than ${i.banks.overview.staleBalances === 1 ? 'its' : 'their'} window. ${i.banks.maturedCounted > 0 ? `${exPlural(i.banks.maturedCounted, 'matured deposit')} wait to be confirmed and are in net worth but not here.` : ''}`.trim(),
+        `${exPlural(i.banks.overview.staleBalances, 'balance')} older than ${i.banks.overview.staleBalances === 1 ? 'its' : 'their'} window. ${i.banks.maturedNotCounted > 0 ? `Deposits past their date (${exInr(i.banks.maturedNotCounted)}) are not counted: their money is in a savings account or a new deposit.` : ''}`.trim(),
       notes: [],
       fix: { label: 'Open Accounts', href: i.links.accounts },
     }),

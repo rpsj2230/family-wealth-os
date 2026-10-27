@@ -12,6 +12,7 @@ import {
   foldByKind,
   freshnessSummary,
   growthSplit,
+  investedMoney,
   isCounted,
   largestShare,
   linearPath,
@@ -250,8 +251,8 @@ export interface HomeModel {
     overview: BankOverview;
     lines: BankLine[];
     topShare: number | null;
-    /** matured deposits still listed as running: in net worth, but not in the bank figures until confirmed */
-    maturedCounted: number;
+    /** deposits past their date, waiting to be confirmed: in no figure (the money counts where it went) */
+    maturedNotCounted: number;
   };
   deposits: {
     overview: BankOverview;
@@ -343,7 +344,7 @@ export function buildHome(i: HomeInput): HomeModel {
   const funds = i.inv && i.inv.household.funds > 0 ? i.inv : null;
   const fundRows: FundRow[] = funds ? funds.groups.flatMap((g) => g.funds) : [];
   // --- the four kinds of holding, and what each earned in each period
-  const awaitingRows = rows.filter((r) => r.fd?.needsConfirmation && r.status === 'active');
+  const awaitingRows = rows.filter((r) => r.fd?.listState === 'confirm');
   const awaiting = {
     count: awaitingRows.length,
     invested: awaitingRows.reduce((a, r) => a + r.fd!.principal, 0),
@@ -381,10 +382,8 @@ export function buildHome(i: HomeInput): HomeModel {
     ),
   });
   const sumOf = (f: (c: ClassCard) => number) => classList.reduce((a, c) => a + f(c), 0);
-  const card = (k: ClassCard['key']) => classList.find((c) => c.key === k)!;
-  // invested money is the deposits' principal and the cost of the fund units held; cash, shares, property and loans are not invested
-  const moneyInvested = card('fd').invested + card('funds').invested;
-  const moneyProfit = card('fd').profit + card('funds').profit;
+  // invested money is deposits and funds; the profit is on that money (core investedMoney, shared with the daily summary)
+  const invested = investedMoney(classList, nw.total);
 
   const growth = growthSplit([
     {
@@ -448,7 +447,9 @@ export function buildHome(i: HomeInput): HomeModel {
   const currencies = toShares(currencyAmounts, {}, 4);
 
   // --- how fast it can be reached
-  const runningDeposits = rows.filter((r) => r.fd && r.status === 'active');
+  const runningDeposits = rows.filter(
+    (r) => r.fd && r.status === 'active' && !r.fd.needsConfirmation,
+  );
   const ladder = liquidityLadder({
     today,
     cashNow: overview.parts.cash.current,
@@ -486,7 +487,7 @@ export function buildHome(i: HomeInput): HomeModel {
     uninsured: i.cover.uninsured,
     banksOver: Object.values(i.cover.byBank).filter((b) => b.uninsured > 0).length,
   };
-  const toConfirmRows = rows.filter((r) => r.fd?.needsConfirmation);
+  const toConfirmRows = rows.filter((r) => r.fd?.listState === 'confirm');
   const dated = (d: string | null, kind: 'renewal' | 'ends', insurer: string) =>
     d ? [{ insurer, kind, on: d }] : [];
   const attention = attentionItems({
@@ -671,28 +672,14 @@ export function buildHome(i: HomeInput): HomeModel {
     styles: i.styles,
     total: nw.total,
     money: {
-      invested: moneyInvested,
       current: nw.total,
       maturity: sumOf((c) => c.maturity),
-      profit: moneyProfit,
-      profitPct: moneyInvested > 0 ? moneyProfit / moneyInvested : null,
-      valueOfInvested: card('fd').current + card('funds').current,
-      parts: {
-        fd: {
-          invested: card('fd').invested,
-          current: card('fd').current,
-          profit: card('fd').profit,
-        },
-        funds: {
-          invested: card('funds').invested,
-          current: card('funds').current,
-          profit: card('funds').profit,
-        },
-        notInvested: nw.total - card('fd').current - card('funds').current,
-      },
-      estimated: classList.some(
-        (c) => (c.key === 'fd' || c.key === 'funds') && c.estimated && c.profit !== 0,
-      ),
+      invested: invested.invested,
+      profit: invested.profit,
+      profitPct: invested.profitPct,
+      valueOfInvested: invested.valueOfInvested,
+      parts: invested.parts,
+      estimated: invested.estimated,
     },
     classes: classList,
     periods,
@@ -753,9 +740,7 @@ export function buildHome(i: HomeInput): HomeModel {
       overview,
       lines: bankLines,
       topShare: topBank?.share ?? null,
-      maturedCounted: toConfirmRows
-        .filter((r) => r.status === 'active')
-        .reduce((a, r) => a + (r.current ?? 0), 0),
+      maturedNotCounted: toConfirmRows.reduce((a, r) => a + (r.fd?.maturityAmount ?? 0), 0),
     },
     deposits: {
       overview: depOverview,

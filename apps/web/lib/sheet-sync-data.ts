@@ -36,6 +36,7 @@ export async function loadSyncApp(
     portfolio,
     institutionNames: institutionName,
     today,
+    hideMaturedAfterDays: loaded.hideMaturedAfterDays,
   });
   const valueOf = new Map(
     portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? null]),

@@ -207,7 +207,7 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
     if (isBank && b.doneThisMonth) banksDone++;
     for (const sct of b.sections) {
       for (const r of sct.rows) {
-        if (r.kind === 'fd' && r.fd?.needsConfirmation) toConfirm++;
+        if (r.kind === 'fd' && r.fd?.listState === 'confirm') toConfirm++;
         if (r.kind !== 'fd' && r.stale && r.status !== 'closed' && r.status !== 'stopped') stale++;
         if (!counted(r)) continue;
         if (r.kind !== 'fd' && r.asOf) dates.push(r.asOf);

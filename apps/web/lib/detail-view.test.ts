@@ -107,6 +107,51 @@ describe('buildAssetView: deposit', () => {
   });
 });
 
+describe('buildAssetView: a deposit from the history import, or past its date', () => {
+  const short = 'From the monthly tabs (2021-06 to 2021-10); ended about 2021-11 (estimate).';
+  it('explains the short note in full, and the estimated end and start dates', () => {
+    const v = buildAssetView(
+      base({
+        asset: { ...base().asset, status: 'closed', notes: short },
+        fd: {
+          ...base().fd!,
+          booked_on: '2021-06-01',
+          maturity_on: '2021-12-01',
+          ended_on: '2021-11-01',
+          ended_estimated: true,
+          start_estimated: true,
+        },
+      }),
+    );
+    const f = (l: string) => v.facts.filter((x) => x.label === l);
+    expect(f('Notes')[0]!.value).toBe(short);
+    expect(f('About the monthly-tabs import')[0]!.value).toContain(
+      'first month it is missing from',
+    );
+    expect(f('Ended on')[0]).toMatchObject({ value: '2021-11-01' });
+    expect(f('Ended on')[0]!.note).toContain('estimated');
+    expect(f('Start date').some((x) => x.note?.includes('estimated'))).toBe(true);
+  });
+  it('still explains the older, longer note the importer used to write', () => {
+    const v = buildAssetView(
+      base({
+        asset: {
+          ...base().asset,
+          notes: 'Added from the monthly tabs (2021-06 to 2021-10). The tabs do not say...',
+        },
+      }),
+    );
+    expect(v.facts.some((x) => x.label === 'About the monthly-tabs import')).toBe(true);
+  });
+  it('says a deposit still marked active but past its date is not confirmed and not counted', () => {
+    const v = buildAssetView(base({ fd: { ...base().fd!, maturity_on: '2026-10-20' } }));
+    const st = v.facts.find((x) => x.label === 'Status')!;
+    expect(st.value).toBe('Past its maturity date, not confirmed');
+    expect(st.note).toContain('Not counted');
+    expect(buildAssetView(base()).facts.find((x) => x.label === 'Status')!.value).toBe('Active');
+  });
+});
+
 describe('buildAssetView: fund and loan', () => {
   it('works out XIRR from the ledger, lots and sales', () => {
     const v = buildAssetView(

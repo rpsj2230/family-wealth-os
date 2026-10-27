@@ -5,6 +5,7 @@ import {
   filterBlocksByOwner,
   tenureText,
   formatInr,
+  isPastMaturity,
   personStyles,
   type BankBlock,
   type BankRow,
@@ -109,6 +110,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
           .from('mf_transactions')
           .select('id, txn_on, kind, amount, units, nav, balance_units, description')
           .eq('asset_id', id)
+          .is('superseded_on', null)
           .order('txn_on')
           .order('id')
           .range(from, to),
@@ -158,6 +160,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     portfolio: l.portfolio,
     institutionNames: instNames,
     today: l.today,
+    hideMaturedAfterDays: l.hideMaturedAfterDays,
   });
   let row: BankRow | undefined;
   for (const b of blocks) for (const s of b.sections) row ??= s.rows.find((r) => r.assetId === id);
@@ -271,6 +274,9 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
             fd.bank_maturity_amount === null ? null : Number(fd.bank_maturity_amount),
           fd_ref_last4: fd.fd_ref_last4 ?? null,
           fd_ref: fd.fd_ref ?? null,
+          ended_on: fd.ended_on ?? null,
+          ended_estimated: !!fd.ended_estimated,
+          start_estimated: !!fd.start_estimated,
         }
       : null,
     position: position
@@ -408,6 +414,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
     portfolio: l.portfolio,
     institutionNames: Object.fromEntries(instRows.map((i) => [i.id, i.name])),
     today: l.today,
+    hideMaturedAfterDays: l.hideMaturedAfterDays,
   });
   const block0 = blocks.find((b) => b.key === id) ?? null;
   if (ownerId && !ownerList.some((o) => o.id === ownerId)) notFound();
@@ -436,7 +443,10 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
         booked_on: f.booked_on,
         maturity_on: f.maturity_on,
         compounding: f.compounding,
-        counted: counted(mineAssets.find((a) => a.id === f.asset_id)?.status ?? ''),
+        // a deposit past its date is no longer held: its money is in the account or deposit it went to
+        counted:
+          counted(mineAssets.find((a) => a.id === f.asset_id)?.status ?? '') &&
+          !isPastMaturity(f.maturity_on, todayIso),
       })),
   });
   const inbox = ids.size
@@ -515,7 +525,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
     ...Object.fromEntries(ownerList.map((o) => [o.id, o.name])),
     ...Object.fromEntries(instRows.map((i) => [i.id, i.name])),
   };
-  const fdLines = rows.filter((r) => r.fd && r.status === 'active');
+  const fdLines = rows.filter((r) => r.fd && r.status === 'active' && !r.fd.needsConfirmation);
   if (fdLines.length > 0) {
     const sorted = [...fdLines].sort((a, b) => a.fd!.maturityOn.localeCompare(b.fd!.maturityOn));
     const principal = sorted.reduce((s2, r) => s2 + r.fd!.principal, 0);

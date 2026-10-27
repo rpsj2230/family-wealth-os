@@ -1,4 +1,4 @@
-import { projectGoal } from '@fwos/core';
+import { isCounted, projectGoal } from '@fwos/core';
 import { loadContext } from '@/lib/data';
 import { DEFAULT_INFLATION, returnFor } from '@/lib/goals-view';
 import { loadPortfolio } from '@/lib/portfolio-data';
@@ -26,7 +26,14 @@ export default async function GoalsPage({
     supabase.from('goal_allocations').select('goal_id, asset_id, method, value'),
     supabase.from('mf_positions').select('asset_id, sip_monthly, sip_stopped'),
   ]);
-  const value = new Map(portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]));
+  // a deposit past its date is worth nothing to a goal: its money is in the account or deposit it went to
+  const value = new Map(
+    portfolio.valued.map((v) => [
+      v.assetId,
+      v.type === 'fixed_deposit' && !isCounted(v) ? 0 : (v.estimate?.estimatedAmount ?? 0),
+    ]),
+  );
+  const statusOf = new Map(portfolio.valued.map((v) => [v.assetId, v.status]));
   const nick = new Map(assetRows.map((a) => [a.id, a.nickname]));
   const sip = new Map(
     (sips.data ?? []).map((s) => [
@@ -101,7 +108,7 @@ export default async function GoalsPage({
     .filter(
       (a) =>
         ['mutual_fund', 'fixed_deposit', 'bank_account', 'stock'].includes(a.type) &&
-        ['active', 'stopped'].includes(a.status),
+        ['active', 'stopped'].includes(statusOf.get(a.id) ?? a.status),
     )
     .sort((a, b) => a.nickname.localeCompare(b.nickname))
     .map((a) => {

@@ -14,7 +14,7 @@ import {
 } from './explain';
 import {
   GRANULARITIES,
-  signedPct,
+  signedShare,
   type ValuationHistory,
   type ValuationRow,
 } from './valuation-history';
@@ -80,7 +80,7 @@ export function buildValuationExplain(
     title: 'Value, change and gain by period',
     what: 'For each period: what the funds were worth at its end, how that changed from the end of the period before (new money included, as on a fund statement), and how much of the change was money you put in and how much was a real gain.',
     how: ex
-      ? `${ex.period.label}: value ${exInr(ex.value ?? 0)}${ex.change === null ? '' : ` − the period before ${exInr((ex.value ?? 0) - ex.change)} = change ${exSigned(ex.change)} (${signedPct(ex.changePct)})`}. Money put in, net of sales: ${exSigned(ex.netIn)}. Gain = change − net money in = ${ex.gain === null ? 'not worked out' : exSigned(ex.gain)}${ex.gainPct === null || ex.gain === null || ex.base <= 0 ? '' : `; as a share of the money at work in the period (the value at its start plus each purchase for the days it was held): ${ratioHow({ label: 'gain', amount: ex.gain }, { label: 'at work', amount: ex.base })}`}.`
+      ? `${ex.period.label}: value ${exInr(ex.value ?? 0)}${ex.change === null ? '' : ` − the period before ${exInr((ex.value ?? 0) - ex.change)} = change ${exSigned(ex.change)} (${signedShare(ex.changePct)})`}. Money put in, net of sales: ${exSigned(ex.netIn)}. Gain = change − net money in = ${ex.gain === null ? 'not worked out' : exSigned(ex.gain)}${ex.gainPct === null || ex.gain === null || ex.base <= 0 ? '' : `; as a share of the money at work in the period (the value at its start plus each purchase for the days it was held): ${ratioHow({ label: 'gain', amount: ex.gain }, { label: 'at work', amount: ex.base })}`}.`
       : 'Not worked out: no fund has a value on record.',
     inputs: [
       {

@@ -122,6 +122,7 @@ export function demoModel(periodCases = true) {
       booked: string,
       maturity: string,
       ref: number,
+      more: { notes?: string; endedOn?: string; endedEstimated?: boolean } = {},
     ) => {
       assets.push(
         base({
@@ -132,6 +133,7 @@ export function demoModel(periodCases = true) {
           status,
           nickname: 'FD',
           account_kind: null,
+          ...(more.notes ? { notes: more.notes } : {}),
         }),
       );
       fds.push({
@@ -144,6 +146,7 @@ export function demoModel(periodCases = true) {
         bank_maturity_amount: null,
         fd_ref_last4: String(ref),
         fd_ref: `30001779${ref}-1`,
+        ...(more.endedOn ? { ended_on: more.endedOn, ended_estimated: !!more.endedEstimated } : {}),
       });
     };
     extraFd('f-eq-new', 'eq', 'p1', 'active', 750_000, 0.0725, '2026-10-06', '2027-10-06', 4101);
@@ -160,6 +163,31 @@ export function demoModel(periodCases = true) {
       '2027-08-18',
       4104,
     );
+    // matured deposits, for the rule that hides them. Invented. One matured 12 days ago and is not confirmed (shown, not counted, with
+    // "Confirm matured"); one was confirmed matured long ago, and one from the History import was closed on an estimated date (both hidden);
+    // one is still marked running two years after its date (hidden too, and in no total)
+    const tabsNote =
+      'Added from the monthly tabs (2021-06 to 2021-10). The tabs do not say when it ended; 2021-11 is the first month it is missing from, an estimate to correct if you know better.';
+    extraFd('f-ii-recent', 'ii', 'p1', 'active', 300_000, 0.07, '2025-09-20', '2026-10-14', 4105, {
+      notes: tabsNote,
+    });
+    extraFd('f-yb-old', 'yb', 'p1', 'closed', 250_000, 0.0625, '2021-06-10', '2021-12-10', 4106, {
+      notes: tabsNote,
+      endedOn: '2021-11-01',
+      endedEstimated: true,
+    });
+    extraFd(
+      'f-rb-confirmed',
+      'rb',
+      'p2',
+      'matured',
+      350_000,
+      0.0675,
+      '2025-07-01',
+      '2026-07-01',
+      4107,
+    );
+    extraFd('f-au-stale', 'au', 'p1', 'active', 200_000, 0.065, '2023-03-01', '2024-03-01', 4108);
     // a dollar account: its balance is in dollars and moves with the exchange rate, which is not interest
     assets.push(
       base({

@@ -232,7 +232,7 @@ describe('runCasImport', () => {
 });
 
 describe('a fund missing from a complete statement', () => {
-  const stmt = parseCas(TEXT);
+  const stmt = { ...parseCas(TEXT), basis: 'pan' as const };
   const listed = {
     assetId: 'f1',
     name: 'Sample Flexi Cap Fund',

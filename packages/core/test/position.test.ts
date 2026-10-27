@@ -222,7 +222,9 @@ describe('fixed deposits', () => {
     expect(mid.value).toBeCloseTo(fdOn(a.fd!, '2026-07-01'), 6);
     expect(mid.basis).toBe('terms');
     expect(mid.estimated).toBe(false);
-    const after = valueOn(a, '2027-01-01', cfg());
+    // it still counts on the day it matures, and not after (the same rule as net worth)
+    expect(valueOn(a, '2027-01-01', cfg()).state).toBe('held');
+    const after = valueOn(a, '2027-01-02', cfg());
     expect(after.state).toBe('ended');
     expect(after.value).toBe(0);
   });

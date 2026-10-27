@@ -13,7 +13,8 @@ describe('Home model for the sample household', () => {
 
   it('every way of cutting the total adds up to the same total', () => {
     expect(h.total).toBe(nw.total);
-    expect(h.allocation.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(nw.total, 2);
+    // each share is kept to the paisa, so the sum of them can differ from the whole by a few paise
+    expect(h.allocation.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(nw.total, 1);
     // each person’s total is kept to the paisa, so the four of them can differ from the whole by a few paise
     expect(h.byPerson.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(nw.total, 1);
     expect(h.trust.total).toBeCloseTo(nw.total, 2);
@@ -23,14 +24,14 @@ describe('Home model for the sample household', () => {
 
   it('the bank, deposit and fund figures are the ones their own pages show', () => {
     const banks = h.banks.overview;
-    // a deposit past its date that is still listed as running is in net worth but waits for confirmation in the bank figures
-    expect(banks.current + h.banks.maturedCounted).toBeCloseTo(
+    // a deposit past its date is in neither: net worth and the bank figures agree, and the matured one is only noted
+    expect(banks.current).toBeCloseTo(
       (nw.byType.bank_account ?? 0) +
         (nw.byType.fixed_deposit ?? 0) +
         (nw.byType.third_party_held ?? 0),
-      2,
+      1,
     );
-    expect(h.banks.maturedCounted).toBeGreaterThan(0);
+    expect(h.banks.maturedNotCounted).toBeGreaterThan(0);
     expect(h.deposits.overview.current).toBeCloseTo(banks.parts.fd.current, 2);
     expect(h.deposits.overview.deposits).toBe(banks.deposits);
     expect(h.funds!.totals.value).toBeCloseTo(nw.byType.mutual_fund ?? 0, 2);
@@ -142,8 +143,8 @@ describe('the headline tiles', () => {
     expect(t.recent.coverage.withValue).toBeGreaterThan(t.fy.coverage.withValue);
   });
 
-  it('count only what holdings earned: net worth moved by more, because money was added', () => {
-    expect(t.recent.netWorth.change).toBeGreaterThan(t.recent.amount);
+  it('count only what holdings earned: net worth moves by a different amount, because money came in and went out', () => {
+    expect(t.recent.netWorth.change).not.toBeCloseTo(t.recent.amount, 0);
     expect(t.recent.netWorth.end).toBeCloseTo(m.total, 2);
   });
 });

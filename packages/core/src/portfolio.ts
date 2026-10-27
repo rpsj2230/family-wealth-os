@@ -13,6 +13,7 @@ import {
   estimateSavings,
   type CurrentValueEstimate,
 } from './estimate';
+import { effectiveDepositStatus } from './deposit-state';
 import { classifyFreshness, type Confidence, type Freshness } from './freshness';
 import {
   aggregateNetWorth,
@@ -152,6 +153,7 @@ export function buildPortfolio(
 ): Portfolio {
   const latest = latestObservations(observations);
   const fdByAsset = new Map(fds.map((f) => [f.asset_id, f]));
+  const todayIso = today.toISOString().slice(0, 10);
   const valued: ValuedAsset[] = [];
   const lines: Record<string, AssetStatusLine> = {};
 
@@ -162,6 +164,7 @@ export function buildPortfolio(
     let marketDate: string | null = null;
     let freshness: AssetStatusLine['freshness'] = 'missing';
     let ageDays: number | null = null;
+    let status = a.status;
 
     const fd = a.type === 'fixed_deposit' ? fdByAsset.get(a.id) : undefined;
     if (fd) {
@@ -183,7 +186,11 @@ export function buildPortfolio(
         maturityOn: dt(fd.maturity_on),
         compounding: fd.compounding,
       });
-      freshness = a.status === 'matured_unconfirmed' ? 'older_than_expected' : 'calculated';
+      // One rule for every total: once the date has passed the money has left the deposit (it went into a savings account or another
+      // deposit, which are counted on their own), so a deposit still marked active is valued as matured and not confirmed. A deposit
+      // maturing today still counts until tomorrow.
+      status = effectiveDepositStatus(a.status, fd.maturity_on, todayIso);
+      freshness = status === 'matured_unconfirmed' ? 'older_than_expected' : 'calculated';
     } else if (obs) {
       const asOf = dt(obs.as_of);
       const f = classifyFreshness({
@@ -260,7 +267,7 @@ export function buildPortfolio(
       assetId: a.id,
       ownerId: a.owner_id,
       type: a.type,
-      status: a.status,
+      status,
       name: a.nickname,
       estimate,
     });

@@ -3,6 +3,7 @@ import {
   buildHandbook,
   profileFromJson,
   receivableStatus,
+  withoutHiddenDeposits,
   type Handbook,
   type HandbookInput,
 } from '@fwos/core';
@@ -56,14 +57,18 @@ export async function loadHandbookInput(
   const names = Object.fromEntries(
     ((inst.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [i.id, i.name]),
   );
-  const banks = buildBankBlocks({
-    assets: l.assetRows,
-    observations: l.obsRows,
-    fds: l.fdRows,
-    portfolio: l.portfolio,
-    institutionNames: names,
-    today: l.today,
-  });
+  // the printed handbook lists what is held and what needs a decision, not deposits that matured long ago or are confirmed
+  const banks = withoutHiddenDeposits(
+    buildBankBlocks({
+      assets: l.assetRows,
+      observations: l.obsRows,
+      fds: l.fdRows,
+      portfolio: l.portfolio,
+      institutionNames: names,
+      today: l.today,
+      hideMaturedAfterDays: l.hideMaturedAfterDays,
+    }),
+  ).blocks;
   const value = new Map(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? null]),
   );

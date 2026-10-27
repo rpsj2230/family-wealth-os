@@ -79,7 +79,8 @@ export function summariseDeposits(fds: FdLine[], windowDays: number): DepositSum
         : null,
     soon,
     soonTotal: soon.reduce((s, f) => s + (f.bankMaturity ?? f.accruedToday), 0),
-    confirm: fds.filter(needsConfirmation),
+    // matured within the window and not confirmed; older ones are hidden (they are in no total either)
+    confirm: fds.filter((f) => needsConfirmation(f) && f.listState !== 'hidden'),
     next,
   };
 }

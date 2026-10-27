@@ -186,15 +186,32 @@ describe('settings fields', () => {
     };
     const r = parseGroup(
       group('deposits'),
-      form({ limit: '600000', alertDays: '7, 30', soonDays: '20' }),
+      form({ limit: '600000', alertDays: '7, 30', hideMaturedDays: '90', soonDays: '20' }),
     );
     if (!r.ok) throw new Error('should parse');
     const cfg = configFromJson(mergeGroup(prior, r.raw));
     expect(cfg.deposits.insuranceLimit).toBe(600000);
+    expect(cfg.deposits.hideMaturedAfterDays).toBe(90);
     expect(cfg.deposits.maturityAlertDays).toEqual([7, 30]);
     expect(cfg.reminders.maturitySoonDays).toBe(20);
     expect(cfg.liquidity.mode).toBe('fastest');
     expect(cfg.harvest.nri).toBe(false);
+  });
+
+  it('the matured-deposit window is a whole number of days from 1 to 3650', () => {
+    const f = (v: string) =>
+      parseGroup(
+        group('deposits'),
+        form({ limit: '500000', alertDays: '7, 30', hideMaturedDays: v, soonDays: '30' }),
+      );
+    expect(group('deposits').fields.find((x) => x.name === 'hideMaturedDays')!.label).toBe(
+      'Hide a matured deposit from the lists after (days)',
+    );
+    expect(groupValues(group('deposits'), DEFAULT_CONFIG).hideMaturedDays).toBe('60');
+    expect(f('60').ok).toBe(true);
+    expect(f('0').ok).toBe(false);
+    expect(f('3651').ok).toBe(false);
+    expect(f('abc').ok).toBe(false);
   });
 
   it('tracks which groups the household has confirmed', () => {

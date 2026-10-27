@@ -52,13 +52,13 @@ describe('the headline figures and the four cards', () => {
   });
 
   it('each card is the figure of its own page', () => {
-    // deposits as Deposits counts them, plus the matured ones that wait to be confirmed (in net worth, not in Deposits)
+    // deposits as Deposits counts them; the matured ones that wait to be confirmed are in neither (their money is counted where it went)
     const dep = h.deposits.overview.parts.fd;
     const fd = card('fd');
     expect(fd.awaiting!.count).toBeGreaterThan(0);
-    expect(fd.current - fd.awaiting!.current).toBeCloseTo(dep.current, 4);
-    expect(fd.invested - fd.awaiting!.invested).toBeCloseTo(dep.invested, 4);
-    expect(fd.maturity - fd.awaiting!.current).toBeCloseTo(dep.maturity, 4);
+    expect(fd.current).toBeCloseTo(dep.current, 4);
+    expect(fd.invested).toBeCloseTo(dep.invested, 4);
+    expect(fd.maturity).toBeCloseTo(dep.maturity, 4);
     expect(h.deposits.banks.reduce((a, b) => a + b.current, 0)).toBeCloseTo(dep.current, 4);
     expect(depositsByBank(fixedDepositBlocks(input.blocks), today).length).toBe(
       h.deposits.banks.length,
@@ -142,12 +142,8 @@ describe('the same period gives the same figure on every page', () => {
     const running = deposits.filter((d) => d.held && d.maturityOn >= today);
     const so = depositPeriod(running, spanBetween('2000-01-01', today, today), today);
     expect(so.profit).toBeCloseTo(h.deposits.overview.profit, 4);
-    // and the card adds the deposits waiting to be confirmed
-    const held = deposits.filter((d) => d.held);
-    expect(depositPeriod(held, spanBetween('2000-01-01', today, today), today).profit).toBeCloseTo(
-      card('fd').profit,
-      4,
-    );
+    // and the card is the same figure: deposits past their date are in neither
+    expect(card('fd').profit).toBeCloseTo(h.deposits.overview.profit, 4);
   });
 
   it('interest by financial year in Reports is the shared figure for that year', () => {

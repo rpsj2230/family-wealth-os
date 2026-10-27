@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { runDigests, type Claim, type DigestStore, type Mailer } from '../src/digest-run';
+import {
+  runDigestTest,
+  runDigests,
+  type Claim,
+  type DigestStore,
+  type Mailer,
+} from '../src/digest-run';
 
 function setup(
   opts: {
@@ -96,5 +102,28 @@ describe('runDigests', () => {
     const r = await runDigests(s.store, s.mailer, '2026-10-26', fast);
     expect(r[0]).toMatchObject({ outcome: 'failed', error: 'database unavailable' });
     expect(s.finished[0]!.status).toBe('failed');
+  });
+});
+
+describe('runDigestTest', () => {
+  it('sends one [Test] message to the people who can sign in, not the extra recipients, and writes no log', async () => {
+    const s = setup({ extra: ['mum@example.test'], claims: ['already_done'] });
+    const r = await runDigestTest(s.store, s.mailer, '2026-10-26');
+    expect(r[0]).toMatchObject({ outcome: 'sent', recipients: 2 });
+    expect(s.sent).toHaveLength(1);
+    expect(s.sent[0]!.to).toEqual(['a@example.test', 'b@example.test']);
+    expect(s.sent[0]!.subject).toBe('[Test] S');
+    // it never claims the day, so a real summary is neither used up nor blocked
+    expect(s.finished).toHaveLength(0);
+  });
+
+  it('reports a household with nobody to send to, and a failure, without stopping', async () => {
+    expect(
+      (await runDigestTest(setup({ members: [] }).store, setup().mailer, 'd'))[0]!.outcome,
+    ).toBe('no_recipients');
+    const bad = await runDigestTest(setup({ buildFails: true }).store, setup().mailer, 'd');
+    expect(bad[0]).toMatchObject({ outcome: 'failed', error: 'database unavailable' });
+    const smtp = await runDigestTest(setup().store, setup({ failSends: 1 }).mailer, 'd');
+    expect(smtp[0]).toMatchObject({ outcome: 'failed', error: 'smtp 421' });
   });
 });

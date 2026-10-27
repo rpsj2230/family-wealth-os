@@ -1,35 +1,39 @@
 import {
-  assess,
+  assembleDigest,
+  bankOverview,
+  buildBankBlocks,
   compareHoldings,
-  buildPlan,
-  earliestRetirementAge,
-  holdingsFromAssets,
+  depositCover,
   formatInr,
   harvestPlanSummary,
-  positionAsOf,
-  positionGains,
-  maturityAlerts,
+  holdingsFromAssets,
+  isEstimateLine,
+  moveAmount,
   planHarvest,
-  overdueMaturities,
+  positionAsOf,
   receivableStatus,
+  rateOfferFromRow,
+  savingsRatesOf,
   settingsFromJson,
+  summariseGoals,
   withPeople,
   type DigestInput,
+  type DigestSources,
+  type RateOffer,
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
+import { pageAll } from './paging';
 import { loadPositionInput } from './position';
 import { loadSettings } from './settings';
 import { loadRatesContext } from './rates';
 import { loadHarvestPositions } from './harvest';
 
-const STATUS_TEXT = {
-  meets_plan: 'projected to meet the plan under your assumptions',
-  shortfall: 'projected shortfall under your assumptions',
-  insufficient_data: 'insufficient data to assess',
-} as const;
-
-/** Everything the daily summary needs for one household, from whichever Supabase client is supplied. */
+/**
+ * Everything the daily summary needs for one household, from whichever Supabase client is supplied: the rows are read here and put
+ * together by `assembleDigest` (core), which uses the functions Home, Goals and "Can I retire now?" use, so the e-mail agrees with
+ * the portal. Reads only. `includeGoals` and `includeRetirement` are the two switches in Settings > Notifications.
+ */
 export async function buildDigestInput(
   db: SupabaseClient,
   opts: {
@@ -38,6 +42,7 @@ export async function buildDigestInput(
     householdName: string;
     appUrl: string;
     includeRetirement?: boolean;
+    includeGoals?: boolean;
   },
 ): Promise<DigestInput> {
   const today = new Date(opts.date + 'T00:00:00Z');
@@ -45,70 +50,193 @@ export async function buildDigestInput(
     const q = db.from(table).select(cols);
     return opts.householdId ? q.eq('household_id', opts.householdId) : q;
   };
-  const loadedAll = await loadPortfolioData(db, {
+  const l = await loadPortfolioData(db, {
     ...(opts.householdId ? { householdId: opts.householdId } : {}),
     today,
-  }).then(async (l) => {
-    const pos = await scoped('mf_positions', 'sip_monthly, sip_stopped');
-    const sips = (
-      (pos.data ?? []) as unknown as { sip_monthly: number | null; sip_stopped: boolean }[]
-    )
-      .filter((x) => !x.sip_stopped)
-      .reduce((s, x) => s + Number(x.sip_monthly ?? 0), 0);
-    return { ...l, sipMonthly: sips };
   });
-  const { assetRows, obsRows, fdRows, ownerName, portfolio, marketDates, sipMonthly } = loadedAll;
-
-  const cfg = (await loadSettings(db, opts.householdId)).config;
-  // what the holdings earned, from the same function Home uses; the summary goes out without it if the records cannot be read
-  let gains: DigestInput['gains'] = null;
-  let position: Awaited<ReturnType<typeof loadPositionInput>> | null = null;
-  try {
-    position = await loadPositionInput(db, loadedAll, {
-      ...(opts.householdId ? { householdId: opts.householdId } : {}),
-      config: cfg,
-    });
-    const g = positionGains({ position, recentDays: cfg.home.changeDays });
-    gains = {
-      days: cfg.home.changeDays,
-      recent: g.tiles.find((t) => t.key === 'recent')!,
-      fy: g.tiles.find((t) => t.key === 'fy')!,
-    };
-  } catch {
-    // the records could not be read: no earnings line, and the month review falls back to the saved snapshots
-  }
-  const [snaps, recv, pays, settings, pols, taskRows] = await Promise.all([
-    scoped('snapshots', 'taken_on, total')
-      .lt('taken_on', opts.date)
-      .order('taken_on', { ascending: false })
-      .limit(1),
+  const { assetRows, obsRows, fdRows, ownerName, portfolio, marketDates, fundDay } = l;
+  const st = await loadSettings(db, opts.householdId);
+  const cfg = st.config;
+  const [
+    snaps,
+    recv,
+    pays,
+    plan,
+    pols,
+    taskRows,
+    insts,
+    offerRows,
+    jointRows,
+    positions,
+    txns,
+    goalRows,
+    allocRows,
+    people,
+    inbox,
+  ] = await Promise.all([
+    pageAll<{
+      taken_on: string;
+      total: number;
+      by_type: Record<string, number> | null;
+      by_owner: Record<string, number> | null;
+    }>((from, to) =>
+      scoped('snapshots', 'taken_on, total, by_type, by_owner')
+        .order('taken_on', { ascending: true })
+        .range(from, to),
+    ),
     scoped('receivables', 'asset_id, counterparty, lent, expected_on'),
     scoped('receivable_payments', 'asset_id, amount'),
     scoped('plan_settings', 'settings').maybeSingle(),
     scoped('policies', 'insurer, renewal_on, expires_on'),
     scoped('tasks', 'title, due_on').eq('status', 'open').not('due_on', 'is', null),
+    scoped('institutions', 'id, name, deposit_insured'),
+    scoped(
+      'rate_offers',
+      'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days, source_note, source_url',
+    ),
+    scoped('assets', 'id, joint_holder_id').not('joint_holder_id', 'is', null),
+    scoped('mf_positions', 'asset_id, invested, sip_monthly, sip_stopped'),
+    pageAll<{ asset_id: string; source: string | null; description: string | null }>((from, to) =>
+      scoped('mf_transactions', 'asset_id, source, description').order('id').range(from, to),
+    ),
+    scoped('goals', 'id, name, kind, target_amount, target_date, inflation_rate').order('name'),
+    scoped('goal_allocations', 'goal_id, asset_id, method, value'),
+    scoped('owners', 'dob, plan_role'),
+    (async () => {
+      const q = db
+        .from('inbox_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('outcome', 'needs_review')
+        .is('resolved_at', null);
+      return opts.householdId ? q.eq('household_id', opts.householdId) : q;
+    })(),
   ]);
-  const tasksDue = ((taskRows.data ?? []) as unknown as { title: string; due_on: string }[]).map(
-    (t) => ({ title: t.title, dueOn: t.due_on }),
-  );
 
-  const name = new Map(assetRows.map((a) => [a.id, a.nickname]));
-  const status = new Map(assetRows.map((a) => [a.id, a.status]));
-  const fdList = fdRows.map((f) => ({
-    id: f.asset_id,
-    name: name.get(f.asset_id) ?? 'FD',
-    maturityOn: new Date(f.maturity_on + 'T00:00:00Z'),
-    status: status.get(f.asset_id) ?? 'active',
-  }));
-  const valued = new Map(
-    portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
+  const value = new Map(portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]));
+  const instRows = (insts.data ?? []) as unknown as {
+    id: string;
+    name: string;
+    deposit_insured: boolean | null;
+  }[];
+  const blocks = buildBankBlocks({
+    assets: assetRows,
+    observations: obsRows,
+    fds: fdRows,
+    portfolio,
+    institutionNames: Object.fromEntries(instRows.map((i) => [i.id, i.name])),
+    today,
+  });
+  const offers: RateOffer[] = ((offerRows.data ?? []) as unknown as Record<string, unknown>[]).map(
+    rateOfferFromRow,
   );
-  const bankMat = new Map(fdRows.map((f) => [f.asset_id, f.bank_maturity_amount]));
+  // the same rate each savings account earns on Accounts: its own, the bank's listed slab, else the assumed rate
+  const rates = savingsRatesOf(
+    blocks.flatMap((b) => b.sections.flatMap((s) => s.rows.map((r) => ({ ...r, bank: b.name })))),
+    new Map(assetRows.map((a) => [a.id, a.interest_rate ?? null])),
+    offers,
+    cfg.estimates.savingsRate,
+  );
+  const overview = bankOverview(blocks, {
+    today,
+    soonDays: cfg.reminders.maturitySoonDays,
+    savingsRates: Object.fromEntries(Object.entries(rates).map(([id, c]) => [id, c.rate])),
+    defaultSavingsRate: cfg.estimates.savingsRate,
+    tdsRate: cfg.estimates.interestTdsRate,
+  });
+  const cover = depositCover({
+    assets: assetRows,
+    valued: portfolio.valued,
+    jointHolders: Object.fromEntries(
+      ((jointRows.data ?? []) as unknown as { id: string; joint_holder_id: string }[]).map((j) => [
+        j.id,
+        j.joint_holder_id,
+      ]),
+    ),
+    outside: new Set(instRows.filter((i) => i.deposit_insured === false).map((i) => i.id)),
+    limit: cfg.deposits.insuranceLimit,
+  });
 
-  const paid = new Map<string, number>();
-  for (const p of (pays.data ?? []) as unknown as { asset_id: string; amount: number }[]) {
-    paid.set(p.asset_id, (paid.get(p.asset_id) ?? 0) + Number(p.amount));
+  // the funds as Investments counts them: value, the amount entered as invested, and the move over the last two prices
+  const owned = new Set(assetRows.map((a) => a.id));
+  const pos = (
+    (positions.data ?? []) as unknown as {
+      asset_id: string;
+      invested: number | null;
+      sip_monthly: number | null;
+      sip_stopped: boolean;
+    }[]
+  ).filter((p) => owned.has(p.asset_id));
+  const withStatement = new Set(txns.filter((t) => !isEstimateLine(t)).map((t) => t.asset_id));
+  const fundValue = pos.reduce((a, p) => a + (value.get(p.asset_id) ?? 0), 0);
+  const fundsToday = pos.reduce((a, p) => {
+    const v = value.get(p.asset_id) ?? 0;
+    const move = fundDay[p.asset_id];
+    return move && v > 0 ? a + moveAmount(v, move.pct) : a;
+  }, 0);
+  const funds: DigestSources['funds'] =
+    pos.length > 0
+      ? {
+          count: pos.length,
+          invested: pos.reduce((a, p) => a + Number(p.invested ?? 0), 0),
+          value: fundValue,
+          today: fundsToday,
+          withoutStatement: pos.filter((p) => !withStatement.has(p.asset_id)).length,
+        }
+      : null;
+  const sipMonthly = pos
+    .filter((p) => !p.sip_stopped)
+    .reduce((a, p) => a + Number(p.sip_monthly ?? 0), 0);
+
+  // goals (the same arithmetic as the Goals page)
+  const sips = new Map(
+    pos.map((p) => [p.asset_id, p.sip_stopped ? 0 : Number(p.sip_monthly ?? 0)]),
+  );
+  const goals =
+    opts.includeGoals === false
+      ? null
+      : summariseGoals({
+          goals: ((goalRows.data ?? []) as unknown as Record<string, unknown>[]).map((g) => ({
+            id: g.id as string,
+            name: g.name as string,
+            kind: g.kind as string,
+            targetAmount: g.target_amount ? Number(g.target_amount) : null,
+            targetDate: (g.target_date as string | null) ?? null,
+            inflationRate:
+              g.inflation_rate !== null && g.inflation_rate !== undefined
+                ? Number(g.inflation_rate)
+                : null,
+          })),
+          allocations: ((allocRows.data ?? []) as unknown as Record<string, unknown>[]).map(
+            (a) => ({
+              goalId: a.goal_id as string,
+              assetId: a.asset_id as string,
+              method: a.method as 'percent' | 'amount',
+              value: Number(a.value),
+            }),
+          ),
+          values: value,
+          sips,
+          today: opts.date,
+        });
+
+  // retirement: the saved plan, when there is one and the person left the view on
+  let retirement: DigestSources['retirement'] = null;
+  if (opts.includeRetirement !== false && plan.data) {
+    retirement = {
+      settings: withPeople(
+        settingsFromJson((plan.data as unknown as { settings: unknown }).settings),
+        (people.data ?? []) as unknown as { dob: string | null; plan_role: string | null }[],
+      ),
+      holdings: holdingsFromAssets(portfolio.valued),
+      sipMonthly,
+    };
   }
+
+  // what needs the person
+  const status = new Map(assetRows.map((a) => [a.id, a.status]));
+  const paid = new Map<string, number>();
+  for (const p of (pays.data ?? []) as unknown as { asset_id: string; amount: number }[])
+    paid.set(p.asset_id, (paid.get(p.asset_id) ?? 0) + Number(p.amount));
   const overdueLoans = (
     (recv.data ?? []) as unknown as {
       asset_id: string;
@@ -132,8 +260,7 @@ export async function buildDigestInput(
     }))
     .filter((x) => x.s.status === 'overdue')
     .map((x) => ({ name: x.name, outstanding: x.s.outstanding, daysOverdue: x.s.daysOverdue }));
-
-  const policyDates = (
+  const policies = (
     (pols.data ?? []) as unknown as {
       insurer: string;
       renewal_on: string | null;
@@ -143,50 +270,28 @@ export async function buildDigestInput(
     ...(p.renewal_on ? [{ insurer: p.insurer, kind: 'renewal' as const, on: p.renewal_on }] : []),
     ...(p.expires_on ? [{ insurer: p.insurer, kind: 'ends' as const, on: p.expires_on }] : []),
   ]);
+  const tasks = ((taskRows.data ?? []) as unknown as { title: string; due_on: string }[]).map(
+    (t) => ({ title: t.title, dueOn: t.due_on }),
+  );
 
   const bankDates = obsRows
     .filter((o) => assetRows.find((a) => a.id === o.asset_id)?.type === 'bank_account')
     .map((o) => o.as_of);
   const lastBank = bankDates.length ? bankDates.reduce((m, d) => (d > m ? d : m)) : null;
 
-  let retirement: DigestInput['retirement'] = null;
-  if (opts.includeRetirement !== false && settings.data) {
-    const ppl = ((await scoped('owners', 'dob, plan_role')).data ?? []) as unknown as {
-      dob: string | null;
-      plan_role: string | null;
-    }[];
-    const s = withPeople(
-      settingsFromJson((settings.data as unknown as { settings: unknown }).settings),
-      ppl,
-    );
-    if (s.monthlySpendingToday > 0 && s.primaryDob) {
-      const plan = buildPlan(s, holdingsFromAssets(portfolio.valued), sipMonthly, opts.date);
-      const r = assess(plan, s.assumptions);
-      retirement = {
-        statusText: STATUS_TEXT[r.status],
-        earliestAge:
-          r.status === 'insufficient_data'
-            ? null
-            : Math.round((earliestRetirementAge(plan, s.assumptions).earliest ?? NaN) * 10) / 10 ||
-              null,
-      };
-    }
-  }
-
   // tax: the harvest deadline and what is still to be claimed back
   let taxIdeas: string[] = [];
   try {
-    const st = await loadSettings(db, opts.householdId);
     const hv = await loadHarvestPositions(db, {
       ...(opts.householdId ? { householdId: opts.householdId } : {}),
       today,
     });
-    const plan = planHarvest(hv.positions, opts.date, {
+    const hp = planHarvest(hv.positions, opts.date, {
       rules: st.rules,
-      config: st.config.harvest,
+      config: cfg.harvest,
       ytdRealised: hv.ytdRealised,
     });
-    taxIdeas = harvestPlanSummary(plan, opts.date, hv.ownerName);
+    taxIdeas = harvestPlanSummary(hp, opts.date, hv.ownerName);
     const rf = await scoped(
       'tds_refunds',
       'owner_id, fy, kind, expected_refund, refund_received, status',
@@ -207,44 +312,9 @@ export async function buildDigestInput(
     // tax lines are optional; the summary goes out without them
   }
 
-  // on the first of the month: how the month went
-  let monthly: DigestInput['monthly'] = null;
-  if (opts.date.slice(8) === '01') {
-    const d = new Date(`${opts.date}T00:00:00Z`);
-    d.setUTCMonth(d.getUTCMonth() - 1);
-    const since = d.toISOString().slice(0, 10);
-    // rebuilt from the records on file when there are any for that day; else from the snapshot saved nearest before it
-    const then = position ? positionAsOf(position, since) : null;
-    if (then && then.counted > 0)
-      monthly = {
-        since,
-        change: Math.round(portfolio.netWorth.total - then.total),
-        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
-          name: ownerName.get(id) ?? 'Unknown',
-          change: Math.round(v - (then.byOwner[id] ?? 0)),
-        })),
-      };
-    const old = monthly
-      ? null
-      : ((
-          await scoped('snapshots', 'taken_on, total, by_owner')
-            .lte('taken_on', since)
-            .order('taken_on', { ascending: false })
-            .limit(1)
-        ).data as unknown as
-          { taken_on: string; total: number; by_owner: Record<string, number> }[] | null);
-    if (old?.[0] && !monthly)
-      monthly = {
-        since: old[0].taken_on,
-        change: Math.round(portfolio.netWorth.total - Number(old[0].total)),
-        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
-          name: ownerName.get(id) ?? 'Unknown',
-          change: Math.round(v - Number(old[0]!.by_owner?.[id] ?? 0)),
-        })),
-      };
-  }
-
+  // better rates elsewhere, and how many banks' rates are old
   let rateIdeas: string[] = [];
+  let staleRates = 0;
   try {
     const rc = await loadRatesContext(db, {
       ...(opts.householdId ? { householdId: opts.householdId } : {}),
@@ -259,48 +329,95 @@ export async function buildDigestInput(
     )
       .filter((x) => x.offerAgeDays <= rc.config.rates.staleDays)
       .map((x) => x.text);
+    const old = new Set(
+      rc.offers
+        .filter(
+          (o) =>
+            (Date.parse(opts.date) - Date.parse(o.checkedOn)) / 86_400_000 >
+            rc.config.rates.staleDays,
+        )
+        .map((o) => o.bank),
+    );
+    staleRates = old.size;
   } catch {
     // rates are optional; the summary goes out without them
   }
-  const prev = ((snaps.data ?? []) as unknown as { taken_on: string; total: number }[])[0];
-  return {
+
+  // what the holdings earned and what the household held on earlier days: the position engine, the same one Home uses. The summary
+  // goes out without it (and falls back to the saved snapshots) if the records cannot be read.
+  let position: DigestSources['position'];
+  try {
+    position = await loadPositionInput(db, l, {
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
+      config: cfg,
+    });
+  } catch {
+    position = undefined;
+  }
+
+  // on the first of a month: how the month went
+  let monthly: DigestInput['monthly'] = null;
+  if (opts.date.slice(8) === '01') {
+    const d = new Date(`${opts.date}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    const since = d.toISOString().slice(0, 10);
+    const then = position ? positionAsOf(position, since) : null;
+    const old = [...snaps].filter((s) => s.taken_on <= since).pop();
+    if (then && then.counted > 0)
+      monthly = {
+        since,
+        change: Math.round(portfolio.netWorth.total - then.total),
+        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
+          name: ownerName.get(id) ?? 'Unknown',
+          change: Math.round(v - (then.byOwner[id] ?? 0)),
+        })),
+      };
+    else if (old)
+      monthly = {
+        since: old.taken_on,
+        change: Math.round(portfolio.netWorth.total - Number(old.total)),
+        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
+          name: ownerName.get(id) ?? 'Unknown',
+          change: Math.round(v - Number(old.by_owner?.[id] ?? 0)),
+        })),
+      };
+  }
+
+  return assembleDigest({
     date: opts.date,
     householdName: opts.householdName,
-    netWorth: portfolio.netWorth,
+    appUrl: opts.appUrl,
+    config: cfg,
+    portfolio,
+    blocks,
+    overview,
+    cover,
+    funds,
+    snapshots: snaps
+      .filter((s) => s.taken_on < opts.date)
+      .map((s) => ({
+        date: s.taken_on,
+        total: Number(s.total),
+        byType: s.by_type ?? {},
+        byOwner: s.by_owner ?? {},
+      })),
     ownerNames: Object.fromEntries(ownerName),
-    previous: prev ? { date: prev.taken_on, total: Number(prev.total) } : null,
+    newestRecorded: obsRows.reduce<string | null>(
+      (m, o) => (!m || o.as_of > m ? o.as_of : m),
+      null,
+    ),
     lastBankBalanceAsOf: lastBank,
-    attention: {
-      maturedUnconfirmed: [
-        ...new Set([
-          ...fdList.filter((f) => f.status === 'matured_unconfirmed').map((f) => f.name),
-          ...overdueMaturities(fdList, today).map((f) => f.name),
-        ]),
-      ],
-      maturingSoon: maturityAlerts(fdList, today, cfg.deposits.maturityAlertDays)
-        .filter((a) => a.daysLeft <= cfg.reminders.maturitySoonDays)
-        .map((a) => ({
-          name: a.name,
-          daysLeft: a.daysLeft,
-          amount: Number(bankMat.get(a.id) ?? valued.get(a.id) ?? 0),
-        })),
-      overdueLoans,
-      policyDates,
-      tasksDue,
-      staleOrMissing: Object.values(portfolio.lines).filter(
-        (l) => l.freshness === 'stale' || l.freshness === 'missing',
-      ).length,
-    },
     market:
       marketDates.navLatest || Object.keys(marketDates.fx).length
         ? { navLatest: marketDates.navLatest, fx: marketDates.fx }
         : { navLatest: null, fx: {} },
+    goals,
     retirement,
-    reminders: { policyDays: cfg.reminders.policyDays, taskDays: cfg.reminders.taskDays },
-    rateIdeas,
+    attention: { overdueLoans, tasks, policies, inboxReview: inbox.count ?? 0 },
     taxIdeas,
+    rateIdeas,
+    staleRates,
     monthly,
-    gains,
-    appUrl: opts.appUrl,
-  };
+    ...(position ? { position } : {}),
+  });
 }

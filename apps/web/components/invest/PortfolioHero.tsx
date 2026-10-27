@@ -223,8 +223,10 @@ export function PortfolioHero({
               {h.unrealisedPct !== null && <b>{pct(h.unrealisedPct, 1)}</b>}
               {h.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
               <span className="hp-sub">
-                {h.unrealised >= 0 ? 'profit' : 'loss'} on units held
-                {h.unrealisedPct !== null ? `, on the ${formatInrCompact(h.invested)} put in` : ''}
+                {h.unrealised >= 0 ? 'profit' : 'loss'}
+                {h.unrealisedPct !== null
+                  ? ` on ${formatInrCompact(h.invested)} invested`
+                  : ' on units held'}
               </span>
               <Why explain={ex['invest.profit']} tone="on-dark" />
             </span>

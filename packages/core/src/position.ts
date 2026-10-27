@@ -410,7 +410,8 @@ const valueDeposit: Valuer = (a, on, c, cur) => {
   const end = depositEnd(d);
   // a deposit that "left" before it was booked is bad data: it never counted
   if (end <= d.bookedOn) return none(a, 'ended', 'ended on or before its booking date');
-  if (on >= end)
+  // a deposit that matures today still counts until tomorrow (net worth's rule); one paid out or closed has left on that day
+  if (d.endedOn ? on >= d.endedOn : on > d.maturityOn)
     return none(a, 'ended', `${d.endedOn ? 'paid out or closed' : 'matured'} on ${niceIso(end)}`);
   const eff = depositRateOf(d, c);
   const value = fdValueOn({
@@ -882,7 +883,6 @@ export function depositsOf(input: PositionInput): DepositTerms[] {
     const d = a.fd;
     if (!d || a.status === 'gifted') return [];
     const eff = depositRateOf(d, c);
-    const end = depositEnd(d);
     return [
       {
         assetId: a.assetId,
@@ -892,7 +892,11 @@ export function depositsOf(input: PositionInput): DepositTerms[] {
         maturityOn: d.maturityOn,
         compounding: d.compounding,
         // held today as net worth has it (a deposit past its date that still waits to be confirmed is in net worth until it is), else when today is before the day it left
-        held: input.current?.[a.assetId] ? input.current[a.assetId]!.counted : c.today < end,
+        held: input.current?.[a.assetId]
+          ? input.current[a.assetId]!.counted
+          : d.endedOn
+            ? c.today < d.endedOn
+            : c.today <= d.maturityOn,
         endedOn: d.endedOn,
       },
     ];

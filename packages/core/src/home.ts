@@ -19,10 +19,58 @@ const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
 const daysBetween = (from: string, to: string) => Math.round((t(to) - t(from)) / DAY);
 
 // ------------------------------------------------------------------------------------------------
-// Financial year
+// Change over a period
 // ------------------------------------------------------------------------------------------------
+export interface Change {
+  amount: number;
+  /** against the value it started from; null when that was not above zero */
+  pct: number | null;
+  /** date of the value it is measured from */
+  from: string;
+  /** the history is shorter than the period, so it is measured from the first value on record */
+  partial: boolean;
+}
+
+/**
+ * Change since `start`: the last value on or before that date is the base. With no value that old, the first value on record is
+ * used and the result is marked `partial` so the page can say "since 3 Mar" instead of pretending it is a full period.
+ */
+export function changeSinceDate(points: Point[], start: string): Change | null {
+  if (points.length < 2) return null;
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const last = sorted[sorted.length - 1]!;
+  const before = [...sorted].reverse().find((p) => p.date <= start);
+  const base = before ?? sorted[0]!;
+  if (base.date >= last.date) return null;
+  return {
+    amount: last.value - base.value,
+    pct: base.value > 0 ? last.value / base.value - 1 : null,
+    from: base.date,
+    partial: !before,
+  };
+}
+
 /** First day of the financial year that `today` falls in (India: 1 April). */
 export const fyStartOf = fyStartOn;
+
+export interface NetWorthChanges {
+  /** against the value `monthDays` ago */
+  month: Change | null;
+  /** against the close of the last financial year, or the first value on record when the history starts later */
+  fy: Change | null;
+  fyStart: string;
+}
+
+export function netWorthChanges(trend: Point[], today: string, monthDays: number): NetWorthChanges {
+  const fyStart = fyStartOf(today);
+  // the close of the previous year is the last value before the new year starts
+  const dayBefore = addIsoDays(fyStart, -1);
+  return {
+    month: changeSinceDate(trend, addIsoDays(today, -monthDays)),
+    fy: changeSinceDate(trend, dayBefore),
+    fyStart,
+  };
+}
 
 export const HOME_RANGES: {
   key: Extract<RangeKey, '1M' | '3M' | '6M' | '1Y' | 'ALL'>;
@@ -383,7 +431,7 @@ export interface ClassCard {
   share: number;
   /** the profit rests on an estimate: a rate, a plan, an instalment assumed */
   estimated: boolean;
-  /** a deposit past its date waiting to be confirmed is counted here (in net worth) but not in the Deposits figures */
+  /** deposits past their date waiting to be confirmed: not counted anywhere (their money is in a savings account or a new deposit), listed for the note */
   awaiting: { count: number; invested: number; current: number } | null;
 }
 
@@ -393,7 +441,7 @@ export interface ClassCardsInput {
   fd: OverviewPart;
   /** their earnings in the last day */
   fdToday: number;
-  /** deposits past their date that are still listed as running: in net worth, waiting to be confirmed */
+  /** deposits past their date that are still listed as running: in no total, waiting to be confirmed */
   awaiting: { count: number; invested: number; current: number };
   /** savings and cash in banks as Cash counts them, and what they earned in the last day */
   cash: OverviewPart;
@@ -436,12 +484,12 @@ export const classHref = (k: ClassKey) => CLASS_HREF[k];
  * and what is counted today, which is nothing unless a recorded value has been moved on.
  */
 export function classCards(i: ClassCardsInput): ClassCard[] {
+  // a deposit past its date is not counted: its money went into a savings account or another deposit, counted on their own
   const fd = {
-    count: i.fd.count + i.awaiting.count,
-    invested: i.fd.invested + i.awaiting.invested,
-    current: i.fd.current + i.awaiting.current,
-    // a deposit past its date is worth its maturity amount, and earns nothing more
-    maturity: i.fd.maturity + i.awaiting.current,
+    count: i.fd.count,
+    invested: i.fd.invested,
+    current: i.fd.current,
+    maturity: i.fd.maturity,
   };
   const funds = i.funds
     ? { count: i.funds.count, invested: i.funds.invested, current: i.funds.value }
@@ -488,6 +536,55 @@ export function classCards(i: ClassCardsInput): ClassCard[] {
     make('cash', cash, cash.current, i.cashToday, cash.count > 0),
     make('others', others, others.current, 0, false),
   ];
+}
+
+// ------------------------------------------------------------------------------------------------
+// Invested money and the profit on it
+// ------------------------------------------------------------------------------------------------
+export interface InvestedMoney {
+  /** the money put into deposits (their principal) and funds (the cost of the units still held) */
+  invested: number;
+  /** what those deposits and funds are worth above it: interest accrued on deposits plus the gain on the fund units held */
+  profit: number;
+  /** the profit as a share of the money invested, at cost; null when nothing is invested */
+  profitPct: number | null;
+  /** what the invested money is worth now */
+  valueOfInvested: number;
+  parts: {
+    fd: { invested: number; current: number; profit: number };
+    funds: { invested: number; current: number; profit: number };
+    /** the part of net worth that is not invested money: savings and cash, shares, property, pension accounts, money lent */
+    notInvested: number;
+  };
+  /** the profit of deposits or funds rests on an estimate */
+  estimated: boolean;
+}
+
+/**
+ * Total invested and the profit on it, for Home and the daily summary alike. Invested money is deposits and funds: savings and cash
+ * balances, shares, property and money lent are in net worth but have no cost to earn a profit on, so they are not "invested" and
+ * are not in the profit. The per cent is of the money invested, at cost.
+ */
+export function investedMoney(classes: ClassCard[], netWorth: number): InvestedMoney {
+  const fd = classes.find((c) => c.key === 'fd');
+  const funds = classes.find((c) => c.key === 'funds');
+  const part = (c: ClassCard | undefined) => ({
+    invested: c?.invested ?? 0,
+    current: c?.current ?? 0,
+    profit: c?.profit ?? 0,
+  });
+  const a = part(fd);
+  const b = part(funds);
+  const invested = a.invested + b.invested;
+  const profit = a.profit + b.profit;
+  return {
+    invested,
+    profit,
+    profitPct: invested > 0 ? profit / invested : null,
+    valueOfInvested: a.current + b.current,
+    parts: { fd: a, funds: b, notInvested: netWorth - a.current - b.current },
+    estimated: [fd, funds].some((c) => !!c && c.estimated && c.profit !== 0),
+  };
 }
 
 // ------------------------------------------------------------------------------------------------

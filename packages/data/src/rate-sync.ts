@@ -39,8 +39,8 @@ export interface RatesSaved {
 }
 
 /**
- * Stores rates read from a bank's own pages (or from text you pasted from them): new ones are added, changed ones updated, a rate you
- * typed is never overwritten, and a rate that was read wrongly before is noted so the reader is told next time. A rate read earlier
+ * Stores rates read from a bank's own pages (or from text you pasted from them): new ones are added, changed ones updated, what the bank's page says wins over a rate you
+ * typed earlier (it may be old). A rate read earlier
  * that is no longer on the pages is removed, but only for the products the pages that were read carry (a savings page that could not be
  * read never removes the savings rates). Rates once saved from a comparison website are read the same way as any other read rate, so
  * the bank's own figures replace them. Shared by the monthly job, the Sync page and the "paste the page" box.
@@ -127,11 +127,23 @@ export async function saveRatesRead(args: {
         })),
       ),
     );
+  // what the bank's page says wins over what was saved or typed before: a typed rate may be old, so it becomes a read rate
+  const typedBefore = new Set(existing.filter((e) => e.sourceKind === 'manual').map((e) => e.id));
   for (const c of plan.change)
     must(
       await db
         .from('rate_offers')
-        .update({ rate: c.to, ...touch })
+        .update({
+          rate: c.to,
+          source_kind: 'ai',
+          ai_rate: null,
+          correction_reason: null,
+          corrected_on: null,
+          misread_count: 0,
+          page_rate: null,
+          page_seen_on: null,
+          ...touch,
+        })
         .eq('id', c.id),
     );
   if (plan.confirm.length) must(await db.from('rate_offers').update(touch).in('id', plan.confirm));
@@ -209,6 +221,7 @@ export async function saveRatesRead(args: {
     ...plan.confirm,
     ...plan.remove,
   ].filter((id) => thirdParty.has(id)).length;
+  const typedReplaced = plan.change.filter((c) => typedBefore.has(c.id)).length;
   const summary =
     `${fetched.length} rates saved: ${plan.insert.length} new, ${plan.change.length} changed, ${unchanged} unchanged` +
     (plan.remove.length ? `, ${plan.remove.length} no longer on the page` : '') +
@@ -221,9 +234,7 @@ export async function saveRatesRead(args: {
     (plan.stillMisread.length
       ? `; ${plan.stillMisread.length} still read wrongly (rule saved for next time)`
       : '') +
-    (plan.pageDiffers.length + plan.pageMoved.length
-      ? `; ${plan.pageDiffers.length + plan.pageMoved.length} typed rates differ from the page`
-      : '');
+    (typedReplaced ? `; ${typedReplaced} typed rates replaced by the bank's page` : '');
   return {
     summary,
     total: fetched.length,
@@ -284,7 +295,7 @@ export interface SyncBankResult {
 /**
  * Syncs one bank, the one way for the monthly job and the Sync page: reads the pages saved for the bank together with the bank's own
  * published documents, skips the AI when the text (with the corrections and the ceiling that go with it) is the same as when it was
- * last read, otherwise asks the AI keys in their order, and stores what was read. Rates you typed yourself are never overwritten. A
+ * last read, otherwise asks the AI keys in their order, and stores what was read. What the bank's page says wins over a rate you typed earlier (it may be old). A
  * bank whose pages cannot be read keeps the rates on file and records why, in plain words. Every result is written to the bank's rows
  * in `rate_sources` (last run, result, the documents tried, the page hash). Never throws: a failure is the result.
  *

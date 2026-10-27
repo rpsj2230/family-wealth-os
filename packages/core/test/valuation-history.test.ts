@@ -5,8 +5,8 @@ import {
   pickPeriods,
   periodsFor,
   positionConfig,
-  signedInr,
-  signedPct,
+  signedRupees,
+  signedShare,
   valuationCsvRows,
   valuationHistory,
   weekStartOn,
@@ -278,7 +278,7 @@ describe('portfolio value by period', () => {
     expect(sep.value).toBeNull();
     expect(sep.gain).toBeNull();
     expect(sep.change).toBeNull();
-    expect(signedInr(sep.value)).toBe('no data');
+    expect(signedRupees(sep.value)).toBe('no data');
     // the period after it still has its own value, and its change is not made up against the gap
     expect(r.rows[2]!.value).toBe(11_500);
     expect(r.rows[2]!.change).toBeNull();
@@ -353,10 +353,10 @@ describe('portfolio value by period', () => {
 
 describe('words', () => {
   it('signs money with Indian grouping and a real minus', () => {
-    expect(signedInr(1234567)).toBe('+₹12,34,567');
-    expect(signedInr(-4500)).toBe('−₹4,500');
-    expect(signedInr(0)).toBe('₹0');
-    expect(signedPct(-0.0123)).toBe('−1.23%');
-    expect(signedPct(null)).toBe('–');
+    expect(signedRupees(1234567)).toBe('+₹12,34,567');
+    expect(signedRupees(-4500)).toBe('−₹4,500');
+    expect(signedRupees(0)).toBe('₹0');
+    expect(signedShare(-0.0123)).toBe('−1.23%');
+    expect(signedShare(null)).toBe('–');
   });
 });

@@ -2,8 +2,8 @@ import Link from 'next/link';
 import {
   GRANULARITIES,
   formatInr,
-  signedInr,
-  signedPct,
+  signedRupees,
+  signedShare,
   type ExplainSet,
   type Granularity,
   type ValuationHistory,
@@ -30,7 +30,7 @@ function Signed({
   if (n === null) return <span className="vbp-nil">–</span>;
   return (
     <span className={tone(n)}>
-      {pct ? signedPct(n) : signedInr(n)}
+      {pct ? signedShare(n) : signedRupees(n)}
       {estimated && (
         <>
           {' '}
@@ -274,7 +274,7 @@ export function ValueByPeriod({
                       {r.value === null ? (
                         <span className="vbp-nil">–</span>
                       ) : (
-                        signedInr(r.netIn, false)
+                        signedRupees(r.netIn, false)
                       )}
                     </td>
                     <td className="num" data-label="Gain (₹)">

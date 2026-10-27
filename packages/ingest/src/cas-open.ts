@@ -5,6 +5,7 @@
  */
 import { casPdfText, isPasswordError } from './cas-pdf';
 import { parseCas, type CasStatement } from './cas';
+import { splitByOwner, type SkippedFolios } from './cas-import';
 
 /** What is recorded when a statement that came by e-mail is protected by a password that none of the saved ones fits. */
 export const MAIL_PASSWORD_FAILED =
@@ -13,7 +14,19 @@ export const MAIL_PASSWORD_FAILED =
 export type PasswordCandidate = { ownerId: string; passwords: string[]; panLast4: string | null };
 
 export type Opened =
-  | { ok: true; stmt: CasStatement; ownerId: string }
+  | {
+      ok: true;
+      stmt: CasStatement;
+      /** the person whose password opened it or whose PAN it names (the first person in the file when it names nobody) */
+      ownerId: string;
+      /**
+       * The statement split by person. A statement keyed on an email address can hold several people's folios; each scheme belongs
+       * to the person whose PAN is printed on its folio, not to whoever opened the file.
+       */
+      groups: { ownerId: string; stmt: CasStatement }[];
+      /** folios of someone who is not in the family list: named, not applied */
+      skipped: SkippedFolios[];
+    }
   | { ok: false; ownerId: string | null; detail: string };
 
 /**
@@ -71,14 +84,17 @@ export async function openStatement(
       panLast4 = hit[0]!.panLast4;
     }
   }
-  if (owner === null)
+  // folios that print their own PAN are told apart by it; a statement that does not (a holdings statement, an old layout) belongs to
+  // the person it names, as before
+  const hasFolioPan = stmt.schemes.some((s) => s.folioPan);
+  if (owner === null && !hasFolioPan)
     return {
       ok: false,
       ownerId: null,
       detail:
         'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
     };
-  if (stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
+  if (!hasFolioPan && stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
     return {
       ok: false,
       ownerId: owner,
@@ -91,5 +107,17 @@ export async function openStatement(
       ownerId: owner,
       detail: stmt.warnings.join(' ') || 'Nothing recognised.',
     };
-  return { ok: true, stmt, ownerId: owner };
+  const { groups, skipped } = splitByOwner(
+    stmt,
+    candidates.map((c) => ({ ownerId: c.ownerId, panLast4: c.panLast4 })),
+    owner,
+  );
+  if (groups.length === 0)
+    return {
+      ok: false,
+      ownerId: owner,
+      detail:
+        'None of the folios in this statement belong to anyone in your family list: the PANs printed on them do not match the PAN saved for anyone in Settings.',
+    };
+  return { ok: true, stmt, ownerId: owner ?? groups[0]!.ownerId, groups, skipped };
 }

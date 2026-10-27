@@ -210,17 +210,16 @@ describe('syncBankRates', () => {
     expect(String(t.rows('rate_sources')[0]!.last_result)).toMatch(/^Not read: no AI key/);
   });
 
-  it('never overwrites a rate you typed yourself', async () => {
+  it('replaces a rate you typed with what the bank’s page says (a typed rate may be old)', async () => {
     pageOk();
     const typed = offer({ source_kind: 'manual', rate: 0.075, source_note: 'Typed in the form' });
     const t = setup({ offers: [typed] });
     const r = await t.run();
     expect(r.status).toBe('synced');
     const row = t.rows('rate_offers').find((o) => o.id === typed.id)!;
-    expect(row.rate).toBe(0.075);
-    expect(row.source_kind).toBe('manual');
-    expect(row.page_rate).toBeCloseTo(0.071, 5);
-    expect(r.message).toContain('1 typed rates differ from the page');
+    expect(row.rate).toBeCloseTo(0.071, 5);
+    expect(row.source_kind).toBe('ai');
+    expect(r.message).toContain('1 typed rates replaced by the bank');
     expect(t.rows('rate_offers')).toHaveLength(1);
   });
 

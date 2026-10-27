@@ -7,6 +7,9 @@ create temp table dctx as select public.create_household('Digest household') as 
 grant all on dctx to authenticated;
 insert into public.digest_settings (household_id, enabled, extra_recipients) select h, true, array['mum@example.test'] from dctx;
 select t.assert((select enabled from public.digest_settings), 'settings saved, opt-in');
+select t.assert((select include_goals and include_retirement from public.digest_settings), 'the goals and retirement views default to on');
+update public.digest_settings set include_goals = false;
+select t.assert(not (select include_goals from public.digest_settings), 'the goals view can be switched off');
 select t.assert(t.throws($q$update public.digest_settings set extra_recipients = array['not-an-email']$q$), 'bad address rejected');
 select t.assert(t.throws($q$update public.digest_settings set extra_recipients = array['a@b.co','b@b.co','c@b.co','d@b.co','e@b.co','f@b.co']$q$), 'more than five extra recipients rejected');
 select t.assert(t.throws($q$insert into public.digest_log (household_id, digest_date, status) select h, current_date, 'sending' from dctx$q$), 'users cannot write the delivery log');

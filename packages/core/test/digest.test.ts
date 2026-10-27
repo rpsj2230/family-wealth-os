@@ -107,10 +107,11 @@ describe('policy reminders', () => {
 describe('buildDigest', () => {
   it('leads with the estimated net worth and the change since the previous snapshot, labelled as an estimate', () => {
     const g = buildDigest(base());
-    expect(g.subject).toBe('₹62.00 L estimated (+₹50,000) · 26 Oct 2026');
-    expect(g.text).toContain('Since 25 Oct 2026: +₹50,000');
-    expect(g.text).toContain('not new savings');
-    expect(g.text).toContain('By person: Rupash ₹50.00 L · Ragini ₹12.00 L');
+    expect(g.subject).toBe(
+      'Family Wealth Summary · 26 Oct 2026 · Net worth ₹62.00 L (+0.8% today)',
+    );
+    expect(g.text).toContain('Since 25 Oct');
+    expect(g.text).toContain('+₹50,000 (+0.8%)');
   });
 
   it('says plainly when no new verified bank balance has arrived', () => {
@@ -143,7 +144,7 @@ describe('buildDigest', () => {
         },
       }),
     );
-    expect(g.text).toContain('NEEDS YOUR ATTENTION');
+    expect(g.text).toContain('NEEDS YOU (4)');
     expect(g.text).toContain('RBL FD has matured');
     expect(g.text).toContain('Yes Bank FD matures in 6 days (₹13,80,416)');
     expect(g.text).toContain('Somesh owes ₹2,00,000, 114 days overdue');
@@ -151,10 +152,10 @@ describe('buildDigest', () => {
   });
 
   it('handles the first report and negative changes', () => {
-    expect(buildDigest(base({ previous: null })).text).toContain('first report');
+    expect(buildDigest(base({ previous: null })).text).toContain('First report');
     const down = buildDigest(base({ previous: { date: '2026-10-25', total: 6_500_000 } }));
-    expect(down.subject).toContain('−₹3.00 L');
-    expect(down.text).toContain('−₹3,00,000');
+    expect(down.subject).toContain('−');
+    expect(down.text).toContain('−₹3.00 L');
   });
 
   it('escapes anything that could break the HTML and keeps the WhatsApp text short and plain', () => {
@@ -218,53 +219,5 @@ describe('tax lines and the monthly review', () => {
   it('says nothing extra when there is nothing to say', () => {
     const g = buildDigest(base());
     expect(g.text).not.toContain('Month in review');
-  });
-});
-
-describe('what the holdings earned', () => {
-  const tile = (key: 'recent' | 'fy', amount: number, asked: string, clamped = false) => ({
-    key,
-    label: key === 'fy' ? 'This financial year' : 'Last 30 days',
-    asked,
-    from: clamped ? '2026-06-01' : asked,
-    to: '2026-10-26',
-    clamped,
-    dataStarts: '2026-06-01',
-    amount,
-    pct: 0.01,
-    base: 1,
-    putIn: 0,
-    takenOut: 0,
-    estimated: true,
-    empty: false,
-    coverage: { withValue: 9, of: 10 },
-    netWorth: { start: 1, end: 2, change: 1 },
-    startFrom: {
-      oldest: '2026-08-22',
-      newest: '2026-08-22',
-      onTheDay: 0,
-      movedForward: 1,
-      fromTerms: 0,
-    },
-  });
-  const gains = {
-    days: 30,
-    recent: tile('recent', 41_000, '2026-09-26'),
-    fy: tile('fy', 222_000, '2026-04-01', true),
-  };
-
-  it('replaces the change since the previous snapshot, in the e-mail, the subject and the WhatsApp text, with the same words as Home', () => {
-    const g = buildDigest(base({ gains }));
-    expect(g.text).toContain('Earned: last 30 days +₹41,000 (since 26 Sep 2026)');
-    expect(g.text).toContain('this financial year +₹2,22,000 (data starts 1 Jun 2026)');
-    expect(g.text).toContain('money added or taken out is not counted');
-    expect(g.text).not.toContain('Since 25 Oct 2026');
-    expect(g.whatsapp).toContain('+₹41,000 earned in 30 days');
-    expect(g.subject).toMatch(/\(\+₹41,000 in 30 days\)/);
-  });
-
-  it('keeps the old line when the records could not be read', () => {
-    const g = buildDigest(base({ gains: null }));
-    expect(g.text).toContain('Since 25 Oct 2026');
   });
 });

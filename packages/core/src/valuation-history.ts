@@ -331,12 +331,12 @@ export function valuationHistory(args: {
 // Words and the download
 // ------------------------------------------------------------------------------------------------
 /** "−₹1,23,456" or "+₹1,23,456" with Indian grouping; "no data" for nothing. */
-export function signedInr(n: number | null, plus = true): string {
+export function signedRupees(n: number | null, plus = true): string {
   if (n === null) return 'no data';
   const r = Math.round(n);
   return `${r < 0 ? '−' : plus && r > 0 ? '+' : ''}${formatInr(Math.abs(r))}`;
 }
-export function signedPct(n: number | null, digits = 2): string {
+export function signedShare(n: number | null, digits = 2): string {
   if (n === null) return '–';
   const v = n * 100;
   return `${v < 0 ? '−' : v > 0 ? '+' : ''}${Math.abs(v).toFixed(digits)}%`;
