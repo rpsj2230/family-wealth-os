@@ -1,11 +1,15 @@
 import {
   capacityKeyFor,
+  DEFAULT_CONFIG,
+  depositListState,
   dicgcPosition,
   daysBetween,
+  effectiveDepositStatus,
   fdValueOn,
   maturityVariance,
   partnerMissing,
   type CoverRow,
+  type DepositListState,
   type FdRow,
   type ValuedAsset,
 } from '@fwos/core';
@@ -42,6 +46,10 @@ export interface FdLine {
   status: string;
   /** difference between our quarterly-compounding figure and the bank's maturity amount, in percent */
   varianceVsBankPct: number | null;
+  /** the day a deposit that is no longer held left, when the History import worked it out */
+  endedOn?: string | null;
+  /** show: listed as usual; confirm: matured within the window, waiting for "Confirm matured"; hidden: confirmed, or older than the window */
+  listState?: DepositListState;
 }
 
 export interface DepositsView {
@@ -69,7 +77,10 @@ export function buildDeposits(
   limit: number,
   /** banks outside the Indian deposit insurance scheme (foreign banks): their money is not counted in the cover */
   outside: ReadonlySet<string> = new Set(),
+  /** Settings: deposits.hideMaturedAfterDays */
+  hideAfterDays: number = DEFAULT_CONFIG.deposits.hideMaturedAfterDays,
 ): DepositsView {
+  const todayIso = today.toISOString().slice(0, 10);
   const val = new Map(valued.map((v) => [v.assetId, v]));
   const fdBy = new Map(fds.map((f) => [f.asset_id, f]));
   const lines: FdLine[] = [];
@@ -104,6 +115,14 @@ export function buildDeposits(
       accruedToday: v,
       daysLeft: daysBetween(today, maturityOn),
       status: a.status,
+      endedOn: f.ended_on ?? null,
+      listState: depositListState({
+        status: a.status,
+        maturityOn: f.maturity_on,
+        endedOn: f.ended_on ?? null,
+        today: todayIso,
+        hideAfterDays,
+      }),
       varianceVsBankPct:
         f.bank_maturity_amount === null
           ? null
@@ -124,8 +143,10 @@ export function buildDeposits(
     .filter(
       (a) =>
         (a.type === 'fixed_deposit' || a.type === 'bank_account') &&
-        // a deposit that has matured but has not been paid out yet is still a deposit at the bank
-        (a.status === 'active' || a.status === 'matured_unconfirmed') &&
+        // a deposit whose date has passed is not counted: its money is in a savings account or a new deposit, which are
+        (a.type === 'fixed_deposit' && fdBy.has(a.id)
+          ? effectiveDepositStatus(a.status, fdBy.get(a.id)!.maturity_on, todayIso) === 'active'
+          : a.status === 'active') &&
         a.institutionId &&
         !outside.has(a.institutionId),
     )

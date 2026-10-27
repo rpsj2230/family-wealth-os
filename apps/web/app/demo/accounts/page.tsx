@@ -1,10 +1,17 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { bankOverview, DEFAULT_CONFIG, filterBlocksByOwner, formatInrCompact } from '@fwos/core';
+import {
+  bankOverview,
+  DEFAULT_CONFIG,
+  filterBlocksByOwner,
+  formatInrCompact,
+  withoutHiddenDeposits,
+} from '@fwos/core';
 import { BankOverviewPanel } from '@/app/(app)/accounts/BankOverview';
 import { ForeignCard, ManageCards } from '@/app/(app)/accounts/Parts';
 import { BankTable } from '@/components/BankTable';
 import { GrandTotal } from '@/components/GrandTotal';
+import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { AddButton, QuickEditProvider } from '@/components/QuickEdit';
 import { DemoShell } from '@/components/DemoShell';
 import { ListingTools } from '@/components/ListingTools';
@@ -14,6 +21,7 @@ import { Tabs } from '@/components/Tabs';
 import type { ForeignLine } from '@/lib/accounts-summary';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
 import { accountsExplain, bankBase } from '@/lib/explain-money';
+import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { quickModel } from '@/lib/quick-edit';
 
 export const metadata: Metadata = {
@@ -38,13 +46,18 @@ const FOREIGN: ForeignLine[] = [
 export default async function DemoAccounts({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string; tab?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string; matured?: string }>;
 }) {
-  const { p, tab: rawTab } = await searchParams;
+  const { p, tab: rawTab, matured } = await searchParams;
+  const showAll = showsMatured(matured);
   const tab = rawTab === 'manage' ? 'manage' : 'banks';
   const { blocks, styles, portfolio, assets, fds, people, institutionNames } = demoModel();
   const who = p && styles[p] ? p : null;
-  const shown = who ? filterBlocksByOwner(blocks, who) : blocks;
+  // matured long ago or confirmed: out of the rows (they are in no total); ?matured=all lists them again, dimmed
+  const { blocks: shown, counts: hiddenCounts } = withoutHiddenDeposits(
+    who ? filterBlocksByOwner(blocks, who) : blocks,
+    showAll,
+  );
   const overview = bankOverview(shown, {
     today: DEMO_TODAY,
     soonDays: DEFAULT_CONFIG.reminders.maturitySoonDays,
@@ -66,7 +79,9 @@ export default async function DemoAccounts({
   const totals = Object.fromEntries(
     Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
   );
-  const rows = blocks.flatMap((b) => b.sections.flatMap((s) => s.rows));
+  const rows = withoutHiddenDeposits(blocks, showAll).blocks.flatMap((b) =>
+    b.sections.flatMap((s) => s.rows),
+  );
   const assumed = rows.filter((r) => r.kindInferred).length;
   const quick = quickModel({
     blocks,
@@ -138,7 +153,7 @@ export default async function DemoAccounts({
               totals={totals}
             />
             <ListingTools name="accounts">
-              <BankTable blocks={shown} styles={styles} updateBase="/demo/bank" />
+              <BankTable blocks={shown} styles={styles} updateBase="/demo/bank" sample />
               <GrandTotal
                 invested={overview.invested}
                 maturity={overview.maturity}
@@ -148,6 +163,12 @@ export default async function DemoAccounts({
                 why={exA['accounts.grand']}
               />
             </ListingTools>
+            <HiddenDepositsNote
+              counts={hiddenCounts}
+              showAll={showAll}
+              showHref={maturedHref('/demo/accounts', { p: who }, true)}
+              hideHref={maturedHref('/demo/accounts', { p: who }, false)}
+            />
             <ForeignCard lines={FOREIGN} styles={styles} />
           </>
         )}

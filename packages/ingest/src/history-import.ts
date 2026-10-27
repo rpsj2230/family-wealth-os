@@ -82,6 +82,9 @@ export interface MonthResult {
   errors: string[];
 }
 
+/** How the note of an account added by the history import begins; the account's page recognises it to explain the estimate in full. */
+export const HISTORY_NOTE_PREFIX = 'From the monthly tabs';
+
 const inr = (n: number) => '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 function describe(h: HistoricalAsset): NewHistoricalAsset {
@@ -97,15 +100,15 @@ function describe(h: HistoricalAsset): NewHistoricalAsset {
     holderName: h.holderName,
     status: h.status,
   };
-  const note = `Added from the monthly tabs (${when}). The tabs do not say when it ended; ${h.endedOn} is the first month it is missing from, an estimate to correct if you know better.`;
+  // One short line: the list shows it as it is. What it means (the tabs do not say when it ended, so the end is the first month it is
+  // missing from) is explained in full on the account's own page, which recognises this prefix and the fixed deposit's flags.
+  const note = `${HISTORY_NOTE_PREFIX} (${when}); ended about ${h.endedOn} (estimate).`;
   if (h.kind === 'fd' && h.fd) {
     return {
       ...base,
       type: 'fixed_deposit',
       nickname: `${h.label || 'FD'} (${h.fd.startEstimated ? 'first listed ' : ''}${h.fd.bookedOn}, ${h.fd.principal.toLocaleString('en-IN')})`,
-      notes: h.fd.startEstimated
-        ? `${note} The tabs also give no start date; ${h.fd.bookedOn} is the first month the deposit is listed.`
-        : note,
+      notes: h.fd.startEstimated ? `${note} Start also estimated.` : note,
       fd: {
         principal: h.fd.principal,
         rate: h.fd.rate,

@@ -29,7 +29,9 @@ export function bankBase(a: {
   const rows = a.blocks.flatMap((b) => b.sections.flatMap((s) => s.rows));
   const cash = rows.filter((r) => r.kind === 'cash' && r.status === 'active');
   const dates = cash.map((r) => r.asOf).filter((d): d is string => !!d);
-  const fds = rows.filter((r) => r.kind === 'fd' && r.fd && r.status === 'active');
+  const fds = rows.filter(
+    (r) => r.kind === 'fd' && r.fd && r.status === 'active' && !r.fd.needsConfirmation,
+  );
   const booked = fds.map((r) => r.fd!.bookedOn).sort();
   const matures = fds.map((r) => r.fd!.maturityOn).sort();
   const tag = (id: string) => a.rates?.[id]?.tag ?? 'assumed';

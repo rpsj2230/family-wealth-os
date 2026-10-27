@@ -16,6 +16,7 @@ import {
   type DepositLinks,
 } from '@/app/(app)/deposits/Parts';
 import { DemoShell } from '@/components/DemoShell';
+import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
@@ -24,6 +25,7 @@ import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
 import { bankBase, depositsExplain } from '@/lib/explain-money';
+import { maturedHref, showsMatured } from '@/lib/matured-list';
 
 export const metadata: Metadata = {
   title: 'Sample deposits',
@@ -45,9 +47,10 @@ const links: DepositLinks = {
 export default async function DemoDeposits({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; p?: string }>;
+  searchParams: Promise<{ tab?: string; p?: string; matured?: string }>;
 }) {
   const sp = await searchParams;
+  const showAll = showsMatured(sp.matured);
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as (typeof TABS)[number])
     : 'deposits';
@@ -76,6 +79,13 @@ export default async function DemoDeposits({
   const windowDays = Math.max(...DEFAULT_CONFIG.deposits.maturityAlertDays);
   const shown = tab === 'cover' || !who ? v.fds : v.fds.filter((f) => f.ownerId === who);
   const s = summariseDeposits(shown, windowDays);
+  const hiddenFds = shown.filter((f) => f.listState === 'hidden');
+  const registerFds = showAll ? shown : shown.filter((f) => f.listState !== 'hidden');
+  const hiddenCounts = {
+    hidden: hiddenFds.length,
+    confirmed: hiddenFds.filter((f) => ['matured', 'renewed', 'closed'].includes(f.status)).length,
+  };
+  const keepQuery = { tab: tab === 'deposits' ? null : tab, p: who };
   const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
   const blocks = fixedDepositBlocks(m.blocks);
   const scoped = who && tab !== 'cover' ? filterBlocksByOwner(blocks, who) : blocks;
@@ -159,7 +169,22 @@ export default async function DemoDeposits({
         />
       )}
       <ListingTools name={`deposits-${tab}`}>
-        {tab === 'deposits' && <RegisterTab fds={shown} styles={m.styles} links={links} />}
+        {tab === 'deposits' && (
+          <>
+            <RegisterTab
+              fds={registerFds}
+              styles={m.styles}
+              links={links}
+              allHidden={hiddenCounts.hidden > 0}
+            />
+            <HiddenDepositsNote
+              counts={hiddenCounts}
+              showAll={showAll}
+              showHref={maturedHref('/demo/deposits', keepQuery, true)}
+              hideHref={maturedHref('/demo/deposits', keepQuery, false)}
+            />
+          </>
+        )}
         {tab === 'maturities' && (
           <MaturitiesTab
             s={s}

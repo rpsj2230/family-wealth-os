@@ -70,6 +70,10 @@ export interface AssetViewInput {
     bank_maturity_amount: number | null;
     fd_ref_last4: string | null;
     fd_ref?: string | null;
+    /** the day a deposit that is no longer held left, and whether the monthly tabs (not the bank) gave it */
+    ended_on?: string | null;
+    ended_estimated?: boolean;
+    start_estimated?: boolean;
   } | null;
   position: {
     fund_name: string;
@@ -164,6 +168,8 @@ const BASIS: Record<string, string> = {
   estimated: 'estimated from the last recorded value',
   carried_forward: 'last recorded value, carried forward',
 };
+/** The note the history import writes (and its older, longer wording): the page explains the estimate in full. */
+const HISTORY_NOTE = /^(Added )?[Ff]rom the monthly tabs/;
 const STATUS: Record<string, string> = {
   active: 'Active',
   matured: 'Matured',
@@ -417,10 +423,23 @@ export function buildAssetView(i: AssetViewInput): AssetView {
   if (a.account_kind) facts.push({ label: 'Account type', value: a.account_kind });
   if (a.is_joint) facts.push({ label: 'Joint account', value: 'Yes' });
   if (a.identifier_last4) facts.push({ label: 'Last 4 digits', value: `…${a.identifier_last4}` });
-  facts.push({ label: 'Status', value: STATUS[a.status] ?? a.status });
+  const pastDate = !!i.fd && a.status === 'active' && i.fd.maturity_on < i.today;
+  facts.push({
+    label: 'Status',
+    value: pastDate ? 'Past its maturity date, not confirmed' : (STATUS[a.status] ?? a.status),
+    ...(pastDate || a.status === 'matured_unconfirmed'
+      ? { note: 'Not counted in any total: its money is in a savings account or a new deposit.' }
+      : {}),
+  });
   if (a.currency !== 'INR') facts.push({ label: 'Currency', value: a.currency });
   if (a.holder_name) facts.push({ label: 'Held in the name of', value: a.holder_name });
   if (a.notes) facts.push({ label: 'Notes', value: a.notes });
+  if (a.notes && HISTORY_NOTE.test(a.notes))
+    facts.push({
+      label: 'About the monthly-tabs import',
+      value:
+        'This was added by Import > History from all monthly tabs. The tabs do not say when an account ended, so the end date is the first month it is missing from: an estimate. Correct it by pressing Edit if you know better.',
+    });
 
   const charts: AssetView['charts'] = [];
   const tables: DetailTableData[] = [];
@@ -478,6 +497,20 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         note: `${inr(accrued - fd.principal)} of interest so far`,
       },
     );
+    if (fd.ended_on)
+      facts.push({
+        label: 'Ended on',
+        value: fd.ended_on,
+        note: fd.ended_estimated
+          ? 'estimated from the monthly tabs: the first month the deposit is missing from'
+          : undefined,
+      });
+    if (fd.start_estimated)
+      facts.push({
+        label: 'Start date',
+        value: fd.booked_on,
+        note: 'estimated: the monthly tabs do not give a start date, so this is the first month the deposit is listed',
+      });
     if (fd.fd_ref_last4)
       facts.push({ label: 'Deposit number', value: fd.fd_ref ?? `…${fd.fd_ref_last4}` });
     if (i.linked)

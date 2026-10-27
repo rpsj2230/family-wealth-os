@@ -2,13 +2,13 @@ import {
   assess,
   compareHoldings,
   buildPlan,
+  depositListState,
   earliestRetirementAge,
   holdingsFromAssets,
   formatInr,
   harvestPlanSummary,
   maturityAlerts,
   planHarvest,
-  overdueMaturities,
   receivableStatus,
   settingsFromJson,
   withPeople,
@@ -78,6 +78,7 @@ export async function buildDigestInput(
     id: f.asset_id,
     name: name.get(f.asset_id) ?? 'FD',
     maturityOn: new Date(f.maturity_on + 'T00:00:00Z'),
+    endedOn: f.ended_on ?? null,
     status: status.get(f.asset_id) ?? 'active',
   }));
   const valued = new Map(
@@ -240,8 +241,19 @@ export async function buildDigestInput(
     attention: {
       maturedUnconfirmed: [
         ...new Set([
-          ...fdList.filter((f) => f.status === 'matured_unconfirmed').map((f) => f.name),
-          ...overdueMaturities(fdList, today).map((f) => f.name),
+          // matured within the window and not confirmed; older ones are hidden from the lists and no longer asked about
+          ...fdList
+            .filter(
+              (f) =>
+                depositListState({
+                  status: f.status,
+                  maturityOn: f.maturityOn.toISOString().slice(0, 10),
+                  endedOn: f.endedOn,
+                  today: today.toISOString().slice(0, 10),
+                  hideAfterDays: cfg.deposits.hideMaturedAfterDays,
+                }) === 'confirm',
+            )
+            .map((f) => f.name),
         ]),
       ],
       maturingSoon: maturityAlerts(fdList, today, cfg.deposits.maturityAlertDays)

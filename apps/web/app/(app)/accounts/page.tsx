@@ -6,9 +6,11 @@ import {
   filterBlocksByOwner,
   formatInrCompact,
   personStyles,
+  withoutHiddenDeposits,
 } from '@fwos/core';
 import { BankTable } from '@/components/BankTable';
 import { GrandTotal } from '@/components/GrandTotal';
+import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { AddButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
 import { ListingTools } from '@/components/ListingTools';
@@ -20,6 +22,7 @@ import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { cashRatesFor, loadOffers } from '@/lib/rates-view';
 import { quickModel } from '@/lib/quick-edit';
+import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { loadFxHint, loadJointHolders } from '@/lib/quick-edit-data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
 import { loadSettings } from '@fwos/data';
@@ -36,16 +39,17 @@ const TABS = ['banks', 'manage'] as const;
 export default async function AccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string; tab?: string; edit?: string }>;
+  searchParams: Promise<{ p?: string; tab?: string; edit?: string; matured?: string }>;
 }) {
-  const { p, tab: rawTab, edit } = await searchParams;
+  const { p, tab: rawTab, edit, matured } = await searchParams;
+  const showAll = showsMatured(matured);
   const tab = (TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as (typeof TABS)[number])
     : 'banks';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
   const [
-    { today, assetRows, obsRows, fdRows, ownerName, portfolio, marketDates },
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, marketDates, hideMaturedAfterDays },
     inst,
     settings,
     offers,
@@ -74,8 +78,13 @@ export default async function AccountsPage({
     portfolio,
     institutionNames: names,
     today,
+    hideMaturedAfterDays,
   });
-  const blocks = who ? filterBlocksByOwner(all, who) : all;
+  // a deposit that matured long ago or is confirmed leaves the rows (never the totals: it is in none); ?matured=all lists it again, dimmed
+  const { blocks, counts: hiddenCounts } = withoutHiddenDeposits(
+    who ? filterBlocksByOwner(all, who) : all,
+    showAll,
+  );
   const cashRates = cashRatesFor(
     blocks.flatMap((b) =>
       b.sections.flatMap((sct) => sct.rows.map((r) => ({ ...r, bank: b.name }))),
@@ -128,7 +137,9 @@ export default async function AccountsPage({
       {children}
     </QuickEditHost>
   );
-  const rows = all.flatMap((b) => b.sections.flatMap((s) => s.rows));
+  const rows = withoutHiddenDeposits(all, showAll).blocks.flatMap((b) =>
+    b.sections.flatMap((s) => s.rows),
+  );
   const assumed = rows.filter((r) => r.kindInferred).length;
   const month = today.toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
   const totals = Object.fromEntries(
@@ -243,6 +254,12 @@ export default async function AccountsPage({
           why={exA['accounts.grand']}
         />
       </ListingTools>
+      <HiddenDepositsNote
+        counts={hiddenCounts}
+        showAll={showAll}
+        showHref={maturedHref('/accounts', { p: who }, true)}
+        hideHref={maturedHref('/accounts', { p: who }, false)}
+      />
       <ForeignCard lines={foreign} styles={styles} />
       <details className="disclose">
         <summary>How these values are worked out</summary>
@@ -256,8 +273,11 @@ export default async function AccountsPage({
             balance is old. The Updated column says who recorded it and when.
           </li>
           <li>
-            A deposit past its maturity date is not counted until you say where the money went (see{' '}
-            <Link href="/deposits?tab=maturities">Deposits, Maturities</Link>).
+            A deposit past its maturity date is not counted anywhere: its money is in the savings
+            account or new deposit it went to. Press Confirm matured once it has been paid out. It
+            stays on this list for the number of days set in{' '}
+            <Link href="/settings#limits">Settings</Link>, then it is hidden (Show matured brings it
+            back).
           </li>
         </ul>
       </details>

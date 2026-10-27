@@ -265,7 +265,10 @@ export function UpdateGrid({
     const e = edits[r.assetId] ?? {};
     const fd = r.fd!;
     return (
-      <tr key={r.assetId} className={`urow ${r.status !== 'active' ? 'dim' : ''}`}>
+      <tr
+        key={r.assetId}
+        className={`urow ${fd.listState === 'hidden' || (r.status !== 'active' && fd.listState !== 'confirm') ? 'dim' : ''}`}
+      >
         <td className="acct">
           <div className="code">
             <span className={`kind ${r.kind}`}>{r.code}</span>
@@ -293,7 +296,17 @@ export function UpdateGrid({
           {money(fd.maturityAmount)}
         </td>
         <td className="num" data-label="Worth today">
-          {money(r.current)}
+          {fd.needsConfirmation ? (
+            <span
+              className="muted"
+              title="Counted in the savings account or a new deposit once you record it"
+            >
+              {money(fd.maturityAmount)}
+              <div className="small">matured, not counted</div>
+            </span>
+          ) : (
+            money(r.current)
+          )}
         </td>
         <td className="wide" data-label="Status">
           <select

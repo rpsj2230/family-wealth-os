@@ -11,10 +11,8 @@ export const dynamic = 'force-dynamic';
 export default async function ReorderPage() {
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst] = await Promise.all([
-    loadPortfolio(supabase),
-    supabase.from('institutions').select('id, name'),
-  ]);
+  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays }, inst] =
+    await Promise.all([loadPortfolio(supabase), supabase.from('institutions').select('id, name')]);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const blocks = buildBankBlocks({
     assets: assetRows,
@@ -25,6 +23,7 @@ export default async function ReorderPage() {
       (inst.data ?? []).map((i) => [i.id as string, i.name as string]),
     ),
     today,
+    hideMaturedAfterDays,
   });
   const banks: ReorderBank[] = blocks.map((b) => ({
     key: b.key,

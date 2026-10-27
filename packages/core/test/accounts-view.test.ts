@@ -6,6 +6,7 @@ import {
   rowCode,
   sourceTag,
   olderBankReading,
+  withoutHiddenDeposits,
 } from '../src/accounts-view';
 import { buildPortfolio, type AssetRow, type FdRow, type ObservationRow } from '../src/portfolio';
 
@@ -382,5 +383,143 @@ describe('bankStyle', () => {
     expect(bankStyle('IDFC First').abbr).toBe('IF');
     expect(bankStyle('IDFC').abbr).toBe('ID');
     expect(bankStyle('RBL Bank').abbr).toBe('RB');
+  });
+});
+
+describe('matured deposits in the rows', () => {
+  const rowsOf = [
+    asset({ id: 'cash', label: 'Cash-NRE', identifier_last4: '1000', sort_order: 1 }),
+    asset({ id: 'run', type: 'fixed_deposit', account_kind: null, sort_order: 2 }),
+    asset({ id: 'today', type: 'fixed_deposit', account_kind: null, sort_order: 3 }),
+    asset({ id: 'recent', type: 'fixed_deposit', account_kind: null, sort_order: 4 }),
+    asset({ id: 'edge', type: 'fixed_deposit', account_kind: null, sort_order: 5 }),
+    asset({ id: 'over', type: 'fixed_deposit', account_kind: null, sort_order: 6 }),
+    asset({
+      id: 'unconf',
+      type: 'fixed_deposit',
+      account_kind: null,
+      status: 'matured_unconfirmed',
+      sort_order: 7,
+    }),
+    asset({
+      id: 'done',
+      type: 'fixed_deposit',
+      account_kind: null,
+      status: 'matured',
+      sort_order: 8,
+    }),
+    asset({
+      id: 'hist',
+      type: 'fixed_deposit',
+      account_kind: null,
+      status: 'closed',
+      sort_order: 9,
+    }),
+  ];
+  const terms = (id: string, maturity_on: string, o: Partial<FdRow> = {}) =>
+    fd(id, { booked_on: '2021-01-01', maturity_on, bank_maturity_amount: null, ...o });
+  const fdRows = [
+    terms('run', '2027-06-01'),
+    terms('today', '2026-10-26'),
+    terms('recent', '2026-10-14'),
+    terms('edge', '2026-08-27'), // exactly 60 days ago
+    terms('over', '2026-08-26'), // 61 days ago, still marked active
+    terms('unconf', '2026-10-01'),
+    terms('done', '2026-10-10'),
+    terms('hist', '2021-12-10', { ended_on: '2021-11-01', ended_estimated: true }),
+  ];
+  const obsRows = [obs({ id: 'c', asset_id: 'cash', amount: 250_000 })];
+  const build = () => {
+    const p = buildPortfolio(rowsOf, obsRows, fdRows, today);
+    return buildBankBlocks({
+      assets: rowsOf,
+      observations: obsRows,
+      fds: fdRows,
+      portfolio: p,
+      institutionNames: { eq: 'Equitas' },
+      today,
+    });
+  };
+  const all = build();
+  const rows = all.flatMap((b) => b.sections.flatMap((x) => x.rows));
+  const stateOf = (id: string) => rows.find((r) => r.assetId === id)!.fd?.listState;
+
+  it('gives every deposit a list state by the rule', () => {
+    expect(['run', 'today'].map(stateOf)).toEqual(['show', 'show']);
+    expect(['recent', 'edge', 'unconf'].map(stateOf)).toEqual(['confirm', 'confirm', 'confirm']);
+    expect(['over', 'done', 'hist'].map(stateOf)).toEqual(['hidden', 'hidden', 'hidden']);
+    expect(rows.find((r) => r.assetId === 'hist')!.fd).toMatchObject({
+      endedOn: '2021-11-01',
+      endedEstimated: true,
+    });
+  });
+
+  it('counts only the running deposits (and the one maturing today) in the totals', () => {
+    const counted = rows.filter((r) => r.assetId === 'run' || r.assetId === 'today');
+    expect(all[0]!.totals.fdInvested).toBe(counted.length * 500_000);
+    expect(all[0]!.totals.fdCurrent).toBeCloseTo(
+      counted.reduce((a, r) => a + (r.current ?? 0), 0),
+      4,
+    );
+  });
+
+  it('asks about the deposits in the window only, not the hidden ones', () => {
+    expect(all[0]!.needsYou).toBe(3);
+  });
+
+  it('takes the hidden rows out without changing any total, and says how many', () => {
+    const { blocks, counts } = withoutHiddenDeposits(all);
+    const ids = blocks.flatMap((b) => b.sections.flatMap((x) => x.rows.map((r) => r.assetId)));
+    expect(ids).toEqual(['cash', 'run', 'today', 'recent', 'edge', 'unconf']);
+    expect(counts).toEqual({ hidden: 3, confirmed: 2 });
+    expect(blocks[0]!.totals).toEqual(all[0]!.totals);
+    expect(blocks[0]!.needsYou).toBe(all[0]!.needsYou);
+  });
+
+  it('lists them again when asked, with the same count', () => {
+    const { blocks, counts } = withoutHiddenDeposits(all, true);
+    expect(blocks).toBe(all);
+    expect(counts.hidden).toBe(3);
+  });
+
+  it('drops a person section or a bank that has nothing left to show', () => {
+    const only = [
+      asset({
+        id: 'h1',
+        type: 'fixed_deposit',
+        account_kind: null,
+        status: 'closed',
+        owner_id: 'g',
+      }),
+    ];
+    const f = [terms('h1', '2021-12-10')];
+    const p = buildPortfolio(only, [], f, today);
+    const b = buildBankBlocks({
+      assets: only,
+      observations: [],
+      fds: f,
+      portfolio: p,
+      institutionNames: { eq: 'Equitas' },
+      today,
+    });
+    expect(b).toHaveLength(1);
+    expect(withoutHiddenDeposits(b).blocks).toEqual([]);
+  });
+
+  it('follows the window from Settings', () => {
+    const p = buildPortfolio(rowsOf, obsRows, fdRows, today);
+    const b = buildBankBlocks({
+      assets: rowsOf,
+      observations: obsRows,
+      fds: fdRows,
+      portfolio: p,
+      institutionNames: { eq: 'Equitas' },
+      today,
+      hideMaturedAfterDays: 20,
+    });
+    const r = b.flatMap((x) => x.sections.flatMap((y) => y.rows));
+    expect(r.find((x) => x.assetId === 'recent')!.fd!.listState).toBe('confirm');
+    expect(r.find((x) => x.assetId === 'edge')!.fd!.listState).toBe('hidden');
+    expect(r.find((x) => x.assetId === 'unconf')!.fd!.listState).toBe('hidden'); // 25 days
   });
 });

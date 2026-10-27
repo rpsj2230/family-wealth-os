@@ -17,6 +17,10 @@ Writes are plain inserts, one marking an older value as replaced when the person
 - `observations`: `source = 'workbook'`, `confidence = 'imported_unverified'`, `source_ref = 'hist:<tab>:<cell>'` (the corrected month's name when the person chose the month of a tab: `hist:Feb 2026:F12`). A fund's figure uses `histfund:<tab>:<cell>`; `loadPortfolioData` leaves those out, so a fund's valuation never rests on the sheet. Read them for the "the sheet said" line with `source_ref like 'histfund:%'`.
 - `assets.from_history = true` for each closed account or deposit added; deposits also have `fixed_deposits.ended_on`, `ended_estimated` and `start_estimated` (migration `20261027000100_history.sql`). `ended_on` is read by the period gains (`endedOn`); other pages still use the maturity date for a closed deposit.
 
+A closed account or deposit added by the import gets one short note, `From the monthly tabs (2021-06 to 2021-10); ended about 2021-11 (estimate).` (deposits whose start was also estimated add ` Start also estimated.`). The longer explanation (the tabs do not say when an account ended, so the end is the first month it is missing from) is written on the account's own page, which recognises the prefix `HISTORY_NOTE_PREFIX` and reads `ended_estimated` / `start_estimated`. Earlier imports wrote a long note with the explanation inside; the page still recognises it, and Accounts shows any note as one line (full text on hover).
+
+**Accounts and these deposits.** An imported deposit has status `closed` (or `matured`), so Accounts hides it at once; `Show matured` (`?matured=all`) lists it, dimmed. A deposit whose date, or `ended_on`, is more than `deposits.hideMaturedAfterDays` (Settings, default 60) days ago is hidden whatever its status. The Balance history grid and the account's page still show it. None of these deposits is in any total: a deposit past its maturity date is valued as matured and not counted (`packages/core/src/deposit-state.ts`).
+
 ## Identifying savings lines from other tabs
 
 `packages/ingest/src/history-identity.ts` (pure, tested in `history-identity.test.ts`; wired in `history.ts` right after the lines are matched).

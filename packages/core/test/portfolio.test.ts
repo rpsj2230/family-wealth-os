@@ -132,6 +132,38 @@ describe('buildPortfolio', () => {
     expect(p.lines.fd1!.freshness).toBe('older_than_expected');
   });
 
+  it('leaves out an FD that is still marked active but is past its maturity date, and counts one maturing today', () => {
+    const rows = [
+      asset({ id: 'late', type: 'fixed_deposit' }),
+      asset({ id: 'today', type: 'fixed_deposit' }),
+      asset({ id: 'ahead', type: 'fixed_deposit' }),
+    ];
+    const terms = (id: string, maturity_on: string): FdRow => ({
+      ...fd,
+      asset_id: id,
+      booked_on: '2025-10-26',
+      maturity_on,
+      bank_maturity_amount: null,
+    });
+    const p = buildPortfolio(
+      rows,
+      [],
+      [terms('late', '2026-10-25'), terms('today', '2026-10-26'), terms('ahead', '2026-10-27')],
+      today,
+    );
+    expect(p.valued.find((v) => v.assetId === 'late')!.status).toBe('matured_unconfirmed');
+    expect(p.valued.find((v) => v.assetId === 'today')!.status).toBe('active');
+    expect(p.netWorth.excluded).toEqual([
+      expect.objectContaining({ assetId: 'late', reason: 'status_not_counted' }),
+    ]);
+    expect(p.netWorth.excluded[0]!.amount).toBeGreaterThan(500_000);
+    expect(p.netWorth.counted).toBe(2);
+    expect(p.lines.late!.freshness).toBe('older_than_expected');
+    expect(p.lines.today!.freshness).toBe('calculated');
+    // the stored status is not changed: only the valuation treats it as matured
+    expect(rows[0]!.status).toBe('active');
+  });
+
   it('shows S$ balances at the anchor rate until a live rate is supplied, then separates FX movement', () => {
     const rows = [asset({ id: 'sg', currency: 'SGD' })];
     const o = [obs({ id: 'o', asset_id: 'sg', amount: 100, currency: 'SGD', fx_rate: 65 })];

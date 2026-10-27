@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { buildBankBlocks, personStyles, standings } from '@fwos/core';
+import { buildBankBlocks, personStyles, standings, withoutHiddenDeposits } from '@fwos/core';
 import { BankBadge } from '@/components/BankBadge';
+import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { PageHead } from '@/components/PageHead';
 import { QuickEditHost } from '@/components/QuickEditHost';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadContext } from '@/lib/data';
+import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
 import { loadJointHolders } from '@/lib/quick-edit-data';
@@ -14,21 +16,32 @@ import { slugify } from '@/lib/slug';
 
 export const dynamic = 'force-dynamic';
 
-export default async function BankUpdatePage({ params }: { params: Promise<{ bank: string }> }) {
+export default async function BankUpdatePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ bank: string }>;
+  searchParams: Promise<{ matured?: string }>;
+}) {
   const { bank } = await params;
+  const showAll = showsMatured((await searchParams).matured);
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, fx, jointHolders] =
-    await Promise.all([
-      loadPortfolio(supabase),
-      supabase.from('institutions').select('id, name'),
-      supabase
-        .from('fx_rates')
-        .select('currency, rate_date, inr_per_unit')
-        .order('rate_date', { ascending: false })
-        .limit(20),
-      loadJointHolders(supabase as unknown as SupabaseClient),
-    ]);
+  const [
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays },
+    inst,
+    fx,
+    jointHolders,
+  ] = await Promise.all([
+    loadPortfolio(supabase),
+    supabase.from('institutions').select('id, name'),
+    supabase
+      .from('fx_rates')
+      .select('currency, rate_date, inr_per_unit')
+      .order('rate_date', { ascending: false })
+      .limit(20),
+    loadJointHolders(supabase as unknown as SupabaseClient),
+  ]);
   const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const names = Object.fromEntries(
@@ -41,9 +54,13 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
     portfolio,
     institutionNames: names,
     today,
+    hideMaturedAfterDays,
   });
-  const blocks = all.filter((b) => slugify(b.name) === bank);
-  if (blocks.length === 0) notFound();
+  const ofBank = all.filter((b) => slugify(b.name) === bank);
+  if (ofBank.length === 0) notFound();
+  // deposits that matured long ago or are confirmed leave the grid; ?matured=all lists them again, dimmed
+  const { blocks: shown, counts: hiddenCounts } = withoutHiddenDeposits(ofBank, showAll);
+  const blocks = shown.length > 0 ? shown : ofBank;
   const fxHint: Record<string, number> = {};
   for (const r of fx.data ?? [])
     if (!((r.currency as string) in fxHint)) fxHint[r.currency as string] = Number(r.inr_per_unit);
@@ -78,6 +95,12 @@ export default async function BankUpdatePage({ params }: { params: Promise<{ ban
         fxHint={fxHint}
         institutions
         summary={false}
+      />
+      <HiddenDepositsNote
+        counts={hiddenCounts}
+        showAll={showAll}
+        showHref={maturedHref(`/monthly/${bank}`, {}, true)}
+        hideHref={maturedHref(`/monthly/${bank}`, {}, false)}
       />
     </QuickEditHost>
   );

@@ -15,6 +15,7 @@ import {
   type Explain,
   type ExplainSet,
 } from './explain';
+import { maturedRuleText } from './deposit-state';
 import type { ReportFd, ReportFund, ReportTable } from './reports';
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -73,12 +74,12 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
       id: 'reports.fdCount',
       title: 'Deposits counted',
       what: `How many fixed deposits the deposit reports include${whose}.`,
-      how: `${exPlural(i.fds.length, 'deposit')}: the running ones and matured ones still waiting to be confirmed. Closed and renewed deposits are history and are not counted.`,
+      how: `${exPlural(i.fds.length, 'deposit')}: the ones still running. A deposit whose date has passed, and closed, renewed or confirmed matured ones, are not counted.`,
       inputs: [{ label: 'Deposits', value: String(i.fds.length), basis: 'recorded', ...fdBasis }],
       level: fdLevel,
       completeness:
-        'Counted from the recorded deposits. Unlike the Accounts and Deposits overviews, which leave out a matured deposit until you confirm it, these reports include it.',
-      notes: [],
+        'Counted from the recorded deposits, by the same rule as net worth and the Accounts and Deposits overviews.',
+      notes: [maturedRuleText()],
       fix: { label: 'Open Deposits', href: i.links.deposits },
     }),
     'reports.fdPrincipal': explain({

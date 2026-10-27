@@ -8,6 +8,7 @@ export * from './dicgc';
 export * from './goals';
 export * from './receivables';
 export * from './maturity';
+export * from './deposit-state';
 export * from './portfolio';
 export * from './snapshot';
 export * from './retirement';

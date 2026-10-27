@@ -431,7 +431,7 @@ export interface ClassCard {
   share: number;
   /** the profit rests on an estimate: a rate, a plan, an instalment assumed */
   estimated: boolean;
-  /** a deposit past its date waiting to be confirmed is counted here (in net worth) but not in the Deposits figures */
+  /** deposits past their date waiting to be confirmed: not counted anywhere (their money is in a savings account or a new deposit), listed for the note */
   awaiting: { count: number; invested: number; current: number } | null;
 }
 
@@ -441,7 +441,7 @@ export interface ClassCardsInput {
   fd: OverviewPart;
   /** their earnings in the last day */
   fdToday: number;
-  /** deposits past their date that are still listed as running: in net worth, waiting to be confirmed */
+  /** deposits past their date that are still listed as running: in no total, waiting to be confirmed */
   awaiting: { count: number; invested: number; current: number };
   /** savings and cash in banks as Cash counts them, and what they earned in the last day */
   cash: OverviewPart;
@@ -484,12 +484,12 @@ export const classHref = (k: ClassKey) => CLASS_HREF[k];
  * and what is counted today, which is nothing unless a recorded value has been moved on.
  */
 export function classCards(i: ClassCardsInput): ClassCard[] {
+  // a deposit past its date is not counted: its money went into a savings account or another deposit, counted on their own
   const fd = {
-    count: i.fd.count + i.awaiting.count,
-    invested: i.fd.invested + i.awaiting.invested,
-    current: i.fd.current + i.awaiting.current,
-    // a deposit past its date is worth its maturity amount, and earns nothing more
-    maturity: i.fd.maturity + i.awaiting.current,
+    count: i.fd.count,
+    invested: i.fd.invested,
+    current: i.fd.current,
+    maturity: i.fd.maturity,
   };
   const funds = i.funds
     ? { count: i.funds.count, invested: i.funds.invested, current: i.funds.value }

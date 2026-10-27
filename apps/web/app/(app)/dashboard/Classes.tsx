@@ -80,8 +80,9 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
       </p>
       {c.awaiting && (
         <p className="hm-class-note small muted">
-          Includes {formatInrCompact(c.awaiting.current)} in {plural(c.awaiting.count, 'deposit')}{' '}
-          past their date, waiting for you to say where the money went.
+          Not counted: {plural(c.awaiting.count, 'deposit')} ({formatInrCompact(c.awaiting.current)}
+          ) past their date. Confirm them on Accounts; the money counts in the savings account or
+          new deposit it went to.
         </p>
       )}
     </li>

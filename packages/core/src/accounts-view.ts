@@ -3,7 +3,9 @@
  * deposits side by side, every line tagged with whose it is, how current it is and where the figure came from.
  * Pure functions; the pages only draw what this returns.
  */
+import { depositListState, type DepositListState } from './deposit-state';
 import { fdValueOn, type Compounding } from './fd';
+import { DEFAULT_CONFIG } from './config';
 import type { AssetRow, FdRow, ObservationRow, Portfolio } from './portfolio';
 import { latestObservations } from './portfolio';
 
@@ -200,7 +202,17 @@ export interface BankRow {
     ref: string | null;
     /** code of the savings account it is linked to, found by the last four digits */
     linkedTo: string | null;
+    /**
+     * the deposit's date has passed (or it is marked matured, not confirmed): its money has left the deposit, so it is in no total.
+     * Counted by the same rule as net worth (deposit-state.ts).
+     */
     needsConfirmation: boolean;
+    /** the day a deposit that is no longer held left, when the History import worked it out */
+    endedOn: string | null;
+    /** the end date was read from the monthly tabs, not from the bank */
+    endedEstimated: boolean;
+    /** show: listed as usual; confirm: matured within the window and waiting for "Confirm matured"; hidden: confirmed or older than the window */
+    listState: DepositListState;
   } | null;
 }
 
@@ -239,6 +251,8 @@ export interface BuildInput {
   portfolio: Portfolio;
   institutionNames: Record<string, string>;
   today: Date;
+  /** Settings: deposits.hideMaturedAfterDays (default 60) */
+  hideMaturedAfterDays?: number;
 }
 
 const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 86_400_000);
@@ -295,6 +309,8 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
   const latest = latestObservations(i.observations);
   const fdBy = new Map(i.fds.map((f) => [f.asset_id, f]));
   const valued = new Map(i.portfolio.valued.map((v) => [v.assetId, v]));
+  const todayIso = i.today.toISOString().slice(0, 10);
+  const hideAfter = i.hideMaturedAfterDays ?? DEFAULT_CONFIG.deposits.hideMaturedAfterDays;
   const monthStart = `${i.today.toISOString().slice(0, 7)}-01`;
   const NONE = OTHER_HOLDINGS_KEY;
   let seq = 0;
@@ -342,7 +358,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         obs?.as_of ?? null,
         a.type === 'fixed_deposit',
         obs?.created_at ?? null,
-        i.today.toISOString().slice(0, 10),
+        todayIso,
       ),
       olderEmail: (() => {
         const o = a.type === 'fixed_deposit' ? null : olderBankReading(i.observations, a.id, obs);
@@ -378,6 +394,15 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         linkedTo: null,
         needsConfirmation:
           a.status === 'matured_unconfirmed' || (a.status === 'active' && daysLeft < 0),
+        endedOn: fd.ended_on ?? null,
+        endedEstimated: !!fd.ended_estimated,
+        listState: depositListState({
+          status: a.status,
+          maturityOn: fd.maturity_on,
+          endedOn: fd.ended_on ?? null,
+          today: todayIso,
+          hideAfterDays: hideAfter,
+        }),
       };
     }
     (rowsByBank.get(bankKey) ?? rowsByBank.set(bankKey, []).get(bankKey)!).push(row);
@@ -437,7 +462,8 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
     let lastUpdated: string | null = null;
     for (const r of rows) {
       if (r.kind === 'fd') {
-        if (r.fd?.needsConfirmation) {
+        // a deposit hidden by age is not nagged about; it is in no total either
+        if (r.fd?.listState === 'confirm') {
           needsYou++;
           done = false;
         }
@@ -464,6 +490,48 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
   return blocks.sort(
     (a, b) => Number(a.key === NONE) - Number(b.key === NONE) || a.order - b.order,
   );
+}
+
+export interface HiddenDeposits {
+  /** deposits left out of the lists: confirmed matured, renewed or closed, or matured longer ago than the window */
+  hidden: number;
+  /** how many of them are confirmed (the rest are old) */
+  confirmed: number;
+}
+
+/**
+ * The lists without the deposits that have matured and are settled or old (see depositListState), with the count that was left
+ * out so the page can say so and offer them back. Hidden deposits are in no total already, so every total stays as it was; a
+ * person section or a bank left with no row at all goes too. With `showAll` nothing is removed.
+ */
+export function withoutHiddenDeposits(
+  blocks: BankBlock[],
+  showAll = false,
+): { blocks: BankBlock[]; counts: HiddenDeposits } {
+  const counts: HiddenDeposits = { hidden: 0, confirmed: 0 };
+  if (showAll) {
+    for (const r of blocks.flatMap((b) => b.sections.flatMap((sct) => sct.rows)))
+      if (r.fd?.listState === 'hidden') {
+        counts.hidden++;
+        if (['matured', 'renewed', 'closed'].includes(r.status)) counts.confirmed++;
+      }
+    return { blocks, counts };
+  }
+  const out: BankBlock[] = [];
+  for (const b of blocks) {
+    const sections: OwnerSection[] = [];
+    for (const sct of b.sections) {
+      const rows = sct.rows.filter((r) => {
+        if (r.fd?.listState !== 'hidden') return true;
+        counts.hidden++;
+        if (['matured', 'renewed', 'closed'].includes(r.status)) counts.confirmed++;
+        return false;
+      });
+      if (rows.length > 0) sections.push({ ...sct, rows });
+    }
+    if (sections.length > 0) out.push({ ...b, sections, owners: sections.map((x) => x.ownerId) });
+  }
+  return { blocks: out, counts };
 }
 
 /** Only one person's rows, with every total worked out again. */

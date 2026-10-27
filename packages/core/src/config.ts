@@ -14,6 +14,11 @@ export interface AppConfig {
     insuranceLimit: number;
     /** days before maturity at which an alert escalates, smallest first */
     maturityAlertDays: number[];
+    /**
+     * a deposit that matured more than this many days ago is hidden from the lists (Accounts, Monthly update), whatever its status;
+     * a confirmed matured, renewed or closed deposit is hidden at once. A deposit whose date has passed is not counted anywhere.
+     */
+    hideMaturedAfterDays: number;
   };
   reminders: {
     policyDays: number;
@@ -222,7 +227,11 @@ export interface AppConfig {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
-  deposits: { insuranceLimit: 500_000, maturityAlertDays: [7, 15, 30, 60, 90] },
+  deposits: {
+    insuranceLimit: 500_000,
+    maturityAlertDays: [7, 15, 30, 60, 90],
+    hideMaturedAfterDays: 60,
+  },
   reminders: { policyDays: 45, taskDays: 7, maturitySoonDays: 30, harvestMonth: 3, harvestDay: 15 },
   estimates: {
     freshnessDays: 35,
@@ -424,6 +433,9 @@ export function configFromJson(raw: unknown): AppConfig {
     deposits: {
       insuranceLimit: num(dep.insuranceLimit, d.deposits.insuranceLimit, 1, 1e9),
       maturityAlertDays: days.length > 0 ? days : d.deposits.maturityAlertDays,
+      hideMaturedAfterDays: Math.round(
+        num(dep.hideMaturedAfterDays, d.deposits.hideMaturedAfterDays, 1, 3650),
+      ),
     },
     reminders: {
       policyDays: num(rem.policyDays, d.reminders.policyDays, 0, 365),
