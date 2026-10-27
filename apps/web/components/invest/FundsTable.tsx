@@ -126,7 +126,6 @@ function Row({
                 : `${l.goalIds.length} goals`}
             </span>
           )}
-          <LedgerChip chip={l.ledgerChip} />
           {!l.amfiCode && (
             <Link
               className="nopricechip"
@@ -145,25 +144,30 @@ function Row({
             {l.categoryLabel}
             {l.categoryCertain ? '' : ' ?'}
           </span>
+          <LedgerChip chip={l.ledgerChip} />
           <span className="fl-subtext">{sub.join(' · ')}</span>
         </div>
       </td>
       <td className="num c-inv" data-label="Invested">
         {l.invested ? inr(l.invested) : '–'}
-        {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
-        <span className="fl-s">{l.avgCost !== null ? `avg ${money2(l.avgCost)}` : ''}</span>
+        <span className="fl-s">
+          {l.avgCost !== null ? `avg ${money2(l.avgCost)}` : ''}
+          {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
+        </span>
       </td>
       <td className="num c-val" data-label="Value now">
         {l.value ? inr(l.value) : '–'}
-        {l.value > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         <span className="fl-s">
           {l.value > 0 ? `${(l.share * 100).toFixed(l.share < 0.1 ? 1 : 0)}% of total` : ''}
+          {l.value > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
       <td className={`num c-pl ${l.invested ? tone(l.gain) : ''}`} data-label="Profit or loss">
         {l.invested ? rupees(l.gain) : '–'}
-        {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
-        <span className="fl-s">{l.gainPct === null ? '' : pct(l.gainPct, 1)}</span>
+        <span className="fl-s">
+          {l.gainPct === null ? '' : pct(l.gainPct, 1)}
+          {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
+        </span>
       </td>
       <td className={`num c-day ${tone(l.dayAmount)}`} data-label="Today">
         {l.dayAmount === null ? '–' : rupees(l.dayAmount)}
@@ -171,7 +175,7 @@ function Row({
       </td>
       <td className={`num c-xirr ${tone(l.xirr)}`} data-label="Return a year">
         {l.xirr === null ? '–' : pct(l.xirr, 1)}
-        {l.xirr !== null && l.xirrEstimated && (
+        {l.xirr !== null && l.xirrEstimated && !l.figuresEstimated && (
           <span
             className="fl-est"
             title="Estimated from the start date and SIP; exact once the fund statement is imported"
@@ -441,10 +445,15 @@ export function FundsTable({
                   </tr>
                 )}
                 {by === 'person' && !filtering && checks?.[g.key] && (
-                  <tr className="fl-datacheck">
-                    <td colSpan={8}>
+                  <tr
+                    className={`fl-datacheck ${checks[g.key]!.need.length > 0 || checks[g.key]!.startsLate ? 'warn' : 'ok'}`}
+                  >
+                    {/* six columns, then the two that a narrow table drops, so the strip never adds a column of its own */}
+                    <td colSpan={6}>
                       <DataCheck summary={checks[g.key]!} fundHref={fundHref} />
                     </td>
+                    <td className="c-sip" />
+                    <td className="c-act" />
                   </tr>
                 )}
                 {g.lines.map((l) => (

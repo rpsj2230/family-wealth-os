@@ -86,6 +86,8 @@ export interface LedgerVerdict {
   sources: string[];
   /** the sum of the signed units of the real lines */
   ledgerUnits: number;
+  /** the units the lines add up to by themselves: the units held before the first line (when known) plus every line */
+  unitsBySum: number | null;
   /** units held before the first line that no line explains; null when the lines carry no running balance */
   openingUnits: number | null;
   /** where the lines lead to: opening units plus every line, taking each folio's own balance as it stands */
@@ -321,6 +323,7 @@ const emptyVerdict = (
     estimatedAmount: est.reduce((a, l) => a + Math.abs(l.amount), 0),
     sources: est.length > 0 ? ['estimate'] : [],
     ledgerUnits: 0,
+    unitsBySum: null,
     openingUnits: null,
     ledgerClosingUnits: null,
     statementUnits: null,
@@ -444,16 +447,6 @@ export function ledgerCheck(input: LedgerCheckInput): LedgerVerdict {
     notes.push(
       `The lines come from ${folios} folios, each with its own running balance. The unit count on file may hold only one of them.`,
     );
-  for (const b of breaks.slice(0, 5)) {
-    const span =
-      b.from === b.to ? `on ${niceIso(b.to)}` : `between ${niceIso(b.from)} and ${niceIso(b.to)}`;
-    notes.push(
-      b.unexplained > 0
-        ? `${unitsText(b.unexplained)} units appear ${span} that no line explains: lines are missing.`
-        : `${unitsText(-b.unexplained)} units disappear ${span} that no line explains: a sale is missing, or a line is on file twice.`,
-    );
-  }
-  if (breaks.length > 5) notes.push(`${breaks.length - 5} more breaks not listed.`);
   if (openingUnits !== null && openingUnits > tol + SLACK)
     notes.push(
       `${unitsText(openingUnits)} units were already held before the first line (${niceIso(firstTxnOn)}); their purchases are not on file.`,
@@ -474,7 +467,7 @@ export function ledgerCheck(input: LedgerCheckInput): LedgerVerdict {
     notes.push('The unit count on file is older than the first line, so it cannot be compared.');
   else if (!pos || pos.units === null)
     notes.push('No unit count is recorded for this fund to compare the lines with.');
-  else if (ledgerAtPos !== null && pos.unitsAsOf)
+  else if (ledgerAtPos !== null && pos.unitsAsOf && breaks.length === 0)
     notes.push(
       `The lines lead to ${unitsText(ledgerAtPos)} units on ${niceIso(pos.unitsAsOf)}, the same as the unit count on file.`,
     );
@@ -579,6 +572,7 @@ export function ledgerCheck(input: LedgerCheckInput): LedgerVerdict {
     estimatedAmount: est.reduce((a, l) => a + Math.abs(l.amount), 0),
     sources,
     ledgerUnits,
+    unitsBySum: (openingUnits ?? 0) + ledgerUnits,
     openingUnits,
     ledgerClosingUnits: anchored ? closing : null,
     statementUnits: lastBal ? (lastBal.balance as number) : null,

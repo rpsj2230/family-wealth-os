@@ -95,7 +95,8 @@ describe('ledgerCheck', () => {
     expect(v.breaks[0]).toMatchObject({ from: '2021-03-05', to: '2021-05-05' });
     expect(v.breaks[0]!.unexplained).toBeCloseTo(95.2, 3);
     expect(v.chip.label).toBe('Gap: 5 Mar 2021 to 5 May 2021');
-    expect(v.notes.join(' ')).toContain('95.2 units appear between 5 Mar 2021 and 5 May 2021');
+    expect(v.unitsBySum).toBeCloseTo(288.6, 3); // 383.8 on the statement less the 95.2 missing
+    expect(v.statementUnits).toBeCloseTo(383.8, 3);
   });
 
   it('a line on file twice is a break the other way round', () => {

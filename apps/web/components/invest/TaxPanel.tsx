@@ -79,7 +79,7 @@ export function TaxPanel({
         <b data-testid="exit-load-status">{x.headline}</b>
         {x.state === 'not_set' || x.offerSet ? (
           <>
-            {' '}
+            {' · '}
             <Link href={setExitLoadHref}>Set it for this fund</Link>
           </>
         ) : null}

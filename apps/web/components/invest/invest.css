@@ -1481,10 +1481,12 @@ table.pltbl td {
   background: var(--bad-bg);
   color: var(--fail);
 }
-.fl-name > .ledgerchip {
+.fl-sub > .ledgerchip {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 60%;
+}
+.fl-sub > .ledgerchip + .fl-subtext {
+  flex-shrink: 100;
 }
 .datacheck {
   margin: 0;
@@ -1558,6 +1560,13 @@ table.pltbl td {
 tr.fl-datacheck td {
   padding: 0;
   border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+tr.fl-datacheck.warn td {
+  background: var(--warn-bg);
+}
+tr.fl-datacheck td .datacheck {
+  background: transparent;
 }
 @container (max-width: 800px) {
   table.fl tr.fl-datacheck {
@@ -1565,7 +1574,11 @@ tr.fl-datacheck td {
     border-radius: 10px;
     overflow: hidden;
   }
-  .fl-name > .ledgerchip {
+  table.fl tr.fl-datacheck td.c-sip,
+  table.fl tr.fl-datacheck td.c-act {
+    display: none;
+  }
+  .fl-sub > .ledgerchip {
     max-width: 100%;
     white-space: normal;
     overflow: visible;
@@ -1789,4 +1802,8 @@ tr.fl-datacheck td {
 }
 .taxpanel .tp-foot {
   margin: 10px 0 0;
+}
+
+.addsup .au-breaks li {
+  font-size: 0.84rem;
 }

@@ -33,7 +33,7 @@ export function DataCheck({
         </span>
         <b>Data check</b>
         <span>{s.headline}</span>
-        {s.earliestTxnOn && (
+        {s.earliestTxnOn && !s.lateNote && (
           <span className="muted">Earliest transaction on file: {niceDate(s.earliestTxnOn)}.</span>
         )}
       </p>
@@ -136,10 +136,8 @@ export function AddsUp({
                 <tr>
                   <td>Units held</td>
                   <td className="num" data-label="By the lines">
-                    {u(v.ledgerClosingUnits ?? (v.openingUnits === null ? v.ledgerUnits : null))}
-                    {v.ledgerClosingUnits === null && v.openingUnits === null && (
-                      <span className="fl-s">opening not known</span>
-                    )}
+                    {u(v.unitsBySum)}
+                    {v.openingUnits === null && <span className="fl-s">opening not known</span>}
                   </td>
                   <td className="num" data-label="Last line on the statement">
                     {u(v.statementUnits)}
@@ -163,7 +161,7 @@ export function AddsUp({
                     )}
                   </td>
                   <td className="num" data-label="By the lines">
-                    {at(v.ledgerClosingUnits)}
+                    {at(v.unitsBySum)}
                   </td>
                   <td className="num" data-label="Last line on the statement">
                     {at(v.statementUnits)}

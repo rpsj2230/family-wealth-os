@@ -27,6 +27,31 @@ describe('settings fields', () => {
     expect(groupValues(group('rates'), DEFAULT_CONFIG).rateGap).toBe('0.25');
   });
 
+  it('the fund history card holds a date and two tolerances, and a date that is not one is named', () => {
+    const v = groupValues(group('funds'), DEFAULT_CONFIG);
+    expect(v).toEqual({ historyFrom: '2021-01-01', unitTolerance: '0.001', moneyTolerance: '1' });
+    const ok = parseGroup(
+      group('funds'),
+      form({ historyFrom: '2019-04-01', unitTolerance: '0.002', moneyTolerance: '2' }),
+    );
+    expect(ok).toEqual({
+      ok: true,
+      raw: { funds: { historyFrom: '2019-04-01', unitTolerance: 0.002, moneyTolerance: 2 } },
+    });
+    const bad = parseGroup(
+      group('funds'),
+      form({ historyFrom: '2019-02-30', unitTolerance: '0.002', moneyTolerance: '2' }),
+    );
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.message).toContain('Transactions should be on file from');
+    expect(
+      parseGroup(
+        group('funds'),
+        form({ historyFrom: '2019-04-01', unitTolerance: '2', moneyTolerance: '2' }),
+      ).ok,
+    ).toBe(false);
+  });
+
   it('every field has a plain label and a one-line what-this-changes', () => {
     for (const g of CONFIG_GROUPS)
       for (const f of g.fields) {

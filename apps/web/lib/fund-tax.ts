@@ -64,6 +64,16 @@ export function buildFundTax(view: InvestmentView, fund: FundRow): FundTaxPanel 
     rules: view.tax.rules,
     config: view.tax.harvest,
   });
+  // the same plan with this fund alone: what it could do if the allowance were used on it
+  const alone = planHarvest(
+    harvestPositionsOf(mine.filter((f) => f.assetId === fund.assetId)),
+    view.today,
+    {
+      ytdRealised: { [fund.ownerId]: allowanceUsed(booked) },
+      rules: view.tax.rules,
+      config: view.tax.harvest,
+    },
+  );
   const first = fund.ledger.firstTxnOn;
   return fundTaxPanel(
     {
@@ -91,6 +101,7 @@ export function buildFundTax(view: InvestmentView, fund: FundRow): FundTaxPanel 
       rules: view.tax.rules,
       config: view.tax.harvest,
       plan,
+      planAlone: alone,
       setExitLoadHref: `?edit=${fund.assetId}`,
     },
   );

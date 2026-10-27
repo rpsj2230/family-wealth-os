@@ -309,11 +309,14 @@ export function PortfolioHero({
           label="Statements"
           value={`${h.withStatement} of ${h.funds}`}
           sub={
-            h.estimated > 0
-              ? `${h.estimated} estimated`
-              : h.unreconciled > 0
-                ? `${h.unreconciled} not reconciled yet`
-                : 'every fund is exact'
+            h.estimated > 0 || h.unreconciled > 0
+              ? [
+                  h.estimated > 0 ? `${h.estimated} estimated` : '',
+                  h.unreconciled > 0 ? `${h.unreconciled} not reconciled yet` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ')
+              : 'every fund is exact'
           }
           href={tabLinks.transactions}
         />

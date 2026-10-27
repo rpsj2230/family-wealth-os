@@ -76,6 +76,8 @@ export interface HarvestAdvice {
   headline: string;
   lines: string[];
   pick: HarvestPick | null;
+  /** what selling from this fund alone would do, when the whole plan gives the allowance to other funds first */
+  alone: HarvestPick | null;
   /** the person's allowance for the year and what is left of it */
   allowance: { exemption: number; used: number; room: number; fy: string; deadline: string } | null;
   /** when more units of this fund become ready, soonest first */
@@ -134,6 +136,8 @@ export interface FundTaxContext {
   >;
   /** the plan for the person's funds (planHarvest), when the class can be harvested */
   plan: HarvestPlan | null;
+  /** the same plan with this fund only, to say what it could do alone */
+  planAlone?: HarvestPlan | null;
   /** the place to set the fund's own exit load */
   setExitLoadHref?: string;
 }
@@ -350,6 +354,7 @@ function adviceFor(
   view: FundView | null,
   person: PersonHarvest | null,
   plan: HarvestPlan | null,
+  alone: HarvestPick | null,
   estimated: boolean,
 ): HarvestAdvice {
   const na = (headline: string, lines: string[] = []): HarvestAdvice => ({
@@ -357,6 +362,7 @@ function adviceFor(
     headline,
     lines,
     pick: null,
+    alone: null,
     allowance: null,
     next: [],
     estimated,
@@ -398,24 +404,35 @@ function adviceFor(
     lines.push(
       `Then buy the same amount back (${inr(pick.buyBackAmount)}) so the cost of the units goes up.`,
     );
+    if (pick.basis === 'total_only')
+      lines.push(
+        'No list of purchases is on file for this fund, so the units and the gain are worked out from the total invested and the first purchase date.',
+      );
     return {
       state: 'sell_now',
       headline: `Take out about ${inr(pick.sellAmount)} this year`,
       lines,
       pick,
+      alone: null,
       allowance,
       next,
       estimated,
       caution,
     };
   }
-  lines.push(view.reason);
+  if (view.status !== 'ready_not_needed') lines.push(view.reason);
   if (person.room < 1)
     lines.push(`Your ${inr(person.exemption)} tax-free allowance for ${plan.fy} is already used.`);
-  else if (view.status === 'ready_not_needed')
+  else if (view.status === 'ready_not_needed') {
+    const others = person.picks.filter((p) => p.assetId !== input.assetId);
     lines.push(
-      `${inr(person.room)} of the allowance is left but is used by funds with smaller gains first. See the Tax page for the whole plan.`,
+      `The plan gives this year's ${inr(person.room)} allowance to ${others.map((p) => p.fund).join(', ') || 'other funds'} first (smallest gains first, so as many positions as possible are completed).`,
     );
+    if (alone)
+      lines.push(
+        `Used on this fund instead, selling about ${alone.units !== null ? `${unitsFmt(alone.units)} units (` : '('}${inr(alone.sellAmount)}${alone.units !== null ? ')' : ''} of its oldest units would book about ${inr(alone.estimatedGain)} of tax-free gain.`,
+      );
+  }
   if (next.length > 0)
     lines.push(
       `More units become ready: ${next.map((n) => `${niceIso(n.on)} (${unitsFmt(n.units)} units, gain ${inr(n.gain)})`).join('; ')}.`,
@@ -425,6 +442,7 @@ function adviceFor(
     headline: 'Nothing to do now',
     lines,
     pick: null,
+    alone,
     allowance,
     next,
     estimated,
@@ -459,7 +477,14 @@ export function fundTaxPanel(input: FundTaxInput, ctx: FundTaxContext): FundTaxP
     rows,
     totals,
     exitLoad: exitLoadStatus(rows, totals, rule, source, ctx),
-    harvest: adviceFor(input, view, person, ctx.plan, estimated),
+    harvest: adviceFor(
+      input,
+      view,
+      person,
+      ctx.plan,
+      ctx.planAlone?.plans[0]?.picks.find((p) => p.assetId === input.assetId) ?? null,
+      estimated,
+    ),
     rates: eff
       ? {
           stcg: eff.rules.equity.stcgRate,
