@@ -1,15 +1,14 @@
 import type { FundImportDiff, OnFileState } from '@fwos/core';
 import {
   applyFundDiff,
-  casPdfText,
   fundCsvToStatement,
-  isPasswordError,
-  parseCas,
+  openStatement,
   planCasImport,
   type CasFund,
   type CasIo,
   type CasReport,
   type CasStatement,
+  type PasswordCandidate,
   type PlanConfig,
   type Selection,
   type TxnCsvRow,
@@ -364,86 +363,14 @@ export interface CasPdfResult {
   summary: string;
 }
 
-type Candidate = { ownerId: string; passwords: string[]; panLast4: string | null };
-
-type Opened =
-  | { ok: true; stmt: CasStatement; ownerId: string }
-  | { ok: false; ownerId: string | null; detail: string };
+type Candidate = PasswordCandidate;
 
 /**
- * Opens a fund statement with each candidate's passwords (the PAN, or the password chosen when the statement was requested)
- * until one fits, and checks the statement belongs to that person. No password or PAN is logged or returned.
+ * A fund statement that lists balances held with a depository only, or that mentions demat holdings (a combined CAMS + KFintech
+ * statement can carry a demat section), cannot show that a fund was sold, so it is not complete.
  */
-async function openStatement(pdf: Uint8Array, candidates: Candidate[]): Promise<Opened> {
-  let text: string | null = null;
-  let owner: string | null = null;
-  let panLast4: string | null = null;
-  let lastError: unknown = null;
-  // an unprotected statement opens without a password
-  try {
-    text = await casPdfText(pdf);
-  } catch (e) {
-    lastError = e;
-  }
-  if (text === null)
-    outer: for (const c of candidates) {
-      for (const pw of c.passwords) {
-        try {
-          text = await casPdfText(pdf, pw);
-          owner = c.ownerId;
-          panLast4 = c.panLast4;
-          break outer;
-        } catch (e) {
-          lastError = e;
-          if (!isPasswordError(e)) break outer;
-        }
-      }
-    }
-  if (text === null)
-    return {
-      ok: false,
-      ownerId: null,
-      detail: isPasswordError(lastError)
-        ? candidates.some((c) => c.passwords.length > 0)
-          ? 'The password did not open the statement. Use the password you chose when you requested it (CAMS and KFintech let you choose one; if you chose your PAN, type it in capital letters).'
-          : 'The statement is password-protected: type its password (the one you chose when requesting it, or your PAN).'
-        : `The PDF could not be read (${(lastError as Error | null)?.message ?? 'unknown error'}).`,
-    };
-  const stmt = parseCas(text);
-  if (owner === null) {
-    const hit = candidates.filter(
-      (c) => c.panLast4 && stmt.pan && c.panLast4 === stmt.pan.slice(-4),
-    );
-    if (hit.length === 1) {
-      owner = hit[0]!.ownerId;
-      panLast4 = hit[0]!.panLast4;
-    }
-  }
-  if (owner === null)
-    return {
-      ok: false,
-      ownerId: null,
-      detail:
-        'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
-    };
-  if (stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
-    return {
-      ok: false,
-      ownerId: owner,
-      detail:
-        'This statement belongs to a different person than the one chosen (the PAN on it does not match).',
-    };
-  if (stmt.schemes.length === 0)
-    return {
-      ok: false,
-      ownerId: owner,
-      detail: stmt.warnings.join(' ') || 'Nothing recognised.',
-    };
-  return { ok: true, stmt, ownerId: owner };
-}
-
-/** A fund statement that lists balances held with a depository only cannot show that a fund was sold, so it is not complete. */
-const isComplete = (stmt: CasStatement) => !stmt.schemes.some((s) => s.holdingsOnly);
+const isComplete = (stmt: CasStatement) =>
+  !stmt.schemes.some((s) => s.holdingsOnly) && !stmt.dematMention;
 
 export type CasPreview =
   | { ok: false; detail: string }
@@ -499,7 +426,14 @@ export async function importCasPdf(
   hh: string,
   pdf: Uint8Array,
   candidates: Candidate[],
-  opts: { sourceRef: string; today: string; receivedOn?: string; select?: Selection },
+  opts: {
+    sourceRef: string;
+    today: string;
+    receivedOn?: string;
+    select?: Selection;
+    /** the statement came by e-mail: a password that fits none of the saved ones is explained for that case */
+    fromMail?: boolean;
+  },
 ): Promise<CasPdfResult> {
   const done = async (
     res: Omit<CasPdfResult, 'summary'> & { summary?: string },
@@ -522,7 +456,7 @@ export async function importCasPdf(
     );
     return out;
   };
-  const o = await openStatement(pdf, candidates);
+  const o = await openStatement(pdf, candidates, opts.fromMail);
   if (!o.ok) return done({ outcome: 'failed', ownerId: o.ownerId, report: null, detail: o.detail });
   const io = casIo(db, hh);
   const diff = await planCasImport(o.ownerId, o.stmt, io, {
@@ -533,6 +467,7 @@ export async function importCasPdf(
   const report = await applyFundDiff(diff, io, opts.select ?? null);
   await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   const partial = report.needsReview.length > 0;
+  await markRequestsArrived(db, hh, o.ownerId, opts.today);
   return done(
     {
       outcome: partial ? 'partial' : 'imported',
@@ -577,4 +512,120 @@ export async function importFundCsv(
   if (report)
     await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
   return { ownerId, diff, notes: [...notes, ...statement.warnings], report };
+}
+
+/**
+ * A statement for this person has been read: the requests for a full statement that were still waiting for them are now arrived. A
+ * failure here never fails the import (the request note is a convenience).
+ */
+export async function markRequestsArrived(
+  db: SupabaseClient,
+  hh: string,
+  ownerId: string,
+  today: string,
+): Promise<void> {
+  try {
+    const done = await db
+      .from('statement_requests')
+      .update({ status: 'arrived', arrived_on: today })
+      .eq('household_id', hh)
+      .eq('owner_id', ownerId)
+      .eq('status', 'asked')
+      .select('task_id');
+    // the reminder left for a late request is no longer needed
+    const tasks = ((done.data ?? []) as { task_id: string | null }[])
+      .map((r) => r.task_id)
+      .filter((x): x is string => !!x);
+    if (tasks.length > 0)
+      await db
+        .from('tasks')
+        .update({ status: 'done', done_at: new Date().toISOString() })
+        .in('id', tasks)
+        .eq('status', 'open');
+  } catch {
+    /* the import itself is done */
+  }
+}
+
+/**
+ * Everyone's passwords for opening statements, for the background jobs (service role only): the saved PAN in capitals and in small
+ * letters, then any extra statement passwords the person saved. Nothing here is ever logged or returned to a page.
+ */
+export async function loadStatementCandidates(
+  db: SupabaseClient,
+  hh: string,
+): Promise<Candidate[]> {
+  const pans = must(
+    await db.from('owner_pan').select('owner_id, pan').eq('household_id', hh),
+    'saved PANs',
+  ) as { owner_id: string; pan: string }[];
+  const extra = must(
+    await db.from('statement_passwords').select('owner_id, password').eq('household_id', hh),
+    'statement passwords',
+  ) as { owner_id: string; password: string }[];
+  const byOwner = new Map<string, string[]>();
+  for (const e of extra) byOwner.set(e.owner_id, [...(byOwner.get(e.owner_id) ?? []), e.password]);
+  return pans.map((p) => ({
+    ownerId: p.owner_id,
+    passwords: [...new Set([p.pan, p.pan.toLowerCase(), ...(byOwner.get(p.owner_id) ?? [])])],
+    panLast4: p.pan.slice(-4),
+  }));
+}
+
+export interface CasMailResult {
+  outcome: 'imported' | 'partial' | 'failed';
+  reason: string;
+  /** whose statement it was (the people the attachments opened for) */
+  ownerIds: string[];
+  funds: number;
+  transactions: number;
+}
+
+/**
+ * Imports the PDF attachments of one e-mail as fund statements: the same safety as the label job (it was extracted from there so
+ * both jobs share it). The reason is one line, with no password and no PAN in it.
+ */
+export async function importCasAttachments(
+  db: SupabaseClient,
+  hh: string,
+  m: {
+    messageId: string;
+    receivedOn: string;
+    attachments: { filename: string; content: Uint8Array }[];
+  },
+  today: string,
+): Promise<CasMailResult> {
+  const candidates = await loadStatementCandidates(db, hh);
+  const results: CasPdfResult[] = [];
+  for (const a of m.attachments)
+    results.push(
+      await importCasPdf(db, hh, a.content, candidates, {
+        sourceRef: `${m.messageId}|${a.filename}`,
+        today,
+        receivedOn: m.receivedOn,
+        fromMail: true,
+      }),
+    );
+  const ok = results.filter((r) => r.outcome !== 'failed');
+  if (ok.length === 0)
+    return {
+      outcome: 'failed',
+      reason: results
+        .map((r) => r.detail)
+        .join(' ')
+        .slice(0, 300),
+      ownerIds: [],
+      funds: 0,
+      transactions: 0,
+    };
+  const review = ok.flatMap((r) => r.report?.needsReview ?? []);
+  // what changed, in one line (the full list is kept with the import: Import > Fund statement, recent statements)
+  const changed = ok.map((r) => r.summary).filter((x) => x.length > 0);
+  return {
+    outcome: review.length > 0 ? 'partial' : 'imported',
+    reason: `${changed.join(' | ')}${review.length ? `; check: ${review.join(', ')}` : ''}`,
+    ownerIds: [...new Set(ok.map((r) => r.ownerId).filter((x): x is string => !!x))],
+    funds: ok.reduce((n, r) => n + (r.report?.statementFunds ?? 0), 0),
+    transactions: ok.reduce((n, r) => n + (r.report?.transactionsAdded ?? 0), 0),
+  };
 }

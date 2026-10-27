@@ -6,6 +6,8 @@ import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
 import { FundChanges } from '@/components/FundChanges';
 import type { PersonPreview } from '@/lib/fund-import';
+import { GmailStatements } from './GmailStatements';
+import type { GmailModel } from '@/lib/gmail-statements';
 import { HistoryPanel } from './HistoryPanel';
 import { ImportDoor } from './ImportDoor';
 import { plainCountName } from '@/lib/import-detect';
@@ -51,6 +53,8 @@ export interface ImportData {
   email: AutomationCard | null;
   /** the Google Sheet connection and its last sync */
   sheet: SheetSyncInfo;
+  /** the Gmail statements card (only the Fund statement tab draws it) */
+  gmail?: GmailModel | null;
 }
 
 /** Reads the change list kept with an import (stored as JSON), or nothing for an older import. */
@@ -298,6 +302,11 @@ export function ImportHub({
 
       {tab === 'cas' && (
         <div className="hubgrid">
+          {data.gmail && (
+            <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+              <GmailStatements model={data.gmail} demo={demo} />
+            </div>
+          )}
           <section className="card">
             <h2>What this does</h2>
             <p className="small">
@@ -314,9 +323,19 @@ export function ImportHub({
               </li>
               <li>Send it to the Gmail address the app reads, once for each person.</li>
               <li>
-                In Gmail, apply the label <strong>FWOS/Inbox</strong> to mail from camsonline.com,
-                kfintech.com, mfcentral.com, cdslindia.com or nsdl.com with an attachment. They are
-                then imported by themselves, every month.
+                {data.gmail?.enabled ? (
+                  <>
+                    Nothing more: the Gmail scan above finds it by itself. (Labelling a message{' '}
+                    <strong>FWOS/Inbox</strong> still works too.)
+                  </>
+                ) : (
+                  <>
+                    In Gmail, apply the label <strong>FWOS/Inbox</strong> to mail from
+                    camsonline.com, kfintech.com, mfcentral.com, cdslindia.com or nsdl.com with an
+                    attachment, or switch the Gmail scan above on. They are then imported by
+                    themselves.
+                  </>
+                )}
               </li>
             </ol>
             <div className="rulebox small">
@@ -361,7 +380,7 @@ export function ImportHub({
               </div>
             </section>
           )}
-          <section className="card" style={{ gridColumn: '1 / -1' }}>
+          <section className="card" style={{ gridColumn: '1 / -1' }} id="recent-statements">
             <h2>Recent statements</h2>
             {data.cas.length === 0 ? (
               <p className="empty">
