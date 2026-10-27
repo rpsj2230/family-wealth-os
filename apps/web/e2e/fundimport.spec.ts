@@ -47,7 +47,9 @@ test.describe('Preview changes for a fund statement (public sample)', () => {
     await expect(flexi.locator('.fc-nums')).toContainText('₹1,50,000');
     await expect(flexi.locator('.fc-nums')).toContainText('₹1,80,000');
     await flexi.getByText('2 new transactions').click();
-    await expect(flexi.locator('.fc-table')).toContainText('SIP instalment');
+    await expect(flexi.locator('.fc-lines:not(.fc-replaced) .fc-table')).toContainText(
+      'SIP instalment',
+    );
 
     const large = row(page, 'Sample Large Cap');
     await expect(large.locator('.fc-chip', { hasText: 'SIP stopped' })).toBeVisible();

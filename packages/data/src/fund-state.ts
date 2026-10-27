@@ -18,6 +18,9 @@ export interface FundPosition {
   invested: number | null;
   sip_monthly: number | null;
   sip_stopped: boolean | null;
+  /** the period of the latest detailed statement applied to the fund */
+  cas_detail_from?: string | null;
+  cas_detail_to?: string | null;
 }
 
 export async function loadFundStates(
@@ -62,6 +65,8 @@ export async function loadFundStates(
       .select('asset_id, source_ref, txn_on, kind, amount, units, source')
       .eq('household_id', hh)
       .in('asset_id', assetIds)
+      // lines a statement has replaced are set aside, not part of what is on file
+      .is('superseded_on', null)
       .order('id')
       .range(from, to),
   ))
@@ -138,6 +143,7 @@ export async function loadFundStates(
       latestValue: latest.get(id) ?? null,
       snapshots: snaps.get(id) ?? [],
       ignored: ignored.get(id) ?? [],
+      cover: p?.cas_detail_to ? { from: p.cas_detail_from ?? null, to: p.cas_detail_to } : null,
     });
   }
   return out;

@@ -31,6 +31,7 @@ export async function loadRealisedGains(
         'mf_transactions',
         'asset_id, txn_on, kind, amount, units, nav, balance_units, description, source',
       )
+        .is('superseded_on', null)
         .order('txn_on', { ascending: true })
         .order('id')
         .range(from, to),

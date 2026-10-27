@@ -2,13 +2,15 @@
  * Which items of a preview can be ticked, which are ticked, and what is sent back. Plain functions, so the rules (a new or sold fund
  * and its SIP go together; an item that is shown and not ticked is remembered as overruled) are tested without a browser.
  */
-import { sipIsChange, sipKey } from '@fwos/core';
+import { replaceIsChange, replaceKey, sipIsChange, sipKey } from '@fwos/core';
 import type { ItemView, PersonPreview } from './fund-import';
 
 /** The fund part is something to apply. */
 export const fundSelectable = (i: ItemView) => i.changed;
 /** The SIP part is something to apply (and can be ticked on its own). */
 export const sipSelectable = (i: ItemView) => sipIsChange(i.sip);
+/** The statement replaces lines on file for this fund: a part that can be unticked on its own (to keep your own lines). */
+export const replaceSelectable = (i: ItemView) => i.changed && replaceIsChange(i);
 /** A new or sold fund brings its SIP with it: the SIP cannot be applied without the fund. */
 export const sipDependsOnFund = (i: ItemView) => i.kind === 'new' || i.kind === 'sold';
 
@@ -17,6 +19,7 @@ export function selectableKeys(people: Pick<PersonPreview, 'diff'>[]): string[] 
   return people.flatMap((p) =>
     p.diff.items.flatMap((i) => [
       ...(fundSelectable(i) ? [i.key] : []),
+      ...(replaceSelectable(i) ? [replaceKey(i.key)] : []),
       ...(sipSelectable(i) ? [sipKey(i.key)] : []),
     ]),
   );
@@ -29,6 +32,8 @@ export function isTaken(
   key: string,
 ): boolean {
   if (off.has(key)) return false;
+  // the lines a statement replaces are replaced only together with the statement's own changes to the fund
+  if (key.endsWith('#replace')) return !off.has(key.slice(0, -'#replace'.length));
   if (!key.endsWith('#sip')) return true;
   const itemKey = key.slice(0, -'#sip'.length);
   for (const p of people) {
@@ -52,7 +57,7 @@ export function selectionOf(
 ): FundSelection {
   const seen = selectableKeys(people);
   const take = seen.filter((k) => isTaken(people, off, k));
-  const funds = new Set(take.map((k) => k.replace(/#sip$/, '')));
+  const funds = new Set(take.map((k) => k.replace(/#(sip|replace)$/, '')));
   return { seen, take, count: funds.size };
 }
 

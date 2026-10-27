@@ -245,6 +245,7 @@ export async function loadTxnDetail(assetId: string, txnId: string): Promise<Rec
         .from('mf_transactions')
         .select('id, txn_on, kind, amount, units, created_at')
         .eq('asset_id', assetId)
+        .is('superseded_on', null)
         .order('txn_on')
         .order('created_at')
         .order('id')
@@ -309,10 +310,21 @@ export async function loadTxnDetail(assetId: string, txnId: string): Promise<Rec
           ? 'Entered by hand'
           : r.source === 'cas'
             ? 'Fund statement import'
-            : (r.source as string),
+            : r.source === 'csv'
+              ? 'App export (transactions file)'
+              : (r.source as string),
       note: r.source_ref ? `reference ${String(r.source_ref).slice(0, 60)}` : undefined,
     },
     { label: 'Added on', value: when(r.created_at as string) },
+    ...(r.superseded_on
+      ? [
+          {
+            label: 'Replaced by a fund statement',
+            value: when(r.superseded_on as string),
+            note: `${String(r.superseded_reason ?? 'Replaced by a fund statement')}. This line is kept here for review and is not counted anywhere.`,
+          },
+        ]
+      : []),
   ];
   return {
     assetId,

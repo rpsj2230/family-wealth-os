@@ -23,6 +23,7 @@ import type { FundRow } from '@/lib/investments';
 import { AddsUp, LedgerChip } from './DataCheck';
 import { AddTxnButton, EditFundButton } from './FundEdit';
 import { Ledger, type LedgerEntry } from './Ledger';
+import { ReplacedLines, type ReplacedRow } from './ReplacedLines';
 import { TaxPanel } from './TaxPanel';
 import {
   Chips,
@@ -104,6 +105,7 @@ export function FundPage({
   colour,
   tax,
   taxHref,
+  replaced = [],
 }: {
   fund: FundRow;
   detail: FundDetail;
@@ -125,6 +127,8 @@ export function FundPage({
   /** the exit-load and tax panel of this fund, and the address of the Tax page it points to */
   tax: FundTaxPanel;
   taxHref: string;
+  /** lines a fund statement replaced: listed (collapsed) under the transactions, counted nowhere */
+  replaced?: ReplacedRow[];
 }) {
   const f = fund;
   const d = detail;
@@ -769,6 +773,7 @@ export function FundPage({
             demo={demo}
             empty="No transactions are on file for this fund. Import a fund statement under Import, or press Add a transaction."
           />
+          <ReplacedLines rows={replaced} />
         </section>
       )}
       {tab === 'lots' && lotsBody}

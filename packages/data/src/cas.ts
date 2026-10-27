@@ -4,14 +4,17 @@ import {
   casPdfText,
   fundCsvToStatement,
   isPasswordError,
+  mergeReports,
   parseCas,
   planCasImport,
+  splitByOwner,
   type CasFund,
   type CasIo,
   type CasReport,
   type CasStatement,
   type PlanConfig,
   type Selection,
+  type SkippedFolios,
   type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -43,7 +46,7 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         await db
           .from('mf_positions')
           .select(
-            'asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on, units, invested, sip_monthly, sip_stopped',
+            'asset_id, fund_name, amfi_code, isin, folio_last4, units_as_of, started_on, units, invested, sip_monthly, sip_stopped, cas_detail_from, cas_detail_to',
           )
           .eq('household_id', hh)
           .in('asset_id', ids),
@@ -218,7 +221,30 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       );
       return a.id;
     },
-    async save({ assetId, transactions, position, valuation, closed, sip }) {
+    async save({ assetId, transactions, lineSource, replace, position, valuation, closed, sip }) {
+      // lines the statement replaces are set aside first, so nothing is counted twice at any moment (they are never deleted)
+      if (replace)
+        for (let i = 0; i < replace.keys.length; i += 200) {
+          const r = await db.rpc('supersede_fund_lines', {
+            p_household: hh,
+            p_asset: assetId,
+            p_refs: replace.keys.slice(i, i + 200),
+            p_statement_ref: replace.statementRef,
+            p_statement_on: replace.statementOn || null,
+            p_reason: replace.reason,
+          });
+          if (r.error) throw new Error(`set aside replaced lines: ${r.error.message}`);
+        }
+      // a statement that has a line which an earlier statement had set aside brings it back as its own
+      if (lineSource === 'cas' && transactions.length > 0)
+        for (let i = 0; i < transactions.length; i += 200) {
+          const r = await db.rpc('restore_fund_lines', {
+            p_household: hh,
+            p_asset: assetId,
+            p_refs: transactions.slice(i, i + 200).map((t) => t.key),
+          });
+          if (r.error) throw new Error(`restore lines: ${r.error.message}`);
+        }
       // only the lines that are not stored yet arrive here; each carries the reference it is stored under
       const rows = transactions.map((t) => ({
         household_id: hh,
@@ -230,7 +256,7 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
         nav: t.nav,
         balance_units: t.balance,
         description: t.description,
-        source: 'cas',
+        source: lineSource,
         source_ref: t.key,
       }));
       let added = 0;
@@ -253,6 +279,10 @@ export function casIo(db: SupabaseClient, hh: string): CasIo {
       if (position.startedOn) upd.started_on = position.startedOn;
       if (position.folioLast4) upd.folio_last4 = position.folioLast4;
       if (position.casAsOf) upd.cas_as_of = position.casAsOf;
+      if (position.coverTo) {
+        upd.cas_detail_from = position.coverFrom ?? null;
+        upd.cas_detail_to = position.coverTo;
+      }
       if (position.isin) upd.isin = position.isin;
       if (position.amfiCode) upd.amfi_code = position.amfiCode;
       if (position.units !== undefined && position.unitsAsOf) {
@@ -357,8 +387,14 @@ async function planRules(db: SupabaseClient, hh: string): Promise<Partial<PlanCo
 
 export interface CasPdfResult {
   outcome: 'imported' | 'partial' | 'failed';
+  /** the first person the statement was applied to (the one whose password opened it when it names nobody) */
   ownerId: string | null;
+  /** one report for everyone in the file */
   report: CasReport | null;
+  /** the report of each person in the file */
+  people?: { ownerId: string; report: CasReport }[];
+  /** folios of someone who is not in the family list: named, not applied */
+  skipped?: SkippedFolios[];
   detail: string;
   /** "2 funds updated: +5 transactions; 1 SIP stopped; 1 fund sold" */
   summary: string;
@@ -367,12 +403,21 @@ export interface CasPdfResult {
 type Candidate = { ownerId: string; passwords: string[]; panLast4: string | null };
 
 type Opened =
-  | { ok: true; stmt: CasStatement; ownerId: string }
+  | {
+      ok: true;
+      stmt: CasStatement;
+      /** the person whose password opened it (or whose PAN it names); null when it names nobody */
+      ownerId: string | null;
+      groups: { ownerId: string; stmt: CasStatement }[];
+      skipped: SkippedFolios[];
+    }
   | { ok: false; ownerId: string | null; detail: string };
 
 /**
  * Opens a fund statement with each candidate's passwords (the PAN, or the password chosen when the statement was requested)
- * until one fits, and checks the statement belongs to that person. No password or PAN is logged or returned.
+ * until one fits, and splits it by person: a statement keyed on an email address can hold the folios of several people, and each
+ * scheme belongs to the person whose PAN is printed on its folio, not to whoever opened the file. No password or PAN is logged
+ * or returned.
  */
 async function openStatement(pdf: Uint8Array, candidates: Candidate[]): Promise<Opened> {
   let text: string | null = null;
@@ -419,46 +464,70 @@ async function openStatement(pdf: Uint8Array, candidates: Candidate[]): Promise<
       panLast4 = hit[0]!.panLast4;
     }
   }
-  if (owner === null)
-    return {
-      ok: false,
-      ownerId: null,
-      detail:
-        'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
-    };
-  if (stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
-    return {
-      ok: false,
-      ownerId: owner,
-      detail:
-        'This statement belongs to a different person than the one chosen (the PAN on it does not match).',
-    };
   if (stmt.schemes.length === 0)
     return {
       ok: false,
       ownerId: owner,
       detail: stmt.warnings.join(' ') || 'Nothing recognised.',
     };
-  return { ok: true, stmt, ownerId: owner };
+  const hasFolioPan = stmt.schemes.some((s) => s.folioPan);
+  // a statement that does not print a PAN on its folios belongs to the person it names, as before
+  if (!hasFolioPan && owner === null)
+    return {
+      ok: false,
+      ownerId: null,
+      detail:
+        'The statement opened without a password, but its PAN does not match anyone saved in Settings.',
+    };
+  if (!hasFolioPan && stmt.pan && panLast4 && stmt.pan.slice(-4) !== panLast4)
+    return {
+      ok: false,
+      ownerId: owner,
+      detail:
+        'This statement belongs to a different person than the one chosen (the PAN on it does not match).',
+    };
+  const { groups, skipped } = splitByOwner(
+    stmt,
+    candidates.map((c) => ({ ownerId: c.ownerId, panLast4: c.panLast4 })),
+    owner,
+  );
+  if (groups.length === 0)
+    return {
+      ok: false,
+      ownerId: owner,
+      detail:
+        'None of the folios in this statement belong to anyone in your family list: the PANs printed on them do not match the PAN saved for anyone in Settings.',
+    };
+  return { ok: true, stmt, ownerId: owner, groups, skipped };
 }
 
 /** A fund statement that lists balances held with a depository only cannot show that a fund was sold, so it is not complete. */
 const isComplete = (stmt: CasStatement) => !stmt.schemes.some((s) => s.holdingsOnly);
 
+const skippedLine = (k: SkippedFolios) =>
+  `${k.schemes.length} scheme${k.schemes.length === 1 ? '' : 's'} on folios of someone not in your family list (PAN ending ${k.panLast4 ?? 'unknown'}): skipped`;
+
 export type CasPreview =
   | { ok: false; detail: string }
   | {
       ok: true;
+      /** the first person in the file, and the comparison for them */
       ownerId: string;
       diff: FundImportDiff;
+      /** one comparison for every person whose folios are in the file */
+      people: { ownerId: string; diff: FundImportDiff }[];
+      /** folios of someone who is not in the family list: named, and not applied */
+      skipped: SkippedFolios[];
+      basis: 'email' | 'pan' | 'unknown';
       warnings: string[];
       periodFrom: string | null;
       periodTo: string | null;
     };
 
 /**
- * What a statement would change, without writing anything: opens it (the password is used here and nowhere kept), reads what is on
- * file and compares. A fund statement for the whole PAN lists everything held, so a fund missing from it has been sold.
+ * What a statement would change, without writing anything: opens it (the password is used here and nowhere kept), splits it by
+ * person (the PAN on each folio), reads what is on file and compares. Only a statement keyed on a PAN lists everything a person
+ * holds, so only that kind can show a fund as sold by leaving it out.
  */
 export async function previewCasPdf(
   db: SupabaseClient,
@@ -469,15 +538,25 @@ export async function previewCasPdf(
 ): Promise<CasPreview> {
   const o = await openStatement(pdf, candidates);
   if (!o.ok) return { ok: false, detail: o.detail };
-  const diff = await planCasImport(o.ownerId, o.stmt, casIo(db, hh), {
-    ...(await planRules(db, hh)),
-    today: opts.today,
-    complete: isComplete(o.stmt),
-  });
+  const rules = await planRules(db, hh);
+  const io = casIo(db, hh);
+  const people: { ownerId: string; diff: FundImportDiff }[] = [];
+  for (const g of o.groups)
+    people.push({
+      ownerId: g.ownerId,
+      diff: await planCasImport(g.ownerId, g.stmt, io, {
+        ...rules,
+        today: opts.today,
+        complete: isComplete(g.stmt),
+      }),
+    });
   return {
     ok: true,
-    ownerId: o.ownerId,
-    diff,
+    ownerId: people[0]!.ownerId,
+    diff: people[0]!.diff,
+    people,
+    skipped: o.skipped,
+    basis: o.stmt.basis ?? 'unknown',
     warnings: o.stmt.warnings,
     periodFrom: o.stmt.periodFrom,
     periodTo: o.stmt.periodTo,
@@ -491,8 +570,8 @@ function changeRecord(report: CasReport, diffNotes: string[]) {
 
 /**
  * Opens a fund statement, compares it with what is on file and writes only what is new or changed: all of it (the mailbox job), or
- * only the items in `select` (the person's choice at the preview). The statement is logged in `cas_imports` (once per source) with
- * the full list of changes.
+ * only the items in `select` (the person's choice at the preview). Each person's folios in the file are applied to that person. The
+ * statement is logged in `cas_imports` (once per source) with the full list of changes.
  */
 export async function importCasPdf(
   db: SupabaseClient,
@@ -525,23 +604,36 @@ export async function importCasPdf(
   const o = await openStatement(pdf, candidates);
   if (!o.ok) return done({ outcome: 'failed', ownerId: o.ownerId, report: null, detail: o.detail });
   const io = casIo(db, hh);
-  const diff = await planCasImport(o.ownerId, o.stmt, io, {
-    ...(await planRules(db, hh)),
-    today: opts.today,
-    complete: isComplete(o.stmt),
-  });
-  const report = await applyFundDiff(diff, io, opts.select ?? null);
+  const rules = await planRules(db, hh);
+  const people: { ownerId: string; report: CasReport }[] = [];
+  const notes: string[] = [];
+  for (const g of o.groups) {
+    const diff = await planCasImport(g.ownerId, g.stmt, io, {
+      ...rules,
+      today: opts.today,
+      complete: isComplete(g.stmt),
+    });
+    const report = await applyFundDiff(diff, io, opts.select ?? null, {
+      statementRef: opts.sourceRef,
+    });
+    people.push({ ownerId: g.ownerId, report });
+    notes.push(...diff.notes);
+  }
   await syncSipEstimates(db, { householdId: hh, today: new Date(`${opts.today}T00:00:00Z`) });
+  const report = mergeReports(people.map((p) => p.report));
+  const skippedLines = o.skipped.map(skippedLine);
   const partial = report.needsReview.length > 0;
   return done(
     {
       outcome: partial ? 'partial' : 'imported',
-      ownerId: o.ownerId,
+      ownerId: people[0]!.ownerId,
       report,
+      people,
+      skipped: o.skipped,
       summary: report.summary,
-      detail: [report.summary, ...report.lines, ...o.stmt.warnings].join('\n'),
+      detail: [report.summary, ...report.lines, ...skippedLines, ...o.stmt.warnings].join('\n'),
     },
-    changeRecord(report, diff.notes),
+    changeRecord(report, [...notes, ...skippedLines]),
   );
 }
 

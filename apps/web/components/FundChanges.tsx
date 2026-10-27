@@ -2,14 +2,21 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import {
+  PRIORITY_SENTENCE,
   chipsOf,
   fmtUnits,
   formatInr,
+  fromInception,
   longDate,
   personStyles,
+  priorityTotals,
+  replaceIsChange,
+  replaceKey,
   sipChip,
   sipIsChange,
   sipKey,
+  sourceLabel,
+  sourceRank,
   type Chip,
 } from '@fwos/core';
 import type { ItemView, PersonPreview } from '@/lib/fund-import';
@@ -79,6 +86,16 @@ function Row({
   const sipLocked = sipChange && sipDependsOnFund(item) && !fundOn;
   const selectable = fundSelectable(item);
   const hasNums = item.units || item.invested || item.value || item.startedOn;
+  const rep = replaceIsChange(item) ? item.lines.replace! : null;
+  const replaceK = replaceKey(item.key);
+  const replaceOn = isTaken(people, off, replaceK);
+  const replaceLocked = !fundOn;
+  const fromWords = rep
+    ? Object.entries(rep.bySource)
+        .sort(([a], [b]) => sourceRank(b) - sourceRank(a))
+        .map(([src, n]) => `${n} ${sourceLabel(src).toLowerCase()}`)
+        .join(', ')
+    : '';
   return (
     <li className={`fc-row ${item.kind}${selectable && !fundOn ? ' off' : ''}`}>
       <div className="fc-head">
@@ -151,6 +168,57 @@ function Row({
             </div>
           )}
         </dl>
+      )}
+
+      {rep && (
+        <div className={`fc-replace${replaceLocked || !replaceOn ? ' off' : ''}`}>
+          <input
+            id={`${id}-r`}
+            type="checkbox"
+            checked={replaceOn}
+            disabled={disabled || replaceLocked}
+            onChange={(e) => onToggle(replaceK, e.target.checked)}
+            aria-label={`Replace the lines on file for ${item.name} with the statement's`}
+          />
+          <div className="fc-replacebody">
+            <label htmlFor={`${id}-r`}>
+              This statement replaces {rep.count} line{rep.count === 1 ? '' : 's'} on file (from{' '}
+              {fromWords}), adds {item.lines.newCount}, confirms {item.lines.duplicateCount}.
+            </label>
+            <p className="fc-why">
+              {replaceOn && !replaceLocked
+                ? 'They are kept in a hidden list on the fund page, not deleted. Untick to keep your own lines for this fund.'
+                : 'Your own lines stay as they are for this fund.'}
+            </p>
+            <details className="fc-lines fc-replaced">
+              <summary>
+                The {Math.min(rep.views.length, 5)} first of {rep.count}
+              </summary>
+              <table className="fc-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>What</th>
+                    <th>From</th>
+                    <th className="num">Amount</th>
+                    <th className="num">Units</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rep.views.slice(0, 5).map((l, n) => (
+                    <tr key={`${l.date}${n}`}>
+                      <td>{longDate(l.date)}</td>
+                      <td>{KIND_WORD[l.kind] ?? l.kind}</td>
+                      <td>{sourceLabel(l.source)}</td>
+                      <td className="num">{formatInr(l.amount)}</td>
+                      <td className="num">{fmtUnits(l.units)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          </div>
+        </div>
       )}
 
       {item.lines.newCount > 0 && (
@@ -259,8 +327,24 @@ export function FundChanges({
       return next;
     });
 
+  const statementOnly = people.length > 0 && people.every((p) => p.files.length === 0);
+  const totals = useMemo(() => priorityTotals(people.flatMap((p) => p.diff.items)), [people]);
   return (
     <div className="fc">
+      {statementOnly && (
+        <div className="fc-priority" role="note">
+          <p>
+            <strong>{PRIORITY_SENTENCE.split('. ')[0]}.</strong>{' '}
+            {PRIORITY_SENTENCE.split('. ').slice(1).join('. ')}
+          </p>
+          <p className="fc-counts">
+            {totals.replaced > 0
+              ? `${totals.replaced} line${totals.replaced === 1 ? '' : 's'} on file in ${totals.funds} fund${totals.funds === 1 ? '' : 's'} replaced, `
+              : 'Nothing on file is replaced, '}
+            {totals.added} line{totals.added === 1 ? '' : 's'} added, {totals.confirmed} confirmed.
+          </p>
+        </div>
+      )}
       {inputs && (
         <>
           {sel.seen.map((k) => (
@@ -290,7 +374,7 @@ export function FundChanges({
             </h3>
             <p className="muted small fc-period">
               {p.diff.periodTo
-                ? `Dated ${longDate(p.diff.periodTo)}${p.diff.periodFrom ? `, from ${longDate(p.diff.periodFrom)}` : ''}. `
+                ? `Dated ${longDate(p.diff.periodTo)}${p.diff.periodFrom ? (fromInception(p.diff.periodFrom) ? ', from the beginning' : `, from ${longDate(p.diff.periodFrom)}`) : ''}. `
                 : ''}
               {changed.length === 0
                 ? 'Nothing new.'
@@ -330,6 +414,13 @@ export function FundChanges({
                           · SIP {formatInr(i.sip.after)} unchanged
                         </span>
                       ) : null}
+                      {i.notes
+                        .filter((n) => n.startsWith('Kept:') || n.includes('inside the period'))
+                        .map((n) => (
+                          <span key={n} className="muted small fc-kept">
+                            {n}
+                          </span>
+                        ))}
                     </li>
                   ))}
                 </ul>
