@@ -106,7 +106,7 @@ export function computeSetupStatus(f: SetupFacts): SetupItem[] {
       href: '/settings?tab=rules',
       hint:
         unconfirmed === 0
-          ? 'All seven groups are saved by you.'
+          ? `All ${RULE_GROUPS.length} groups are saved by you.`
           : `${unconfirmed} of ${RULE_GROUPS.length} groups still use the built-in numbers: ${list(
               f.unconfirmedRuleGroups.map((g) => GROUP_TITLE[g]),
             )}.`,

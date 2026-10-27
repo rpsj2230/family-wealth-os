@@ -28,6 +28,7 @@ import {
   FundEditProvider,
   type FundEditActions,
 } from '@/components/invest/FundEdit';
+import { DataCheck } from '@/components/invest/DataCheck';
 import { FundsTable } from '@/components/invest/FundsTable';
 import { Ledger } from '@/components/invest/Ledger';
 import {
@@ -170,6 +171,7 @@ export function InvestShell({
     sipMonthly: h.sipMonthly,
     withStatement: stats.all.withStatement,
     estimated: stats.all.estimated,
+    unreconciled: funds.filter((f) => f.ledger.figuresEstimated).length,
     longShare: stats.all.holding.longShare,
     realised: stats.all.realised,
   });
@@ -408,6 +410,7 @@ function OverviewBody({
         <Link href="/import">Import page</Link>, or press Add a fund.
       </p>
     );
+  const fundHref = (id: string) => (demo ? `/demo/asset?kind=fund&id=${id}` : `/asset/${id}`);
   const profile = perf.profile;
   const bench = view.benchmark;
   const hasBench = !!bench && perf.versus.some((x) => x.v.benchmark !== null);
@@ -426,10 +429,27 @@ function OverviewBody({
   const grand = totalsOfLines(lines, total, xirrOf);
   const catColour = slotColours(CATEGORY_ORDER.filter((k) => view.palette.categories.includes(k)));
   const cat = foldShares(stats.all.byCategory, cfg.maxSlices);
-  const fundHref = (id: string) => (demo ? `/demo/asset?kind=fund&id=${id}` : `/asset/${id}`);
   const people = who ? null : groupLines(lines, 'person', xirrOf);
   return (
     <>
+      <section className="card dcsection" aria-labelledby="ov-dc">
+        <div className="cardhead">
+          <h2 id="ov-dc">Is the history complete?</h2>
+          <Link className="sectionlink" href={link({ tab: 'funds', group: undefined })}>
+            Funds
+          </Link>
+        </div>
+        {view.groups.map((g) => (
+          <div
+            key={g.ownerId}
+            className="dcperson"
+            style={{ ['--person' as string]: styles[g.ownerId]?.colour }}
+          >
+            <h3 className="dcname">{g.name}</h3>
+            <DataCheck summary={g.ledger} fundHref={fundHref} />
+          </div>
+        ))}
+      </section>
       <div className="invgrid two">
         <section className="card" aria-labelledby="ov-v">
           <div className="cardhead">
@@ -634,6 +654,7 @@ function FundsBody({
         goalName={goalName}
         demo={demo}
         matchHref={matchHref}
+        checks={Object.fromEntries(view.groups.map((g) => [g.ownerId, g.ledger]))}
       />
       {view.household.xirrEstimated && (
         <p className="muted small">

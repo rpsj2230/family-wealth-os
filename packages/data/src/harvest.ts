@@ -1,17 +1,22 @@
 import {
+  allowanceUsed,
   approximateFlows,
+  effectiveRules,
   fundTaxClass,
+  fyStartOf,
   harvestDueOn,
   harvestTaskTitle,
   planHarvest,
+  realisedSince,
   type HarvestPlan,
   type HarvestLot,
   type HarvestPosition,
 } from '@fwos/core';
-import { fifoLots, type CasTxn } from '@fwos/ingest';
+import { fundLedger, type CasTxn } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
 import { pageAll } from './paging';
+import { loadSettings } from './settings';
 
 /** Fund positions with today's value, for the harvest planner. Works with the user's client (RLS) or the service role. */
 export async function loadHarvestPositions(
@@ -26,10 +31,13 @@ export async function loadHarvestPositions(
   /** net short- and long-term equity gains already booked this financial year per person, before set-off */
   ytd: Record<string, { stcg: number; ltcg: number }>;
 }> {
-  const l = await loadPortfolioData(db, {
-    ...(opts.householdId ? { householdId: opts.householdId } : {}),
-    ...(opts.today ? { today: opts.today } : {}),
-  });
+  const [l, settings] = await Promise.all([
+    loadPortfolioData(db, {
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
+      ...(opts.today ? { today: opts.today } : {}),
+    }),
+    loadSettings(db, opts.householdId),
+  ]);
   const q = db
     .from('mf_positions')
     .select(
@@ -61,15 +69,16 @@ export async function loadHarvestPositions(
     nav: number | null;
     balance_units: number | null;
     description: string | null;
+    source: string | null;
   }>((from, to) => {
     const tq = db
       .from('mf_transactions')
-      .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description')
+      .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description, source')
       .order('txn_on', { ascending: true })
       .order('id');
     return (opts.householdId ? tq.eq('household_id', opts.householdId) : tq).range(from, to);
   });
-  const byAsset = new Map<string, CasTxn[]>();
+  const byAsset = new Map<string, (CasTxn & { source: string | null })[]>();
   for (const t of txRows)
     byAsset.set(t.asset_id, [
       ...(byAsset.get(t.asset_id) ?? []),
@@ -81,6 +90,7 @@ export async function loadHarvestPositions(
         units: Number(t.units),
         nav: t.nav === null ? null : Number(t.nav),
         balance: t.balance_units === null ? null : Number(t.balance_units),
+        source: t.source,
       },
     ]);
   const todayIso = l.today.toISOString().slice(0, 10);
@@ -129,21 +139,21 @@ export async function loadHarvestPositions(
         { date: n.nav_date, nav: Number(n.nav) },
       ]);
   }
-  const fyStart = `${Number(todayIso.slice(5, 7)) >= 4 ? todayIso.slice(0, 4) : String(Number(todayIso.slice(0, 4)) - 1)}-04-01`;
+  const fyStart = fyStartOf(todayIso);
+  const holdingMonths =
+    effectiveRules(todayIso, settings.rules)?.rules.equity.holdingMonthsLong ?? null;
   const ytdRealised: Record<string, number> = {};
   const ytd: Record<string, { stcg: number; ltcg: number }> = {};
   const lotsOf = new Map<string, HarvestPosition['lots']>();
   for (const r of rows) {
     const txns = byAsset.get(r.asset_id);
     if (!txns || txns.length === 0 || !owner.has(r.asset_id)) continue;
-    const first = txns[0]!;
-    const last = txns[txns.length - 1]!;
-    const prior = first.balance !== null ? Math.max(0, first.balance - first.units) : 0;
-    const res = fifoLots({
-      transactions: txns,
-      openingUnits: prior,
-      closingUnits: last.balance,
+    // the same ledger the Investments page uses: same-day lines put in order, assumed instalments never decide
+    const res = fundLedger({
+      txns,
       costValue: Number(r.invested ?? 0) || null,
+      unitsHeld: l.fundInfo[r.asset_id]?.units ?? null,
+      unitTolerance: settings.config.funds.unitTolerance,
     });
     // lots only count when they add up to the units held; otherwise the old method is used for this fund
     if (res.reconciled)
@@ -153,32 +163,27 @@ export async function loadHarvestPositions(
           acquiredOn: x.acquiredOn === '1900-01-01' ? '0001-01-01' : x.acquiredOn,
           units: x.units,
           cost: x.acquiredOn === '1900-01-01' ? null : x.cost,
+          ...(x.estimated ? { estimated: true } : {}),
         })),
       );
     const ow = owner.get(r.asset_id)!;
-    for (const x of res.realised) {
-      if (x.soldOn < fyStart || x.cost === null) continue;
-      const heldMonths =
-        (Date.parse(`${x.soldOn}T00:00:00Z`) - Date.parse(`${x.acquiredOn}T00:00:00Z`)) /
-        (86_400_000 * 30.4375);
-      if (fundTaxClass(r.fund_name, categoryOf.get(r.amfi_code ?? '') ?? null).class !== 'equity')
-        continue;
-      const cur = (ytd[ow] ??= { stcg: 0, ltcg: 0 });
-      if (heldMonths > 12) {
-        ytdRealised[ow] = (ytdRealised[ow] ?? 0) + (x.proceeds - x.cost);
-        cur.ltcg += x.proceeds - x.cost;
-      } else cur.stcg += x.proceeds - x.cost;
-    }
+    if (
+      holdingMonths === null ||
+      fundTaxClass(r.fund_name, categoryOf.get(r.amfi_code ?? '') ?? null).class !== 'equity'
+    )
+      continue;
+    const booked = realisedSince({ sold: res.realised, fyStart, holdingMonths });
+    const cur = (ytd[ow] ??= { stcg: 0, ltcg: 0 });
+    cur.stcg += booked.stcg;
+    cur.ltcg += booked.ltcg;
   }
   // a short-term loss is set off against long-term gain before the allowance applies
   for (const k of Object.keys(ytd)) {
     const y = ytd[k]!;
     y.stcg = Math.round(y.stcg);
     y.ltcg = Math.round(y.ltcg);
-    ytdRealised[k] = Math.max(0, Math.round(Math.max(0, y.ltcg + Math.min(0, y.stcg))));
+    ytdRealised[k] = allowanceUsed(y);
   }
-  for (const k of Object.keys(ytdRealised))
-    ytdRealised[k] = Math.max(0, Math.round(ytdRealised[k]!));
   const positions: HarvestPosition[] = rows
     .filter((r) => owner.has(r.asset_id))
     .map((r) => {

@@ -13,6 +13,7 @@ const empty: SetupFacts = {
     'rates',
     'refunds',
     'harvest',
+    'funds',
     'liquidity',
   ],
   taxRules: [],
@@ -114,7 +115,7 @@ describe('computeSetupStatus', () => {
       unconfirmedRuleGroups: ['deposits', 'harvest', 'liquidity'],
     }).rules!;
     expect(r.done).toBe(false);
-    expect(r.hint).toContain('3 of 9');
+    expect(r.hint).toContain('3 of 10');
     expect(r.hint).toContain('Deposits, Tax-gain harvesting and 1 more');
   });
 

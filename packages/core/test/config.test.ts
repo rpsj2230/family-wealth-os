@@ -174,4 +174,34 @@ describe('sheet sync settings', () => {
     // the last row can never be above the first
     expect(configFromJson({ sheetSync: { firstRow: 50, lastRow: 10 } }).sheetSync.lastRow).toBe(50);
   });
+
+  it('the fund history check: a date and two tolerances, each falling back when they make no sense', () => {
+    expect(DEFAULT_CONFIG.funds).toMatchObject({
+      historyFrom: '2021-01-01',
+      unitTolerance: 0.001,
+      moneyTolerance: 1,
+    });
+    const ok = configFromJson({
+      funds: { historyFrom: '2019-04-01', unitTolerance: 0.0005, moneyTolerance: 5 },
+    }).funds;
+    expect(ok).toMatchObject({
+      historyFrom: '2019-04-01',
+      unitTolerance: 0.0005,
+      moneyTolerance: 5,
+    });
+    const bad = configFromJson({
+      funds: { historyFrom: '2021-02-30', unitTolerance: -1, moneyTolerance: 'x' },
+    }).funds;
+    expect(bad).toMatchObject({
+      historyFrom: '2021-01-01',
+      unitTolerance: 0.001,
+      moneyTolerance: 1,
+    });
+    expect(configFromJson({ funds: { historyFrom: 'last year' } }).funds.historyFrom).toBe(
+      '2021-01-01',
+    );
+    expect(configFromJson({}).harvest.otherLongMonths).toBe(24);
+    expect(configFromJson({ harvest: { otherLongMonths: 0 } }).harvest.otherLongMonths).toBe(24);
+    expect(configFromJson({ harvest: { otherLongMonths: 36 } }).harvest.otherLongMonths).toBe(36);
+  });
 });

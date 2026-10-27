@@ -20,6 +20,7 @@ import { fundEditRows } from '@/lib/invest-ledger';
 import { FundEditProvider } from '@/components/invest/FundEdit';
 import { FundPage, parseFundTab } from '@/components/invest/FundPage';
 import { buildFundDetail, NAV_POINTS } from '@/lib/fund-detail-model';
+import { buildFundTax } from '@/lib/fund-tax';
 import type { FundRow } from '@/lib/investments';
 import {
   buildActivity,
@@ -303,6 +304,8 @@ export default async function DemoAsset({
             holdingMonths={DEMO_HOLDING_MONTHS}
             config={DEFAULT_CONFIG.funds}
             colour={owner.colour}
+            tax={buildFundTax(all, sample.row)}
+            taxHref="/demo/tax-harvest"
             overview={
               <FundDetailPanel
                 fund={sample.row}

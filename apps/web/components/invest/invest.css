@@ -1426,3 +1426,384 @@ table.pltbl td {
   gap: 8px;
   margin: 0 0 10px;
 }
+
+/* the "est." mark on a figure whose fund history does not reconcile (the same mark as on Accounts and Home) */
+.invhero .bv-est,
+.fundslist .bv-est,
+.fundhero .bv-est,
+.datacheck .bv-est {
+  display: inline-block;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+  font-size: 0.64rem;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  font-weight: 600;
+  vertical-align: middle;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.invhero abbr.bv-est,
+.fundslist abbr.bv-est,
+.fundhero abbr.bv-est,
+.datacheck abbr.bv-est {
+  text-decoration: none;
+  cursor: help;
+}
+
+/* ------------------------------------------------------------------ data check: does the history add up */
+.ledgerchip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  background: var(--soft);
+  color: var(--muted);
+}
+.ledgerchip.ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.ledgerchip.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.ledgerchip.bad {
+  background: var(--bad-bg);
+  color: var(--fail);
+}
+.fl-sub > .ledgerchip {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.fl-sub > .ledgerchip + .fl-subtext {
+  flex-shrink: 100;
+}
+.datacheck {
+  margin: 0;
+  padding: 6px 12px 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  border-left: 4px solid var(--person, var(--primary));
+  background: var(--card);
+}
+.datacheck.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.datacheck.ok {
+  color: var(--muted);
+}
+.datacheck p {
+  margin: 0;
+}
+.datacheck .dc-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.datacheck .dc-icon {
+  font-weight: 700;
+}
+.datacheck.ok .dc-icon {
+  color: var(--ok-fg);
+}
+.datacheck .muted {
+  color: inherit;
+  opacity: 0.8;
+}
+.datacheck .dc-late {
+  margin-top: 4px;
+}
+.datacheck details {
+  margin-top: 4px;
+}
+.datacheck summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.datacheck ul.dc-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.datacheck ul.dc-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  min-width: 0;
+}
+.datacheck ul.dc-list li a {
+  font-weight: 600;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+.datacheck ul.dc-list li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.datacheck .dc-fix {
+  margin-top: 6px;
+}
+tr.fl-datacheck td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+tr.fl-datacheck.warn td {
+  background: var(--warn-bg);
+}
+tr.fl-datacheck td .datacheck {
+  background: transparent;
+}
+@container (max-width: 800px) {
+  table.fl tr.fl-datacheck {
+    margin: 0 0 8px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  table.fl tr.fl-datacheck td.c-sip,
+  table.fl tr.fl-datacheck td.c-act {
+    display: none;
+  }
+  .fl-sub > .ledgerchip {
+    max-width: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    border-radius: 10px;
+  }
+}
+/* "Does this add up?" on a fund's page */
+.addsup {
+  padding: 10px 14px;
+}
+.addsup > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.addsup > summary::-webkit-details-marker {
+  display: none;
+}
+.addsup > summary h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.addsup .au-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px 14px;
+  margin: 10px 0;
+}
+.addsup .au-facts dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.addsup .au-facts dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.addsup .au-breaks h3 {
+  margin: 10px 0 4px;
+  font-size: 0.85rem;
+}
+.addsup .au-breaks ul,
+.addsup ul.au-notes {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.addsup ul.au-notes li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+.addsup .au-fix {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.addsup .fl-s.fail {
+  color: var(--fail);
+}
+.addsup table.au-table th,
+.addsup table.au-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.dcsection .dcperson {
+  margin: 0 0 8px;
+}
+.dcsection .dcname {
+  margin: 0 0 2px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.dcsection .datacheck {
+  border-radius: 8px;
+}
+
+/* ------------------------------------------------------------------ exit load and tax panel on a fund's page */
+.taxpanel .tp-status {
+  display: block;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.taxpanel .tp-status.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.taxpanel .tp-status.ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.taxpanel .tp-status a {
+  color: inherit;
+  font-weight: 600;
+}
+.taxpanel .tp-warn {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  overflow-wrap: anywhere;
+}
+.taxpanel .tp-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.taxpanel .tp-tile {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--soft);
+}
+.taxpanel .tp-tile dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.taxpanel .tp-tile dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.taxpanel .tp-tile dd.v {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.taxpanel .tp-tile dd.s {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.taxpanel .tp-lots {
+  margin: 0 0 12px;
+}
+.taxpanel .tp-lots > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.taxpanel table.tp-table th,
+.taxpanel table.tp-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.taxpanel table.tp-table tr.underload td {
+  background: color-mix(in srgb, var(--warn-bg) 55%, transparent);
+}
+.taxpanel table.tp-table tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+}
+.taxpanel .tp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.taxpanel .tp-harvest {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.taxpanel .tp-harvest h3 {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+.taxpanel .tp-harvest.sell_now {
+  border-color: var(--ok-fg);
+}
+.taxpanel .tp-harvest ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+.taxpanel .tp-harvest li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+.taxpanel .tp-head {
+  margin: 0 0 4px;
+}
+.taxpanel .takeout {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+.taxpanel .takeout label {
+  display: block;
+  margin-bottom: 4px;
+}
+.taxpanel .takeout input {
+  width: 100%;
+  max-width: 260px;
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+}
+.taxpanel .to-result p,
+.taxpanel .to-list {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.taxpanel .to-list {
+  padding-left: 18px;
+}
+.taxpanel .tp-foot {
+  margin: 10px 0 0;
+}
+
+.addsup .au-breaks li {
+  font-size: 0.84rem;
+}

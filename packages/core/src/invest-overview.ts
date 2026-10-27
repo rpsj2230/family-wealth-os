@@ -6,6 +6,7 @@
 import { BEFORE_STATEMENT, type RealisedSummary, type StatFund } from './fund-stats';
 import { addMonthsIso } from './harvest-lots';
 import { sipSummary } from './fund-timeline';
+import type { LedgerStatus, LedgerVerdict } from './ledger-check';
 
 // ------------------------------------------------------------------------------------------------
 // Headline
@@ -23,6 +24,8 @@ export interface HeroInput {
   /** funds whose figures rest on a statement, and funds estimated from the start date and SIP */
   withStatement: number;
   estimated: number;
+  /** funds whose transaction history does not reconcile, so the headline figures are partly estimated */
+  unreconciled?: number;
   longShare: number | null;
   realised: RealisedSummary;
 }
@@ -55,6 +58,7 @@ export interface Hero {
   longShare: number | null;
   withStatement: number;
   estimated: number;
+  unreconciled: number;
   /** how today's value splits between the money put in and its growth: each 0 to 1, summing to 1 (growth is 0 for a loss) */
   split: { cost: number; growth: number } | null;
 }
@@ -94,6 +98,7 @@ export function heroModel(i: HeroInput): Hero {
     longShare: i.longShare,
     withStatement: i.withStatement,
     estimated: i.estimated,
+    unreconciled: i.unreconciled ?? 0,
     split,
   };
 }
@@ -138,6 +143,10 @@ export interface FundLine {
   navDate: string | null;
   /** in words, where today's value comes from */
   valueBasis: string;
+  /** whether the transaction history adds up, and the chip that says so; the figures of a fund that does not reconcile carry "est." */
+  ledgerStatus: LedgerStatus;
+  ledgerChip: LedgerVerdict['chip'];
+  figuresEstimated: boolean;
 }
 
 export type GroupBy = 'person' | 'goal' | 'kind' | 'house' | 'none';
@@ -164,6 +173,8 @@ export interface GroupTotals {
   xirrEstimated: boolean;
   share: number;
   sipMonthly: number;
+  /** funds in the group whose history does not reconcile, so the figures above are partly estimated */
+  unreconciled: number;
 }
 
 export interface FundGroup {
@@ -197,6 +208,7 @@ export function totalsOfLines(
     xirrEstimated: x.estimated,
     share: everything > 0 ? value / everything : 0,
     sipMonthly: lines.filter((l) => !l.sipStopped).reduce((a, l) => a + (l.sipMonthly ?? 0), 0),
+    unreconciled: lines.filter((l) => l.figuresEstimated).length,
   };
 }
 

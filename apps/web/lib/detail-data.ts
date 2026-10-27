@@ -13,7 +13,7 @@ import {
 import type { ActivityItem } from '@/components/ActivityLog';
 import type { DetailTableData } from '@/components/DetailTable';
 import type { Fact } from '@/components/AssetFacts';
-import { loadSettings } from '@fwos/data';
+import { loadSettings, pageAll } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext, type Ctx } from './data';
 import {
@@ -103,12 +103,16 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
         )
         .eq('asset_id', id)
         .maybeSingle(),
-      supabase
-        .from('mf_transactions')
-        .select('id, txn_on, kind, amount, units, nav, balance_units, description')
-        .eq('asset_id', id)
-        .order('txn_on')
-        .limit(5000),
+      // the API returns at most 1,000 rows a request, so a long ledger is read in pages (a plain limit would drop the newest lines)
+      pageAll<Record<string, unknown>>((from, to) =>
+        supabase
+          .from('mf_transactions')
+          .select('id, txn_on, kind, amount, units, nav, balance_units, description')
+          .eq('asset_id', id)
+          .order('txn_on')
+          .order('id')
+          .range(from, to),
+      ),
       supabase
         .from('receivables')
         .select('counterparty, lent, lent_on, expected_on, interest_note')
@@ -211,7 +215,12 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     .flatMap((sct) => sct.rows)
     .filter((r) => r.assetId !== id)
     .map((r) => ({ id: r.assetId, label: r.code, value: r.current }));
+  const unitTolerance =
+    asset.type === 'mutual_fund'
+      ? (await loadSettings(supabase as unknown as SupabaseClient)).config.funds.unitTolerance
+      : undefined;
   const input: AssetViewInput = {
+    ...(unitTolerance !== undefined ? { unitTolerance } : {}),
     rateInfo: cashRate ?? null,
     market: bestFd
       ? {
@@ -271,7 +280,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
           sip_monthly: position.sip_monthly === null ? null : Number(position.sip_monthly),
         }
       : null,
-    txns: ((tx.data ?? []) as unknown as AssetViewInput['txns']).map((t) => ({
+    txns: (tx as unknown as AssetViewInput['txns']).map((t) => ({
       ...t,
       amount: Number(t.amount),
       units: Number(t.units),

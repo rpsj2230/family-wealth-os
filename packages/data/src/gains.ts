@@ -1,6 +1,7 @@
 import { fyBounds, type RealisedRow } from '@fwos/core';
 import { pageAll } from './paging';
-import { fifoLots, type CasTxn } from '@fwos/ingest';
+import { fundLedger, type CasTxn } from '@fwos/ingest';
+import { loadSettings } from './settings';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** Every sale of fund units in a financial year, matched to the purchases it used (oldest first), from the fund statements. */
@@ -24,10 +25,11 @@ export async function loadRealisedGains(
       nav: number | null;
       balance_units: number | null;
       description: string | null;
+      source: string | null;
     }>((from, to) =>
       sel(
         'mf_transactions',
-        'asset_id, txn_on, kind, amount, units, nav, balance_units, description',
+        'asset_id, txn_on, kind, amount, units, nav, balance_units, description, source',
       )
         .order('txn_on', { ascending: true })
         .order('id')
@@ -53,7 +55,8 @@ export async function loadRealisedGains(
       a.owner_id,
     ]),
   );
-  const byAsset = new Map<string, CasTxn[]>();
+  const unitTolerance = (await loadSettings(db, householdId)).config.funds.unitTolerance;
+  const byAsset = new Map<string, (CasTxn & { source: string | null })[]>();
   for (const t of tx)
     byAsset.set(t.asset_id, [
       ...(byAsset.get(t.asset_id) ?? []),
@@ -65,6 +68,7 @@ export async function loadRealisedGains(
         units: Number(t.units),
         nav: t.nav === null ? null : Number(t.nav),
         balance: t.balance_units === null ? null : Number(t.balance_units),
+        source: t.source,
       },
     ]);
   const rows: RealisedRow[] = [];
@@ -72,13 +76,12 @@ export async function loadRealisedGains(
     const owner = ownerOf.get(assetId);
     const p = posOf.get(assetId);
     if (!owner || !p) continue;
-    const first = txns[0]!;
-    const last = txns[txns.length - 1]!;
-    const res = fifoLots({
-      transactions: txns,
-      openingUnits: first.balance !== null ? Math.max(0, first.balance - first.units) : 0,
-      closingUnits: last.balance,
+    // same-day lines are put in the order their running balance gives, so a sale and a purchase on one day cannot swap places
+    const res = fundLedger({
+      txns,
       costValue: Number(p.invested ?? 0) || null,
+      unitsHeld: null,
+      unitTolerance,
     });
     for (const x of res.realised)
       if (x.soldOn >= start && x.soldOn <= end)

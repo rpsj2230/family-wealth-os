@@ -11,7 +11,16 @@ export interface FundTxn {
   units: number;
   /** rupees paid (positive) or received (positive); the sign of `units` says which */
   amount: number;
+  /**
+   * the kind of line, when known. Units bought with a dividend (`dividend_reinvest`) cost the investor nothing: the money paid out
+   * and put back is one movement, so the line is not a cash flow of the return.
+   */
+  kind?: string | null;
 }
+
+/** A line that moves money in or out of the investor's pocket (units bought with a reinvested dividend do not). */
+export const isCashFlow = (t: { units: number; amount: number; kind?: string | null }) =>
+  t.units !== 0 && t.amount !== 0 && t.kind !== 'dividend_reinvest';
 
 export interface FundForReturns {
   assetId: string;
@@ -71,7 +80,7 @@ export interface Returns {
 
 const flowsOf = (f: FundForReturns, today: string) => [
   ...(f.txns.length > 0 ? f.txns : f.plan ? approximateFlows(f.plan, today) : [])
-    .filter((t) => t.units !== 0 && t.amount !== 0)
+    .filter(isCashFlow)
     .map((t) => ({
       date: new Date(`${t.date}T00:00:00Z`),
       amount: t.units > 0 ? -Math.abs(t.amount) : Math.abs(t.amount),

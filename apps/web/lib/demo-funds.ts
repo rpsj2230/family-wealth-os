@@ -13,6 +13,11 @@ import {
   fundTaxClass,
   flowsOfFund,
   lastNavMove,
+  ledgerCheck,
+  ledgerSummary,
+  openingFlow,
+  RULES,
+  type LedgerLine,
   moveAmount,
   monthEnds,
   perfDates,
@@ -64,6 +69,10 @@ interface Spec {
   plan?: 'direct' | 'regular';
   /** no fund statement: only the amount put in and the start date are known */
   plain?: boolean;
+  /** units already held before the first line on file, and what they cost: the history starts midway */
+  opening?: { units: number; cost: number };
+  /** months (YYYY-MM) whose lines are missing from the ledger although the units are held: a gap */
+  drop?: string[];
   goal?: string;
 }
 
@@ -112,6 +121,7 @@ const SPECS: Spec[] = [
     sip: { monthly: 15_000, start: '2024-03-05' },
     extras: [['2025-06-12', 'switch_in', 0]],
     plan: 'regular',
+    opening: { units: 300, cost: 11_500 },
   },
   {
     id: 'f8',
@@ -161,6 +171,7 @@ const SPECS: Spec[] = [
       ['2026-02-12', 300],
       ['2026-10-14', 120],
     ],
+    drop: ['2024-05'],
     goal: 'g1',
   },
   {
@@ -301,7 +312,7 @@ function recipe(s: Spec): CasTxn[] {
     });
   }
   rows.sort((a, b) => a.date.localeCompare(b.date) || b.units - a.units);
-  let bal = 0;
+  let bal = s.opening?.units ?? 0;
   return rows.map((r) => ({ ...r, balance: (bal = Math.round((bal + r.units) * 1000) / 1000) }));
 }
 
@@ -315,16 +326,20 @@ function buildRow(
   const all = recipe(s);
   const hidden = s.plain;
   const navs = s.amfi ? dailyNavs(s) : [];
-  const txns = hidden ? [] : all;
-  const unitsNow = Math.round(all.reduce((a, t) => a + t.units, 0) * 1000) / 1000;
+  // a gap: lines of some months are missing from the ledger although the units are held (the balances still show it)
+  const txns = hidden ? [] : all.filter((t) => !s.drop?.includes(t.date.slice(0, 7)));
+  const unitsNow =
+    Math.round(((s.opening?.units ?? 0) + all.reduce((a, t) => a + t.units, 0)) * 1000) / 1000;
   const navNow = navOn(s, DEMO_TODAY);
-  const ledger = fundLedger({ txns, costValue: null, unitsHeld: unitsNow });
+  // what the fund records as invested comes from the whole history, however much of it is on file
+  const whole = fundLedger({ txns: all, costValue: null, unitsHeld: unitsNow });
   const heldCost = hidden
     ? all.filter((t) => t.units > 0).reduce((a, t) => a + t.amount, 0)
-    : ledger.lots.reduce((a, l) => a + (l.cost ?? 0), 0);
+    : whole.lots.reduce((a, l) => a + (l.cost ?? 0), 0) + (s.opening?.cost ?? 0);
   const invested = Math.round(heldCost);
+  const ledger = fundLedger({ txns, costValue: invested || null, unitsHeld: unitsNow });
   const value = Math.round(unitsNow * navNow);
-  const startedOn = all[0]?.date ?? null;
+  const startedOn = s.opening ? null : (all[0]?.date ?? null);
   const sipMonthly = s.sip?.monthly ?? null;
   const sipStopped = !!s.sip?.stopAfter;
   // recorded values for a fund with no statement: month ends, valued at that day's price
@@ -355,12 +370,34 @@ function buildRow(
           cur,
           chartDates(range, history[0]?.date ?? DEMO_TODAY, DEMO_TODAY),
         );
+  // the lines the fund page checks: the statement lines on file (a fund with no statement has none)
+  const lines: LedgerLine[] = txns.map((t) => ({
+    date: t.date,
+    kind: t.kind,
+    units: t.units,
+    amount: t.amount,
+    nav: t.nav,
+    balance: t.balance,
+    source: 'cas',
+    description: t.description,
+  }));
+  const verdict = ledgerCheck({
+    lines,
+    position: { units: unitsNow, unitsAsOf: DEMO_TODAY, invested, startedOn },
+    heldCost:
+      ledger.reconciled && ledger.lots.every((l) => l.cost !== null)
+        ? ledger.lots.reduce((a, l) => a + (l.cost ?? 0), 0)
+        : null,
+    tolerance: { units: config.unitTolerance, money: config.moneyTolerance },
+    historyFrom: config.historyFrom,
+  });
+  const opening = openingFlow(txns, config.unitTolerance);
   const fr: FundForReturns = {
     assetId: s.id,
     ownerId: s.owner,
     name: s.name,
     value,
-    txns: hist.txns,
+    txns: [...hist.txns, ...(opening ? [opening] : [])],
     plan: { invested, startedOn, sipMonthly, sipStopped },
   };
   const r = returnsFor([fr], DEMO_TODAY);
@@ -397,17 +434,15 @@ function buildRow(
       amount: Math.abs(t.amount),
       nav: t.nav,
       balance: t.balance,
+      kind: t.kind,
     })),
     plan: { invested, startedOn, sipMonthly, sipStopped },
     today: DEMO_TODAY,
+    unitTolerance: config.unitTolerance,
   });
-  const perf = startedOn
-    ? fundSeries(
-        hist,
-        DEMO_TODAY,
-        cur,
-        perfDates(history[0]?.date ?? startedOn, DEMO_TODAY, config.weeksShown),
-      )
+  const firstDate = history[0]?.date ?? startedOn;
+  const perf = firstDate
+    ? fundSeries(hist, DEMO_TODAY, cur, perfDates(firstDate, DEMO_TODAY, config.weeksShown))
     : [];
   const row: FundRow = {
     assetId: s.id,
@@ -419,7 +454,7 @@ function buildRow(
     sipMonthly,
     sipStopped,
     xirr: r.xirr,
-    xirrEstimated: r.estimatedFunds > 0,
+    xirrEstimated: r.estimatedFunds > 0 || verdict.figuresEstimated,
     gain: r.funds > 0 && r.estimatedFunds === 0 ? r.gain : value - invested,
     dayAmount: move ? moveAmount(value, move.pct) : null,
     dayPct: move ? move.pct : null,
@@ -441,6 +476,10 @@ function buildRow(
     category: fundCategory(s.name, cat),
     amc: amcLabel(s.amc),
     taxClass: fundTaxClass(s.name, cat).class,
+    taxInfo: (() => {
+      const c = fundTaxClass(s.name, cat);
+      return { label: c.label, note: c.note, certain: c.certain, lockInMonths: c.lockInMonths };
+    })(),
     label: null,
     status: 'active',
     exitLoadPct: s.id === 'f2' ? 0.01 : null,
@@ -454,12 +493,13 @@ function buildRow(
           })
         : [],
     perf,
-    periodPoints: startedOn
+    periodPoints: firstDate
       ? fundSeries(hist, DEMO_TODAY, cur, periodDates(DEMO_TODAY, DEFAULT_CONFIG.home.changeDays))
       : [],
     flows: fl.flows,
     flowsEstimated: fl.estimated,
     hasStatement: !hidden,
+    ledger: verdict,
     txns: stat,
     lots,
     lotsBasis,
@@ -474,7 +514,18 @@ function totalsOf(rows: FundRow[]): Totals {
     ownerId: f.ownerId,
     name: f.name,
     value: f.value,
-    txns: f.txns.map((t) => ({ date: t.date, units: t.units, amount: Math.abs(t.amount) })),
+    txns: [
+      ...f.txns.map((t) => ({
+        date: t.date,
+        units: t.units,
+        amount: Math.abs(t.amount),
+        kind: t.kind,
+      })),
+      ...(() => {
+        const o = openingFlow(f.txns, DEFAULT_CONFIG.funds.unitTolerance);
+        return o ? [o] : [];
+      })(),
+    ],
     plan: {
       invested: f.invested,
       startedOn: f.startedOn,
@@ -493,7 +544,7 @@ function totalsOf(rows: FundRow[]): Totals {
     invested,
     gain: r.funds > 0 ? r.gain : value - invested,
     xirr: r.xirr,
-    xirrEstimated: r.estimatedFunds > 0,
+    xirrEstimated: r.estimatedFunds > 0 || rows.some((f) => f.ledger.figuresEstimated),
     dayAmount: day,
     dayPct: withDay.length > 0 ? day / (value - day) : null,
     sipMonthly: rows.filter((f) => !f.sipStopped).reduce((a, f) => a + (f.sipMonthly ?? 0), 0),
@@ -514,6 +565,21 @@ export function demoView(who: string | null, range: FundRangeKey): InvestmentVie
       name: p.name,
       panLast4: p.id === 'p1' ? '4321' : null,
       funds,
+      ledger: ledgerSummary(
+        [
+          {
+            ownerId: p.id,
+            name: p.name,
+            funds: funds.map((f) => ({
+              assetId: f.assetId,
+              name: f.name,
+              startedOn: f.startedOn,
+              verdict: f.ledger,
+            })),
+          },
+        ],
+        { historyFrom: config.historyFrom, unitTolerance: config.unitTolerance },
+      )[0]!,
       totals: totalsOf(funds),
       series: combineSeries(funds.map((f) => f.history)),
       trend: combineSeries(funds.map((f) => f.trend)),
@@ -535,6 +601,7 @@ export function demoView(who: string | null, range: FundRangeKey): InvestmentVie
     },
     holdingMonths: DEMO_HOLDING_MONTHS,
     config,
+    tax: { rules: RULES, harvest: DEFAULT_CONFIG.harvest },
     benchmark: demoBenchmark(),
     goals: DEMO_GOALS,
   };

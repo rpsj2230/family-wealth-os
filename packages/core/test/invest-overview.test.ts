@@ -45,6 +45,9 @@ const line = (o: Partial<FundLine> & { assetId: string }): FundLine => ({
   startedOn: '2024-01-05',
   navDate: '2026-10-23',
   valueBasis: 'units × live price',
+  ledgerStatus: 'complete',
+  ledgerChip: { icon: '✓', label: 'Reconciled', tone: 'ok', title: '' },
+  figuresEstimated: false,
   ...o,
 });
 const xirrOf = (ids: string[]) => ({ xirr: ids.length / 100, estimated: false });

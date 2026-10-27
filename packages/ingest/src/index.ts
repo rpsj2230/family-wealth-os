@@ -7,6 +7,7 @@ export * from './inbox-run';
 export * from './rates-ai';
 export * from './cas';
 export * from './cas-import';
+export * from './fund-ledger';
 export * from './cas-pdf';
 export * from './txn-csv';
 export * from './rate-docs';

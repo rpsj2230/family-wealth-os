@@ -12,12 +12,15 @@ import {
   type FundSortKey,
   type GroupBy,
   type GroupTotals,
+  type PersonLedgerSummary,
   type PersonStyle,
 } from '@fwos/core';
+import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { PersonBadge } from '@/components/Person';
 import { niceMonth } from '@/lib/dates';
 import { toCsv } from '@/lib/listing';
+import { DataCheck, LedgerChip } from './DataCheck';
 import { EditFundButton } from './FundEdit';
 import './invest.css';
 
@@ -42,13 +45,16 @@ function Totals({ t, label }: { t: GroupTotals; label?: ReactNode }) {
       <td className="c-name fl-glabel">{label}</td>
       <td className="num c-inv" data-label="Invested">
         {inr(t.invested)}
+        {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
       </td>
       <td className="num c-val" data-label="Value now">
         {inr(t.value)}
+        {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
         <span className="fl-s">{(t.share * 100).toFixed(t.share < 0.1 ? 1 : 0)}% of total</span>
       </td>
       <td className={`num c-pl ${tone(t.gain)}`} data-label="Profit or loss">
         {rupees(t.gain)}
+        {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
         <span className="fl-s">{t.gainPct === null ? '–' : pct(t.gainPct, 1)}</span>
       </td>
       <td className={`num c-day ${tone(t.dayAmount)}`} data-label="Today">
@@ -138,22 +144,30 @@ function Row({
             {l.categoryLabel}
             {l.categoryCertain ? '' : ' ?'}
           </span>
+          <LedgerChip chip={l.ledgerChip} />
           <span className="fl-subtext">{sub.join(' · ')}</span>
         </div>
       </td>
       <td className="num c-inv" data-label="Invested">
         {l.invested ? inr(l.invested) : '–'}
-        <span className="fl-s">{l.avgCost !== null ? `avg ${money2(l.avgCost)}` : ''}</span>
+        <span className="fl-s">
+          {l.avgCost !== null ? `avg ${money2(l.avgCost)}` : ''}
+          {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
+        </span>
       </td>
       <td className="num c-val" data-label="Value now">
         {l.value ? inr(l.value) : '–'}
         <span className="fl-s">
           {l.value > 0 ? `${(l.share * 100).toFixed(l.share < 0.1 ? 1 : 0)}% of total` : ''}
+          {l.value > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
       <td className={`num c-pl ${l.invested ? tone(l.gain) : ''}`} data-label="Profit or loss">
         {l.invested ? rupees(l.gain) : '–'}
-        <span className="fl-s">{l.gainPct === null ? '' : pct(l.gainPct, 1)}</span>
+        <span className="fl-s">
+          {l.gainPct === null ? '' : pct(l.gainPct, 1)}
+          {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
+        </span>
       </td>
       <td className={`num c-day ${tone(l.dayAmount)}`} data-label="Today">
         {l.dayAmount === null ? '–' : rupees(l.dayAmount)}
@@ -161,7 +175,7 @@ function Row({
       </td>
       <td className={`num c-xirr ${tone(l.xirr)}`} data-label="Return a year">
         {l.xirr === null ? '–' : pct(l.xirr, 1)}
-        {l.xirr !== null && l.xirrEstimated && (
+        {l.xirr !== null && l.xirrEstimated && !l.figuresEstimated && (
           <span
             className="fl-est"
             title="Estimated from the start date and SIP; exact once the fund statement is imported"
@@ -170,6 +184,7 @@ function Row({
             ~
           </span>
         )}
+        {l.xirr !== null && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         <span className={`fl-s ${tone(l.ret1y)}`}>
           {l.ret1y === null ? '' : `1Y price ${pct(l.ret1y, 1)}`}
         </span>
@@ -206,6 +221,7 @@ export function FundsTable({
   goalName,
   demo,
   matchHref,
+  checks,
 }: {
   groups: FundGroup[];
   grand: GroupTotals | null;
@@ -214,6 +230,8 @@ export function FundsTable({
   goalName: Record<string, string>;
   demo: boolean;
   matchHref: string;
+  /** the data check of each person, shown under the person's heading when the funds are grouped by person */
+  checks?: Record<string, PersonLedgerSummary>;
 }) {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<{ key: FundSortKey; dir: 1 | -1 } | null>(null);
@@ -424,6 +442,18 @@ export function FundsTable({
                         }
                       />
                     )}
+                  </tr>
+                )}
+                {by === 'person' && !filtering && checks?.[g.key] && (
+                  <tr
+                    className={`fl-datacheck ${checks[g.key]!.need.length > 0 || checks[g.key]!.startsLate ? 'warn' : 'ok'}`}
+                  >
+                    {/* six columns, then the two that a narrow table drops, so the strip never adds a column of its own */}
+                    <td colSpan={6}>
+                      <DataCheck summary={checks[g.key]!} fundHref={fundHref} />
+                    </td>
+                    <td className="c-sip" />
+                    <td className="c-act" />
                   </tr>
                 )}
                 {g.lines.map((l) => (

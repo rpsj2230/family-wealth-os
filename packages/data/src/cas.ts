@@ -13,6 +13,7 @@ import {
   type TxnCsvRow,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { pageAll } from './paging';
 import { loadSettings } from './settings';
 import { syncSipEstimates } from './sip-estimates';
 
@@ -538,15 +539,16 @@ export async function importFundCsv(
         );
         let have = new Set<string>();
         if (!args.assetId.startsWith('new-')) {
-          const r = must(
-            await db
+          // read in pages: the API returns at most 1,000 rows a request, and a preview that misses stored lines counts them as new
+          const r = await pageAll<{ source_ref: string }>((from, to) =>
+            db
               .from('mf_transactions')
               .select('source_ref')
               .eq('household_id', hh)
               .eq('asset_id', args.assetId)
-              .limit(5000),
-            'stored transactions',
-          ) as { source_ref: string }[];
+              .order('id')
+              .range(from, to),
+          );
           have = new Set(r.map((x) => x.source_ref));
         }
         res = { added: wanted.filter((w) => !have.has(w)).length };

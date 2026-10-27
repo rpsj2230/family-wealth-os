@@ -7,6 +7,7 @@ import {
   type PersonStyle,
   type PortfolioPerformance,
   type ProfileConfig,
+  openingFlow,
   returnsFor,
 } from '@fwos/core';
 import { perfFundIn } from './fund-holdings';
@@ -35,27 +36,42 @@ export function investPerformance(view: InvestmentView): PortfolioPerformance {
   });
 }
 
-const forReturns = (f: FundRow): FundForReturns => ({
-  assetId: f.assetId,
-  ownerId: f.ownerId,
-  name: f.name,
-  value: f.value,
-  txns: f.txns.map((t) => ({ date: t.date, units: t.units, amount: Math.abs(t.amount) })),
-  plan: {
-    invested: f.invested,
-    startedOn: f.startedOn,
-    sipMonthly: f.sipMonthly,
-    sipStopped: f.sipStopped,
-  },
-});
+const forReturns = (f: FundRow, unitTolerance: number): FundForReturns => {
+  const opening = openingFlow(f.txns, unitTolerance);
+  return {
+    assetId: f.assetId,
+    ownerId: f.ownerId,
+    name: f.name,
+    value: f.value,
+    txns: [
+      ...f.txns.map((t) => ({
+        date: t.date,
+        units: t.units,
+        amount: Math.abs(t.amount),
+        kind: t.kind,
+      })),
+      // units held before the first line count as put in on that day, as on the fund's own page
+      ...(opening ? [opening] : []),
+    ],
+    plan: {
+      invested: f.invested,
+      startedOn: f.startedOn,
+      sipMonthly: f.sipMonthly,
+      sipStopped: f.sipStopped,
+    },
+  };
+};
 
 /** The annual return of any set of funds on the view (a person, a kind of fund, a fund house). */
 export function xirrOfIds(view: InvestmentView) {
-  const by = new Map(allFunds(view).map((f) => [f.assetId, forReturns(f)]));
+  const funds = allFunds(view);
+  const by = new Map(funds.map((f) => [f.assetId, forReturns(f, view.config.unitTolerance)]));
+  // a fund whose history does not reconcile makes the return it is part of an estimate
+  const unsure = new Set(funds.filter((f) => f.ledger.figuresEstimated).map((f) => f.assetId));
   return (ids: string[]) => {
     const list = ids.map((i) => by.get(i)).filter((x): x is FundForReturns => !!x);
     const r = returnsFor(list, view.today);
-    return { xirr: r.xirr, estimated: r.estimatedFunds > 0 };
+    return { xirr: r.xirr, estimated: r.estimatedFunds > 0 || ids.some((i) => unsure.has(i)) };
   };
 }
 
@@ -99,6 +115,9 @@ export function fundLines(view: InvestmentView): FundLine[] {
         startedOn: f.startedOn,
         navDate: f.navDate,
         valueBasis: f.valueBasis,
+        ledgerStatus: f.ledger.status,
+        ledgerChip: f.ledger.chip,
+        figuresEstimated: f.ledger.figuresEstimated,
       };
     }),
   );

@@ -135,6 +135,8 @@ export interface AppConfig {
     stampDutyPct: number;
     /** days kept clear before 31 March: an order after the cut-off or on a holiday is priced on the next working day */
     orderBufferDays: number;
+    /** months after which units of an international, gold or fund-of-funds fund are long-term (they have no tax-free allowance) */
+    otherLongMonths: number;
   };
   /** what the AI costs: the prices it is charged at, to turn the logged tokens into money */
   ai: {
@@ -154,6 +156,12 @@ export interface AppConfig {
   };
   /** how the mutual-fund statistics and graphs are cut */
   funds: {
+    /** the date from which the transactions of every fund should be on file (ISO date): a person whose earliest transaction is later is asked for an earlier statement */
+    historyFrom: string;
+    /** the units a ledger may be out by (rounding on a statement) before it counts as not adding up */
+    unitTolerance: number;
+    /** the rupees a ledger may be out by before the money does not count as adding up */
+    moneyTolerance: number;
     /** an annual figure (CAGR, XIRR over time) is shown only after money has been invested this many months */
     annualiseAfterMonths: number;
     /** how many of the largest funds make up "concentration" */
@@ -274,6 +282,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     sttPct: 0.00001,
     stampDutyPct: 0.00005,
     orderBufferDays: 6,
+    otherLongMonths: 24,
   },
   ai: {
     usdInr: 88,
@@ -286,6 +295,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   home: { changeDays: 30, upcomingDays: 120, bankShareWatch: 0.4 },
   funds: {
+    historyFrom: '2021-01-01',
+    unitTolerance: 0.001,
+    moneyTolerance: 1,
     annualiseAfterMonths: 12,
     concentrationTop: 3,
     calendarMonths: 24,
@@ -349,6 +361,12 @@ const zone = (v: unknown, d: string): string => {
 /** The safety copy's suffix: short, plain characters only (a tab name cannot hold every character). */
 const tabSuffix = (v: unknown, d: string): string =>
   typeof v === 'string' && /^[A-Za-z0-9 ._()-]{3,40}$/.test(v) ? v : d;
+/** A real calendar date written 2021-01-01, or the default. */
+const isoDate = (v: unknown, d: string): string => {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return d;
+  const t = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === v ? v : d;
+};
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
@@ -515,6 +533,7 @@ export function configFromJson(raw: unknown): AppConfig {
       sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
       stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
       orderBufferDays: Math.round(num(har.orderBufferDays, d.harvest.orderBufferDays, 0, 60)),
+      otherLongMonths: Math.round(num(har.otherLongMonths, d.harvest.otherLongMonths, 1, 120)),
     },
     ai: {
       usdInr: num(aiSec.usdInr, d.ai.usdInr, 1, 1000),
@@ -534,6 +553,9 @@ export function configFromJson(raw: unknown): AppConfig {
       bankShareWatch: num(hom.bankShareWatch, d.home.bankShareWatch, 0.05, 1),
     },
     funds: {
+      historyFrom: isoDate(fun.historyFrom, d.funds.historyFrom),
+      unitTolerance: num(fun.unitTolerance, d.funds.unitTolerance, 0, 1),
+      moneyTolerance: num(fun.moneyTolerance, d.funds.moneyTolerance, 0, 1000),
       annualiseAfterMonths: Math.round(
         num(fun.annualiseAfterMonths, d.funds.annualiseAfterMonths, 1, 120),
       ),

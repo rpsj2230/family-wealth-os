@@ -93,6 +93,8 @@ export default async function AssetPage({
           holdingMonths={fundView.holdingMonths}
           config={v.config}
           colour={d.person?.colour ?? 'var(--viz-1)'}
+          tax={fundView.tax}
+          taxHref="/tax"
           overview={
             <FundDetailPanel
               fund={fundView.fund}
