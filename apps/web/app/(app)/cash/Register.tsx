@@ -80,7 +80,7 @@ export function CashRegister({
                     : '–'}
                 </td>
                 <td data-label="Updated">
-                  <UpdatedCell asOf={r.asOf} source={r.source} />
+                  <UpdatedCell asOf={r.asOf} source={r.source} olderEmail={r.olderEmail ?? null} />
                 </td>
               </tr>
             );

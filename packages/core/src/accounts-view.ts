@@ -133,6 +133,26 @@ export function sourceTag(
   return { label: `You, ${d}`, kind: 'manual' };
 }
 
+/**
+ * A reading the bank sent (email or statement) that is older than the value now shown, so it does not count. The tag says so instead of
+ * leaving you to wonder why an email that was fetched changed nothing.
+ */
+export function olderBankReading(
+  rows: ObservationRow[],
+  assetId: string,
+  current: ObservationRow | null,
+): ObservationRow | null {
+  if (!current || current.source === 'email' || current.source === 'statement') return null;
+  let best: ObservationRow | null = null;
+  for (const o of rows) {
+    if (o.asset_id !== assetId || o.superseded_by) continue;
+    if (o.source !== 'email' && o.source !== 'statement') continue;
+    if (o.as_of >= current.as_of) continue;
+    if (!best || o.as_of > best.as_of) best = o;
+  }
+  return best;
+}
+
 export type AccountKind = 'NRE' | 'NRO';
 
 /** The key of the block that holds everything with no bank: money held by others and accounts without a bank. */
@@ -161,6 +181,8 @@ export interface BankRow {
   recorded: number | null;
   asOf: string | null;
   source: SourceTag;
+  /** an email or statement reading that is older than the value shown, so it does not count */
+  olderEmail?: { asOf: string; amount: number } | null;
   stale: boolean;
   holderName: string | null;
   fd: {
@@ -322,6 +344,10 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         obs?.created_at ?? null,
         i.today.toISOString().slice(0, 10),
       ),
+      olderEmail: (() => {
+        const o = a.type === 'fixed_deposit' ? null : olderBankReading(i.observations, a.id, obs);
+        return o ? { asOf: o.as_of, amount: o.amount } : null;
+      })(),
       stale: line?.freshness === 'stale' || line?.freshness === 'missing',
       holderName: a.holder_name ?? null,
       fd: null,

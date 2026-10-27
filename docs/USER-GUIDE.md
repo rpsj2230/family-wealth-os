@@ -41,6 +41,8 @@ Forward bank alerts to the Gmail label shown in Settings. A balance from the ban
 
 **Read again, check the number, correct it.** Under every message there is **Show the email**: a kept copy of the text (account numbers cut to the last four digits, no attachments) with the number that was read highlighted, so you can check it at a glance. **Read again** (on anything that is skipped, waiting or failed) makes the AI read just that one email; if it finds a balance for one account, the number is recorded straight away without waiting for you. If it is wrong, type the right number next to the email and press **Save number**: the corrected figure replaces it and the earlier one stays in the history as replaced. Emails logged before copies were kept are fetched from Gmail again at the next mailbox run (within 3 hours).
 
+**Why a fetched email may not change a balance.** A value counts by its date: the latest date wins. If the email is dated 25 Oct and you imported or typed a value dated 26 Oct, the email is older and does not become the current balance; the account line then says "email 25 Oct is older". A balance the app added today carries the tag "updated today". When you press **Apply**, **Read again** or **Save number**, you are saying that email is the one to use, so it replaces a typed or imported value with a later date (that value stays in the history as replaced, and the message tells you what was replaced). A newer value from the bank itself is never replaced.
+
 ## Import
 
 Open **Import**, press **Choose a file** and pick whatever you have: your Excel workbook (.xlsx), a fund statement (PDF), a fund app export (CSV) or a tax statement (Form 26AS or AIS). The page works out which one it is from the file's name and first lines (in your browser; nothing is uploaded yet) and shows the matching form with the file already attached. If it cannot tell, it asks "What is this file?"; you can also correct a wrong guess. Below the box there is a card for each kind if you prefer to choose yourself.
@@ -239,6 +241,10 @@ Every option stays inside the deposit-insurance limit at each bank for the chose
 ## Rates from banks that block automatic reading
 
 Every bank with a rate page saved in Settings is read, including banks where you hold nothing yet (so you can compare before you move money). When a bank's own page cannot be read by a program, the weekly job reads the bank's published rate-sheet PDFs where they exist (AU Small Finance Bank), and otherwise public comparison pages, which are marked **Reference only (third party)** with the date to check. A comparison page never deletes a rate that is not on it. If nothing can be read, the reason is shown beside the bank in Settings; paste the rates from your notes on the Rates page. The program does not pretend to be a browser and does not get around a block.
+
+**A page that loads but shows no rates.** Some banks (HDFC, IDFC FIRST) serve a page whose table is built by a script, so the text a program sees has no rates. When the reader finds nothing on the bank's own page it then tries the labelled public comparison pages for that bank. **Check sync** does the same and says so in its steps. A source note longer than the database column is shortened instead of failing the bank.
+
+**The most you will put with one bank.** Settings > Money rules > Rates has **The most I will put with one bank** (₹1 crore to begin with). Savings slabs and deposit rates that apply only above it are not read from bank pages, are not stored and are left out of every comparison, so a rate you could never use does not appear as the best rate. A slab that reaches into the range below the limit (for example ₹50 lakh to ₹5 crore) is kept.
 
 
 ## Savings interest from the Rates list, and recently added deposits

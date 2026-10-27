@@ -34,9 +34,12 @@ export const cleanNote = (n: string | null) =>
 export function UpdatedCell({
   asOf,
   source,
+  olderEmail = null,
 }: {
   asOf: string | null;
   source: { label: string; kind: 'auto' | 'manual' | 'calc' | 'import' | 'none' };
+  /** an email or statement reading older than the value shown: it was fetched but does not count */
+  olderEmail?: { asOf: string; amount: number } | null;
 }) {
   const word =
     source.kind === 'calc'
@@ -48,6 +51,15 @@ export function UpdatedCell({
     <div className="updcell" title={source.label}>
       <div className="upddate">{asOf ? fmtDate(asOf) : source.kind === 'calc' ? 'daily' : '–'}</div>
       <span className={`srcchip ${source.kind}`}>{word}</span>
+      {source.label.includes('updated today') && <span className="updnote ok">updated today</span>}
+      {olderEmail && (
+        <span
+          className="updnote"
+          title={`A bank email dated ${fmtDate(olderEmail.asOf)} (${formatInr(Math.round(olderEmail.amount))}) was fetched, but a value with a later date is shown, so it does not count. Open it in Bank emails to use it anyway.`}
+        >
+          email {fmtDate(olderEmail.asOf)} is older
+        </span>
+      )}
     </div>
   );
 }
@@ -162,7 +174,7 @@ function Row({
         )}
       </td>
       <td className="upd">
-        <UpdatedCell asOf={r.asOf} source={r.source} />
+        <UpdatedCell asOf={r.asOf} source={r.source} olderEmail={r.olderEmail ?? null} />
       </td>
       <td className="notes">
         {fd?.refLast4 && (

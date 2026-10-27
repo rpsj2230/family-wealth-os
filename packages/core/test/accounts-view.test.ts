@@ -5,6 +5,7 @@ import {
   personStyles,
   rowCode,
   sourceTag,
+  olderBankReading,
 } from '../src/accounts-view';
 import { buildPortfolio, type AssetRow, type FdRow, type ObservationRow } from '../src/portfolio';
 
@@ -324,6 +325,40 @@ describe('helpers', () => {
     expect(sourceTag('manual', '2026-10-12', false).label).toBe('You, 12 Oct');
     expect(sourceTag(null, null, false).kind).toBe('none');
     expect(sourceTag('manual', '2026-10-12', true).kind).toBe('calc');
+  });
+  it('says when an automatic reading was added today, and only then', () => {
+    expect(
+      sourceTag('email', '2026-10-25', false, '2026-10-27T03:00:00Z', '2026-10-27').label,
+    ).toBe('Email, 25 Oct · updated today');
+    expect(
+      sourceTag('email', '2026-10-25', false, '2026-10-26T03:00:00Z', '2026-10-27').label,
+    ).toBe('Email, 25 Oct');
+    expect(
+      sourceTag('manual', '2026-10-25', false, '2026-10-27T03:00:00Z', '2026-10-27').label,
+    ).toBe('You, 25 Oct');
+  });
+  it('finds a fetched bank reading that is older than the value shown', () => {
+    const o = (id: string, source: string, as_of: string, sup: string | null = null) =>
+      ({
+        id,
+        asset_id: 'a1',
+        kind: 'balance',
+        amount: 1,
+        currency: 'INR',
+        fx_rate: null,
+        as_of,
+        confidence: 'verified',
+        source,
+        created_at: '2026-10-27T00:00:00Z',
+        superseded_by: sup,
+      }) as ObservationRow;
+    const sheet = o('s', 'workbook', '2026-10-26');
+    const rows = [o('e1', 'email', '2026-10-24'), o('e2', 'email', '2026-10-25'), sheet];
+    expect(olderBankReading(rows, 'a1', sheet)?.id).toBe('e2');
+    expect(olderBankReading([o('e3', 'email', '2026-10-25', 'x'), sheet], 'a1', sheet)).toBeNull();
+    // the value shown is itself from the bank, or nothing is shown: nothing to explain
+    expect(olderBankReading(rows, 'a1', rows[1]!)).toBeNull();
+    expect(olderBankReading(rows, 'a1', null)).toBeNull();
   });
   it('gives each person a distinct colour and an initial', () => {
     const s = personStyles([

@@ -207,7 +207,7 @@ export function UpdateGrid({
         </td>
         <td className="lastcell" data-label="Last value">
           <div className="amt">{own(r, r.recorded)}</div>
-          <UpdatedCell asOf={r.asOf} source={r.source} />
+          <UpdatedCell asOf={r.asOf} source={r.source} olderEmail={r.olderEmail ?? null} />
           {(st === 'waiting' || st === 'missing') && (
             <span className="statuspill warn">
               {st === 'missing' ? 'No value yet' : 'Needs this month’s value'}
