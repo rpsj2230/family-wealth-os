@@ -122,3 +122,42 @@ export async function runDigests(
   }
   return results;
 }
+
+/**
+ * A test send: the day's summary, marked "[Test]" in the subject, to the people who can sign in (never to the extra recipients), for
+ * every household that switched the summary on. It does not claim or write the delivery log and does nothing on Telegram, so it
+ * cannot use up the real summary of the day or stop it going out.
+ */
+export async function runDigestTest(
+  store: Pick<DigestStore, 'households' | 'memberEmails' | 'build'>,
+  mailer: Mailer,
+  date: string,
+): Promise<DigestResult[]> {
+  const out: DigestResult[] = [];
+  for (const h of await store.households()) {
+    try {
+      const to = [
+        ...new Set(
+          (await store.memberEmails(h.id))
+            .map((e) => e.trim().toLowerCase())
+            .filter((e) => EMAIL.test(e)),
+        ),
+      ];
+      if (to.length === 0) {
+        out.push({ householdId: h.id, outcome: 'no_recipients', recipients: 0 });
+        continue;
+      }
+      const msg = await store.build(h.id, date);
+      await mailer.send({ ...msg, subject: `[Test] ${msg.subject}`, to });
+      out.push({ householdId: h.id, outcome: 'sent', recipients: to.length });
+    } catch (e) {
+      out.push({
+        householdId: h.id,
+        outcome: 'failed',
+        recipients: 0,
+        error: (e as Error).message.slice(0, 300),
+      });
+    }
+  }
+  return out;
+}

@@ -57,6 +57,22 @@ const check = (
     historyFrom: FROM,
   });
 
+describe('ledgerCheck and lines a statement replaced', () => {
+  it('counts nothing from a line that was set aside', () => {
+    const lines = statement(SIPS);
+    const twice: LedgerLine[] = [
+      ...lines,
+      { ...lines[1]!, source: 'csv', superseded: true },
+      { ...lines[2]!, units: 77, balance: 1, source: 'manual', superseded: true },
+    ];
+    const v = check(twice, 383.8);
+    expect(v.status).toBe('complete');
+    expect(v.txnCount).toBe(4);
+    expect(v.sources).toEqual(['cas']);
+    expect(v.duplicates).toEqual([]);
+  });
+});
+
 describe('ledgerCheck', () => {
   it('a history from the first instalment that adds up is complete', () => {
     const v = check(statement(SIPS), 383.8);

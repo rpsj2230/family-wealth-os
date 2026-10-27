@@ -78,6 +78,7 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
     portfolio,
     institutionNames: bankNames,
     today,
+    hideMaturedAfterDays: settings.config.deposits.hideMaturedAfterDays,
   });
   const overview = await bankOverviewOptions({
     supabase,

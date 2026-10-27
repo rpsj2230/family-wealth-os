@@ -19,6 +19,8 @@
 import {
   DEFAULT_CONFIG,
   diffFundImport,
+  replaceIsChange,
+  replaceKey,
   schemeLinkKey,
   sipIsChange,
   sipKey,
@@ -26,7 +28,6 @@ import {
   storedChanges,
   summariseChanges,
   type FolioLink,
-  type ForeignGroup,
   type FundChangeItem,
   type FundImportDiff,
   type IgnorableVerdict,
@@ -35,7 +36,7 @@ import {
   type SipChange,
   type StatementFund,
 } from '@fwos/core';
-import { coreTokens } from './amfi';
+import { schemeKey, schemeKeysCompatible } from './amfi';
 import { fifoLots, type CasScheme, type CasStatement } from './cas';
 
 export interface CasFund {
@@ -57,6 +58,15 @@ export interface CasSave {
   assetId: string;
   /** only the lines that are not stored yet, each with the reference it is stored under */
   transactions: FundWrite['lines'];
+  /** where the new lines are stored from ('cas' for a statement, 'csv' for an app export) */
+  lineSource: 'cas' | 'csv';
+  /** stored lines the statement replaces: set aside (never deleted) under the statement that replaced them */
+  replace: {
+    keys: string[];
+    reason: string;
+    statementRef: string;
+    statementOn: string;
+  } | null;
   /** only the fields that are new or changed */
   position: FundWrite['position'];
   valuation: FundWrite['valuation'];
@@ -143,19 +153,40 @@ export type Match =
   | { status: 'none' }
   | { status: 'ambiguous'; candidates: CasFund[] };
 
-/** ISIN or AMFI code first; then folio and name together; then a clearly best name. Never a guess between equals. */
+/**
+ * ISIN or AMFI code first; then the scheme's name by a tolerant key (the same words in any order, with the plan and option agreeing);
+ * then a clearly best partial name. A fund whose ISIN differs from the scheme's is a different fund whatever its name. Folio breaks a
+ * tie between two of your funds that are the same scheme. Never a guess between equals.
+ */
 export function matchScheme(scheme: CasScheme, amfi: string | null, funds: CasFund[]): Match {
+  const sameFolio = (f: CasFund) => !!f.folioLast4 && f.folioLast4 === scheme.folioLast4;
+  const pick = (found: CasFund[]): Match => {
+    if (found.length === 1) return { status: 'one', fund: found[0]! };
+    if (found.length === 0) return { status: 'none' };
+    const byFolio = found.filter(sameFolio);
+    return byFolio.length === 1
+      ? { status: 'one', fund: byFolio[0]! }
+      : { status: 'ambiguous', candidates: found };
+  };
   const byId = funds.filter(
     (f) => (scheme.isin && f.isin && same(f.isin, scheme.isin)) || (amfi && f.amfiCode === amfi),
   );
-  if (byId.length === 1) return { status: 'one', fund: byId[0]! };
-  if (byId.length > 1) return { status: 'ambiguous', candidates: byId };
-  const want = coreTokens(scheme.name);
-  const scored = funds
+  if (byId.length > 0) return pick(byId);
+
+  const want = schemeKey(scheme.name);
+  const pool = funds.filter(
+    (f) =>
+      !(scheme.isin && f.isin && !same(f.isin, scheme.isin)) &&
+      schemeKeysCompatible(want, schemeKey(f.name)),
+  );
+  const exact = pool.filter((f) => want.tokens.length > 0 && schemeKey(f.name).key === want.key);
+  if (exact.length > 0) return pick(exact);
+
+  const scored = pool
     .map((f) => ({
       f,
-      score: sharedShare(want, coreTokens(f.name)),
-      folio: !!f.folioLast4 && f.folioLast4 === scheme.folioLast4,
+      score: sharedShare(want.tokens, schemeKey(f.name).tokens),
+      folio: sameFolio(f),
     }))
     .filter((x) => x.score >= 0.75 || (x.folio && x.score >= 0.5))
     .sort((a, b) => b.score - a.score);
@@ -236,6 +267,7 @@ function statementFund(
     holdingsOnly: s.holdingsOnly,
     soldThisYear: s.transactions.some((t) => t.units < 0 && t.date >= fyStart),
     sipCancelled: s.sipCancelled ?? null,
+    unclear: s.unclear ?? null,
     match,
   };
 }
@@ -260,6 +292,7 @@ function combine(a: StatementFund, b: StatementFund): StatementFund {
     holdingsOnly: a.holdingsOnly && b.holdingsOnly,
     soldThisYear: a.soldThisYear || b.soldThisYear,
     sipCancelled: a.sipCancelled ?? b.sipCancelled ?? null,
+    unclear: a.unclear ?? b.unclear ?? null,
     ...(a.links || b.links ? { links: [...(a.links ?? []), ...(b.links ?? [])] } : {}),
     ...(a.chosen || b.chosen ? { chosen: [...(a.chosen ?? []), ...(b.chosen ?? [])] } : {}),
   };
@@ -275,10 +308,57 @@ export interface PlanConfig {
   sipMinInstalments?: number;
   unitTolerance?: number;
   moneyTolerance?: number;
-  /** who the folios on a statement keyed on an e-mail address may belong to: this person's PAN, and the rest of the family */
-  people?: {
-    own: string | null;
-    family: { ownerId: string; name: string; panLast4: string | null }[];
+}
+
+/** A person of the household, by the last four characters of the PAN saved for them. */
+export interface PanOwner {
+  ownerId: string;
+  panLast4: string | null;
+}
+
+export interface SkippedFolios {
+  /** the PAN printed on the folios, last four characters only */
+  panLast4: string | null;
+  holder: string | null;
+  schemes: string[];
+}
+
+/**
+ * A statement keyed on an email address can hold the folios of several people. Each scheme belongs to the person whose PAN is
+ * printed on its folio (never to whoever opened the file); a scheme with no PAN printed goes to `fallbackOwner`. Folios of someone
+ * who is not in the list are returned apart, so they are named and skipped, not guessed.
+ */
+export function splitByOwner(
+  stmt: CasStatement,
+  owners: PanOwner[],
+  fallbackOwner: string | null,
+): { groups: { ownerId: string; stmt: CasStatement }[]; skipped: SkippedFolios[] } {
+  const by = new Map<string, CasScheme[]>();
+  const skipped = new Map<string, SkippedFolios>();
+  for (const sc of stmt.schemes) {
+    const last4 = sc.folioPan ? sc.folioPan.slice(-4) : null;
+    const hit = last4
+      ? owners.filter((o) => o.panLast4 && o.panLast4.toUpperCase() === last4.toUpperCase())
+      : [];
+    const owner: string | null = last4
+      ? hit.length === 1
+        ? hit[0]!.ownerId
+        : null
+      : fallbackOwner;
+    if (owner) by.set(owner, [...(by.get(owner) ?? []), sc]);
+    else {
+      const k = last4 ?? 'none';
+      const cur = skipped.get(k) ?? { panLast4: last4, holder: sc.holder ?? null, schemes: [] };
+      cur.schemes.push(sc.name);
+      skipped.set(k, cur);
+    }
+  }
+  return {
+    groups: [...by.entries()].map(([ownerId, schemes]) => ({
+      ownerId,
+      stmt: { ...stmt, schemes },
+    })),
+    skipped: [...skipped.values()],
   };
 }
 
@@ -286,24 +366,7 @@ export interface PlanConfig {
 export const reviewKey = (ownerId: string, s: Pick<CasScheme, 'folioLast4' | 'isin' | 'name'>) =>
   `${ownerId}|review:${s.folioLast4}|${schemeLinkKey(s)}`;
 
-const last4 = (pan: string | null | undefined) => (pan ? pan.slice(-4).toUpperCase() : null);
 const isLink = (o: string) => o.startsWith('link:');
-
-/**
- * Whether a folio on a statement keyed on an e-mail address belongs to someone else (that statement lists every folio registered
- * under the address, whoever holds it). Only a folio whose PAN is printed and differs from this person's saved PAN is another
- * person's; a statement keyed on the person's own PAN, or one that prints no folio PAN, is taken as theirs throughout.
- */
-function foreignKeyOf(
-  s: CasScheme,
-  stmt: CasStatement,
-  cfg: PlanConfig,
-): { key: string; panLast4: string } | null {
-  const own = last4(cfg.people?.own);
-  const pan = last4(s.folioPan);
-  if (stmt.basis !== 'email' || !own || !pan || pan === own) return null;
-  return { key: `foreign:${pan}`, panLast4: pan };
-}
 
 /**
  * Reads what is on file and compares it with the statement. Writes nothing. A scheme that could be more than one of the person's
@@ -349,36 +412,12 @@ export async function planCasImport(
   /** The comparison with these answers applied. */
   const build = (answers: ReadonlyMap<string, Decision>): FundImportDiff => {
     const groups = new Map<string, StatementFund>();
-    const foreign = new Map<string, ForeignGroup>();
     let n = 0;
     for (const s of stmt.schemes) {
       const rk = reviewKey(ownerId, s);
       const amfi = s.isin ? (amfiOf.get(s.isin) ?? null) : null;
       const sk = schemeLinkKey(s);
-      const other = foreignKeyOf(s, stmt, cfg);
       let chosen: string[] | undefined;
-      if (other) {
-        const fk = `${ownerId}|review:${other.key}`;
-        if (answers.get(fk)?.option !== 'mine') {
-          const g = foreign.get(other.key) ?? {
-            key: other.key,
-            holder: s.holder ?? null,
-            panLast4: other.panLast4,
-            member:
-              cfg.people?.family.find((m) => last4(m.panLast4) === other.panLast4)?.name ?? null,
-            folios: [],
-          };
-          g.folios.push({
-            name: s.name,
-            folioLast4: s.folioLast4,
-            units: s.closingUnits,
-            invested: s.costValue,
-          });
-          foreign.set(other.key, g);
-          continue;
-        }
-        chosen = [fk];
-      }
       let m: Match;
       let links: FolioLink[] | undefined;
       const known = remembered.find(
@@ -433,7 +472,6 @@ export async function planCasImport(
       onFile,
       rules,
       ...(stmt.basis ? { basis: stmt.basis } : {}),
-      foreign: [...foreign.values()],
     });
   };
 
@@ -452,14 +490,13 @@ export async function planCasImport(
   const suggested = new Map<string, Decision>();
   for (const i of base.items) {
     const r = i.prompt?.suggestion.recommended;
-    if (r && (isLink(r) || r === 'new' || r === 'mine'))
-      suggested.set(i.key, { option: r, input: null });
+    if (r && (isLink(r) || r === 'new')) suggested.set(i.key, { option: r, input: null });
   }
   for (const i of base.items) {
     const p = i.prompt;
-    if (!p || (p.kind !== 'ambiguous' && p.kind !== 'foreign')) continue;
+    if (!p || p.kind !== 'ambiguous') continue;
     for (const o of p.suggestion.options) {
-      if (!(isLink(o.id) || o.id === 'new' || o.id === 'mine')) continue;
+      if (!(isLink(o.id) || o.id === 'new')) continue;
       const answers = new Map(suggested);
       answers.set(i.key, { option: o.id, input: null });
       const after = build(answers);
@@ -494,7 +531,7 @@ export async function applyFundDiff(
   diff: FundImportDiff,
   io: CasIo,
   selection: Selection | null = null,
-  opts: { today?: string } = {},
+  ctx: { statementRef?: string; today?: string } = {},
 ): Promise<CasReport> {
   const r: CasReport = {
     matched: 0,
@@ -509,7 +546,7 @@ export async function applyFundDiff(
     changes: [],
     statementFunds: diff.statementFunds,
   };
-  const today = opts.today ?? null;
+  const today = ctx.today ?? null;
   const shown = (k: string) => !!selection && selection.seen.has(k);
   /** the person's answer to a question, only when it is one of the answers the question offered */
   const answerOf = (k: string, prompt: FundChangeItem['prompt']) => {
@@ -520,7 +557,11 @@ export async function applyFundDiff(
   const askedKeep = (i: FundChangeItem) => i.prompt?.kind === 'absent' && i.prompt.start === 'keep';
   const taken = (i: FundChangeItem, k: string) =>
     !selection ? !(k === i.key && askedKeep(i)) : selection.take.has(k);
-  const applied = { funds: new Set<string>(), sips: new Set<string>() };
+  const applied = {
+    funds: new Set<string>(),
+    sips: new Set<string>(),
+    replaces: new Set<string>(),
+  };
   let linked = 0;
   let sipStops = 0;
 
@@ -530,12 +571,26 @@ export async function applyFundDiff(
   for (const item of diff.items) {
     try {
       if (item.kind === 'review') {
-        if (answerOf(item.key, item.prompt)) {
+        const a = answerOf(item.key, item.prompt);
+        // a fund the statement does not list, which the person says was sold: closed from the date typed
+        if (a && item.reviewKind === 'absent' && a.option === 'sold' && item.assetId) {
+          const asOf =
+            item.prompt?.suggestion.options.find((o) => o.id === 'sold')?.input?.value ?? null;
+          const on = validDay(a.input, today) ? a.input : asOf;
+          if (!on) throw new Error('the date it was sold is needed');
+          if (!io.markSold) throw new Error('this importer cannot close a fund');
+          await io.markSold({ assetId: item.assetId, asOf: on });
+          r.assumedSold.push(item.name);
+          r.lines.push(`sold on ${on}, as you chose: ${item.name}`);
+          applied.funds.add(item.key);
+        } else if (a) {
           r.lines.push(`left alone as you chose: ${item.name}`);
         } else {
           r.needsReview.push(item.name);
           r.lines.push(
-            `waiting for your decision: ${item.name}${item.prompt ? ` (${item.prompt.suggestion.suggest})` : ''}`,
+            item.reviewKind === 'absent'
+              ? `not on this statement, not marked as sold: ${item.name} (waiting for your decision; suggestion: leave it as it is)`
+              : `waiting for your decision: ${item.name}${item.prompt ? ` (${item.prompt.suggestion.suggest})` : ''}`,
           );
         }
         continue;
@@ -561,6 +616,8 @@ export async function applyFundDiff(
         await io.save({
           assetId: item.assetId,
           transactions: [],
+          lineSource: 'cas',
+          replace: null,
           position: {},
           valuation: null,
           closed: false,
@@ -573,6 +630,19 @@ export async function applyFundDiff(
         r.lines.push(`SIP kept as recorded: ${item.name}: ${item.sip.why}`);
       }
       if (item.kind === 'unchanged' && !sipIsChange(item.sip)) {
+        // the period the statement decided is recorded quietly, so an older statement cannot override it later
+        if (item.write && item.assetId && !item.changed) {
+          await io.save({
+            assetId: item.assetId,
+            transactions: [],
+            lineSource: item.write.lineSource ?? 'cas',
+            replace: null,
+            position: item.write.position,
+            valuation: null,
+            closed: false,
+            sip: [],
+          });
+        }
         if (item.assetId) {
           r.unchanged++;
           await writeLinks(item.assetId);
@@ -624,9 +694,21 @@ export async function applyFundDiff(
       }
       if (!assetId) continue;
       const sip: SipChange | null = sipOn ? item.sip : null;
+      // the statement replaces the lines on file unless that part was unticked
+      const replaceOn = fundOn && !!w?.replace && taken(item, replaceKey(item.key));
       const res = await io.save({
         assetId,
         transactions: fundOn && w ? w.lines : [],
+        lineSource: w?.lineSource ?? 'cas',
+        replace:
+          replaceOn && w?.replace
+            ? {
+                keys: w.replace.keys,
+                reason: w.replace.reason,
+                statementRef: ctx.statementRef ?? `statement:${diff.periodTo ?? ''}`,
+                statementOn: diff.periodTo ?? '',
+              }
+            : null,
         position: fundOn && w ? w.position : {},
         valuation: fundOn && w ? w.valuation : null,
         closed: fundOn && w ? w.close : false,
@@ -635,10 +717,14 @@ export async function applyFundDiff(
       r.transactionsAdded += res.added;
       if (fundOn) applied.funds.add(item.key);
       if (sipOn) applied.sips.add(item.key);
+      if (replaceOn) applied.replaces.add(item.key);
       if (fundOn && w?.close && !w.create) r.assumedSold.push(item.name);
       await writeLinks(assetId);
       const bits = [
         fundOn ? `${res.added} new transactions` : null,
+        replaceOn && replaceIsChange(item)
+          ? `${item.lines.replace!.count} on file replaced by the statement`
+          : null,
         sip ? (sip.kind === 'changed' ? 'SIP amount changed' : `SIP ${sip.kind}`) : null,
       ].filter(Boolean);
       r.lines.push(
@@ -666,14 +752,41 @@ export async function applyFundDiff(
 
 export type { FundChangeItem };
 
+/** One report for several people's statements read from one file. */
+export function mergeReports(reports: CasReport[]): CasReport {
+  const sum = (f: (r: CasReport) => number) => reports.reduce((a, r) => a + f(r), 0);
+  const summaries = reports.map((r) => r.summary).filter((x) => x && x !== 'Nothing changed');
+  return {
+    matched: sum((r) => r.matched),
+    created: sum((r) => r.created),
+    skipped: sum((r) => r.skipped),
+    unchanged: sum((r) => r.unchanged),
+    transactionsAdded: sum((r) => r.transactionsAdded),
+    needsReview: reports.flatMap((r) => r.needsReview),
+    assumedSold: reports.flatMap((r) => r.assumedSold),
+    lines: reports.flatMap((r) => r.lines),
+    summary:
+      reports.length === 1
+        ? reports[0]!.summary
+        : summaries.length > 0
+          ? summaries.join(' | ')
+          : (reports[0]?.summary ?? 'Nothing changed'),
+    changes: reports.flatMap((r) => r.changes),
+    statementFunds: sum((r) => r.statementFunds),
+  };
+}
+
 /** Plans and applies everything (the mailbox job); `select` limits it to the items chosen. */
 export async function runCasImport(
   ownerId: string,
   stmt: CasStatement,
   io: CasIo,
-  cfg: PlanConfig & { select?: Selection },
+  cfg: PlanConfig & { select?: Selection; statementRef?: string },
 ): Promise<CasReport & { diff: FundImportDiff }> {
   const diff = await planCasImport(ownerId, stmt, io, cfg, cfg.select?.choices);
-  const report = await applyFundDiff(diff, io, cfg.select ?? null, { today: cfg.today });
+  const report = await applyFundDiff(diff, io, cfg.select ?? null, {
+    today: cfg.today,
+    ...(cfg.statementRef ? { statementRef: cfg.statementRef } : {}),
+  });
   return { ...report, diff };
 }

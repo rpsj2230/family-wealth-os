@@ -193,6 +193,60 @@
   gap: 4px 8px;
   align-items: center;
 }
+.fc-kept {
+  display: block;
+}
+.fc-priority {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: var(--primary-soft);
+  min-width: 0;
+}
+.fc-priority p {
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.fc-priority .fc-counts {
+  margin-top: 4px;
+  font-weight: 600;
+}
+.fc-replace {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--soft);
+  min-width: 0;
+}
+.fc-replace input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--primary);
+}
+.fc-replace.off .fc-replacebody > label {
+  opacity: 0.6;
+}
+.fc-replace .fc-why,
+.fc-replace .fc-lines {
+  margin-left: 0;
+}
+.fc-replacebody {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fc-replacebody > label {
+  font-size: 0.88rem;
+}
+.fc-replaced .fc-table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
 .fc-quiet {
   margin-top: 8px;
   font-size: 0.85rem;

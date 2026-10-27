@@ -3,13 +3,15 @@
  * and its SIP go together; an item that is shown and not ticked is remembered as overruled; a question has a suggested answer that
  * only counts once approved, except where the suggestion is the way things already go) are tested without a browser.
  */
-import { sipIsChange, sipKey, type FundPrompt } from '@fwos/core';
+import { replaceIsChange, replaceKey, sipIsChange, sipKey, type FundPrompt } from '@fwos/core';
 import type { ItemView, PersonPreview } from './fund-import';
 
 /** The fund part is something to apply. */
 export const fundSelectable = (i: ItemView) => i.changed;
 /** The SIP part is something to apply (and can be ticked on its own). */
 export const sipSelectable = (i: ItemView) => sipIsChange(i.sip);
+/** The statement replaces lines on file for this fund: a part that can be unticked on its own (to keep your own lines). */
+export const replaceSelectable = (i: ItemView) => i.changed && replaceIsChange(i);
 /** A new or sold fund brings its SIP with it: the SIP cannot be applied without the fund. */
 export const sipDependsOnFund = (i: ItemView) => i.kind === 'new' || i.kind === 'sold';
 /** The fund is asked about, not ticked: the answer to the question decides (a fund the statement does not list). */
@@ -20,6 +22,7 @@ export function selectableKeys(people: Pick<PersonPreview, 'diff'>[]): string[] 
   return people.flatMap((p) =>
     p.diff.items.flatMap((i) => [
       ...(fundSelectable(i) ? [i.key] : []),
+      ...(replaceSelectable(i) ? [replaceKey(i.key)] : []),
       ...(sipSelectable(i) ? [sipKey(i.key)] : []),
     ]),
   );
@@ -32,6 +35,8 @@ export function isTaken(
   key: string,
 ): boolean {
   if (off.has(key)) return false;
+  // the lines a statement replaces are replaced only together with the statement's own changes to the fund
+  if (key.endsWith('#replace')) return !off.has(key.slice(0, -'#replace'.length));
   if (!key.endsWith('#sip')) return true;
   const itemKey = key.slice(0, -'#sip'.length);
   for (const p of people) {
@@ -86,15 +91,6 @@ export function initialAnswers(people: Pick<PersonPreview, 'diff'>[]): Answers {
   return out;
 }
 
-/** A fund the statement does not list starts unticked when the suggestion is to leave it. */
-export function initialOff(people: Pick<PersonPreview, 'diff'>[]): ReadonlySet<string> {
-  const off = new Set<string>();
-  for (const p of people)
-    for (const i of p.diff.items)
-      if (tickedByAnswer(i) && i.prompt!.start !== 'sold') off.add(i.key);
-  return off;
-}
-
 export interface FundSelection {
   /** what was shown to tick, and which of it is ticked */
   seen: string[];
@@ -122,10 +118,8 @@ export function selectionOf(
     };
   });
   const funds = new Set([
-    ...take.map((k) => k.replace(/#sip$/, '')),
-    ...qs
-      .filter((q, n) => !isQuiet(choices[n]!.option) && choices[n]!.option !== 'sold')
-      .map((q) => q.itemKey),
+    ...take.map((k) => k.replace(/#(sip|replace)$/, '')),
+    ...qs.filter((q, n) => !isQuiet(choices[n]!.option)).map((q) => q.itemKey),
   ]);
   return { seen, take, choices, count: funds.size };
 }

@@ -77,14 +77,21 @@ describe('planSync', () => {
     );
     expect(p.remove).toEqual(['gone']);
   });
-  it('never applies the page over a typed rate, but shows the difference', () => {
+  it('applies the page over a typed rate: a typed rate may be old', () => {
     const typed = stored({ sourceKind: 'manual', rate: 0.0825 });
-    expect(planSync([typed], [fd({ rate: 0.08 })], { replaceAbsent: false }).pageDiffers).toEqual([
-      { id: 'a', pageRate: 0.08 },
+    expect(planSync([typed], [fd({ rate: 0.08 })], { replaceAbsent: false }).change).toEqual([
+      { id: 'a', from: 0.0825, to: 0.08 },
     ]);
-    expect(planSync([typed], [fd({ rate: 0.0825 })], { replaceAbsent: false }).pageAgrees).toEqual([
+    // the page agrees: the typed rate becomes a read rate
+    expect(planSync([typed], [fd({ rate: 0.0825 })], { replaceAbsent: false }).resolved).toEqual([
       'a',
     ]);
+  });
+  it('leaves a typed rate for something the page does not carry', () => {
+    const typed = stored({ sourceKind: 'manual', rate: 0.0825 });
+    const p = planSync([typed], [], { replaceAbsent: true });
+    expect(p.remove).toEqual([]);
+    expect(p.change).toEqual([]);
   });
   describe('after you corrected a rate the reader got wrong', () => {
     const corrected = stored({
@@ -98,17 +105,15 @@ describe('planSync', () => {
         planSync([corrected], [fd({ rate: 0.08 })], { replaceAbsent: false }).resolved,
       ).toEqual(['a']);
     });
-    it('keeps your figure and explains when the reader repeats the mistake', () => {
+    it('the page still wins when the reader repeats the mistake', () => {
       const p = planSync([corrected], [fd({ rate: 0.085 })], { replaceAbsent: false });
-      expect(p.resolved).toEqual([]);
-      expect(p.stillMisread[0]).toMatchObject({ id: 'a', wrong: 0.085, right: 0.08 });
-      expect(p.stillMisread[0]!.diagnosis.cause).toBe('senior_citizen');
-      expect(p.stillMisread[0]!.diagnosis.hint).toContain('regular (non-senior) column');
+      expect(p.change).toEqual([{ id: 'a', from: 0.08, to: 0.085 }]);
+      expect(p.stillMisread).toEqual([]);
     });
-    it('notices when the page moved on from both figures', () => {
+    it('and when the page moved on from both figures', () => {
       expect(
-        planSync([corrected], [fd({ rate: 0.0775 })], { replaceAbsent: false }).pageMoved,
-      ).toEqual([{ id: 'a', pageRate: 0.0775 }]);
+        planSync([corrected], [fd({ rate: 0.0775 })], { replaceAbsent: false }).change,
+      ).toEqual([{ id: 'a', from: 0.08, to: 0.0775 }]);
     });
   });
 });

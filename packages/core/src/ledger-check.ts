@@ -36,6 +36,8 @@ export interface LedgerLine {
   description?: string | null;
   /** the folio the line belongs to, when it can be told (each folio keeps its own running balance) */
   folio?: string | null;
+  /** a fund statement replaced this line: it is kept for review and counts for nothing */
+  superseded?: boolean;
 }
 
 export interface LedgerTolerance {
@@ -375,7 +377,10 @@ export function ledgerCheck(input: LedgerCheckInput): LedgerVerdict {
   const tol = input.tolerance.units;
   const money = input.tolerance.money;
   const pos = input.position ?? null;
-  const all = orderLines(input.lines, tol);
+  const all = orderLines(
+    input.lines.filter((l) => !l.superseded),
+    tol,
+  );
   const real = all.filter((l) => !isEstimateLine(l));
   const est = all.filter(isEstimateLine);
   if (all.length === 0) return emptyVerdict('no_transactions', input, []);

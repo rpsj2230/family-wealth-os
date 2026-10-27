@@ -4,11 +4,11 @@ import {
   ambiguousPrompt,
   diffFundImport,
   evidenceFor,
-  foreignPrompt,
   nameParts,
   pickCandidate,
   sameSchemeName,
   schemeLinkKey,
+  skippedFoliosProposal,
   sipPrompt,
   type FundImportInput,
   type OnFileFund,
@@ -269,7 +269,7 @@ describe('the prompt for a folio that could be several funds', () => {
 describe('the prompt for a fund the statement does not list', () => {
   const f = fund('x', { name: 'Old Fund', folioLast4: '9001', units: 50 });
   it('suggests marking it sold when the statement lists all the funds of the person', () => {
-    const p = absentPrompt({ f, asOf: '2026-10-25', basis: 'pan' });
+    const p = absentPrompt({ f, asOf: '2026-10-25', doubt: null });
     expect(p.suggestion.recommended).toBe('sold');
     expect(p.start).toBe('sold');
     expect(p.suggestion.approve).toBe('Approve: mark "Old Fund" as sold on 25 Oct 2026');
@@ -280,11 +280,19 @@ describe('the prompt for a fund the statement does not list', () => {
     });
   });
   it('suggests leaving it as it is when the statement is keyed on an e-mail address', () => {
-    const p = absentPrompt({ f, asOf: '2026-10-25', basis: 'email' });
+    const p = absentPrompt({
+      f,
+      asOf: '2026-10-25',
+      doubt: {
+        kind: 'basis',
+        reason:
+          'The statement is keyed on an email address and may not list every folio (a folio registered under another email would be missing), so a missing fund is not proof that it was sold.',
+      },
+    });
     expect(p.suggestion.recommended).toBe('keep');
     expect(p.start).toBe('keep');
     expect(p.suggestion.suggest).toBe('Leave it as it is.');
-    expect(p.suggestion.why).toContain('keyed on an e-mail address and may not list every folio');
+    expect(p.suggestion.why).toContain('keyed on an email address and may not list every folio');
     expect(p.suggestion.options.map((o) => o.id)).toEqual(['keep', 'sold']);
     expect(p.suggestion.found).toContain('folio …9001, 50 units');
   });
@@ -309,29 +317,30 @@ describe('the prompt for a SIP that could not be judged', () => {
   });
 });
 
-describe('the prompt for folios of someone else', () => {
-  const g = {
-    key: 'foreign:567H',
-    holder: 'Chitra Example',
-    panLast4: '567H',
-    member: null,
-    folios: [{ name: 'Sample Bond Fund', folioLast4: '4455', units: 10, invested: 1000 }],
-  };
-  it('suggests skipping them and links to Settings > People for someone not in the family list', () => {
-    const p = foreignPrompt(g);
-    expect(p.suggestion.suggest).toBe('Skip these folios.');
-    expect(p.suggestion.recommended).toBe('skip');
-    expect(p.suggestion.found).toContain('not any person in your family list');
-    expect(p.suggestion.links).toEqual([
+describe('the suggestion for folios of someone who is not in the family list', () => {
+  it('is to skip them, with a link to add the person in Settings > People', () => {
+    const p = skippedFoliosProposal({
+      panLast4: '567H',
+      holder: 'Chitra Example',
+      schemes: ['Sample Bond Fund', 'Sample Gilt Fund'],
+    });
+    expect(p.suggest).toBe('Skip these folios.');
+    expect(p.recommended).toBe('skip');
+    expect(p.approve).toBe('Approve: skip these 2 folios');
+    expect(p.found).toContain('2 folios held by Chitra Example (PAN ending 567H)');
+    expect(p.found).toContain('not any person in your family list');
+    expect(p.links).toEqual([
       { href: '/settings?tab=people', text: 'Add this person in Settings > People' },
     ]);
-    expect(p.suggestion.options.map((o) => o.id)).toEqual(['skip', 'mine']);
   });
-  it('names the family member whose folios they are, and has no Add link', () => {
-    const p = foreignPrompt({ ...g, member: 'Beena' });
-    expect(p.suggestion.suggest).toBe('Skip these folios here; they belong to Beena.');
-    expect(p.suggestion.links).toEqual([]);
-    expect(p.suggestion.why).toContain('import this statement again under Beena');
+  it('names one folio in the singular, and a holder it does not know by the PAN', () => {
+    const p = skippedFoliosProposal({
+      panLast4: '567H',
+      holder: null,
+      schemes: ['Sample Bond Fund'],
+    });
+    expect(p.suggest).toBe('Skip this folio.');
+    expect(p.found).toContain('held by the holder of PAN ending 567H');
   });
 });
 

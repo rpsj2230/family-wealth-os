@@ -66,8 +66,9 @@ export function bankStanding(b: BankBlock, today: string): BankStanding {
     const st = rowState(r, today);
     if (st === 'closed') continue;
     if (st === 'deposit') {
+      if (r.fd?.listState === 'hidden') continue;
       deposits++;
-      if (r.fd?.needsConfirmation) toConfirm++;
+      if (r.fd?.listState === 'confirm') toConfirm++;
       continue;
     }
     balances++;

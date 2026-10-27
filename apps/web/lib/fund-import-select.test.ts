@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { sipKey } from '@fwos/core';
+import { replaceKey, sipKey } from '@fwos/core';
 import { demoFundPreview } from './demo-fund-import';
 import { selectionFromForm } from './fund-import';
 import {
   appendSelection,
   hasWork,
   initialAnswers,
-  initialOff,
   isTaken,
   questionsOf,
   selectableKeys,
@@ -14,7 +13,7 @@ import {
 } from './fund-import-select';
 
 const people = demoFundPreview();
-const [anil, beena, chitra] = people;
+const [anil, beena, charu] = people;
 const key = (p: typeof anil, name: string) => p!.diff.items.find((i) => i.name.includes(name))!.key;
 
 describe('what can be ticked in a preview', () => {
@@ -32,7 +31,6 @@ describe('what can be ticked in a preview', () => {
   it('starts with everything ticked', () => {
     const s = selectionOf(people, new Set());
     expect(s.take).toEqual(s.seen);
-    // Anil's four, Beena's new fund, Chitra's fund that the statement does not list
     expect(s.count).toBe(6);
   });
 
@@ -65,6 +63,30 @@ describe('what can be ticked in a preview', () => {
     expect(fd.getAll('take')).not.toContain(key(anil, 'Old Fund'));
     expect(fd.getAll('take')).toContain(key(anil, 'Flexi'));
   });
+
+  it('gives the lines a statement replaces their own tick, which goes with the fund and not with the SIP', () => {
+    const flexi = key(anil, 'Flexi');
+    const r = replaceKey(flexi);
+    expect(selectableKeys(people)).toContain(r);
+    expect(selectionOf(people, new Set()).take).toContain(r);
+    // unticking only the replace part keeps the fund ticked, so the statement's own lines are still added
+    const only = selectionOf(people, new Set([r]));
+    expect(only.take).toContain(flexi);
+    expect(only.take).not.toContain(r);
+    expect(only.seen).toContain(r);
+    // unticking the fund takes the replace part with it
+    expect(isTaken(people, new Set([flexi]), r)).toBe(false);
+    // a fund with nothing to replace has no such tick
+    expect(selectableKeys(people)).not.toContain(replaceKey(key(anil, 'Index')));
+  });
+
+  it('offers no tick for a fund the statement does not list, and no sale for it', () => {
+    const keys = selectableKeys(people);
+    for (const i of charu!.diff.items.filter((x) => x.kind === 'review')) {
+      expect(keys).not.toContain(i.key);
+      expect(i.kind).toBe('review');
+    }
+  });
 });
 
 describe('the questions in a preview', () => {
@@ -74,16 +96,16 @@ describe('the questions in a preview', () => {
     )!;
   const valueKeys = () =>
     questionsOf([beena!])
-      .filter((q) => q.prompt.kind === 'ambiguous' && q.prompt.statement?.name.includes('Value'))
+      .filter((q) => q.prompt.kind === 'ambiguous' && q.prompt.statement?.name.includes('Core'))
       .map((q) => q.key);
 
   it('finds each question: a folio that could be several funds, a fund the statement does not list, a SIP it could not judge', () => {
     const kinds = questionsOf(people).map((q) => q.prompt.kind);
     expect(kinds.filter((k) => k === 'ambiguous')).toHaveLength(3);
-    expect(kinds.filter((k) => k === 'absent')).toHaveLength(2); // Anil's sold fund, Chitra's dormant fund
+    expect(kinds.filter((k) => k === 'absent')).toHaveLength(3); // Anil's sold fund, Charu's two funds it may not list
     expect(kinds.filter((k) => k === 'sip')).toHaveLength(1);
     expect(
-      questionsOf([chitra!])
+      questionsOf([charu!])
         .find((q) => q.prompt.kind === 'sip')!
         .key.endsWith('#sip'),
     ).toBe(true);
@@ -97,20 +119,29 @@ describe('the questions in a preview', () => {
     // a fund the statement does not list starts on the suggestion, with its date
     const old = ask(anil, 'Old Fund');
     expect(a[old.key]).toEqual({ option: 'sold', input: '2026-10-25', confirmed: false });
-    const dormant = ask(chitra, 'Dormant');
-    expect(a[dormant.key]).toMatchObject({ option: 'keep' });
-    expect(a[ask(chitra, 'Bond').key]).toBeDefined();
+    const dividend = ask(charu, 'Dividend');
+    expect(a[dividend.key]).toMatchObject({ option: 'keep' });
+    expect(a[ask(charu, 'Bond').key]).toBeDefined();
   });
 
-  it('a fund the statement does not list starts unticked when the suggestion is to leave it, ticked when it is to call it sold', () => {
-    const off = initialOff(people);
-    expect(off.has(key(chitra, 'Dormant'))).toBe(true);
-    expect(off.has(key(anil, 'Old Fund'))).toBe(false);
-    const s = selectionOf(people, off, initialAnswers(people));
-    expect(s.take).toContain(key(anil, 'Old Fund'));
-    expect(s.take).not.toContain(key(chitra, 'Dormant'));
-    // the dormant fund is still shown, so leaving it is remembered when applied
-    expect(s.seen).toContain(key(chitra, 'Dormant'));
+  it('a fund the statement may not list has no tick: the answer decides, and selling it counts as work', () => {
+    const dividend = ask(charu, 'Dividend');
+    expect(selectableKeys(people)).not.toContain(dividend.itemKey);
+    const idle = selectionOf([charu!], new Set(), initialAnswers([charu!]));
+    expect(idle.choices.find((c) => c.key === dividend.key)).toMatchObject({ option: 'keep' });
+    expect(hasWork(idle)).toBe(idle.take.length > 0);
+    const sold = {
+      ...initialAnswers([charu!]),
+      [dividend.key]: { option: 'sold', input: '2026-10-20', confirmed: true },
+    };
+    const sel = selectionOf([charu!], new Set(), sold);
+    expect(sel.choices.find((c) => c.key === dividend.key)).toEqual({
+      key: dividend.key,
+      option: 'sold',
+      input: '2026-10-20',
+    });
+    expect(hasWork(sel)).toBe(true);
+    expect(sel.count).toBe(idle.count + 1);
   });
 
   it('an approved folio counts as work; unanswered questions are not work', () => {

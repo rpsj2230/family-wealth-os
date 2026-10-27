@@ -1573,6 +1573,37 @@ table.xl {
   overflow-wrap: anywhere;
   font-size: 0.76rem;
 }
+.xl .notes .notetxt {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* a deposit whose date has passed within the window: its amount is muted (not counted) and the button sits under it */
+.xl .maturedcell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-weight: 400;
+}
+.xl .maturedcell .small {
+  white-space: normal;
+  text-align: right;
+}
+.xl .sub.notcounted {
+  color: var(--warn-fg, #8a4b00);
+}
+.xl .sub.notcounted .confirmmat {
+  display: block;
+  margin-top: 4px;
+}
+.xl .confirmbtn {
+  white-space: nowrap;
+}
+.hiddennote {
+  margin: 8px 2px 16px;
+}
 .xl td .pill {
   display: inline-block;
   margin-left: 6px;

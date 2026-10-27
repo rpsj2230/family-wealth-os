@@ -3,24 +3,31 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  PRIORITY_SENTENCE,
   chipsOf,
   fmtUnits,
   formatInr,
+  fromInception,
   isListed,
   longDate,
   personStyles,
+  priorityTotals,
+  replaceIsChange,
+  replaceKey,
   sipChip,
   sipIsChange,
   sipKey,
+  skippedFoliosProposal,
+  sourceLabel,
+  sourceRank,
   type Chip,
   type FundPrompt,
 } from '@fwos/core';
-import type { ItemView, PersonPreview } from '@/lib/fund-import';
+import type { ItemView, PersonPreview, SkippedFoliosView } from '@/lib/fund-import';
 import { MAX_LINES_SHOWN } from '@/lib/fund-import';
 import {
   fundSelectable,
   initialAnswers,
-  initialOff,
   inputOf,
   isQuiet,
   isTaken,
@@ -280,6 +287,16 @@ function Row({
   const prompt = item.prompt ?? null;
   const fundAnswer = answers[item.key];
   const sipAnswer = answers[sipK];
+  const rep = replaceIsChange(item) ? item.lines.replace! : null;
+  const replaceK = replaceKey(item.key);
+  const replaceOn = isTaken(people, off, replaceK);
+  const replaceLocked = !fundOn;
+  const fromWords = rep
+    ? Object.entries(rep.bySource)
+        .sort(([a], [b]) => sourceRank(b) - sourceRank(a))
+        .map(([src, n]) => `${n} ${sourceLabel(src).toLowerCase()}`)
+        .join(', ')
+    : '';
   return (
     <li className={`fc-row ${item.kind}${selectable && !fundOn ? ' off' : ''}`}>
       <div className="fc-head">
@@ -321,6 +338,57 @@ function Row({
       )}
 
       <Nums item={item} />
+
+      {rep && (
+        <div className={`fc-replace${replaceLocked || !replaceOn ? ' off' : ''}`}>
+          <input
+            id={`${id}-r`}
+            type="checkbox"
+            checked={replaceOn}
+            disabled={disabled || replaceLocked}
+            onChange={(e) => onToggle(replaceK, e.target.checked)}
+            aria-label={`Replace the lines on file for ${item.name} with the statement's`}
+          />
+          <div className="fc-replacebody">
+            <label htmlFor={`${id}-r`}>
+              This statement replaces {rep.count} line{rep.count === 1 ? '' : 's'} on file (from{' '}
+              {fromWords}), adds {item.lines.newCount}, confirms {item.lines.duplicateCount}.
+            </label>
+            <p className="fc-why">
+              {replaceOn && !replaceLocked
+                ? 'They are kept in a hidden list on the fund page, not deleted. Untick to keep your own lines for this fund.'
+                : 'Your own lines stay as they are for this fund.'}
+            </p>
+            <details className="fc-lines fc-replaced">
+              <summary>
+                The {Math.min(rep.views.length, 5)} first of {rep.count}
+              </summary>
+              <table className="fc-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>What</th>
+                    <th>From</th>
+                    <th className="num">Amount</th>
+                    <th className="num">Units</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rep.views.slice(0, 5).map((l, n) => (
+                    <tr key={`${l.date}${n}`}>
+                      <td>{longDate(l.date)}</td>
+                      <td>{KIND_WORD[l.kind] ?? l.kind}</td>
+                      <td>{sourceLabel(l.source)}</td>
+                      <td className="num">{formatInr(l.amount)}</td>
+                      <td className="num">{fmtUnits(l.units)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          </div>
+        </div>
+      )}
 
       {item.lines.newCount > 0 && (
         <details className="fc-lines">
@@ -419,13 +487,13 @@ export function FundChanges({
   disabled?: boolean;
   onSelection?: (s: FundSelection) => void;
 }) {
-  const [off, setOff] = useState<ReadonlySet<string>>(() => initialOff(people));
+  const [off, setOff] = useState<ReadonlySet<string>>(() => new Set());
   const [answers, setAnswers] = useState<Answers>(() => initialAnswers(people));
   // a new preview starts with everything ticked again and every question on its suggested starting answer
   const [shownFor, setShownFor] = useState(people);
   if (shownFor !== people) {
     setShownFor(people);
-    setOff(initialOff(people));
+    setOff(new Set());
     setAnswers(initialAnswers(people));
   }
   const styles = useMemo(() => personStyles(owners), [owners]);
@@ -446,8 +514,24 @@ export function FundChanges({
     if (tickKey) toggle(tickKey, a.option === 'sold');
   };
 
+  const statementOnly = people.length > 0 && people.every((p) => p.files.length === 0);
+  const totals = useMemo(() => priorityTotals(people.flatMap((p) => p.diff.items)), [people]);
   return (
     <div className="fc">
+      {statementOnly && (
+        <div className="fc-priority" role="note">
+          <p>
+            <strong>{PRIORITY_SENTENCE.split('. ')[0]}.</strong>{' '}
+            {PRIORITY_SENTENCE.split('. ').slice(1).join('. ')}
+          </p>
+          <p className="fc-counts">
+            {totals.replaced > 0
+              ? `${totals.replaced} line${totals.replaced === 1 ? '' : 's'} on file in ${totals.funds} fund${totals.funds === 1 ? '' : 's'} replaced, `
+              : 'Nothing on file is replaced, '}
+            {totals.added} line{totals.added === 1 ? '' : 's'} added, {totals.confirmed} confirmed.
+          </p>
+        </div>
+      )}
       {inputs && (
         <>
           {sel.seen.map((k) => (
@@ -484,7 +568,7 @@ export function FundChanges({
             </h3>
             <p className="muted small fc-period">
               {p.diff.periodTo
-                ? `Dated ${longDate(p.diff.periodTo)}${p.diff.periodFrom ? `, from ${longDate(p.diff.periodFrom)}` : ''}. `
+                ? `Dated ${longDate(p.diff.periodTo)}${p.diff.periodFrom ? (fromInception(p.diff.periodFrom) ? ', from the beginning' : `, from ${longDate(p.diff.periodFrom)}`) : ''}. `
                 : ''}
               {changed.length === 0
                 ? 'Nothing new.'
@@ -528,6 +612,13 @@ export function FundChanges({
                           · SIP {formatInr(i.sip.after)} unchanged
                         </span>
                       ) : null}
+                      {i.notes
+                        .filter((n) => n.startsWith('Kept:') || n.includes('inside the period'))
+                        .map((n) => (
+                          <span key={n} className="muted small fc-kept">
+                            {n}
+                          </span>
+                        ))}
                     </li>
                   ))}
                 </ul>
@@ -590,6 +681,62 @@ export function AppliedChanges({
           see my suggestion for {needsReview.length === 1 ? 'it' : 'each'}.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Folios on the statement that belong to someone who is not in the family list. They are never applied; I suggest skipping them, and
+ * a link adds the person in Settings if they should be in the household. Approve only confirms the suggestion (nothing is written).
+ */
+export function SkippedFolios({ groups }: { groups: SkippedFoliosView[] }) {
+  const [ok, setOk] = useState<ReadonlySet<string>>(new Set());
+  if (groups.length === 0) return null;
+  return (
+    <div className="fc-skipped">
+      {groups.map((g) => {
+        const k = g.panLast4 ?? 'none';
+        const p = skippedFoliosProposal(g);
+        const approved = ok.has(k);
+        return (
+          <div
+            key={k}
+            className="fc-ask"
+            role="group"
+            aria-label={`Folios of ${g.holder ?? `PAN ending ${k}`}`}
+          >
+            <p className="fc-found">
+              <span className="fc-lead">What I found</span> {p.found}
+            </p>
+            <p className="fc-suggest">
+              <span className="fc-lead">What I suggest</span> {p.suggest}{' '}
+              <span className="muted">{p.why}</span>
+            </p>
+            <div className="fc-approve">
+              {approved ? (
+                <p className="fc-approved" role="status">
+                  <span aria-hidden="true">✓ </span>
+                  {p.approve!.replace(/^Approve: /, 'Approved: ')}.{' '}
+                  <span className="muted">Nothing is written for them.</span>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => setOk(new Set([...ok, k]))}
+                >
+                  {p.approve}
+                </button>
+              )}
+              {p.links.map((l) => (
+                <Link key={l.href} className="btn compact" href={l.href}>
+                  {l.text}
+                </Link>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   type ExplainSet,
 } from './explain';
 import type { BankOverview } from './bank-overview';
+import { maturedRuleText } from './deposit-state';
 import { formatInrCompact } from './money';
 
 export interface BankFacts {
@@ -218,7 +219,7 @@ export function bankFigure(
               : 'Every figure is recorded or worked out from deposit terms.',
         notes: [
           staleNote,
-          'A deposit past its maturity date is left out until you say where the money went. Foreign-currency balances are counted at today’s rupee value.',
+          `${maturedRuleText()} Foreign-currency balances are counted at today’s rupee value.`,
         ],
         fix: f.balances.stale > 0 || cashEst > 0.5 ? monthlyFix : undefined,
       });
@@ -431,7 +432,7 @@ export function bankFigure(
         ],
         level: 'complete',
         completeness: 'The principal is the amount recorded when each deposit was added.',
-        notes: ['A deposit waiting for confirmation after its date is left out.'],
+        notes: [maturedRuleText()],
       });
     case 'maturity':
       return explain({
@@ -529,7 +530,7 @@ export function bankFigure(
         id,
         title: 'To confirm',
         what: 'Deposits past their date that are still listed as running.',
-        how: `${exPlural(f.toConfirm, 'deposit')} ${f.toConfirm === 1 ? 'has' : 'have'} passed ${f.toConfirm === 1 ? 'its' : 'their'} date and wait for you to say where the money went. Until then ${f.toConfirm === 1 ? 'it is' : 'they are'} left out of these figures.`,
+        how: `${exPlural(f.toConfirm, 'deposit')} ${f.toConfirm === 1 ? 'has' : 'have'} passed ${f.toConfirm === 1 ? 'its' : 'their'} date and wait for you to confirm the deposit has matured. ${f.toConfirm === 1 ? 'It is' : 'They are'} left out of these figures: the money counts in the savings account or new deposit it went to.`,
         inputs: [
           {
             label: 'Matured, not confirmed',
@@ -542,7 +543,7 @@ export function bankFigure(
           f.toConfirm > 0
             ? 'The totals leave these deposits out until confirmed.'
             : 'Nothing waits for confirmation.',
-        notes: [],
+        notes: [maturedRuleText()],
         fix: { label: 'Confirm them', href: f.links.maturities },
       });
     case 'largestBank': {

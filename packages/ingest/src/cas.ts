@@ -44,6 +44,8 @@ export interface CasScheme {
   /** the holder named on the folio and the PAN printed on it: a statement can hold the folios of several people */
   holder?: string | null;
   folioPan?: string | null;
+  /** why this scheme was not read cleanly (a name that is statement text, no name, no closing balance); absent when it was */
+  unclear?: string | null;
 }
 
 export interface CasStatement {
@@ -308,6 +310,12 @@ export function parseCas(raw: string): CasStatement {
       );
       sc.name = `${sc.name.slice(0, 110).trim()}…`;
     }
+  }
+
+  for (const sc of schemes) {
+    if (sc.name.endsWith('…') || sc.name === 'Unnamed scheme')
+      sc.unclear = 'the scheme name could not be read cleanly';
+    else if (sc.closingUnits === null) sc.unclear = 'no closing balance was found';
   }
 
   if (schemes.length === 0) {

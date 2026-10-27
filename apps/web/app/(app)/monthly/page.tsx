@@ -5,8 +5,10 @@ import {
   personStyles,
   standings,
   summarizeStandings,
+  withoutHiddenDeposits,
 } from '@fwos/core';
 import { AutomationStrip } from '@/components/AutomationCards';
+import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
 import { Why } from '@/components/Why';
@@ -14,6 +16,7 @@ import { QuickEditHost } from '@/components/QuickEditHost';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
+import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
 import { loadJointHolders } from '@/lib/quick-edit-data';
@@ -33,9 +36,10 @@ const TABS = ['banks', 'other'] as const;
 export default async function MonthlyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; matured?: string }>;
 }) {
   const sp = await searchParams;
+  const showAll = showsMatured(sp.matured);
   const tab = (TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as (typeof TABS)[number])
     : 'banks';
@@ -80,17 +84,21 @@ export default async function MonthlyPage({
     );
   }
 
-  const [{ today, assetRows, obsRows, fdRows, ownerName, portfolio }, inst, fx, jointHolders] =
-    await Promise.all([
-      loadPortfolio(supabase),
-      supabase.from('institutions').select('id, name'),
-      supabase
-        .from('fx_rates')
-        .select('currency, rate_date, inr_per_unit')
-        .order('rate_date', { ascending: false })
-        .limit(20),
-      loadJointHolders(supabase as unknown as SupabaseClient),
-    ]);
+  const [
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays },
+    inst,
+    fx,
+    jointHolders,
+  ] = await Promise.all([
+    loadPortfolio(supabase),
+    supabase.from('institutions').select('id, name'),
+    supabase
+      .from('fx_rates')
+      .select('currency, rate_date, inr_per_unit')
+      .order('rate_date', { ascending: false })
+      .limit(20),
+    loadJointHolders(supabase as unknown as SupabaseClient),
+  ]);
   const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const names = Object.fromEntries(
@@ -103,11 +111,14 @@ export default async function MonthlyPage({
     portfolio,
     institutionNames: names,
     today,
+    hideMaturedAfterDays,
   });
   const fxHint: Record<string, number> = {};
   for (const r of fx.data ?? [])
     if (!((r.currency as string) in fxHint)) fxHint[r.currency as string] = Number(r.inr_per_unit);
-  const sum = summarizeStandings(standings(blocks, iso));
+  // deposits that matured long ago or are confirmed leave the grid (they are in no total); ?matured=all lists them again, dimmed
+  const { blocks: visible, counts: hiddenCounts } = withoutHiddenDeposits(blocks, showAll);
+  const sum = summarizeStandings(standings(visible, iso));
   const waiting = sum.waiting + sum.attention;
   const exM = buildMonthlyExplain({
     today: iso,
@@ -170,7 +181,13 @@ export default async function MonthlyPage({
           value.
         </p>
       )}
-      <UpdateGrid blocks={blocks} styles={styles} today={iso} fxHint={fxHint} institutions />
+      <UpdateGrid blocks={visible} styles={styles} today={iso} fxHint={fxHint} institutions />
+      <HiddenDepositsNote
+        counts={hiddenCounts}
+        showAll={showAll}
+        showHref={maturedHref('/monthly', {}, true)}
+        hideHref={maturedHref('/monthly', {}, false)}
+      />
     </QuickEditHost>
   );
 }

@@ -9,6 +9,17 @@ import {
 import { RULES } from '../src/tax';
 
 describe('fund statistics settings', () => {
+  it('reads the matured-deposit window as whole days from 1 to 3650, 60 by default', () => {
+    const w = (v: unknown) =>
+      configFromJson({ deposits: { hideMaturedAfterDays: v } }).deposits.hideMaturedAfterDays;
+    expect(DEFAULT_CONFIG.deposits.hideMaturedAfterDays).toBe(60);
+    expect(w(90)).toBe(90);
+    expect(w(0)).toBe(60);
+    expect(w(4000)).toBe(60);
+    expect(w('x')).toBe(60);
+    expect(w(30.4)).toBe(30);
+  });
+
   it('start at the built-in numbers, accept saved ones and clamp nonsense', () => {
     expect(configFromJson({}).funds).toEqual(DEFAULT_CONFIG.funds);
     expect(

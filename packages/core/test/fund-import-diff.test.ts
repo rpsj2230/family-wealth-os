@@ -750,6 +750,19 @@ describe('SIP verdicts', () => {
     expect(v.why).toContain('cancelled on 12 Oct 2026');
   });
 
+  it('a new fund whose SIP ended in a cancellation says so, not that an instalment was missed', () => {
+    const cancelled = stFund({
+      match: { status: 'none' },
+      lines: lines('5678', monthly('2026-01-05', 10, 10000)),
+      sipCancelled: { on: '2026-10-26' },
+    });
+    const sip = diffFundImport(input({ funds: [cancelled] })).items[0]!.sip!;
+    expect(sip.kind).toBe('stopped');
+    expect(sip.effectiveOn).toBe('2026-10-26');
+    expect(sip.why).toContain('cancelled on 26 Oct 2026');
+    expect(sip.why).not.toContain('none came');
+  });
+
   it('SIP resumed: stopped on file, instalments again after the stop date', () => {
     const f = withSip({
       sipStopped: true,
@@ -1021,11 +1034,15 @@ describe('questions with a suggested answer', () => {
     const d = diffFundImport(
       input({ funds: [stFund()], onFile: [onFile(), gone()], basis: 'email' }),
     );
-    const sold = d.items.find((i) => i.assetId === 'gone')!;
-    expect(sold.prompt!.start).toBe('keep');
-    expect(sold.prompt!.suggestion.suggest).toBe('Leave it as it is.');
-    expect(chipsOf(sold).map((c) => c.label)).toContain('Not on this statement');
-    expect(chipsOf(sold).map((c) => c.label)).not.toContain('Sold');
+    const it = d.items.find((i) => i.assetId === 'gone')!;
+    expect(it.kind).toBe('review');
+    expect(it.reviewKind).toBe('absent');
+    expect(it.write).toBeNull();
+    expect(it.prompt!.start).toBe('keep');
+    expect(it.prompt!.suggestion.suggest).toBe('Leave it as it is.');
+    expect(it.prompt!.suggestion.why).toContain('keyed on an email address');
+    expect(it.prompt!.suggestion.options.map((o) => o.id)).toEqual(['keep', 'sold']);
+    expect(chipsOf(it).map((c) => c.label)).toEqual(['Not on this statement']);
   });
 
   it('a fund the person already chose to keep has no question', () => {
@@ -1063,28 +1080,5 @@ describe('questions with a suggested answer', () => {
     expect(chipsOf(it).map((c) => c.label)).not.toContain('Needs a look');
     // the question replaces the statement-wide remark
     expect(d.notes.join(' ')).not.toContain('could not be judged');
-  });
-
-  it('folios of someone else are one question for each person, and no fund is called sold meanwhile', () => {
-    const d = diffFundImport(
-      input({
-        funds: [stFund()],
-        onFile: [onFile(), gone()],
-        foreign: [
-          {
-            key: 'foreign:567H',
-            holder: 'Chitra Example',
-            panLast4: '567H',
-            member: null,
-            folios: [{ name: 'Sample Bond Fund', folioLast4: '4455', units: 10, invested: 1000 }],
-          },
-        ],
-      }),
-    );
-    const f = d.items.find((i) => i.prompt?.kind === 'foreign')!;
-    expect(f.kind).toBe('review');
-    expect(f.name).toBe('Folios of Chitra Example');
-    expect(f.prompt!.suggestion.recommended).toBe('skip');
-    expect(d.items.some((i) => i.kind === 'sold')).toBe(false);
   });
 });

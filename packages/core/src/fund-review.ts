@@ -13,7 +13,7 @@
  *      otherwise nothing is suggested ("I cannot tell: please choose").
  *  - absent: a fund on file that a complete statement does not list;
  *  - sip: a SIP the statement could not judge;
- *  - foreign: folios held by someone who is not this person.
+ *  - skipped folios: folios held by someone who is not in the family list (`skippedFoliosProposal`).
  */
 import { formatInr } from './money';
 import { longDate } from './inbox-view';
@@ -32,7 +32,7 @@ export interface FolioLink {
   schemeKey: string;
 }
 
-export type PromptKind = 'ambiguous' | 'absent' | 'sip' | 'foreign';
+export type PromptKind = 'ambiguous' | 'absent' | 'sip';
 
 export interface Evidence {
   /** same ISIN (or AMFI code) */
@@ -80,17 +80,6 @@ export interface FundPrompt {
   start: string;
   /** the fund as it would be shown after each choice, where the choice makes the folio an ordinary matched or new fund */
   outcomes: Record<string, PromptOutcome[]>;
-}
-
-/** Folios the statement lists for someone who is not this person. */
-export interface ForeignGroup {
-  /** the key the choice is filed under */
-  key: string;
-  holder: string | null;
-  panLast4: string | null;
-  /** the family member the PAN belongs to, when it is one of them */
-  member: string | null;
-  folios: { name: string; folioLast4: string; units: number | null; invested: number | null }[];
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -342,11 +331,12 @@ export function ambiguousPrompt(a: AmbiguousArgs): FundPrompt {
 export function absentPrompt(a: {
   f: OnFileFund;
   asOf: string;
-  basis: 'email' | 'pan' | 'unknown';
+  /** why a missing fund is not taken as sold (an e-mail-keyed statement, a scheme read unclearly, too many missing); null when the statement lists all */
+  doubt: { kind: 'basis' | 'unclear' | 'many'; reason: string } | null;
 }): FundPrompt {
   const { f, asOf } = a;
   const st = f.state;
-  const email = a.basis === 'email';
+  const keep = a.doubt !== null;
   const on = f.folioLast4 ? `folio …${f.folioLast4}, ` : '';
   const found = `${quote(f.name)} (${on}${units3(st?.units ?? null)} units${st?.invested ? `, ${formatInr(st.invested)} invested` : ''}) is on file, but is not on the statement dated ${longDate(asOf)}.`;
   const options: SuggestionOption[] = [
@@ -358,11 +348,11 @@ export function absentPrompt(a: {
     },
     { id: 'keep', label: 'Leave as it is', action: 'leave it as it is' },
   ];
-  const s = email
+  const s = a.doubt
     ? suggestion({
         found,
         suggest: 'Leave it as it is.',
-        why: 'The statement is keyed on an e-mail address and may not list every folio (a folio registered under another e-mail would be missing), so a missing fund is not proof that it was sold.',
+        why: a.doubt.reason,
         recommended: 'keep',
         options,
       })
@@ -378,7 +368,7 @@ export function absentPrompt(a: {
     statement: null,
     candidates: [],
     suggestion: s,
-    start: email ? 'keep' : 'sold',
+    start: keep ? 'keep' : 'sold',
     outcomes: {},
   };
 }
@@ -420,46 +410,36 @@ export function sipPrompt(a: {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Folios of someone else
+// Folios of someone who is not in the family list
 // ------------------------------------------------------------------------------------------------
 export const PEOPLE_LINK: SuggestionLink = {
   href: '/settings?tab=people',
   text: 'Add this person in Settings > People',
 };
 
-export function foreignPrompt(g: ForeignGroup): FundPrompt {
-  const n = g.folios.length;
+/**
+ * Folios on a statement keyed on an e-mail address that belong to someone who is not in the family list. They are never applied;
+ * the suggestion is to skip them, and to add the person in Settings > People if they should be in the household.
+ */
+export function skippedFoliosProposal(g: {
+  panLast4: string | null;
+  holder: string | null;
+  schemes: string[];
+}): Proposal {
+  const n = g.schemes.length;
   const who = g.holder ?? (g.panLast4 ? `the holder of PAN ending ${g.panLast4}` : 'someone else');
-  const found = `The statement has ${n} folio${n === 1 ? '' : 's'} held by ${who}${g.holder && g.panLast4 ? ` (PAN ending ${g.panLast4})` : ''}: ${list(g.folios.slice(0, 4).map((x) => `${x.name} …${x.folioLast4}`))}${n > 4 ? `, and ${n - 4} more` : ''}. ${g.member ? `That PAN is ${g.member}'s, not this person's.` : 'That PAN is not any person in your family list.'}`;
-  const s = suggestion({
-    found,
-    suggest: g.member
-      ? `Skip these folios here; they belong to ${g.member}.`
-      : 'Skip these folios.',
-    why: g.member
-      ? `To record them, import this statement again under ${g.member} (choose ${g.member} in "Whose statement").`
-      : "They are not this person's, so adding them would put someone else's money in this household. If this person should be in the family list, add them in Settings and import the statement again.",
+  return suggestion({
+    found: `The statement has ${n} folio${n === 1 ? '' : 's'} held by ${who}${g.holder && g.panLast4 ? ` (PAN ending ${g.panLast4})` : ''}: ${list(g.schemes.slice(0, 4).map(quote))}${n > 4 ? `, and ${n - 4} more` : ''}. That PAN is not any person in your family list.`,
+    suggest: `Skip ${n === 1 ? 'this folio' : 'these folios'}.`,
+    why: "They are not yours, so adding them would put someone else's money in this household. If this person should be in the family list, add them in Settings and import the statement again.",
     recommended: 'skip',
     options: [
       {
         id: 'skip',
-        label: 'Skip these folios',
-        action: `skip these ${n} folio${n === 1 ? '' : 's'}`,
-      },
-      {
-        id: 'mine',
-        label: "They are this person's too: import them",
-        action: `import these ${n} folio${n === 1 ? '' : 's'} as this person's`,
+        label: `Skip ${n === 1 ? 'this folio' : 'these folios'}`,
+        action: `skip ${n === 1 ? 'this folio' : `these ${n} folios`}`,
       },
     ],
-    links: g.member ? [] : [PEOPLE_LINK],
+    links: [PEOPLE_LINK],
   });
-  return {
-    kind: 'foreign',
-    statement: null,
-    candidates: [],
-    suggestion: s,
-    start: 'skip',
-    outcomes: {},
-  };
 }

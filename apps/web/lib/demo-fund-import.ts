@@ -13,7 +13,7 @@ import {
   type StatementFund,
   type StatementLine,
 } from '@fwos/core';
-import { toView, type PersonPreview } from './fund-import';
+import { toView, type PersonPreview, type SkippedFoliosView } from './fund-import';
 
 const RULES = { sipMinInstalments: 3, unitTolerance: 0.001, moneyTolerance: 1 };
 const END = '2026-10-25';
@@ -45,14 +45,14 @@ const toLines = (folio: string, rows: Raw[]): StatementLine[] => {
     balance: null,
   }));
 };
-const stored = (ls: StatementLine[]) =>
+const stored = (ls: StatementLine[], source = 'cas') =>
   ls.map((l) => ({
     key: l.key,
     date: l.date,
     kind: l.kind,
     amount: l.amount,
     units: l.units,
-    source: 'cas',
+    source,
   }));
 
 function state(o: Partial<OnFileState>): OnFileState {
@@ -110,12 +110,7 @@ function stmt(id: string, name: string, isin: string, o: Partial<StatementFund>)
   };
 }
 
-function build(
-  ownerId: string,
-  funds: StatementFund[],
-  files: OnFileFund[],
-  basis: 'email' | 'pan' = 'pan',
-): FundImportInput {
+function build(ownerId: string, funds: StatementFund[], files: OnFileFund[]): FundImportInput {
   return {
     ownerId,
     source: 'statement',
@@ -126,7 +121,6 @@ function build(
     funds,
     onFile: files,
     rules: RULES,
-    basis,
   };
 }
 
@@ -187,6 +181,9 @@ export function demoFundPreview(): PersonPreview[] {
       [
         stmt('f1', 'Sample Flexi Cap Fund - Direct Growth', 'INF000A01AB1', {
           lines: flexiNew,
+          // 650.5 units were held when the statement began, and its eight instalments add 800 more
+          openingUnits: 650.5,
+          startedOn: null,
           closingUnits: 1_450.5,
           invested: 180_000,
         }),
@@ -211,7 +208,18 @@ export function demoFundPreview(): PersonPreview[] {
           units: 1_200.25,
           invested: 150_000,
           sipMonthly: 10_000,
-          lines: stored(flexiOld),
+          // six lines the statement has, one from an app export and one worked out from the SIP that it does not
+          lines: [
+            ...stored(flexiOld),
+            ...stored(
+              toLines('5678', [{ date: '2026-04-20', kind: 'purchase', amount: 5_000, units: 50 }]),
+              'csv',
+            ),
+            ...stored(
+              toLines('5678', [{ date: '2026-06-20', kind: 'sip', amount: 10_000, units: 100 }]),
+              'estimate',
+            ),
+          ],
         }),
         onFile('f2', 'Sample Large Cap Fund - Direct Growth', 'INF000C03EF3', {
           units: 300,
@@ -242,9 +250,10 @@ export function demoFundPreview(): PersonPreview[] {
       ],
     ),
   );
-  // Beena's statement is keyed on an e-mail address. One fund of hers is on file twice with the same ISIN, so two statement folios
-  // could each be either: the folio settles one and the units settle the other. A third scheme has no evidence at all.
-  const VALUE = 'INF000V10ST1';
+  // Beena's statement is keyed on an e-mail address. One fund of hers is on file twice with the same ISIN and neither has the
+  // statement's folios, so each folio could be either: the units settle both (one fund holds 700 units, the other 3,047.333). A third
+  // scheme has no evidence at all.
+  const CORE = 'INF000V10ST1';
   const HYBRID = 'INF000Y11UV2';
   const beena = planWithOutcomes(
     build(
@@ -260,13 +269,13 @@ export function demoFundPreview(): PersonPreview[] {
           closingUnits: 90,
           invested: 9_000,
         }),
-        stmt('', 'Sample Value Fund - Direct Growth', VALUE, {
+        stmt('', 'Sample Core Fund - Direct Growth', CORE, {
           folioLast4: '8540',
           closingUnits: 700,
           invested: 70_000,
           match: { status: 'ambiguous', candidates: ['v1', 'v2'] },
         }),
-        stmt('', 'Sample Value Fund - Direct Growth', VALUE, {
+        stmt('', 'Sample Core Fund - Direct Growth', CORE, {
           folioLast4: '3820',
           closingUnits: 3_047.333,
           invested: 300_000,
@@ -288,15 +297,15 @@ export function demoFundPreview(): PersonPreview[] {
         }),
         onFile(
           'v1',
-          'Sample Value Fund - Direct Growth',
-          VALUE,
+          'Sample Core Fund - Direct Growth',
+          CORE,
           { units: 700, invested: 70_000 },
-          '8540',
+          '1111',
         ),
         onFile(
           'v2',
-          'Sample Value Fund - Direct Growth',
-          VALUE,
+          'Sample Core Fund - Direct Growth',
+          CORE,
           { units: 3_047.333, invested: 300_000 },
           null,
         ),
@@ -315,34 +324,44 @@ export function demoFundPreview(): PersonPreview[] {
           '2201',
         ),
       ],
-      'email',
     ),
   );
-
-  // Chitra's statement is also keyed on an e-mail address. A SIP is a few days late (it has been before, so it cannot be called
-  // stopped yet), and a dormant fund of hers is not listed (the statement may simply not include that folio).
+  // a statement keyed on an email address lists only what is registered under that email: two funds it does not list are not sold.
+  // One more fund has a SIP a few days late (it has been before, so it cannot be called stopped yet).
   const late = toLines(
-    '4455',
+    '5566',
     ['2026-04-23', '2026-05-26', '2026-06-23', '2026-07-25', '2026-08-23', '2026-09-23'].map(
       (date) => ({ date, kind: 'sip', amount: 3_000, units: 30 }),
     ),
   );
-  const chitra = diffFundImport(
-    build(
+  const charu = diffFundImport({
+    ...build(
       'p3',
       [
-        stmt('b1', 'Sample Bond Fund - Direct Growth', 'INF000B12WX3', {
-          folioLast4: '4455',
+        stmt('h1', 'Sample Value Fund - Direct Growth', 'INF000R10ST0', {
+          lines: toLines('4455', monthly('2026-08-05', 3, 4_000)),
+          openingUnits: 100,
+          startedOn: null,
+          closingUnits: 220,
+          invested: 22_000,
+        }),
+        stmt('b1', 'Sample Bond Fund - Direct Growth', 'INF000B13WX3', {
+          folioLast4: '5566',
           lines: late,
           closingUnits: 400,
           invested: 40_000,
         }),
       ],
       [
+        onFile('h1', 'Sample Value Fund - Direct Growth', 'INF000R10ST0', {
+          units: 100,
+          invested: 10_000,
+          lines: [],
+        }),
         onFile(
           'b1',
           'Sample Bond Fund - Direct Growth',
-          'INF000B12WX3',
+          'INF000B13WX3',
           {
             units: 400,
             invested: 40_000,
@@ -351,22 +370,34 @@ export function demoFundPreview(): PersonPreview[] {
             latestValue: { asOf: END, amount: 48_000 },
             snapshots: [{ asOf: END, value: 48_000, units: 400 }],
           },
-          '4455',
+          '5566',
         ),
-        onFile(
-          'd1',
-          'Sample Dormant Fund - Direct Growth',
-          'INF000D13YZ4',
-          { units: 50, invested: 5_000 },
-          '9001',
-        ),
+        onFile('h2', 'Sample Dividend Fund - Direct Growth', 'INF000S11UV1', {
+          units: 80,
+          invested: 8_000,
+        }),
+        onFile('h3', 'Sample Tax Saver Fund - Direct Growth', 'INF000T12WX2', {
+          units: 60,
+          invested: 6_000,
+        }),
       ],
-      'email',
     ),
-  );
+    basis: 'email',
+  });
   return [
     { ownerId: 'p1', name: 'Anil', files: [], diff: toView(anil), notes: [] },
     { ownerId: 'p2', name: 'Beena', files: [], diff: toView(beena), notes: [] },
-    { ownerId: 'p3', name: 'Chitra', files: [], diff: toView(chitra), notes: [] },
+    { ownerId: 'p3', name: 'Charu', files: [], diff: toView(charu), notes: [] },
+  ];
+}
+
+/** Folios on the sample statement that belong to someone who is not in the family list. */
+export function demoSkippedFolios(): SkippedFoliosView[] {
+  return [
+    {
+      panLast4: '901K',
+      holder: 'Sample Relative',
+      schemes: ['Sample Bluechip Fund - Direct Growth'],
+    },
   ];
 }

@@ -1,6 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { planHistory, type HistoryExisting, type HistoryPlan } from '../src/history';
-import { applyHistoryMonth, type ConflictChoice, type MonthResult } from '../src/history-import';
+import {
+  applyHistoryMonth,
+  HISTORY_NOTE_PREFIX,
+  type ConflictChoice,
+  type MonthResult,
+} from '../src/history-import';
 import { planWorkbook } from '../src/workbook';
 import { buildHistoryWorkbook, type Fixture } from './history-fixture';
 import { existingFromPlan } from './history-existing';
@@ -78,7 +83,10 @@ describe('importing months', () => {
       bookedOn: '2021-03-01',
       startEstimated: false,
     });
+    // one short line for the list; the full explanation is on the account's page
     expect(matured.notes).toMatch(/estimate/i);
+    expect(matured.notes!.startsWith(HISTORY_NOTE_PREFIX)).toBe(true);
+    expect(matured.notes!.length).toBeLessThan(90);
     const noStart = fds.find((a) => a.fd!.principal === 80_000)!;
     expect(noStart.fd).toMatchObject({
       startEstimated: true,

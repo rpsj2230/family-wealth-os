@@ -4,8 +4,8 @@ import { AutomationCards } from '@/components/AutomationCards';
 import { Tabs } from '@/components/Tabs';
 import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
-import { FundChanges } from '@/components/FundChanges';
-import type { PersonPreview } from '@/lib/fund-import';
+import { FundChanges, SkippedFolios } from '@/components/FundChanges';
+import type { PersonPreview, SkippedFoliosView } from '@/lib/fund-import';
 import { GmailStatements } from './GmailStatements';
 import type { GmailModel } from '@/lib/gmail-statements';
 import { HistoryPanel } from './HistoryPanel';
@@ -83,6 +83,7 @@ export function ImportHub({
   demo = false,
   demoSync,
   demoChanges,
+  demoSkipped,
 }: {
   base: string;
   tab: ImportTab;
@@ -92,6 +93,7 @@ export function ImportHub({
   demoSync?: SyncView;
   /** the public sample's invented preview of a fund statement */
   demoChanges?: PersonPreview[];
+  demoSkipped?: SkippedFoliosView[];
 }) {
   const casReview = data.cas.filter((c) => c.outcome !== 'imported');
   const taxReview = data.tax.filter((t) => t.readBy === 'ai');
@@ -374,6 +376,7 @@ export function ImportHub({
                 you press the button.
               </p>
               <FundChanges people={demoChanges} owners={data.owners} />
+              {demoSkipped && <SkippedFolios groups={demoSkipped} />}
               <div className="fc-actions">
                 <button type="button" className="btn primary" disabled>
                   Apply the selected changes

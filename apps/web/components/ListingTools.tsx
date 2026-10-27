@@ -63,13 +63,14 @@ function readTables(root: HTMLElement): TableModel[] {
 }
 
 /**
- * A footer row marked `data-totals` follows the rows that are showing: a cell marked `data-sum` adds up its column, `data-wavg="n"`
+ * A footer row marked `data-totals` follows the rows that are showing (except rows marked `data-nosum`): a cell marked `data-sum` adds up its column, `data-wavg="n"`
  * averages it weighted by column n (counting from 0), and `data-count` counts the rows.
  */
 function liveTotals(t: TableModel) {
   const foot = t.el.querySelector<HTMLTableRowElement>('tfoot tr[data-totals]');
   if (!foot) return;
-  const rows = t.blocks.flat().filter((r) => !r.hidden);
+  // a row marked `data-nosum` (a deposit past its date: not counted) is listed but stays out of the totals
+  const rows = t.blocks.flat().filter((r) => !r.hidden && r.dataset.nosum === undefined);
   const num = (r: HTMLTableRowElement, i: number) => {
     const c = r.cells[i] ? parseCell(cellText(r.cells[i]!)) : null;
     return c && c.kind === 'num' ? c.n : null;

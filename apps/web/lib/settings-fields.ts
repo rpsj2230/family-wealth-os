@@ -107,6 +107,16 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'days, separated by commas',
       },
       {
+        name: 'hideMaturedDays',
+        label: 'Hide a matured deposit from the lists after (days)',
+        hint: 'A deposit whose date passed longer ago than this leaves the Accounts and Monthly update lists (Show matured brings it back); a deposit past its date is never counted in totals.',
+        kind: 'int',
+        path: ['deposits', 'hideMaturedAfterDays'],
+        unit: 'days',
+        min: 1,
+        max: 3650,
+      },
+      {
         name: 'soonDays',
         label: 'Call a deposit “maturing soon” within',
         hint: 'Decides which deposits are marked “soon” on Accounts, Deposits and the daily summary.',

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { isPastMaturity } from '@fwos/core';
 import { loadContext } from '@/lib/data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
 import type { Change } from '@/lib/monthly';
@@ -50,6 +51,46 @@ export async function saveQuickEdit(input: {
   revalidatePath('/monthly');
   revalidatePath('/', 'layout');
   return { ok: true, message: 'Saved.' };
+}
+
+/**
+ * "Confirm matured": a deposit whose date has passed (or that is marked matured, not confirmed) is set to matured, which takes it
+ * off the lists. It uses the same database function as the edit panel (the member check and every value check are there); this
+ * adds only the question "has this deposit really matured?", so the button cannot hide a deposit that is still running.
+ */
+export async function confirmMatured(assetId: string): Promise<QuickSaveResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  if (!UUID.test(String(assetId ?? '')))
+    return { ok: false, message: 'That deposit could not be found.' };
+  const { data: asset } = await supabase
+    .from('assets')
+    .select('id, type, status')
+    .eq('id', assetId)
+    .eq('household_id', householdId)
+    .maybeSingle();
+  if (!asset || asset.type !== 'fixed_deposit')
+    return { ok: false, message: 'That deposit could not be found.' };
+  if (asset.status === 'matured') return { ok: true, message: 'It was already marked as matured.' };
+  if (asset.status !== 'active' && asset.status !== 'matured_unconfirmed')
+    return {
+      ok: false,
+      message: 'Only a deposit that is still running or waiting to be confirmed can be confirmed.',
+    };
+  if (asset.status === 'active') {
+    const { data: fd } = await supabase
+      .from('fixed_deposits')
+      .select('maturity_on')
+      .eq('asset_id', assetId)
+      .maybeSingle();
+    const today = new Date().toISOString().slice(0, 10);
+    if (!fd || !isPastMaturity(String(fd.maturity_on), today))
+      return { ok: false, message: 'This deposit has not reached its maturity date yet.' };
+  }
+  const r = await saveAccountDetails([{ id: assetId, status: 'matured' }]);
+  if (!r.ok) return r;
+  revalidatePath('/deposits');
+  return { ok: true, message: 'Marked as matured.' };
 }
 
 /** A note about a whole bank (minimum balance, cards, lounge access). */

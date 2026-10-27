@@ -4,7 +4,7 @@ import { startTransition, useActionState, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BusyNote, ResultNote } from '@/components/BusyNote';
 import { FilePicker } from '@/components/FilePicker';
-import { AppliedChanges, FundChanges } from '@/components/FundChanges';
+import { AppliedChanges, FundChanges, SkippedFolios } from '@/components/FundChanges';
 import type { CasState, FundCsvState } from '@/lib/fund-import';
 import { appendSelection, hasWork, type FundSelection } from '@/lib/fund-import-select';
 import { guessOwner, plainCountName } from '@/lib/import-detect';
@@ -185,7 +185,8 @@ export function CasForm({
   const shown = done && apply.stage !== 'idle' ? apply : preview;
   const busy = previewing || applying;
   const people = useMemo(
-    () => (shown.stage === 'previewed' && shown.person ? [shown.person] : []),
+    () =>
+      shown.stage === 'previewed' ? (shown.people ?? (shown.person ? [shown.person] : [])) : [],
     [shown],
   );
 
@@ -279,6 +280,7 @@ export function CasForm({
       {shown.stage === 'previewed' && (
         <>
           <FundChanges people={people} owners={owners} disabled={busy} onSelection={setSel} />
+          {shown.skipped && shown.skipped.length > 0 && <SkippedFolios groups={shown.skipped} />}
           {shown.warnings && shown.warnings.length > 0 && (
             <ul className="list small">
               {shown.warnings.map((w) => (

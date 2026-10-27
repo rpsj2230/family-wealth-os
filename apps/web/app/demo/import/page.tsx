@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { demoAutomation } from '@/lib/demo-datain';
-import { demoFundPreview } from '@/lib/demo-fund-import';
+import { demoFundPreview, demoSkippedFolios } from '@/lib/demo-fund-import';
 import { demoGmailModel } from '@/lib/demo-gmail';
 import { demoCoverage } from '@/lib/demo-history';
 import { personStyles } from '@fwos/core';
@@ -25,6 +25,7 @@ const PEOPLE = Object.fromEntries(
     personStyles([
       { id: 'p1', name: 'Anil' },
       { id: 'p2', name: 'Beena' },
+      { id: 'p3', name: 'Charu' },
     ]),
   ).map((p) => [p.name, p]),
 );
@@ -35,7 +36,7 @@ const DATA: ImportData = {
   owners: [
     { id: 'p1', name: 'Anil', panLast4: '234F', hasDob: true },
     { id: 'p2', name: 'Beena', panLast4: null, hasDob: false },
-    { id: 'p3', name: 'Chitra', panLast4: '567H', hasDob: true },
+    { id: 'p3', name: 'Charu', panLast4: '567G', hasDob: false },
   ],
   workbook: {
     at: '2026-10-20T08:00:00Z',
@@ -126,6 +127,7 @@ export default async function DemoImport({
             demo
             demoSync={demoSyncView()}
             demoChanges={demoFundPreview()}
+            demoSkipped={demoSkippedFolios()}
           />
           {(tab === 'start' || tab === 'workbook') && (
             <HistoryCoverage coverage={demoCoverage()} people={PEOPLE} demo />

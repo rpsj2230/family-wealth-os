@@ -163,8 +163,8 @@ Across all of them a person opening the page wants these answered, in this order
 
 ### Standing decisions
 
-- Net worth on Home is the same figure as everywhere. Where another page's own figure differs for a stated reason, Home says so: money in banks leaves out a deposit past its date that is
-  still listed as running (it waits for confirmation) while net worth still counts it, so Home shows that amount in a note under the banks card.
+- Net worth on Home is the same figure as everywhere. A deposit whose maturity date has passed is counted nowhere (net worth, banks, deposits, the "I need money" ladder, the insured limit, reports, goals): its money went to a savings account or a new deposit, which are counted on their own. One maturing today still counts. The rule is `packages/core/src/deposit-state.ts` and `buildPortfolio` values such a deposit as matured, not confirmed. Home notes the amount under the banks card.
+- Lists of deposits (Accounts, Monthly update, the Deposits register) show only running deposits and those that matured within `deposits.hideMaturedAfterDays` days and are not confirmed (with a muted amount, "matured, not counted" and a **Confirm matured** button). Confirmed or older ones are hidden behind a quiet line, "N older or confirmed matured deposits are hidden. Show matured" (`?matured=all`), so nothing is lost.
 - A figure the app worked out from rates or prices carries the word "estimate". A change over a period is measured from the daily snapshots and includes money added or taken out.
 - The thresholds on Home are Settings (Money rules, Reminders): how many days "last month" means, how far ahead Coming up looks, and the bank share that is flagged.
   The other windows reuse existing settings: maturity "soon" days, task and policy days, the "I need money" scenario days and the deposit-insurance limit.

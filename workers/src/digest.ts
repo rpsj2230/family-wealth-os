@@ -5,7 +5,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
-import { buildDigest } from '@fwos/core';
+import { DEFAULT_APP_URL, buildDigest } from '@fwos/core';
 import {
   buildDigestInput,
   buildHandbookDoc,
@@ -18,7 +18,14 @@ import {
   loadSettings,
   planHarvest,
 } from '@fwos/data';
-import { parseChatIds, runDigests, sendTelegram, type Claim, type DigestStore } from '@fwos/ingest';
+import {
+  parseChatIds,
+  runDigests,
+  runDigestTest,
+  sendTelegram,
+  type Claim,
+  type DigestStore,
+} from '@fwos/ingest';
 
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SMTP_USER, SMTP_APP_PASSWORD, APP_URL } =
   process.env;
@@ -31,7 +38,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SMTP_USER || !SMTP_APP_PASSW
 const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
-const appUrl = APP_URL || 'https://family-wealth-os-nine.vercel.app';
+const appUrl = APP_URL || DEFAULT_APP_URL;
 
 // The report date is the date in Singapore, where you live.
 const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore' }).format(new Date());
@@ -118,11 +125,7 @@ const store: DigestStore = {
   },
   async build(householdId, d) {
     const h = await db.from('households').select('name').eq('id', householdId).single();
-    const s = await db
-      .from('digest_settings')
-      .select('include_retirement')
-      .eq('household_id', householdId)
-      .single();
+    const s = await db.from('digest_settings').select('*').eq('household_id', householdId).single();
     // schedule this year's tax-gain harvesting as reminder tasks (once per person per year), so they reach the summary
     try {
       const hv = await loadHarvestPositions(db, { householdId });
@@ -171,8 +174,10 @@ const store: DigestStore = {
       date: d,
       householdName: (h.data as { name: string } | null)?.name ?? 'Household',
       appUrl,
+      // a setting that is absent (an older row) behaves as on
       includeRetirement:
-        (s.data as { include_retirement: boolean } | null)?.include_retirement ?? true,
+        (s.data as { include_retirement?: boolean | null } | null)?.include_retirement ?? true,
+      includeGoals: (s.data as { include_goals?: boolean | null } | null)?.include_goals ?? true,
     });
     const g = buildDigest(input);
     return { subject: g.subject, text: g.text, html: g.html };
@@ -194,22 +199,27 @@ const transport = nodemailer.createTransport({
   secure: true,
   auth: { user: SMTP_USER, pass: SMTP_APP_PASSWORD },
 });
-const results = await runDigests(
-  store,
-  {
-    async send(m) {
-      const info = await transport.sendMail({
-        from: `Family Wealth OS <${SMTP_USER}>`,
-        to: m.to,
-        subject: m.subject,
-        text: m.text,
-        html: m.html,
-      });
-      return { id: String(info.messageId ?? 'accepted') };
-    },
+const mailer = {
+  async send(m: { to: string[]; subject: string; text: string; html: string }) {
+    const info = await transport.sendMail({
+      from: `Family Wealth OS <${SMTP_USER}>`,
+      to: m.to,
+      subject: m.subject,
+      text: m.text,
+      html: m.html,
+    });
+    return { id: String(info.messageId ?? 'accepted') };
   },
-  date,
-);
+};
+// "digest test" (run the workflow by hand with Test ticked): one e-mail to the people who can sign in, marked [Test], with no
+// delivery-log entry and no Telegram message, so it never uses up or blocks the real summary of the day
+if (['1', 'true'].includes(String(process.env.DIGEST_TEST ?? '').toLowerCase())) {
+  const sent = await runDigestTest(store, mailer, date);
+  console.log(JSON.stringify({ date, test: true, results: sent }, null, 2));
+  if (sent.length === 0) console.log('No household has switched the daily summary on yet.');
+  process.exit(sent.some((r) => r.outcome === 'failed' || r.outcome === 'no_recipients') ? 1 : 0);
+}
+const results = await runDigests(store, mailer, date);
 console.log(JSON.stringify({ date, results }, null, 2));
 
 /** The same summary on Telegram, for every household that saved a bot and a chat. Once a day; a failure is logged, never fatal. */

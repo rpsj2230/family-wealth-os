@@ -47,7 +47,9 @@ test.describe('Preview changes for a fund statement (public sample)', () => {
     await expect(flexi.locator('.fc-nums')).toContainText('₹1,50,000');
     await expect(flexi.locator('.fc-nums')).toContainText('₹1,80,000');
     await flexi.getByText('2 new transactions').click();
-    await expect(flexi.locator('.fc-table')).toContainText('SIP instalment');
+    await expect(flexi.locator('.fc-lines:not(.fc-replaced) .fc-table')).toContainText(
+      'SIP instalment',
+    );
 
     const large = row(page, 'Sample Large Cap');
     await expect(large.locator('.fc-chip', { hasText: 'SIP stopped' })).toBeVisible();
@@ -131,7 +133,7 @@ test.describe('Preview changes for a fund statement (public sample)', () => {
 
 test.describe('Questions the preview asks (public sample)', () => {
   const valueRows = (page: Page) =>
-    person(page, 'Beena').locator('li.fc-row', { hasText: 'Sample Value Fund' });
+    person(page, 'Beena').locator('li.fc-row', { hasText: 'Sample Core Fund' });
 
   test('a folio that could be several funds: what I found, what I suggest and why, Approve, and the other choices', async ({
     page,
@@ -143,14 +145,13 @@ test.describe('Questions the preview asks (public sample)', () => {
     await expect(first).toContainText('folio …8540, 700 units, ₹70,000 invested');
     await expect(first).toContainText('What I suggest');
     await expect(first).toContainText(
-      'Apply folio …8540 to your fund "Sample Value Fund - Direct Growth".',
+      'Link folio …8540 to your fund "Sample Core Fund - Direct Growth".',
     );
-    await expect(first).toContainText(
-      'only "Sample Value Fund - Direct Growth" has folio …8540 on file',
-    );
+    await expect(first).toContainText('not the folio on file (…1111), but your fund');
+    await expect(first).toContainText('has 700 units, which equal the statement');
     await expect(
       first.getByRole('button', {
-        name: 'Approve: link folio …8540 to "Sample Value Fund - Direct Growth"',
+        name: 'Approve: link folio …8540 to "Sample Core Fund - Direct Growth" (folio …1111)',
       }),
     ).toBeVisible();
     // the other choices, each fund told apart by folio and units
@@ -169,7 +170,7 @@ test.describe('Questions the preview asks (public sample)', () => {
     await page.goto('/demo/import?tab=cas');
     const second = valueRows(page).nth(1);
     await second
-      .getByRole('button', { name: /^Approve: link folio …3820 to "Sample Value Fund/ })
+      .getByRole('button', { name: /^Approve: link folio …3820 to "Sample Core Fund/ })
       .click();
     await expect(second.getByRole('status')).toContainText('Approved: link folio …3820');
     await expect(second.getByRole('status')).toContainText('It is applied when you press Apply.');
@@ -205,19 +206,19 @@ test.describe('Questions the preview asks (public sample)', () => {
     page,
   }) => {
     await page.goto('/demo/import?tab=cas');
-    const dormant = row(page, 'Sample Dormant');
-    await expect(dormant.locator('.fc-chip', { hasText: 'Not on this statement' })).toBeVisible();
-    await expect(dormant).toContainText('Leave it as it is.');
-    await expect(dormant).toContainText('keyed on an e-mail address and may not list every folio');
-    await expect(dormant.getByLabel('Leave as it is')).toBeChecked();
-    await expect(dormant.getByLabel('Sold on')).toHaveCount(0);
-    await dormant.getByLabel('Mark as sold').check();
-    const date = dormant.getByLabel('Sold on');
+    const dividend = row(page, 'Sample Dividend');
+    await expect(dividend.locator('.fc-chip', { hasText: 'Not on this statement' })).toBeVisible();
+    await expect(dividend).toContainText('Leave it as it is.');
+    await expect(dividend).toContainText('keyed on an email address and may not list every folio');
+    await expect(dividend.getByLabel('Leave as it is')).toBeChecked();
+    await expect(dividend.getByLabel('Sold on')).toHaveCount(0);
+    await dividend.getByLabel('Mark as sold').check();
+    const date = dividend.getByLabel('Sold on');
     await expect(date).toHaveValue('2026-10-25');
     await date.fill('2026-10-20');
     await expect(date).toHaveValue('2026-10-20');
-    await dormant.getByLabel('Leave as it is').check();
-    await expect(dormant.getByLabel('Sold on')).toHaveCount(0);
+    await dividend.getByLabel('Leave as it is').check();
+    await expect(dividend.getByLabel('Sold on')).toHaveCount(0);
     // a statement of everything the person holds: suggested sold, with the date
     const old = row(page, 'Sample Old Fund');
     await expect(old.getByLabel('Mark as sold')).toBeChecked();
@@ -242,6 +243,25 @@ test.describe('Questions the preview asks (public sample)', () => {
   });
 });
 
+test.describe('Folios of someone who is not in the family list (public sample)', () => {
+  test('are skipped; I suggest skipping them and link to add the person in Settings', async ({
+    page,
+  }) => {
+    await page.goto('/demo/import?tab=cas');
+    const box = page.getByRole('group', { name: 'Folios of Sample Relative' });
+    await expect(box).toContainText('What I found');
+    await expect(box).toContainText('1 folio held by Sample Relative (PAN ending 901K)');
+    await expect(box).toContainText('What I suggest');
+    await expect(box).toContainText('Skip this folio.');
+    await expect(
+      box.getByRole('link', { name: 'Add this person in Settings > People' }),
+    ).toHaveAttribute('href', '/settings?tab=people');
+    await box.getByRole('button', { name: 'Approve: skip this folio' }).click();
+    await expect(box.getByRole('status')).toContainText('Approved: skip this folio');
+    await expect(box.getByRole('status')).toContainText('Nothing is written for them.');
+  });
+});
+
 test.describe('The preview fits the screen', () => {
   for (const width of [390, 412, 810]) {
     test(`no sideways scroll at ${width}px, also in a wide font`, async ({ page }) => {
@@ -261,12 +281,12 @@ test.describe('The preview fits the screen', () => {
       await page.goto('/demo/import?tab=cas');
       const beena = person(page, 'Beena');
       await beena
-        .locator('li.fc-row', { hasText: 'Sample Value Fund' })
+        .locator('li.fc-row', { hasText: 'Sample Core Fund' })
         .nth(0)
         .getByRole('button', { name: /^Approve/ })
         .click();
       await beena
-        .locator('li.fc-row', { hasText: 'Sample Value Fund' })
+        .locator('li.fc-row', { hasText: 'Sample Core Fund' })
         .nth(1)
         .getByLabel('A new fund')
         .check();
@@ -274,10 +294,10 @@ test.describe('The preview fits the screen', () => {
         .locator('li.fc-row', { hasText: 'Sample Hybrid Fund' })
         .getByLabel(/folio …2200/)
         .check();
-      const dormant = row(page, 'Sample Dormant');
-      await dormant.getByLabel('Mark as sold').check();
+      const dividend = row(page, 'Sample Dividend');
+      await dividend.getByLabel('Mark as sold').check();
       await row(page, 'Sample Bond').getByLabel('Mark the SIP as stopped').check();
-      await expect(dormant.getByLabel('Sold on')).toBeVisible();
+      await expect(dividend.getByLabel('Sold on')).toBeVisible();
       await noSideways(page);
       await noSidewaysWide(page);
     });

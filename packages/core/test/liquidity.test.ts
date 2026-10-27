@@ -113,6 +113,20 @@ describe('sources', () => {
     expect(recent.fixedCostRate).toBeLessThan(0.001); // a few days of interest at most
     expect(recent.notes.join(' ')).toContain('costs little');
   });
+  it('does not list a deposit whose date has passed (its money is in an account or a new deposit), but lists one maturing today', () => {
+    const matured = asset('old', 'fixed_deposit', A, 200_000);
+    matured.v.status = 'matured_unconfirmed'; // what buildPortfolio gives an active deposit past its date
+    const todayFd = asset('now', 'fixed_deposit', A, 150_000);
+    const s = buildSources(
+      input(
+        [matured, todayFd],
+        [fd('old', 190_000, '2025-01-01', '2026-10-20'), fd('now', 140_000, '2025-10-26', TODAY)],
+      ),
+    );
+    expect(s.map((x) => x.assetId)).toEqual(['now']);
+    expect(s[0]).toMatchObject({ kind: 'fd_maturing', availableOn: TODAY });
+    expect(s[0]!.steps.join(' ')).toContain('matures today');
+  });
   it('estimates fund gain from the invested amount and treats SIP funds as short-term', () => {
     const [long] = buildSources(
       input(

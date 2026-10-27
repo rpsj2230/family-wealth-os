@@ -1820,3 +1820,16 @@ tr.fl-datacheck td .datacheck {
 .addsup .au-breaks li {
   font-size: 0.84rem;
 }
+
+/* Lines a fund statement replaced: a collapsed list under the transactions, outside every figure */
+.replaced-lines {
+  margin-top: 14px;
+}
+.replaced-lines .replaced-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.replaced-lines td,
+.replaced-lines th {
+  overflow-wrap: anywhere;
+}

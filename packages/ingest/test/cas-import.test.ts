@@ -249,7 +249,7 @@ describe('runCasImport', () => {
 });
 
 describe('a fund missing from a complete statement', () => {
-  const stmt = parseCas(TEXT);
+  const stmt = { ...parseCas(TEXT), basis: 'pan' as const };
   const listed = {
     assetId: 'f1',
     name: 'Sample Flexi Cap Fund',
@@ -328,8 +328,8 @@ describe('a statement folio that could be several funds', () => {
     folioLast4: folio,
     state: state(units),
   });
-  // the statement closes with 670.909 units on this folio; `a` holds the folio, `b` holds the same number of units
-  const two = () => [twin('a', flexi.folioLast4, 100), twin('b', null, 670.909)];
+  // the statement closes with 670.909 units on this folio; `a` has another folio, `b` has no folio yet and the same number of units
+  const two = () => [twin('a', '9999', 100), twin('b', null, 670.909)];
   const choose = (key: string, option: string, input: string | null = null) => ({
     take: new Set<string>(),
     seen: new Set<string>(),
@@ -341,13 +341,21 @@ describe('a statement folio that could be several funds', () => {
     return d.items.find((i) => i.kind === 'review' && i.name === flexi.name)!;
   };
 
-  it('is asked with the likeliest fund suggested and the reason, ISIN and folio first', async () => {
+  it('is asked with the likeliest fund suggested and the reason', async () => {
     const item = await reviewOf(two());
     expect(item.key).toBe(KEY(flexi.folioLast4));
     const s = item.prompt!.suggestion;
-    expect(s.recommended).toBe('link:a');
-    expect(s.why).toContain('only "Sample Flexi Cap Fund Direct Growth" has folio');
+    expect(s.recommended).toBe('link:b');
+    expect(s.why).toContain("which equal the statement's closing units");
     expect(item.prompt!.kind).toBe('ambiguous');
+    expect(item.reviewKind).toBe('ambiguous');
+  });
+
+  it('is not asked at all when the folio on file settles it: ISIN and folio match one fund', async () => {
+    const { io } = fakeIo([twin('a', flexi.folioLast4, 100), twin('b', null, 670.909)]);
+    const d = await planCasImport('owner', stmt, io, { today: '2026-10-26' });
+    expect(d.items.some((i) => i.kind === 'review' && i.name === flexi.name)).toBe(false);
+    expect(d.items.find((i) => i.assetId === 'a')).toBeDefined();
   });
 
   it('the units settle it when no folio does', async () => {
@@ -447,7 +455,7 @@ describe('a statement folio that could be several funds', () => {
     const r = await runCasImport('owner', stmt, io, { today: '2026-10-26' });
     expect(r.needsReview).toContain(flexi.name);
     expect(r.lines.join('\n')).toContain('waiting for your decision');
-    expect(r.lines.join('\n')).toContain('Apply folio');
+    expect(r.lines.join('\n')).toContain('Link folio');
     expect(saved.find((x) => x.assetId === 'a')).toBeUndefined();
     expect(links).toEqual([]);
   });
@@ -557,19 +565,34 @@ describe('a fund the statement does not list, and a SIP it cannot judge', () => 
     }
   });
 
-  it('"leave as it is" is remembered so the same statement does not ask again, and nothing is sold', async () => {
+  it('"leave as it is" sells nothing and asks nothing more of the person', async () => {
     const { io, sold, ignored } = fakeIo([listed, gone]);
-    await runCasImport('owner', stmt, io, {
+    const r = await runCasImport('owner', stmt, io, {
       today: '2026-10-26',
       complete: true,
       select: sel({ seen: ['owner|gone'], choices: [['owner|gone', 'keep', null]] }),
     });
     expect(sold).toEqual([]);
-    expect(ignored).toEqual([{ assetId: 'gone', verdict: 'sold', basis: '2026-10-25' }]);
+    expect(ignored).toEqual([]);
+    expect(r.needsReview).not.toContain('Fund Not On The Statement');
+    expect(r.lines.join('\n')).toContain('left alone as you chose: Fund Not On The Statement');
   });
 
-  const withSip = (): CasFund => ({
-    ...listed,
+  it('an unanswered question is listed as waiting, with the suggestion to leave it', async () => {
+    const { io, sold } = fakeIo([listed, gone]);
+    const r = await runCasImport('owner', stmt, io, { today: '2026-10-26', complete: true });
+    expect(sold).toEqual([]);
+    expect(r.needsReview).toContain('Fund Not On The Statement');
+    expect(r.lines.join('\n')).toContain('suggestion: leave it as it is');
+  });
+
+  const withSip = (extra: Partial<CasFund> = {}): CasFund => ({
+    assetId: 'f1',
+    name: 'Sample Flexi Cap Fund',
+    amfiCode: null,
+    isin: 'INF000A01AB1',
+    folioLast4: null,
+    ...extra,
     state: {
       units: null,
       invested: null,
@@ -580,106 +603,74 @@ describe('a fund the statement does not list, and a SIP it cannot judge', () => 
       latestValue: null,
       snapshots: [],
       ignored: [],
+      ...extra.state,
     },
   });
-
-  it('a SIP that could not be judged stays as recorded unless the person marks it stopped', async () => {
+  it('notices that a SIP on file has stopped, from its own pattern, and dates the stop from the first missed due date', async () => {
+    const sipStmt = parseCas(SIP_TEXT);
+    const { io, saved } = fakeIo([withSip()]);
+    const r = await runCasImport('owner', sipStmt, io, { today: '2026-10-26' });
+    const s = saved.find((x) => x.assetId === 'f1')!;
+    // last instalment 5 Mar 2026, a monthly SIP (31 days between instalments): the next was due 5 Apr and none came
+    expect(s.sip).toEqual([{ monthly: 0, effectiveOn: '2026-04-05' }]);
+    expect(r.summary).toContain('1 SIP stopped');
+  });
+  it('does not stop a SIP when the statement ends before the next due date', async () => {
+    const sipStmt = parseCas(
+      SIP_TEXT.replace('01-Jan-2025 To 25-Oct-2026', '01-Jan-2025 To 20-Mar-2026'),
+    );
+    const { io, saved } = fakeIo([withSip()]);
+    await runCasImport('owner', sipStmt, io, { today: '2026-03-21' });
+    expect(saved.find((x) => x.assetId === 'f1')!.sip).toEqual([]);
+  });
+  it('leaves a SIP on file alone when the statement has too few instalments to show its pattern', async () => {
     const { io, saved } = fakeIo([withSip()]);
     const r = await runCasImport('owner', stmt, io, { today: '2026-10-26' });
     expect(saved.find((x) => x.assetId === 'f1')!.sip).toEqual([]);
-    expect(r.lines.join('\n')).toContain('SIP kept as recorded');
-    const d = await planCasImport('owner', stmt, io, { today: '2026-10-26' });
-    expect(d.items.find((i) => i.assetId === 'f1')!.sipPrompt!.suggestion.recommended).toBe('keep');
+    expect(r.lines.join('\n')).toContain('not verified by a statement');
   });
-
-  it('marks the SIP stopped from the date typed', async () => {
+  it('reads a cancellation the statement states as an explicit stop', async () => {
+    const cancelled = parseCas(
+      SIP_TEXT.replace(
+        '05-Mar-2026 Systematic',
+        'SIP cancelled on 20-Mar-2026 05-Mar-2026 Systematic',
+      ),
+    );
+    expect(cancelled.schemes[0]!.sipCancelled).toEqual({ on: '2026-03-20' });
     const { io, saved } = fakeIo([withSip()]);
-    const r = await runCasImport('owner', stmt, io, {
-      today: '2026-10-26',
-      select: sel({ choices: [['owner|f1#sip', 'stop', '2026-10-20']] }),
+    await runCasImport('owner', cancelled, io, { today: '2026-03-21' });
+    expect(saved.find((x) => x.assetId === 'f1')!.sip).toEqual([
+      { monthly: 0, effectiveOn: '2026-03-20' },
+    ]);
+  });
+  it('the general terms after the closing balance are not read as a cancellation', () => {
+    const t = parseCas(`${SIP_TEXT}Terms: a SIP can be cancelled at any time.`);
+    expect(t.schemes[0]!.sipCancelled).toBeUndefined();
+  });
+  it('leaves an ambiguous scheme for review and carries on', async () => {
+    const dup = (id: string): CasFund => ({
+      assetId: id,
+      name: 'Sample Flexi Cap Fund Direct Growth',
+      amfiCode: null,
+      isin: null,
+      folioLast4: null,
     });
-    const stops = saved.filter((x) => x.assetId === 'f1' && x.sip.length > 0);
-    expect(stops).toHaveLength(1);
-    expect(stops[0]!.sip).toEqual([{ monthly: 0, effectiveOn: '2026-10-20' }]);
-    expect(r.summary).toContain('1 SIP stopped');
+    const { io, saved } = fakeIo([dup('a'), dup('b')]);
+    const r = await runCasImport('owner', stmt, io, { today: '2026-10-26' });
+    expect(r.needsReview).toContain('Sample Flexi Cap Fund - Direct Plan - Growth');
+    expect(saved.find((x) => x.assetId === 'a')).toBeUndefined();
   });
-
-  it('ignores a stop date that is not a date', async () => {
-    const { io, saved } = fakeIo([withSip()]);
-    await runCasImport('owner', stmt, io, {
-      today: '2026-10-26',
-      select: sel({ choices: [['owner|f1#sip', 'stop', 'soon']] }),
-    });
-    expect(saved.filter((x) => x.sip.length > 0)).toHaveLength(0);
-  });
-});
-
-describe('folios of someone who is not this person', () => {
-  // built at run time: a PAN-shaped value is never written out in a file
-  const STRANGER_PAN = ['ABCDE', '5678', 'H'].join('');
-  const base = parseCas(TEXT);
-  const other = (pan: string) => ({
-    ...base,
-    basis: 'email' as const,
-    schemes: base.schemes.map((s, i) =>
-      i === 0 ? { ...s, folioPan: pan, holder: 'Chitra Example' } : s,
-    ),
-  });
-  const people = {
-    own: 'ZZZZ',
-    family: [{ ownerId: 'o2', name: 'Beena', panLast4: 'BBBB' }],
-  };
-  const flexiName = base.schemes[0]!.name;
-
-  it('are skipped and asked about once, with "Add this person" for someone outside the family list', async () => {
-    const { io, created, saved } = fakeIo([]);
-    const d = await planCasImport('owner', other(STRANGER_PAN), io, {
-      today: '2026-10-26',
-      people,
-    });
-    const q = d.items.find((i) => i.prompt?.kind === 'foreign')!;
-    expect(q.prompt!.suggestion.suggest).toBe('Skip these folios.');
-    expect(q.prompt!.suggestion.links[0]!.href).toBe('/settings?tab=people');
-    expect(d.items.some((i) => i.name === flexiName)).toBe(false);
-    await runCasImport('owner', other(STRANGER_PAN), io, { today: '2026-10-26', people });
-    expect(created.some((c) => c.includes('Flexi'))).toBe(false);
-    expect(saved.length).toBeGreaterThan(0); // the person's own folios are still imported
-  });
-
-  it('name the family member when the PAN is theirs', async () => {
+  it('keeps going when one scheme fails', async () => {
     const { io } = fakeIo([]);
-    const d = await planCasImport('owner', other('ABCDE1BBBB'), io, {
-      today: '2026-10-26',
-      people,
-    });
-    const q = d.items.find((i) => i.prompt?.kind === 'foreign')!;
-    expect(q.prompt!.suggestion.suggest).toContain('they belong to Beena');
-    expect(q.prompt!.suggestion.links).toEqual([]);
-  });
-
-  it("can be imported as this person's own when they say so", async () => {
-    const { io, created } = fakeIo([]);
-    const key = (
-      await planCasImport('owner', other(STRANGER_PAN), io, { today: '2026-10-26', people })
-    ).items.find((i) => i.prompt?.kind === 'foreign')!.key;
-    await runCasImport('owner', other(STRANGER_PAN), io, {
-      today: '2026-10-26',
-      people,
-      select: {
-        take: new Set(),
-        seen: new Set(),
-        choices: new Map([[key, { option: 'mine', input: null }]]),
+    const bad: CasIo = {
+      ...io,
+      async createFund(a) {
+        if (a.name.includes('Flexi')) throw new Error('boom');
+        return 'ok';
       },
-    });
-    expect(created.some((c) => c.includes('Flexi'))).toBe(true);
-  });
-
-  it("are the person's own on a statement keyed on their PAN, or when no folio PAN is printed", async () => {
-    const { io } = fakeIo([]);
-    const pan = { ...other(STRANGER_PAN), basis: 'pan' as const };
-    const d = await planCasImport('owner', pan, io, { today: '2026-10-26', people });
-    expect(d.items.some((i) => i.prompt?.kind === 'foreign')).toBe(false);
-    const none = await planCasImport('owner', base, io, { today: '2026-10-26', people });
-    expect(none.items.some((i) => i.prompt?.kind === 'foreign')).toBe(false);
+    };
+    const r = await runCasImport('owner', stmt, bad, { today: '2026-10-26' });
+    expect(r.needsReview).toContain('Sample Flexi Cap Fund - Direct Plan - Growth');
+    expect(r.created).toBe(1);
   });
 });

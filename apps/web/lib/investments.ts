@@ -232,6 +232,7 @@ export async function loadInvestmentView(
           .select(
             'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source, source_ref',
           )
+          .is('superseded_on', null)
           .order('txn_on')
           .order('id')
           .range(from, to),

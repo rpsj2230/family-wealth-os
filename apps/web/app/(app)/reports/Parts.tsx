@@ -161,7 +161,7 @@ export function DepositReports({
             why: ex['reports.fdMaturity'],
           },
           {
-            label: 'Interest still to earn',
+            label: 'Total interest to maturity',
             value: formatInrCompact(maturity - principal),
             sub: 'from booking to maturity',
             why: ex['reports.fdInterest'],
@@ -303,7 +303,7 @@ export function FundReports({
             why: ex['reports.fundGain'],
           },
           {
-            label: 'Return a year',
+            label: 'Average yearly return (XIRR)',
             value: pctText(xirr, 1),
             sub: 'average of the funds, weighted by value',
             why: ex['reports.fundXirr'],

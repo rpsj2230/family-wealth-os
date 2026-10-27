@@ -50,10 +50,11 @@ export function Banks({
           />
         ))}
       </ol>
-      {m.banks.maturedCounted > 0 && (
+      {m.banks.maturedNotCounted > 0 && (
         <p className="muted small">
-          Not in these figures: {formatInrCompact(m.banks.maturedCounted)} in deposits past their
-          date, still counted in net worth until you say where the money went.
+          Not counted: {formatInrCompact(m.banks.maturedNotCounted)} in deposits past their date.
+          Their money counts in the savings account or new deposit it went to; confirm them on
+          Accounts.
         </p>
       )}
     </section>
