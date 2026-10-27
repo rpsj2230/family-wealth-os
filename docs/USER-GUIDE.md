@@ -277,6 +277,17 @@ In **Settings > Connections > Bank e-mails and AI** the **AI keys** list holds o
 
 The key you had before this was added became the **First choice** automatically. The Gmail label is saved separately, under the keys.
 
+## AI cost
+
+**More → AI cost** shows what the AI has cost so far. Every call the app makes to an AI service (reading a bank e-mail or statement, refreshing bank rates, checking a rate page, reading a tax file, the key tests) is logged with the service, the model, what it was for and the tokens it used: new input, input read from the cache, cache writes and output. Never the text that was sent, and never a key.
+
+- **Top row:** today, the last 7 and 30 days, this month and so far, in dollars and rupees, with the number of calls and tokens.
+- **By day**, **by what it was for**, **by model**, and **recent calls** one by one with their cost and result (failed calls are marked; a call that failed costs nothing unless the service answered).
+- **Prompt caching:** how much of the prompt came from the cache and what that saved.
+- **Prices:** cost is worked out when the page is shown, from **Settings → Money rules → AI prices**: one line per model, `model = input / output / cache read / cache write` in dollars per million tokens, and the rupees per dollar. Change a price and the whole history is re-priced. Claude Haiku 5.5 ($0.10 in, $0.50 out) and OpenRouter's free models ($0) are set to begin with; a model with no line (Groq, Gemini) is counted in tokens but not in money until you add its line. Check the service's price page: the provider's invoice is the final word.
+
+**Caching, and what really saves money.** Anthropic calls are marked so that the fixed instructions at the start of a request (the same for every bank and every e-mail) can be read from the cache at a tenth of the input price when two requests come within a few minutes. The page text and the e-mail change every time and cannot be cached. With Haiku this is worth fractions of a cent; the bigger saving is that a bank rate page whose text, corrections and ceiling are unchanged since it was last read is not sent to the AI at all: its rates are confirmed as checked today ("unchanged since …: not read again (no AI cost)" in the rates log), and it is read again anyway after half the time a rate counts as fresh. Long bank pages are also cut to the parts that hold the rates before they are sent.
+
 ## AI key: OpenRouter with automatic fallback
 
 Add **OpenRouter** under **AI keys** and paste a free key from openrouter.ai/keys (the key is write-only). The reader asks OpenRouter for its free text models, orders them (large instruction models first, reasoning models last) and tries them one after another: if one is busy, rate limited, withdrawn or does not answer in the expected form, the next one is used, up to six per request. Groq and Google Gemini still work as before. To check the chain at any time, run **Check email and AI reading** in GitHub > Actions: it reads back a made-up alert and lists the models in the order they will be tried. Free models have daily limits; adding a small credit on openrouter.ai raises them.

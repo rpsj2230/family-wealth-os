@@ -12,6 +12,7 @@
  * The AI is a chain of keys (see `ai-chain`): when one fails the next is asked, and a key refused earlier in the run is not asked again.
  */
 import { answeredBy, callAi, type AiChain } from './ai-chain';
+import type { AiPurpose } from './ai-usage';
 import {
   aiJson,
   buildAiRequest,
@@ -120,8 +121,15 @@ export async function runInbox(
   const accounts = await io.accounts();
   const chain = cfg.ai && !cfg.ai.empty ? cfg.ai : null;
   /** The AI's readings of one message's text; throws with every key's reason when none could answer. */
-  const readWithAi = async (ai: AiChain, text: string, domain: string, youAsked = false) => {
+  const readWithAi = async (
+    ai: AiChain,
+    text: string,
+    domain: string,
+    purpose: AiPurpose,
+    youAsked = false,
+  ) => {
     const res = await callAi(ai, {
+      purpose,
       build: (provider, key, model) => buildAiRequest(provider, key, text, model),
       parse: (provider, json) =>
         aiJson(provider, json) === null
@@ -236,7 +244,7 @@ export async function runInbox(
           });
           continue;
         }
-        readings = await readWithAi(chain, `${m.subject}\n${text}`, domain);
+        readings = await readWithAi(chain, `${m.subject}\n${text}`, domain, 'inbox_statement');
         if (readings.length === 0) note = 'the AI found no balance in the statement';
       } else if (!m.reread && !mentionsBalance(m.subject, m.text)) {
         await log({ outcome: 'ignored', reason: null, reading: null, assetId: null });
@@ -259,6 +267,7 @@ export async function runInbox(
           `${m.subject}
 ${m.text}`,
           domain,
+          'inbox_email',
           !!m.reread,
         );
         if (readings.length === 0) {

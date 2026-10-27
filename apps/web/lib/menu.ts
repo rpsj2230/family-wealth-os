@@ -5,6 +5,7 @@
 import {
   BellRing,
   Cable,
+  Coins,
   FileText,
   HandCoins,
   Inbox,
@@ -179,6 +180,12 @@ export const MENU: MenuGroup[] = [
         label: 'Notifications',
         hint: 'Daily summary by e-mail, Telegram or WhatsApp.',
         icon: BellRing,
+      },
+      {
+        href: '/ai-cost',
+        label: 'AI cost',
+        hint: 'What the AI has cost so far, by day and by what it did.',
+        icon: Coins,
       },
       {
         href: '/settings?tab=connections',

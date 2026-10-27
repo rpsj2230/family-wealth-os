@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   CalendarCheck,
+  Coins,
   Ellipsis,
   FileText,
   HandCoins,
@@ -77,6 +78,7 @@ export const GROUPS: { title: string; items: Item[] }[] = [
     title: 'Safety and setup',
     items: [
       { href: '/emergency', label: 'Family emergency guide', icon: ShieldAlert },
+      { href: '/ai-cost', label: 'AI cost', icon: Coins },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],
   },

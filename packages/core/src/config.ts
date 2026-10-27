@@ -4,6 +4,7 @@
  * so a typo can never produce a nonsense limit.
  */
 import { RULES, fyBoundsOf, type TaxRuleSet } from './tax';
+import { parsePriceLine } from './ai-cost';
 import { LIQUIDITY_KINDS, type LiquidityKind } from './liquidity-kinds';
 export { effectiveRules, fyBoundsOf, type EffectiveRules } from './tax';
 
@@ -134,6 +135,13 @@ export interface AppConfig {
     stampDutyPct: number;
     /** days kept clear before 31 March: an order after the cut-off or on a holiday is priced on the next working day */
     orderBufferDays: number;
+  };
+  /** what the AI costs: the prices it is charged at, to turn the logged tokens into money */
+  ai: {
+    /** rupees per US dollar, to show the cost in rupees as well */
+    usdInr: number;
+    /** one line per model: "model = input / output / cache read / cache write", in dollars per million tokens (see core ai-cost) */
+    prices: string[];
   };
   /** what Home compares and flags */
   home: {
@@ -267,6 +275,15 @@ export const DEFAULT_CONFIG: AppConfig = {
     stampDutyPct: 0.00005,
     orderBufferDays: 6,
   },
+  ai: {
+    usdInr: 88,
+    prices: [
+      // Claude Haiku 5.5 (the default reader), for prompts up to 100,000 tokens; the cache prices are the usual tenth and quarter-more
+      'claude-haiku-5-5 = 0.10 / 0.50 / 0.01 / 0.125',
+      // OpenRouter's free models cost nothing
+      '*:free = 0 / 0 / 0 / 0',
+    ],
+  },
   home: { changeDays: 30, upcomingDays: 120, bankShareWatch: 0.4 },
   funds: {
     annualiseAfterMonths: 12,
@@ -360,6 +377,7 @@ export function configFromJson(raw: unknown): AppConfig {
   const ref = obj(r.refunds);
   const fun = obj(r.funds);
   const hom = obj(r.home);
+  const aiSec = obj(r.ai);
   const sheet = obj(r.sheetSync);
   const days = Array.isArray(dep.maturityAlertDays)
     ? [
@@ -497,6 +515,18 @@ export function configFromJson(raw: unknown): AppConfig {
       sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
       stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
       orderBufferDays: Math.round(num(har.orderBufferDays, d.harvest.orderBufferDays, 0, 60)),
+    },
+    ai: {
+      usdInr: num(aiSec.usdInr, d.ai.usdInr, 1, 1000),
+      prices: (() => {
+        const lines = Array.isArray(aiSec.prices)
+          ? (aiSec.prices as unknown[])
+              .filter((x): x is string => typeof x === 'string')
+              .map((x) => x.trim())
+              .filter((x) => x !== '' && !('error' in parsePriceLine(x)))
+          : [];
+        return lines.length > 0 ? lines.slice(0, 40) : d.ai.prices;
+      })(),
     },
     home: {
       changeDays: Math.round(num(hom.changeDays, d.home.changeDays, 7, 365)),

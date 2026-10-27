@@ -3,9 +3,9 @@
  * "what this changes", how the value is typed and where it lives in the saved configuration. The form, the save action and
  * the "still on built-in numbers" marker all read this, so they cannot drift apart. Pure: no database, no React.
  */
-import { DEFAULT_CONFIG, type AppConfig } from '@fwos/core';
+import { DEFAULT_CONFIG, parsePriceLine, type AppConfig } from '@fwos/core';
 
-export type FieldKind = 'int' | 'money' | 'pct' | 'pct4' | 'list' | 'emails' | 'check';
+export type FieldKind = 'int' | 'money' | 'pct' | 'pct4' | 'list' | 'emails' | 'lines' | 'check';
 
 export interface FieldSpec {
   name: string;
@@ -23,7 +23,15 @@ export interface FieldSpec {
 }
 
 export type RuleGroup =
-  'deposits' | 'reminders' | 'estimates' | 'inbox' | 'rates' | 'refunds' | 'harvest' | 'liquidity';
+  | 'deposits'
+  | 'reminders'
+  | 'estimates'
+  | 'inbox'
+  | 'ai'
+  | 'rates'
+  | 'refunds'
+  | 'harvest'
+  | 'liquidity';
 
 export interface GroupSpec {
   key: Exclude<RuleGroup, 'liquidity'>;
@@ -39,6 +47,7 @@ export const RULE_GROUPS: RuleGroup[] = [
   'reminders',
   'estimates',
   'inbox',
+  'ai',
   'rates',
   'refunds',
   'harvest',
@@ -50,6 +59,7 @@ export const GROUP_TITLE: Record<RuleGroup, string> = {
   reminders: 'Reminders',
   estimates: 'Estimated balances',
   inbox: 'Bank e-mail forwarding',
+  ai: 'AI prices',
   rates: 'Interest-rate suggestions',
   refunds: 'Tax refunds on NRO interest',
   harvest: 'Tax-gain harvesting',
@@ -222,6 +232,30 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         kind: 'emails',
         path: ['inbox', 'trustedForwarders'],
         unit: 'e-mail addresses, separated by commas',
+      },
+    ],
+  },
+  {
+    key: 'ai',
+    id: 'ai-prices',
+    title: 'AI prices',
+    purpose: 'What the AI is charged at, to show its cost on the AI cost page.',
+    fields: [
+      {
+        name: 'aiUsdInr',
+        label: 'Rupees per US dollar',
+        hint: 'AI services bill in dollars; this turns the cost into rupees on the AI cost page.',
+        kind: 'money',
+        path: ['ai', 'usdInr'],
+        unit: '₹ per $1',
+      },
+      {
+        name: 'aiPrices',
+        label: 'Price of each model, dollars per million tokens',
+        hint: 'One line per model: model = input / output / cache read / cache write. A model id can end with * to cover a family (claude-haiku*), or start with * (*:free). Cache prices may be left out: they default to a tenth and a quarter more than the input price. Check the provider’s price page and change a line here when it changes; a model with no line is counted in tokens but not in money.',
+        kind: 'lines',
+        path: ['ai', 'prices'],
+        unit: 'one line per model',
       },
     ],
   },
@@ -492,6 +526,8 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
     case 'list':
     case 'emails':
       return Array.isArray(v) ? v.join(', ') : '';
+    case 'lines':
+      return Array.isArray(v) ? v.join('\n') : '';
     case 'pct':
       return String(pctOf(Number(v)));
     case 'pct4':
@@ -557,6 +593,20 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
     const text = (get(f.name) ?? '').trim();
     if (f.kind === 'check') {
       bucket[key] = get(f.name) === 'on';
+      continue;
+    }
+    if (f.kind === 'lines') {
+      const rows = (get(f.name) ?? '')
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      for (const row of rows) {
+        const p = parsePriceLine(row);
+        if ('error' in p) return { ok: false, message: `${f.label}: ${p.error}.` };
+      }
+      if (rows.length === 0 || rows.length > 40)
+        return { ok: false, message: `${f.label}: between 1 and 40 lines.` };
+      bucket[key] = rows;
       continue;
     }
     if (f.kind === 'emails') {

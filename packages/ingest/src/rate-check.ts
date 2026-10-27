@@ -119,6 +119,7 @@ export async function checkRateSource(args: {
   const ask = () => {
     const text = parts.join('\n\n');
     return callAi(ai, {
+      purpose: 'rates_check',
       build: (provider, key, model) =>
         buildRatesRequest(provider, key, args.bank, text, model, [], args.maxAmount),
       parse: (provider, json) => {

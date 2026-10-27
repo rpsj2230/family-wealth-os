@@ -280,7 +280,10 @@ describe('Anthropic provider', () => {
     expect(b.model).toBe('claude-haiku-5-5');
     expect(b).not.toHaveProperty('temperature');
     expect(b.max_tokens).toBeGreaterThan(1000);
-    expect(String(b.system)).toContain('JSON');
+    const sys = b.system as { type: string; text: string; cache_control?: { type: string } }[];
+    expect(sys[0]!.text).toContain('JSON');
+    // the instructions are marked for prompt caching
+    expect(sys[0]!.cache_control).toEqual({ type: 'ephemeral' });
     expect(b.messages).toEqual([{ role: 'user', content: 'some text' }]);
   });
   it('reads the text blocks of the answer and ignores thinking blocks', () => {

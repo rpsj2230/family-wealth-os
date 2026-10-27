@@ -230,7 +230,15 @@ export function buildAiChat(
           model: model ?? ANTHROPIC_MODEL,
           max_tokens: 8000,
           output_config: { effort: 'low' },
-          system: `${system}\nReply with one JSON object only: no commentary, no code fence.`,
+          // the instructions are marked for prompt caching: a request whose start is the same as a recent one (the banks of one rates run, the
+          // emails of one inbox run) pays the much lower cached rate for it. Below the service's minimum size it simply is not cached.
+          system: [
+            {
+              type: 'text',
+              text: `${system}\nReply with one JSON object only: no commentary, no code fence.`,
+              cache_control: { type: 'ephemeral' },
+            },
+          ],
           messages: [{ role: 'user', content: body }],
         }),
       },

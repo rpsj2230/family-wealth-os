@@ -348,6 +348,7 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
     const maxAmount = (await loadSettings(supabase as unknown as SupabaseClient)).config.rates
       .maxAmount;
     const res = await callAi(ai, {
+      purpose: 'rates_paste',
       build: (provider, key, model) =>
         buildRatesRequest(provider, key, row.bank, text, model, hintTexts, maxAmount),
       parse: (provider, json) => {

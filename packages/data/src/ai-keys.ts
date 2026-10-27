@@ -5,6 +5,7 @@ import {
   type AiChain,
   type AiChainDeps,
   type AiProvider,
+  type AiUsageEvent,
   type AiUse,
   type StoredAiKey,
 } from '@fwos/ingest';
@@ -110,6 +111,49 @@ export async function recordAiTest(
     .eq('provider', provider);
 }
 
+/** Logs one real call for the AI cost page: which service and model, what it was for, and the tokens it used. Never the text or the key. */
+export async function recordAiUsage(
+  db: SupabaseClient,
+  household: string,
+  access: AiKeyAccess,
+  e: AiUsageEvent,
+): Promise<void> {
+  const t = e.tokens;
+  if (access === 'member') {
+    await db.rpc('record_ai_usage', {
+      p_household: household,
+      p_provider: e.provider,
+      p_model: e.model,
+      p_purpose: e.purpose,
+      p_ok: e.ok,
+      p_status: e.status,
+      p_input: t?.input ?? 0,
+      p_output: t?.output ?? 0,
+      p_cache_read: t?.cacheRead ?? 0,
+      p_cache_write: t?.cacheWrite ?? 0,
+      p_known: !!t,
+      p_ms: e.ms,
+      p_note: e.note,
+    });
+    return;
+  }
+  await db.from('ai_usage').insert({
+    household_id: household,
+    provider: e.provider,
+    model: e.model?.slice(0, 120) ?? null,
+    purpose: e.purpose,
+    ok: e.ok,
+    status: Math.max(0, Math.min(e.status, 999)),
+    input_tokens: t?.input ?? 0,
+    output_tokens: t?.output ?? 0,
+    cache_read_tokens: t?.cacheRead ?? 0,
+    cache_write_tokens: t?.cacheWrite ?? 0,
+    tokens_known: !!t,
+    ms: Math.max(0, Math.round(e.ms)),
+    note: e.note?.slice(0, 200) ?? null,
+  });
+}
+
 /**
  * The chain of keys switched on, first choice first, wired to remember every real use on its key. Empty when no key is switched on
  * (the callers then say so in their own words).
@@ -118,11 +162,12 @@ export async function aiChainFor(
   db: SupabaseClient,
   household: string,
   access: AiKeyAccess,
-  deps: Omit<AiChainDeps, 'record'> = {},
+  deps: Omit<AiChainDeps, 'record' | 'usage'> = {},
 ): Promise<AiChain> {
   const rows = await loadStoredAiKeys(db, household, access);
   return createAiChain(orderedEnabled(rows), {
     ...deps,
     record: (use) => recordAiUse(db, household, access, use),
+    usage: (e) => recordAiUsage(db, household, access, e),
   });
 }

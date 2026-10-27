@@ -144,6 +144,7 @@ export interface AiChainTest {
 export async function testAiChain(chain: AiChain, today: string): Promise<AiChainTest> {
   const t0 = Date.now();
   const res = await callAi(chain, {
+    purpose: 'ai_test',
     build: (provider, key, model) => buildAiRequest(provider, key, testAlert(today), model),
     parse: (provider, json) => {
       const r = parseAiResponse(provider, json, { today })[0];

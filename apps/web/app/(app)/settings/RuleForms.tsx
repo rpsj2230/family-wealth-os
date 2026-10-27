@@ -29,11 +29,21 @@ export function RuleGroupForm({
       <div className="formgrid">
         {boxes.map((f) => (
           <Field key={f.name} label={f.label} hint={f.hint} unit={f.unit}>
-            <input
-              name={f.name}
-              inputMode={f.kind === 'list' || f.kind === 'emails' ? 'text' : 'decimal'}
-              defaultValue={String(values[f.name] ?? '')}
-            />
+            {f.kind === 'lines' ? (
+              <textarea
+                name={f.name}
+                rows={5}
+                spellCheck={false}
+                className="mono"
+                defaultValue={String(values[f.name] ?? '')}
+              />
+            ) : (
+              <input
+                name={f.name}
+                inputMode={f.kind === 'list' || f.kind === 'emails' ? 'text' : 'decimal'}
+                defaultValue={String(values[f.name] ?? '')}
+              />
+            )}
           </Field>
         ))}
       </div>

@@ -110,6 +110,7 @@ export async function importTaxFile(
     const size = (t: Form26as | Ais) =>
       t.kind === '26as' ? t.deductors.length + t.taxPaid.length : t.lines.length;
     const res = await callAi<Form26as | Ais>(opts.ai, {
+      purpose: 'tax_file',
       build: (provider, key, model) =>
         kind === '26as'
           ? build26asRequest(provider, key, body, model)

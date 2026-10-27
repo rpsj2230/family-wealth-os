@@ -5,6 +5,7 @@
  * records why, so nothing silently disappears. The AI keys switched on are tried in their order (see @fwos/ingest `ai-chain`):
  * a key that fails is skipped for the next one, and a key that was refused is not asked again for the rest of the run.
  */
+import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { sameBank } from '@fwos/core';
 import { aiChainFor, loadSettings, saveRatesRead } from '@fwos/data';
@@ -48,7 +49,9 @@ async function main() {
   for (const h of hh.data ?? []) {
     const household = h.id as string;
     // rates that apply only above the most you would put with one bank are not read
-    const maxAmount = (await loadSettings(db, household)).config.rates.maxAmount;
+    const rateCfg = (await loadSettings(db, household)).config.rates;
+    const maxAmount = rateCfg.maxAmount;
+    const staleDays = rateCfg.staleDays;
     // one chain for the whole run, so a key that is refused is skipped for every page after it
     const ai = await aiChainFor(db, household, 'service', {
       limits: { callMs: 30_000, tries: 3 },
@@ -56,7 +59,7 @@ async function main() {
     });
     const sources = await db
       .from('rate_sources')
-      .select('id, bank, url')
+      .select('id, bank, url, page_hash, read_on')
       .eq('household_id', household)
       .eq('enabled', true);
     if (!sources.data?.length) {
@@ -147,10 +150,41 @@ async function main() {
         const forThisBank = ((bankHints.data ?? []) as { bank: string; hint: string }[])
           .filter((h) => sameBank(h.bank, bankName))
           .map((h) => h.hint);
+        // a page whose text (with the corrections and the ceiling that go with it) is the same as when it was last read needs no AI call:
+        // its rates are confirmed as checked today. It is read again anyway after half the time a rate counts as fresh.
+        const hash = createHash('sha256')
+          .update(JSON.stringify({ v: 1, text: parts.join('\n\n'), hints: forThisBank, maxAmount }))
+          .digest('hex');
+        const readOn = (src.read_on as string | null) ?? null;
+        const sameAsBefore =
+          src.page_hash === hash &&
+          readOn !== null &&
+          (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${readOn}T00:00:00Z`)) / 86_400_000 <
+            Math.max(1, Math.floor(staleDays / 2));
+        if (sameAsBefore) {
+          const stored = await db
+            .from('rate_offers')
+            .select('id, bank')
+            .eq('household_id', household)
+            .eq('source_kind', 'ai');
+          if (stored.error) throw new Error(`stored rates: ${stored.error.message}`);
+          const ids = ((stored.data ?? []) as { id: string; bank: string }[])
+            .filter((o) => sameBank(o.bank, bankName))
+            .map((o) => o.id);
+          if (ids.length > 0) {
+            const upd = await db.from('rate_offers').update({ checked_on: today }).in('id', ids);
+            if (upd.error) throw new Error(`confirm rates: ${upd.error.message}`);
+            await note(
+              `unchanged since ${readOn}: not read again (no AI cost); ${ids.length} rates confirmed as checked today`,
+            );
+            continue;
+          }
+        }
         // each key's model is checked when it is first needed (providers retire models without notice)
         const ask = () => {
           const text = parts.join('\n\n');
           return callAi(ai, {
+            purpose: 'rates_refresh',
             build: (provider, key, model) =>
               buildRatesRequest(provider, key, bankName, text, model, forThisBank, maxAmount),
             parse: (provider, json) => {
@@ -193,6 +227,7 @@ async function main() {
             ? `Reference only, from ${[...new Set(used.map(hostOf))].join(' and ')} (third party: the bank's own page cannot be read by a program; check the date)`
             : `Read from ${[...new Set(used.map(hostOf))].join(' and ')}`,
         });
+        await db.from('rate_sources').update({ page_hash: hash, read_on: today }).eq('id', src.id);
         await note(
           res.attempts.length > 0
             ? `${summary}; read by ${PROVIDER_SHORT[res.provider]} after ${briefOf(res.attempts)}`

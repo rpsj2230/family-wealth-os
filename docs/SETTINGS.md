@@ -23,6 +23,7 @@ Nothing personal and no tunable number is written into the code. Everything belo
 | Tax rules per financial year: months to long-term, short and long-term rates, tax-free allowance, cess, verified flag, source note | Tax rules | Tax page, simulator, filing papers |
 | Digest recipients; bank-email label; AI provider and key (write-only) | Daily summary, Bank emails and AI | Email jobs |
 | Dated tasks (plans, deadlines) | Tasks > Add many tasks at once | Daily summary reminders |
+| AI prices: rupees per US dollar, and one price line per model (input / output / cache read / cache write, dollars per million tokens) | Money rules → AI prices | AI cost page |
 
 Built-in defaults exist only as starting values and are marked as such in the screens. A financial year with no tax rules entered uses the latest earlier year and says so.
 CI runs `scripts/check-private-data.sh`, which fails the build if a PAN-shaped value or a personal email appears in code.

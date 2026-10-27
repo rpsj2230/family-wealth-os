@@ -15,6 +15,7 @@ import { aiErrorHint, realFetch, type AiFetch } from './ai-models';
 import { PROVIDER_NAME, PROVIDER_SHORT } from './ai-providers';
 import { prepareAi, type AiLimits, type AiRuntime } from './ai-runtime';
 import type { AiHttp, AiProvider } from './bank-email';
+import { usageFromResponse, type AiPurpose, type AiTokens, type AiUsageEvent } from './ai-usage';
 
 /** One key that may be asked. */
 export interface AiKeyEntry {
@@ -38,6 +39,8 @@ export interface AiChainDeps {
   limits?: AiLimits;
   /** called after every real use; a failure here never stops the reading */
   record?: (use: AiUse) => Promise<void> | void;
+  /** called after every real call (answered or not) with what it used, for the AI cost page; a failure here never stops the reading */
+  usage?: (event: AiUsageEvent) => Promise<void> | void;
   /** called with every failed try, for a job's log (the attempt never holds a key) */
   onFailure?: (attempt: AiAttempt) => void;
   /** busy or slow answers in a row after which a service is left out for the rest of the run */
@@ -80,6 +83,8 @@ export interface AiAttempt {
 }
 
 export interface AiCallSpec<T> {
+  /** what the AI is asked to do, for the cost page (default 'other') */
+  purpose?: AiPurpose;
   /** the request for this service, key and model */
   build(provider: AiProvider, key: string, model: string | undefined): AiHttp;
   /** the usable value in the service's answer, or null when there is none (the next key is then asked) */
@@ -165,6 +170,14 @@ export class AiChain {
       this.deps.onFailure?.(attempt);
     } catch {
       // logging must never stop the reading
+    }
+  }
+
+  async usage(event: AiUsageEvent): Promise<void> {
+    try {
+      await this.deps.usage?.(event);
+    } catch {
+      // the cost log must never stop the reading
     }
   }
 
@@ -292,40 +305,62 @@ function skippedAttempt(entry: AiKeyEntry, why: string): AiAttempt {
   };
 }
 
-type Tried<T> = { ok: true; value: T; model: string | null } | { ok: false; attempt: AiAttempt };
+type Tried<T> =
+  | { ok: true; value: T; model: string | null; tokens: AiTokens | null; ms: number }
+  | { ok: false; attempt: AiAttempt; tokens: AiTokens | null; ms: number };
 
 async function tryKey<T>(
   chain: AiChain,
   entry: AiKeyEntry,
   spec: AiCallSpec<T>,
 ): Promise<Tried<T>> {
+  const t0 = Date.now();
+  const since = () => Date.now() - t0;
   let rt: AiRuntime;
   try {
     rt = await chain.runtime(entry);
   } catch (e) {
-    return { ok: false, attempt: silentAttempt(entry, null, e, 'prepare') };
+    return {
+      ok: false,
+      attempt: silentAttempt(entry, null, e, 'prepare'),
+      tokens: null,
+      ms: since(),
+    };
   }
   const req = spec.build(entry.provider, entry.key, rt.model ?? undefined);
   let res;
   try {
     res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
   } catch (e) {
-    return { ok: false, attempt: silentAttempt(entry, rt.model, e, 'ask') };
+    return {
+      ok: false,
+      attempt: silentAttempt(entry, rt.model, e, 'ask'),
+      tokens: null,
+      ms: since(),
+    };
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    return { ok: false, attempt: failedAttempt(entry, rt.model, res.status, body) };
+    return {
+      ok: false,
+      attempt: failedAttempt(entry, rt.model, res.status, body),
+      tokens: null,
+      ms: since(),
+    };
   }
   const model = res.model ?? rt.model;
   let value: T | null = null;
+  let tokens: AiTokens | null = null;
   try {
-    value = spec.parse(entry.provider, await res.json());
+    const json = await res.json();
+    tokens = usageFromResponse(entry.provider, json);
+    value = spec.parse(entry.provider, json);
   } catch {
     // an answer that is not JSON counts as an answer with nothing usable in it
   }
   if (value === null || value === undefined)
-    return { ok: false, attempt: unusableAttempt(entry, model, res.status) };
-  return { ok: true, value, model };
+    return { ok: false, attempt: unusableAttempt(entry, model, res.status), tokens, ms: since() };
+  return { ok: true, value, model, tokens, ms: since() };
 }
 
 /** Every failed try on one line, for a job log. */
@@ -367,7 +402,18 @@ export async function callAi<T>(chain: AiChain, spec: AiCallSpec<T>): Promise<Ai
       continue;
     }
     const tried = await tryKey(chain, entry, spec);
+    const purpose = spec.purpose ?? 'other';
     if (tried.ok) {
+      await chain.usage({
+        provider: entry.provider,
+        model: tried.model,
+        purpose,
+        ok: true,
+        status: 200,
+        tokens: tried.tokens,
+        ms: tried.ms,
+        note: null,
+      });
       chain.forgive(entry.provider);
       await chain.record({
         provider: entry.provider,
@@ -385,6 +431,16 @@ export async function callAi<T>(chain: AiChain, spec: AiCallSpec<T>): Promise<Ai
       };
     }
     const a = tried.attempt;
+    await chain.usage({
+      provider: a.provider,
+      model: a.model,
+      purpose,
+      ok: false,
+      status: a.status,
+      tokens: tried.tokens,
+      ms: tried.ms,
+      note: a.brief.slice(0, 200),
+    });
     attempts.push(a);
     chain.fail(a);
     if (a.keyLevel) chain.bench(a.provider, a.brief);

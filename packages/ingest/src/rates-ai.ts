@@ -80,10 +80,13 @@ export function htmlToText(html: string, max = 30_000): string {
   );
 }
 
+/**
+ * The instructions are the same for every bank (the bank's name, its corrections and its page come in the user text), so the start of
+ * every request is identical and a service that caches prompts (Anthropic) can reuse it across the banks of one run.
+ */
 const PROMPT = (
-  bank: string,
   maxAmount?: number,
-) => `You read a bank's public interest-rate page and list ONLY these rates for ${bank}:
+) => `You read a bank's public interest-rate page and list ONLY these rates for the bank named after "Bank:" in the text:
  (1) the savings account interest rate, with every balance slab as its own offer;
  (2) fixed deposit rates for NRE deposits (if the page does not separate NRE from domestic rates, give the general fixed deposit rates).
 Savings rates may differ for NRE and NRO accounts: give both when the page does. Ignore everything else: NRO or foreign-currency fixed deposits, recurring deposits, tax-saver deposits, senior-citizen-only tables, corporate or bulk deposits.
@@ -100,13 +103,13 @@ The account holder will never place more than ₹${Math.round(maxAmount).toLocal
 }`;
 
 /** Corrections you made earlier, as rules the reader must follow for this bank (kept short, newest first). */
-export const withHints = (prompt: string, hints: string[]) =>
+export const withHints = (text: string, hints: string[]) =>
   hints.length === 0
-    ? prompt
-    : `${prompt}\nKnown corrections for this bank. Follow them exactly:\n${hints
+    ? text
+    : `Known corrections for this bank. Follow them exactly:\n${hints
         .slice(0, 8)
         .map((h) => `- ${h.slice(0, 400)}`)
-        .join('\n')}`;
+        .join('\n')}\n\n${text}`;
 
 export function buildRatesRequest(
   provider: AiProvider,
@@ -120,8 +123,8 @@ export function buildRatesRequest(
   return buildAiChat(
     provider,
     apiKey,
-    withHints(PROMPT(bank, maxAmount), hints),
-    pageText.slice(0, 30_000),
+    PROMPT(maxAmount),
+    withHints(`Bank: ${bank}\n\n${pageText.slice(0, 30_000)}`, hints),
     model,
   );
 }
