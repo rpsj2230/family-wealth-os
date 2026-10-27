@@ -8,6 +8,7 @@ import { isEstimatedTxn } from './estimate';
 import { addDaysIso, addMonthsIso } from './harvest-lots';
 import { monthEnds, type SeriesPoint } from './fund-series';
 import { xirr } from './xirr';
+import { isCashFlow } from './performance';
 
 const DAY = 86_400_000;
 const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
@@ -145,6 +146,8 @@ export interface FlowTxn {
   date: string;
   units: number;
   amount: number;
+  /** units bought with a reinvested dividend (`dividend_reinvest`) are no cash flow of the return */
+  kind?: string | null;
 }
 
 const lastAtOrBefore = <T extends { date: string }>(list: T[], d: string): T | null => {
@@ -176,7 +179,7 @@ export function xirrOverTime(args: {
     if (addMonthsIso(first, args.minMonths) > d) continue;
     const flows = withTxns.flatMap((f) =>
       f.txns
-        .filter((x) => x.date <= d && x.units !== 0 && x.amount !== 0)
+        .filter((x) => x.date <= d && isCashFlow(x))
         .map((x) => ({
           date: new Date(`${x.date}T00:00:00Z`),
           amount: x.units > 0 ? -Math.abs(x.amount) : Math.abs(x.amount),

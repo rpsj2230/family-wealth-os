@@ -5,7 +5,8 @@
  */
 import { DEFAULT_CONFIG, type AppConfig } from '@fwos/core';
 
-export type FieldKind = 'int' | 'money' | 'pct' | 'pct4' | 'list' | 'emails' | 'check';
+export type FieldKind =
+  'int' | 'money' | 'pct' | 'pct4' | 'list' | 'emails' | 'check' | 'date' | 'decimal';
 
 export interface FieldSpec {
   name: string;
@@ -23,7 +24,15 @@ export interface FieldSpec {
 }
 
 export type RuleGroup =
-  'deposits' | 'reminders' | 'estimates' | 'inbox' | 'rates' | 'refunds' | 'harvest' | 'liquidity';
+  | 'deposits'
+  | 'reminders'
+  | 'estimates'
+  | 'inbox'
+  | 'rates'
+  | 'refunds'
+  | 'harvest'
+  | 'funds'
+  | 'liquidity';
 
 export interface GroupSpec {
   key: Exclude<RuleGroup, 'liquidity'>;
@@ -42,6 +51,7 @@ export const RULE_GROUPS: RuleGroup[] = [
   'rates',
   'refunds',
   'harvest',
+  'funds',
   'liquidity',
 ];
 
@@ -53,6 +63,7 @@ export const GROUP_TITLE: Record<RuleGroup, string> = {
   rates: 'Interest-rate suggestions',
   refunds: 'Tax refunds on NRO interest',
   harvest: 'Tax-gain harvesting',
+  funds: 'Fund history check',
   liquidity: 'When I need money',
 };
 
@@ -464,6 +475,16 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'days',
       },
       {
+        name: 'otherLong',
+        label: 'Months before international, gold and fund-of-funds units are long-term',
+        hint: 'Sets the short-term and long-term split on those funds’ pages. These funds have no yearly tax-free allowance.',
+        kind: 'int',
+        path: ['harvest', 'otherLongMonths'],
+        unit: 'months',
+        min: 1,
+        max: 120,
+      },
+      {
         name: 'skipSip',
         label: 'Leave out funds with an active monthly investment',
         hint: 'Their newest units may still be short-term, so they are skipped.',
@@ -476,6 +497,41 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         hint: 'Shows the withheld tax and the refund to claim, instead of assuming no tax is taken.',
         kind: 'check',
         path: ['harvest', 'nri'],
+      },
+    ],
+  },
+  {
+    key: 'funds',
+    id: 'fund-history',
+    title: 'Fund history check',
+    purpose:
+      'How far back every fund’s transactions should go, and how exactly they must add up to the units held.',
+    fields: [
+      {
+        name: 'historyFrom',
+        label: 'Transactions should be on file from',
+        hint: 'On Investments, a person whose earliest transaction is later than this, while funds started earlier, is asked for an earlier statement.',
+        kind: 'date',
+        path: ['funds', 'historyFrom'],
+      },
+      {
+        name: 'unitTolerance',
+        label: 'Units a history may be out by',
+        hint: 'A fund whose transactions lead to a unit count further away than this from the recorded count is flagged “Doesn’t match”. Statements round units to three decimals.',
+        kind: 'decimal',
+        path: ['funds', 'unitTolerance'],
+        unit: 'units',
+        min: 0,
+        max: 1,
+      },
+      {
+        name: 'moneyTolerance',
+        label: 'Rupees the invested amount may be out by',
+        hint: 'The invested amount worked out from the transactions is compared with the recorded one; a larger difference is shown on the fund’s page.',
+        kind: 'money',
+        path: ['funds', 'moneyTolerance'],
+        unit: '₹',
+        max: 1000,
       },
     ],
   },
@@ -492,6 +548,9 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
     case 'list':
     case 'emails':
       return Array.isArray(v) ? v.join(', ') : '';
+    case 'date':
+    case 'decimal':
+      return String(v);
     case 'pct':
       return String(pctOf(Number(v)));
     case 'pct4':
@@ -535,6 +594,13 @@ export function confirmedGroups(raw: unknown, c: AppConfig): RuleGroup[] {
         ),
   );
 }
+
+/** A real calendar date written 2021-01-01. */
+const isIsoDate = (text: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const t = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === text;
+};
 
 /** Reads a typed number: "₹ 5,00,000" and "5 00 000" are accepted; anything else is not a number. */
 export function parseNumber(text: string): number | null {
@@ -586,6 +652,12 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
           message: `${f.label}: whole numbers between 1 and 365, separated by commas.`,
         };
       bucket[key] = days;
+      continue;
+    }
+    if (f.kind === 'date') {
+      if (!isIsoDate(text))
+        return { ok: false, message: `${f.label}: a date written like 2021-01-01.` };
+      bucket[key] = text;
       continue;
     }
     const n = parseNumber(text);

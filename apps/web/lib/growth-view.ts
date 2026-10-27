@@ -5,6 +5,7 @@ import {
   periodChange,
   rangeStart,
   returnSeries,
+  openingFlow,
   xirrOverTime,
   type AppConfig,
   type FundRangeKey,
@@ -101,7 +102,14 @@ export function buildGrowth(args: {
     returns: returnSeries(clipped.points),
     xirr: xirrOverTime({
       funds: withTxns.map((f) => ({
-        txns: f.txns,
+        // units held before the first line count as put in on that day, as in every other return on the page
+        txns: [
+          ...f.txns,
+          ...(() => {
+            const o = openingFlow(f.txns, args.config.unitTolerance);
+            return o ? [o] : [];
+          })(),
+        ],
         series: f.history.map((p) => ({ date: p.date, value: p.value })),
       })),
       dates,

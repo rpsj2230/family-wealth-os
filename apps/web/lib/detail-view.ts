@@ -3,11 +3,13 @@
  * only draw what this returns, so the same figures appear everywhere and are tested without a database.
  */
 import {
+  DEFAULT_CONFIG,
   describeAudit,
   fdInterestForFy,
   fdValueOn,
   fyBounds,
   formatInr,
+  openingFlow,
   returnsFor,
   sourceTag,
   type FdForFiling,
@@ -32,6 +34,8 @@ export interface ObsIn {
 
 export interface AssetViewInput {
   today: string;
+  /** units a running balance may be out by (Settings: funds.unitTolerance); the built-in value when absent */
+  unitTolerance?: number;
   asset: {
     id: string;
     type: string;
@@ -595,11 +599,26 @@ export function buildAssetView(i: AssetViewInput): AssetView {
   if (i.position) {
     const p = i.position;
     const value = cur.amount;
-    const fundFlows = i.txns.map((t) => ({
-      date: t.txn_on,
-      units: t.units,
-      amount: Math.abs(t.amount),
-    }));
+    // units held before the first line count as put in on that day, so a fund whose history starts midway is not read as all gain
+    const opening = openingFlow(
+      i.txns.map((t) => ({
+        date: t.txn_on,
+        units: t.units,
+        amount: t.amount,
+        nav: t.nav,
+        balance: t.balance_units,
+      })),
+      i.unitTolerance ?? DEFAULT_CONFIG.funds.unitTolerance,
+    );
+    const fundFlows = [
+      ...i.txns.map((t) => ({
+        date: t.txn_on,
+        units: t.units,
+        amount: Math.abs(t.amount),
+        kind: t.kind,
+      })),
+      ...(opening ? [opening] : []),
+    ];
     const r = returnsFor(
       [
         {

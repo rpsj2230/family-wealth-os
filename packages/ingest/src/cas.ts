@@ -274,6 +274,9 @@ export interface LotResult {
 
 const EARLY = '1900-01-01';
 
+/** The units the lots may be out by against the closing balance (a statement prints units to three or four decimals). */
+export const LOT_UNIT_TOLERANCE = 0.01;
+
 export function fifoLots(
   s: Pick<CasScheme, 'transactions' | 'openingUnits' | 'closingUnits' | 'costValue'>,
 ): LotResult {
@@ -312,7 +315,8 @@ export function fifoLots(
     }
   }
   const held = lots.reduce((a, l) => a + l.units, 0);
-  const reconciled = s.closingUnits !== null && Math.abs(held - s.closingUnits) <= 0.01;
+  const reconciled =
+    s.closingUnits !== null && Math.abs(held - s.closingUnits) <= LOT_UNIT_TOLERANCE;
   // units from before the statement: cost is what the statement's total cost leaves after the known lots
   if (prior > 0 && s.costValue !== null) {
     const known = lots.reduce((a, l) => a + (l.cost ?? 0), 0);

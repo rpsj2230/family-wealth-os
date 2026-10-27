@@ -1,7 +1,8 @@
-import type { FundRangeKey } from '@fwos/core';
+import type { FundRangeKey, FundTaxPanel } from '@fwos/core';
 import { pageAll } from '@fwos/data';
 import { loadContext } from './data';
 import { buildFundDetail, NAV_POINTS, type FundDetail } from './fund-detail-model';
+import { buildFundTax } from './fund-tax';
 import { loadInvestmentView, type FundRow, type InvestmentView } from './investments';
 
 /** Everything the fund page adds for a mutual fund: the fund as the Investments page sees it, and the numbers behind its graphs. */
@@ -14,6 +15,8 @@ export async function loadFundDetail(
   today: string;
   holdingMonths: number | null;
   detail: FundDetail;
+  /** exit load, short and long term units and the harvest advice for this fund */
+  tax: FundTaxPanel;
 } | null> {
   const { supabase } = await loadContext();
   const view = await loadInvestmentView(supabase, undefined, null, range);
@@ -35,6 +38,7 @@ export async function loadFundDetail(
     view,
     today: view.today,
     holdingMonths: view.holdingMonths,
+    tax: buildFundTax(view, fund),
     detail: buildFundDetail({
       fund,
       navs,

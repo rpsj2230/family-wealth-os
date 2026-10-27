@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { formatInr, formatInrCompact, type Hero, type SeriesPoint } from '@fwos/core';
+import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { niceDate } from '@/lib/dates';
 import './invest.css';
@@ -118,17 +119,23 @@ function Cell({
   sub,
   cls,
   href,
+  est,
 }: {
   label: string;
   value: string;
   sub?: string | undefined;
   cls?: string | null | undefined;
   href?: string | undefined;
+  /** the figure rests on a fund history that does not add up */
+  est?: boolean | undefined;
 }) {
   const body = (
     <>
       <dt>{label}</dt>
-      <dd className={`v ${cls ?? ''}`}>{value}</dd>
+      <dd className={`v ${cls ?? ''}`}>
+        {value}
+        {est && <Est title={LEDGER_EST_TITLE} />}
+      </dd>
       {sub && <dd className="s">{sub}</dd>}
     </>
   );
@@ -168,12 +175,16 @@ export function PortfolioHero({
       <div className="invhero-top">
         <div className="invhero-main">
           <div className="hero-label">Current value of mutual funds</div>
-          <div className="hero-value">{formatInr(Math.round(h.value))}</div>
+          <div className="hero-value">
+            {formatInr(Math.round(h.value))}
+            {h.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
+          </div>
           <div className="hero-pills">
             <span className={`hpill ${tone(h.unrealised) === 'gain' ? 'up' : 'down'}`}>
               <span aria-hidden="true">{h.unrealised >= 0 ? '▲' : '▼'}</span>
               {rupees(h.unrealised)}
               {h.unrealisedPct !== null && <b>{pct(h.unrealisedPct, 1)}</b>}
+              {h.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
               <span className="hp-sub">profit or loss on units held</span>
             </span>
             <span className={`hpill ${day === null ? '' : day >= 0 ? 'up' : 'down'}`}>
@@ -234,6 +245,7 @@ export function PortfolioHero({
           label="Invested"
           value={formatInrCompact(h.invested)}
           sub="cost of the units still held"
+          est={h.unreconciled > 0}
         />
         <Cell
           label="Profit or loss"
@@ -244,6 +256,7 @@ export function PortfolioHero({
               : `${pct(h.unrealisedPct, 1)} on money put in`
           }
           cls={tone(h.unrealised)}
+          est={h.unreconciled > 0}
         />
         <Cell
           label="Annual return (XIRR)"
@@ -257,6 +270,7 @@ export function PortfolioHero({
           }
           cls={tone(h.xirr)}
           href={tabLinks.performance}
+          est={h.unreconciled > 0}
         />
         <Cell
           label="Booked by selling"
@@ -274,6 +288,7 @@ export function PortfolioHero({
           value={rupees(h.totalGain)}
           sub="held plus booked"
           cls={tone(h.totalGain)}
+          est={h.unreconciled > 0}
         />
         <Cell
           label="SIP a month"
@@ -293,7 +308,13 @@ export function PortfolioHero({
         <Cell
           label="Statements"
           value={`${h.withStatement} of ${h.funds}`}
-          sub={h.estimated > 0 ? `${h.estimated} estimated` : 'every fund is exact'}
+          sub={
+            h.estimated > 0
+              ? `${h.estimated} estimated`
+              : h.unreconciled > 0
+                ? `${h.unreconciled} not reconciled yet`
+                : 'every fund is exact'
+          }
           href={tabLinks.transactions}
         />
       </dl>

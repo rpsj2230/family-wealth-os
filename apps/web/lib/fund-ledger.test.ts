@@ -46,6 +46,7 @@ describe('fundLedger', () => {
       lots: [],
       realised: [],
       reconciled: false,
+      estimatedLots: 0,
     });
   });
   it('marks units from before the statement', () => {

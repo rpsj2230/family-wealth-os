@@ -97,7 +97,7 @@ test.describe('Settings (public sample)', () => {
     page,
   }) => {
     await page.goto('/demo/settings?tab=rules');
-    await expect(page.getByText('7 of 8 cards still run on the built-in numbers.')).toBeVisible();
+    await expect(page.getByText('8 of 9 cards still run on the built-in numbers.')).toBeVisible();
     const harvest = page.locator('#harvest-rules');
     await expect(harvest.getByText('Confirmed by you')).toBeVisible();
     const deposits = page.locator('#limits');

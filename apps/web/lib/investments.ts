@@ -15,7 +15,12 @@ import {
   type StatLot,
   type StatRealised,
   type StatTxn,
-  isEstimatedTxn,
+  folioOfRef,
+  isEstimateLine,
+  ledgerCheck,
+  ledgerSummary,
+  openingFlow,
+  orderLines,
   paceFromSeries,
   periodDates,
   projectCorpus,
@@ -34,7 +39,11 @@ import {
   type TrailingReturn,
   type FundForReturns,
   type FundTxn,
+  type LedgerLine,
+  type LedgerVerdict,
+  type PersonLedgerSummary,
   type SeriesPoint,
+  type TaxRuleSet,
 } from '@fwos/core';
 import { loadSettings, pageAll, type LoadedPortfolio } from '@fwos/data';
 import type { CasTxn } from '@fwos/ingest';
@@ -80,6 +89,8 @@ export interface FundRow {
   category: FundCategory;
   amc: string | null;
   taxClass: FundTaxClass;
+  /** how the class was decided: its words, whether it is only a guess from the name, and the ELSS lock-in in months */
+  taxInfo: { label: string; note: string; certain: boolean; lockInMonths: number };
   /** the name given on the Accounts side (empty when none), and the asset's status: active, or closed once sold */
   label: string | null;
   status: string;
@@ -100,6 +111,8 @@ export interface FundRow {
   /** transactions of a fund statement are on file */
   hasStatement: boolean;
   txns: StatTxn[];
+  /** whether the transaction history adds up: the verdict the Investments page and the fund page show */
+  ledger: LedgerVerdict;
   /** units still held by purchase, from the statement or (marked) estimated from the SIP plan and prices */
   lots: StatLot[];
   lotsBasis: LotsBasis;
@@ -128,6 +141,8 @@ export interface OwnerGroup {
   totals: Totals;
   series: SeriesPoint[];
   trend: SeriesPoint[];
+  /** how many of the person's funds reconcile with their statements, and which need earlier history */
+  ledger: PersonLedgerSummary;
 }
 
 export interface InvestmentView {
@@ -144,6 +159,8 @@ export interface InvestmentView {
   /** months after which equity-fund units are long-term, from the tax rules in Settings; null when no rule is known */
   holdingMonths: number | null;
   config: AppConfig['funds'];
+  /** the tax rules and harvest settings behind the exit-load and tax panel of a fund */
+  tax: { rules: TaxRuleSet[]; harvest: AppConfig['harvest'] };
   goals: { id: string; name: string }[];
   /** the benchmark proxy: an index fund's published prices, when the daily job has loaded them */
   benchmark: { code: string; name: string | null; navs: IndexPoint[] } | null;
@@ -174,7 +191,7 @@ function totalsOf(rows: FundRow[], forReturns: FundForReturns[], today: string):
     invested,
     gain: r.funds > 0 ? r.gain : value - invested,
     xirr: r.xirr,
-    xirrEstimated: r.estimatedFunds > 0,
+    xirrEstimated: r.estimatedFunds > 0 || rows.some((f) => f.ledger.figuresEstimated),
     dayAmount,
     dayPct: withDay.length > 0 && prior > 0 ? dayAmount / prior : null,
     sipMonthly: rows.filter((f) => !f.sipStopped).reduce((a, f) => a + (f.sipMonthly ?? 0), 0),
@@ -208,11 +225,12 @@ export async function loadInvestmentView(
         balance_units: number | null;
         description: string | null;
         source: string | null;
+        source_ref: string | null;
       }>((from, to) =>
         supabase
           .from('mf_transactions')
           .select(
-            'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source',
+            'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source, source_ref',
           )
           .order('txn_on')
           .order('id')
@@ -261,13 +279,11 @@ export async function loadInvestmentView(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
   const methodOf = new Map(l.portfolio.valued.map((v) => [v.assetId, v.estimate?.method] as const));
+  const unitTol = settings.config.funds.unitTolerance;
   const txBy = new Map<string, FundTxn[]>();
-  const casBy = new Map<string, (CasTxn & { source: string | null; id: string })[]>();
+  type Stored = CasTxn & { source: string | null; id: string; folio: string | null };
+  const casBy = new Map<string, Stored[]>();
   for (const t of tx) {
-    txBy.set(t.asset_id, [
-      ...(txBy.get(t.asset_id) ?? []),
-      { date: t.txn_on, units: Number(t.units), amount: Number(t.amount) },
-    ]);
     casBy.set(t.asset_id, [
       ...(casBy.get(t.asset_id) ?? []),
       {
@@ -280,8 +296,18 @@ export async function loadInvestmentView(
         balance: t.balance_units === null ? null : Number(t.balance_units),
         source: t.source,
         id: t.id,
+        folio: folioOfRef(t.source, t.source_ref),
       },
     ]);
+  }
+  // lines of one day have no time on them: the running balance puts them in the order they happened
+  for (const [id, list] of casBy) {
+    const ordered = orderLines(list, unitTol);
+    casBy.set(id, ordered);
+    txBy.set(
+      id,
+      ordered.map((t) => ({ date: t.date, units: t.units, amount: t.amount, kind: t.kind })),
+    );
   }
   const schemeOf = new Map(
     (
@@ -374,12 +400,51 @@ export async function loadInvestmentView(
     if (!ownerId) continue;
     const v = value.get(p.asset_id) ?? 0;
     const invested = Number(p.invested ?? 0);
+    const cas = casBy.get(p.asset_id) ?? [];
+    const unitsHeld = l.fundInfo[p.asset_id]?.units ?? null;
+    const ledger = fundLedger({
+      txns: cas,
+      costValue: invested || null,
+      unitsHeld,
+      unitTolerance: unitTol,
+    });
+    const hasReal = cas.some((c) => !isEstimateLine(c));
+    // the cost of the units held according to the lines (not counting assumed instalments), when every purchase is on file
+    const heldCost =
+      ledger.reconciled && ledger.lots.every((x) => x.estimated || x.cost !== null)
+        ? ledger.lots.filter((x) => !x.estimated).reduce((a, x) => a + (x.cost ?? 0), 0)
+        : null;
+    const verdict = ledgerCheck({
+      lines: cas.map((c): LedgerLine => ({
+        id: c.id,
+        date: c.date,
+        kind: c.kind,
+        units: c.units,
+        amount: c.amount,
+        nav: c.nav,
+        balance: c.balance,
+        source: c.source,
+        description: c.description,
+        folio: c.folio,
+      })),
+      position: {
+        units: unitsHeld,
+        unitsAsOf: l.fundInfo[p.asset_id]?.unitsAsOf ?? null,
+        invested,
+        startedOn: p.started_on,
+      },
+      heldCost,
+      tolerance: { units: unitTol, money: settings.config.funds.moneyTolerance },
+      historyFrom: settings.config.funds.historyFrom,
+    });
+    // units held before the first line count as put in on that day at its price, so a return is never read as a gain on them
+    const opening = openingFlow(cas, unitTol);
     const fr: FundForReturns = {
       assetId: p.asset_id,
       ownerId,
       name: p.fund_name,
       value: v,
-      txns: txBy.get(p.asset_id) ?? [],
+      txns: [...(txBy.get(p.asset_id) ?? []), ...(opening ? [opening] : [])],
       plan: {
         invested,
         startedOn: p.started_on,
@@ -392,12 +457,9 @@ export async function loadInvestmentView(
     const move = l.fundDay[p.asset_id];
     const code = codeOf.get(p.asset_id) ?? null;
     const scheme = code ? schemeOf.get(code) : undefined;
-    const cas = casBy.get(p.asset_id) ?? [];
-    const unitsHeld = l.fundInfo[p.asset_id]?.units ?? null;
-    const ledger = fundLedger({ txns: cas, costValue: invested || null, unitsHeld });
     let lots: StatLot[] = ledger.reconciled ? ledger.lots : [];
     let lotsBasis: LotsBasis = lots.length > 0 ? 'statement' : 'none';
-    if (cas.length === 0 && code && p.started_on && invested > 0) {
+    if (!hasReal && code && p.started_on && invested > 0) {
       const est = estimateLots({
         plan: {
           invested,
@@ -449,6 +511,9 @@ export async function loadInvestmentView(
         amount: c.amount,
         nav: c.nav,
         balance: c.balance,
+        kind: c.kind,
+        source: c.source,
+        description: c.description,
       })),
       plan: {
         invested,
@@ -457,6 +522,7 @@ export async function loadInvestmentView(
         sipStopped: p.sip_stopped,
       },
       today,
+      unitTolerance: unitTol,
     });
     const firstDate = history[0]?.date;
     const perf = firstDate
@@ -483,7 +549,7 @@ export async function loadInvestmentView(
       sipMonthly: p.sip_monthly === null ? null : Number(p.sip_monthly),
       sipStopped: p.sip_stopped,
       xirr: r.xirr,
-      xirrEstimated: r.estimatedFunds > 0,
+      xirrEstimated: r.estimatedFunds > 0 || verdict.figuresEstimated,
       gain: r.funds > 0 && r.estimatedFunds === 0 ? r.gain : v - invested,
       dayAmount: move && v > 0 ? moveAmount(v, move.pct) : null,
       dayPct: move ? move.pct : null,
@@ -503,6 +569,10 @@ export async function loadInvestmentView(
       category: fundCategory(p.fund_name, scheme?.category ?? null),
       amc: amcLabel(scheme?.amc ?? null),
       taxClass: fundTaxClass(p.fund_name, scheme?.category ?? null).class,
+      taxInfo: (() => {
+        const c = fundTaxClass(p.fund_name, scheme?.category ?? null);
+        return { label: c.label, note: c.note, certain: c.certain, lockInMonths: c.lockInMonths };
+      })(),
       label: assetOf.get(p.asset_id)?.label ?? null,
       status: assetOf.get(p.asset_id)?.status ?? 'active',
       exitLoadPct: p.exit_load_pct === null ? null : Number(p.exit_load_pct),
@@ -533,7 +603,8 @@ export async function loadInvestmentView(
       flows: fl.flows,
       flowsEstimated: fl.estimated,
       // lines assumed from the SIP plan (source 'estimate') are not a statement
-      hasStatement: cas.some((c) => c.source !== 'estimate' && !isEstimatedTxn(c)),
+      hasStatement: hasReal,
+      ledger: verdict,
       txns: cas.map((c) => ({
         id: c.id,
         date: c.date,
@@ -573,6 +644,21 @@ export async function loadInvestmentView(
     .map((o) => {
       const funds = rows.filter((r) => r.ownerId === o.id).sort((a, b) => b.value - a.value);
       return {
+        ledger: ledgerSummary(
+          [
+            {
+              ownerId: o.id,
+              name: o.display_name,
+              funds: funds.map((f) => ({
+                assetId: f.assetId,
+                name: f.label || f.name,
+                startedOn: f.startedOn,
+                verdict: f.ledger,
+              })),
+            },
+          ],
+          { historyFrom: settings.config.funds.historyFrom, unitTolerance: unitTol },
+        )[0]!,
         ownerId: o.id,
         name: o.display_name,
         panLast4: o.pan_last4,
@@ -601,6 +687,7 @@ export async function loadInvestmentView(
     palette,
     holdingMonths,
     config: settings.config.funds,
+    tax: { rules: settings.rules, harvest: settings.config.harvest },
     benchmark,
     goals: ((goals.data ?? []) as unknown as { id: string; name: string }[]).map((g) => ({
       id: g.id,

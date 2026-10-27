@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { pageAll } from '@fwos/data';
 import { describeAudit, formatInr, personStyles, sourceTag, type PersonStyle } from '@fwos/core';
 import type { Fact } from '@/components/AssetFacts';
 import type { ActivityItem } from '@/components/ActivityLog';
@@ -239,13 +240,16 @@ export async function loadTxnDetail(assetId: string, txnId: string): Promise<Rec
       .eq('id', txnId)
       .eq('asset_id', assetId)
       .maybeSingle(),
-    supabase
-      .from('mf_transactions')
-      .select('id, txn_on, kind, amount, units, created_at')
-      .eq('asset_id', assetId)
-      .order('txn_on')
-      .order('created_at')
-      .limit(5000),
+    pageAll<Record<string, unknown>>((from, to) =>
+      supabase
+        .from('mf_transactions')
+        .select('id, txn_on, kind, amount, units, created_at')
+        .eq('asset_id', assetId)
+        .order('txn_on')
+        .order('created_at')
+        .order('id')
+        .range(from, to),
+    ),
     supabase
       .from('audit_events')
       .select('actor, table_name, row_id, action, before, after, at')
@@ -266,7 +270,7 @@ export async function loadTxnDetail(assetId: string, txnId: string): Promise<Rec
   const amount = Number(r.amount);
   const sell = units < 0 || ['redeem', 'switch_out'].includes(r.kind as string);
   const navNow = l.fundInfo[assetId]?.nav ?? null;
-  const list = ((all.data ?? []) as Record<string, unknown>[]).map((x) => ({
+  const list = all.map((x) => ({
     id: x.id as string,
     on: x.txn_on as string,
     kind: x.kind as string,

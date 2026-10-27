@@ -1,6 +1,14 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { formatInr, formatInrCompact, rebase, type PlanSplit, type YearKind } from '@fwos/core';
+import {
+  formatInr,
+  formatInrCompact,
+  rebase,
+  type FundTaxPanel,
+  type PlanSplit,
+  type YearKind,
+} from '@fwos/core';
+import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { SipStrip, StatList, type Stat } from '@/components/FundViz';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { PlotChart, type PlotSeries } from '@/components/PlotChart';
@@ -8,8 +16,10 @@ import { Tabs } from '@/components/Tabs';
 import { niceDate } from '@/lib/dates';
 import type { FundDetail } from '@/lib/fund-detail-model';
 import type { FundRow } from '@/lib/investments';
+import { AddsUp, LedgerChip } from './DataCheck';
 import { AddTxnButton, EditFundButton } from './FundEdit';
 import { Ledger, type LedgerEntry } from './Ledger';
+import { TaxPanel } from './TaxPanel';
 import {
   Chips,
   DrawdownCard,
@@ -83,6 +93,8 @@ export function FundPage({
   config,
   plan,
   colour,
+  tax,
+  taxHref,
 }: {
   fund: FundRow;
   detail: FundDetail;
@@ -101,6 +113,9 @@ export function FundPage({
   config: { ledgerPageSize: number; riskMinMonths: number; rollingMinWindows: number };
   plan?: PlanSplit | undefined;
   colour: string;
+  /** the exit-load and tax panel of this fund, and the address of the Tax page it points to */
+  tax: FundTaxPanel;
+  taxHref: string;
 }) {
   const f = fund;
   const d = detail;
@@ -118,6 +133,16 @@ export function FundPage({
   const gainPct = f.invested > 0 ? f.value / f.invested - 1 : null;
   const ret = d.returns;
   const noStatement = !f.hasStatement;
+  const estMark = f.ledger.figuresEstimated ? <Est title={LEDGER_EST_TITLE} /> : null;
+  const addsUp = (
+    <AddsUp
+      verdict={f.ledger}
+      value={f.value}
+      nav={f.nav}
+      navDate={f.navDate}
+      sourceNote={`Value now: ${f.valueBasis}.`}
+    />
+  );
 
   const header = (
     <>
@@ -125,7 +150,12 @@ export function FundPage({
         <Tile
           main
           label="Value now"
-          value={f.value ? inr(f.value) : '–'}
+          value={
+            <>
+              {f.value ? inr(f.value) : '–'}
+              {f.value ? estMark : null}
+            </>
+          }
           sub={
             <>
               {f.units !== null ? `${units(f.units)} units` : 'units not recorded'}
@@ -143,18 +173,33 @@ export function FundPage({
         />
         <Tile
           label="Invested"
-          value={f.invested ? inr(f.invested) : '–'}
+          value={
+            <>
+              {f.invested ? inr(f.invested) : '–'}
+              {f.invested ? estMark : null}
+            </>
+          }
           sub={d.avgCost === null ? 'cost of the units held' : `average cost ${price(d.avgCost)}`}
         />
         <Tile
           label="Profit or loss"
-          value={f.invested ? rupees(gain) : '–'}
+          value={
+            <>
+              {f.invested ? rupees(gain) : '–'}
+              {f.invested ? estMark : null}
+            </>
+          }
           cls={f.invested ? tone(gain) : null}
           sub={gainPct === null ? 'no cost recorded' : `${pct(gainPct, 1)} on money put in`}
         />
         <Tile
           label="Return a year (XIRR)"
-          value={f.xirr === null ? '–' : pct(f.xirr, 1)}
+          value={
+            <>
+              {f.xirr === null ? '–' : pct(f.xirr, 1)}
+              {f.xirr !== null ? estMark : null}
+            </>
+          }
           cls={tone(f.xirr)}
           sub={
             f.xirr === null
@@ -211,6 +256,7 @@ export function FundPage({
             Match to follow its price
           </Link>
         )}
+        <LedgerChip chip={f.ledger.chip} />
         <span className="muted small">
           {planWords[f.plan]}
           {f.folioLast4 ? ` · folio …${f.folioLast4}` : ''}
@@ -617,7 +663,18 @@ export function FundPage({
   return (
     <>
       {header}
-      {tab === 'overview' && overview}
+      {tab === 'overview' && (
+        <>
+          {addsUp}
+          <TaxPanel
+            panel={tax}
+            taxHref={taxHref}
+            setExitLoadHref={href({ edit: f.assetId })}
+            fundName={f.name}
+          />
+          {overview}
+        </>
+      )}
       {tab === 'returns' && returnsBody}
       {tab === 'transactions' && (
         <section aria-labelledby="ft">
@@ -662,6 +719,8 @@ export function FundPage({
               }
             />
           )}
+          <div style={{ height: 14 }} />
+          {addsUp}
           <div style={{ height: 14 }} />
           <Ledger
             rows={ledgerRows}

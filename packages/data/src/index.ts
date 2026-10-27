@@ -15,6 +15,7 @@ import {
   type PortfolioDefaults,
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { pageAll } from './paging';
 import { loadSettings } from './settings';
 
 export interface LoadedPortfolio {
@@ -57,16 +58,22 @@ export async function loadPortfolioData(
   };
   // settings are read in step with the first batch, not after it
   const settingsP = loadSettings(supabase, opts.householdId);
-  const [owners, assets, observations, fds, positions, institutions, offerRows, sipChangeRows] =
+  const [owners, assets, obsRowsRead, fds, positions, institutions, offerRows, sipChangeRows] =
     await Promise.all([
       sel('owners', 'id, display_name'),
       sel(
         'assets',
         'id, owner_id, type, status, nickname, currency, account_kind, expected_freshness_days, interest_rate, tds_rate, institution_id, identifier_last4, holder_name, label, sort_order, is_joint, linked_last4, notes',
       ),
-      sel(
-        'observations',
-        'id, asset_id, kind, amount, currency, fx_rate, as_of, confidence, source, created_at, superseded_by',
+      // the API returns at most 1,000 rows a request: years of monthly values for many accounts need several, in a fixed order
+      pageAll<ObservationRow>((from, to) =>
+        sel(
+          'observations',
+          'id, asset_id, kind, amount, currency, fx_rate, as_of, confidence, source, created_at, superseded_by',
+        )
+          .order('as_of', { ascending: true })
+          .order('id')
+          .range(from, to),
       ),
       sel(
         'fixed_deposits',
@@ -120,7 +127,7 @@ export async function loadPortfolioData(
         },
       ]),
   );
-  const obsRows = (observations.data ?? []) as unknown as ObservationRow[];
+  const obsRows = obsRowsRead;
   // a savings account with no rate of its own earns what the rate list says for its bank, kind and balance slab
   const bankName = new Map(
     ((institutions.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [
@@ -178,13 +185,21 @@ export async function loadPortfolioData(
   const fundInfo: LoadedPortfolio['fundInfo'] = {};
   try {
     const codes = [...new Set(assetRows.map((a) => a.amfi_code).filter((c): c is string => !!c))];
-    const earliest = obsRows.reduce<string>(
-      (m, o) => (o.as_of < m ? o.as_of : m),
-      today.toISOString().slice(0, 10),
-    );
-    const since = new Date(earliest + 'T00:00:00Z');
-    since.setUTCDate(since.getUTCDate() - 10);
-    const sinceIso = since.toISOString().slice(0, 10);
+    const todayIso = today.toISOString().slice(0, 10);
+    // prices are needed from a little before the fund's latest recorded value or unit count (the value is rolled forward from there)
+    const lastObsOn = new Map<string, string>();
+    for (const o of obsRows)
+      if (!o.superseded_by && o.as_of > (lastObsOn.get(o.asset_id) ?? ''))
+        lastObsOn.set(o.asset_id, o.as_of);
+    const sinceOf = new Map<string, string>();
+    for (const a of assetRows) {
+      if (!a.amfi_code) continue;
+      const from = [lastObsOn.get(a.id), a.units_as_of ?? undefined]
+        .filter((x): x is string => !!x)
+        .sort()[0];
+      const cur = sinceOf.get(a.amfi_code) ?? todayIso;
+      sinceOf.set(a.amfi_code, (from ?? todayIso) < cur ? (from ?? todayIso) : cur);
+    }
     const currencies = [...new Set(assetRows.map((a) => a.currency).filter((c) => c !== 'INR'))];
     const fx: Record<string, number> = {};
     const fxP = Promise.all(
@@ -204,17 +219,19 @@ export async function loadPortfolioData(
     );
     const navs = await Promise.all(
       codes.map(async (c) => {
-        const r = await supabase
-          .from('mf_navs')
-          .select('nav_date, nav')
-          .eq('amfi_code', c)
-          .gte('nav_date', sinceIso)
-          .order('nav_date', { ascending: true })
-          .limit(1000);
-        return [
-          c,
-          (r.data ?? []).map((x) => ({ date: x.nav_date as string, nav: Number(x.nav) })),
-        ] as const;
+        const since = new Date(`${sinceOf.get(c) ?? todayIso}T00:00:00Z`);
+        since.setUTCDate(since.getUTCDate() - 10);
+        // read in pages: a plain limit would return the OLDEST 1,000 prices and leave the latest one out
+        const rows = await pageAll<{ nav_date: string; nav: number }>((from, to) =>
+          supabase
+            .from('mf_navs')
+            .select('nav_date, nav')
+            .eq('amfi_code', c)
+            .gte('nav_date', since.toISOString().slice(0, 10))
+            .order('nav_date', { ascending: true })
+            .range(from, to),
+        );
+        return [c, rows.map((x) => ({ date: x.nav_date, nav: Number(x.nav) }))] as const;
       }),
     );
     market.navs = Object.fromEntries(navs.filter(([, v]) => v.length > 0));
