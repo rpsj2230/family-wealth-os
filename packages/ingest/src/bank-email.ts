@@ -160,6 +160,18 @@ export function parseBankEmail(e: EmailInput): EmailOutcome {
   return { kind: 'unknown' };
 }
 
+/**
+ * Whether an email in a format the rules do not know still looks like a balance alert: it talks about a balance or an available amount
+ * and carries a number. Only such emails are shown to the AI reader (offers and newsletters are not).
+ */
+export function mentionsBalance(subject: string, text: string): boolean {
+  const t = `${subject} ${text}`;
+  return (
+    /\b(?:available |closing |current |ledger |account |a\/c )?bal(?:ance)?\b/i.test(t) &&
+    /\d[\d,]*(?:\.\d+)?/.test(t)
+  );
+}
+
 /** Remove anything an AI service does not need: long digit runs (account/card numbers), emails, PAN-like codes. */
 export function redactForAi(s: string): string {
   return s

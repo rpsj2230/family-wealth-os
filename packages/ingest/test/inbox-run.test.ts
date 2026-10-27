@@ -243,3 +243,63 @@ describe('runInbox: tax statements', () => {
     expect(called).toBe(false);
   });
 });
+
+describe('runInbox: a balance email in a format the rules do not know', () => {
+  const forwarded = msg({
+    messageId: 'fwd1',
+    from: 'Me <me@gmail.com>',
+    subject: 'Fwd: Balance Change Alert',
+    text: 'Dear Customer, the balance in your HDFC Bank account ending 7240 is INR 12,345.67 as of 26 Oct 2026.',
+  });
+  const aiAnswer = {
+    choices: [
+      {
+        message: {
+          content:
+            '{"readings":[{"bank":"HDFC","last4":"7240","amount":12345.67,"currency":"INR","asOf":"2026-10-26"}]}',
+        },
+      },
+    ],
+  };
+  const withAi = { today: '2026-10-26', ai: { provider: 'groq' as const, key: 'k' } };
+
+  it('asks the AI, and a reading from a forwarded mail goes to review (the sender is not the bank)', async () => {
+    const { io, rows, applied } = fakeIo({ fetchJson: async () => aiAnswer });
+    const r = await runInbox([forwarded], io, withAi);
+    expect(applied).toHaveLength(0);
+    expect(r.needsReview).toBe(1);
+    expect(rows[0]).toMatchObject({
+      outcome: 'needs_review',
+      reason: 'sender is not confirmed as the bank',
+    });
+    expect(rows[0]!.reading).toMatchObject({ amount: 12345.67, last4: '7240' });
+  });
+
+  it('says so, instead of "not a balance email", when there is no AI key', async () => {
+    const { io, rows } = fakeIo();
+    const r = await runInbox([forwarded], io, cfgNoAi);
+    expect(r.needsReview).toBe(1);
+    expect(rows[0]!.reason).toContain('balance email in a format the rules do not know');
+  });
+
+  it('ignores it when the AI finds no balance, and never asks about an offer', async () => {
+    let asked = 0;
+    const { io, rows } = fakeIo({
+      fetchJson: async () => {
+        asked++;
+        return { choices: [{ message: { content: '{"readings":[]}' } }] };
+      },
+    });
+    await runInbox([forwarded], io, withAi);
+    expect(rows[0]).toMatchObject({
+      outcome: 'ignored',
+      reason: 'the AI found no balance in this email',
+    });
+    await runInbox(
+      [msg({ messageId: 'o1', subject: 'Offers', text: 'Festive offers up to 50% off' })],
+      io,
+      withAi,
+    );
+    expect(asked).toBe(1);
+  });
+});

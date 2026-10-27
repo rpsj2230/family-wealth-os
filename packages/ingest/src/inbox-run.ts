@@ -13,6 +13,7 @@ import {
   buildAiRequest,
   matchAccount,
   parseAiResponse,
+  mentionsBalance,
   parseBankEmail,
   senderDomain,
   senderMatchesBank,
@@ -200,9 +201,40 @@ export async function runInbox(
           senderVerified: senderMatchesBank(domain, r.bank),
         }));
         if (readings.length === 0) note = 'the AI found no balance in the statement';
-      } else {
+      } else if (!mentionsBalance(m.subject, m.text)) {
         await log({ outcome: 'ignored', reason: null, reading: null, assetId: null });
         continue;
+      } else if (!cfg.ai) {
+        // it looks like a balance alert in a format the rules do not know: say so instead of calling it "not a balance email"
+        await log({
+          outcome: 'needs_review',
+          reason: 'balance email in a format the rules do not know; add an AI key to read it',
+          reading: null,
+          assetId: null,
+        });
+        continue;
+      } else {
+        // an unfamiliar format: the AI reads it, and what it finds is still checked like any other reading (sender, account, size)
+        const req = buildAiRequest(
+          cfg.ai.provider,
+          cfg.ai.key,
+          `${m.subject}\n${m.text}`,
+          cfg.ai.model,
+        );
+        const json = await io.fetchJson(req.url, req.init);
+        readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
+          ...r,
+          senderVerified: senderMatchesBank(domain, r.bank),
+        }));
+        if (readings.length === 0) {
+          await log({
+            outcome: 'ignored',
+            reason: 'the AI found no balance in this email',
+            reading: null,
+            assetId: null,
+          });
+          continue;
+        }
       }
 
       if (readings.length === 0) {

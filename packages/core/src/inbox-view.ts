@@ -152,6 +152,12 @@ export function explainEntry(m: InboxEntry): Explained {
       why: 'The amount is very different from the value you have now, which can mean a misread number.',
       next: 'Check it against your bank, then apply or ignore.',
     };
+  if (/balance email in a format the rules do not know/.test(reason))
+    return {
+      headline: 'A balance email in an unfamiliar format',
+      why: 'The fixed rules do not know this bank’s wording, and the AI reader that can read it has no key.',
+      next: 'Add an AI key in Settings (Bank e-mails and AI), then use Read again; or record the balance in Monthly update and ignore this.',
+    };
   if (/add an AI key/.test(reason))
     return {
       headline: 'A statement is attached but was not read',
