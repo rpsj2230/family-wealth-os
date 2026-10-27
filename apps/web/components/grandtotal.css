@@ -1,13 +1,9 @@
-/* The total under a list of bank tables */
+/* The total under a list of bank tables: it sits at the end of the list, not floating over it */
 .grandtotal {
-  position: sticky;
-  bottom: 8px;
   display: grid;
   gap: 8px;
   padding: 12px 16px;
   margin-top: 12px;
-  z-index: 2;
-  box-shadow: 0 -4px 16px rgba(20, 24, 60, 0.08);
 }
 .gt-head {
   display: flex;
@@ -45,8 +41,5 @@
   .gt-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 6px;
-  }
-  .grandtotal {
-    position: static;
   }
 }
