@@ -1,4 +1,4 @@
-import { isEstimatedTxn, type FundHolding, type PerfFundIn } from '@fwos/core';
+import { isEstimatedTxn, type FundHolding, type PerfFundIn, type PosFund } from '@fwos/core';
 import type { FundRow } from './investments';
 
 /**
@@ -38,3 +38,29 @@ export const perfFundIn = (f: FundRow): PerfFundIn => ({
   estimatedSince: fundHoldingOf(f).estimatedSince,
   value: f.value,
 });
+
+/**
+ * A fund as the position engine reads it when there is no price list to read (the public sample): its ledger lines and cash flows, and
+ * its value on every day the fund series was worked out for, as the values on file. The signed-in page reads the prices themselves
+ * (packages/data position.ts) and values the units on each day.
+ */
+export function posFundOfRow(f: FundRow): PosFund {
+  const byDay = new Map<string, number>();
+  for (const p of [...f.perf, ...f.periodPoints, ...f.history]) byDay.set(p.date, p.value);
+  return {
+    txns: f.txns.map((t) => ({
+      date: t.date,
+      units: t.units,
+      amount: t.amount,
+      estimated: t.source === 'estimate' || isEstimatedTxn(t),
+    })),
+    navs: [],
+    units: null,
+    snapshots: [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, value]) => ({ date, value })),
+    flows: f.flows,
+    hasStatement: f.hasStatement,
+    estimatedSince: fundHoldingOf(f).estimatedSince,
+  };
+}

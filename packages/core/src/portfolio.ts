@@ -173,7 +173,7 @@ export function buildPortfolio(
         maturityOn: dt(fd.maturity_on),
         compounding: fd.compounding,
         bankMaturityAmount: fd.bank_maturity_amount,
-        ...(defaults.fdRateGap !== undefined ? { maxGap: defaults.fdRateGap } : {}),
+        maxGap: defaults.fdRateGap ?? DEFAULT_CONFIG.estimates.observedRateGap,
       });
       estimate = estimateFd({
         principal: fd.principal,

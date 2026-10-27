@@ -24,6 +24,7 @@ export function Delta({
   amount,
   pct,
   note,
+  extra,
   estimate = false,
   why,
 }: {
@@ -31,6 +32,8 @@ export function Delta({
   amount: number;
   pct: number | null;
   note: string;
+  /** a second, quieter line: what the figure rests on */
+  extra?: string | undefined;
   estimate?: boolean;
   /** the "?" that says how the figure was worked out */
   why?: Explain | undefined;
@@ -55,6 +58,7 @@ export function Delta({
         {pct !== null && <span className="bv-delta-pct">{formatPct(Math.abs(pct), 2)}</span>}
       </div>
       <div className="bv-delta-note">{note}</div>
+      {extra && <div className="bv-delta-note bv-delta-extra">{extra}</div>}
     </div>
   );
 }

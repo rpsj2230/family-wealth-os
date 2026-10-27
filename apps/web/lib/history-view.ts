@@ -380,3 +380,25 @@ export function resultText(r: {
 }
 
 export { describeMonths };
+
+/** The result of rebuilding the net-worth history, as the page needs it (core snapshot-rebuild via packages/data). */
+export interface RebuildSummary {
+  ok: boolean;
+  /** months stored (added or refreshed) */
+  written: number;
+  /** month ends planned */
+  planned: number;
+  /** month ends left because a snapshot recorded on the day exists */
+  keptRecorded: number;
+  from: string | null;
+  error?: string;
+}
+
+/** What a rebuild of the history chart did, in words. */
+export function rebuildText(r: RebuildSummary): string {
+  if (!r.ok)
+    return `The history chart could not be rebuilt (${r.error ?? 'unknown problem'}). Try again.`;
+  if (r.planned === 0 && r.keptRecorded === 0)
+    return 'Nothing to rebuild yet: no balance or deposit is recorded for an earlier month.';
+  return `History chart rebuilt from ${r.from ?? 'the first record'}: ${r.written} ${r.written === 1 ? 'month' : 'months'} saved as “rebuilt from history”${r.keptRecorded > 0 ? `, ${r.keptRecorded} left as recorded on the day` : ''}.`;
+}

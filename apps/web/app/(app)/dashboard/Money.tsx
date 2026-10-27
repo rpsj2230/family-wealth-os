@@ -95,7 +95,7 @@ export function Money({ m, ex }: { m: HomeModel; ex: ExplainSet<'home'> }) {
       <Tile
         label="Total invested"
         amount={k.invested}
-        note="deposit amounts, cost of the fund units held, last balances recorded"
+        note="deposit amounts and the cost of the fund units held; savings and cash are not counted as invested"
         testId="hm-invested"
         why={ex['home.invested']}
       />
@@ -114,10 +114,10 @@ export function Money({ m, ex }: { m: HomeModel; ex: ExplainSet<'home'> }) {
         why={ex['home.maturity']}
       />
       <SignedTile
-        label="Total profit so far"
+        label="Profit so far"
         amount={k.profit}
         pct={k.profitPct}
-        note="current value less invested; % of the amount invested"
+        note={`deposit interest and fund gains on the money invested (now worth ${formatInrCompact(k.valueOfInvested)}); % of the amount invested`}
         estimated={k.estimated}
         testId="hm-profit"
         why={ex['home.profit']}

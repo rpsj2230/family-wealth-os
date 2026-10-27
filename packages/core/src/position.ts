@@ -398,8 +398,12 @@ export function depositRateOf(d: PosDeposit, c: Pick<PositionConfig, 'rateGap'>)
   });
 }
 
-const valueDeposit: Valuer = (a, on, c) => {
+const valueDeposit: Valuer = (a, on, c, cur) => {
   const d = a.fd;
+  if (on >= c.today && cur)
+    return cur.counted
+      ? got(a, cur.value, 'terms', d?.bookedOn ?? null, false, 'net worth today')
+      : none(a, 'ended', 'not counted today');
   if (!d || !(d.principal > 0)) return none(a, 'no_data', 'no deposit terms on file');
   if (a.status === 'gifted') return none(a, 'ended', 'gifted');
   if (on < d.bookedOn) return none(a, 'not_yet', `booked on ${niceIso(d.bookedOn)}`);
@@ -824,8 +828,8 @@ export interface PositionGainsInput {
 }
 
 export interface HeadlineTile {
-  /** 'today' (one day) or one of the six periods */
-  key: 'today' | PeriodWindow['key'];
+  /** one of the six periods */
+  key: PeriodWindow['key'];
   label: string;
   /** the real first day of the period, and the first day the figures rest on */
   asked: string;
@@ -848,12 +852,24 @@ export interface HeadlineTile {
   coverage: { withValue: number; of: number };
   /** net worth on the first day and on the last, for the note "net worth moved by ... (money added or taken out is part of it)" */
   netWorth: { start: number; end: number; change: number };
+  /**
+   * What the first day of the period is built from: the dates of the oldest and newest record behind it, how many holdings are the
+   * record of that very day, and how many were moved forward from an earlier record (at a rate, a price or an exchange rate).
+   */
+  startFrom: {
+    oldest: string | null;
+    newest: string | null;
+    onTheDay: number;
+    movedForward: number;
+    /** deposits, worked out from their own terms rather than from a record */
+    fromTerms: number;
+  };
 }
 
 export interface PositionGains {
   /** the periods per kind of holding and in total: the Profit by period table */
   periods: PeriodGains;
-  /** the headline tiles: today, then the six periods, from the same figures */
+  /** the headline tiles, one per period, from the same figures as the table (the day's own move is the one Deposits, Cash and Investments show) */
   tiles: HeadlineTile[];
   dataStarts: string | null;
 }
@@ -874,8 +890,8 @@ export function depositsOf(input: PositionInput): DepositTerms[] {
         bookedOn: d.bookedOn,
         maturityOn: d.maturityOn,
         compounding: d.compounding,
-        // held today when today is before the day it left
-        held: c.today < end,
+        // held today as net worth has it (a deposit past its date that still waits to be confirmed is in net worth until it is), else when today is before the day it left
+        held: input.current?.[a.assetId] ? input.current[a.assetId]!.counted : c.today < end,
         endedOn: d.endedOn,
       },
     ];
@@ -903,14 +919,10 @@ export function accountsOf(input: PositionInput): SavingsAccount[] {
 }
 
 /**
- * Every day the period figures look at: the day before each period starts, its first day and its last day, for the periods and for
- * "today". A loader that cannot afford the whole price history reads prices around these days only.
+ * Every day the period figures look at: the day before each period starts, its first day and its last day. A loader that cannot afford the whole price history reads prices around these days only.
  */
 export function gainDays(today: string, recentDays: number, start: string | null): string[] {
-  const ws = [
-    ...periodWindows(today, recentDays, start, start),
-    periodWindows(today, 1, start, start).find((w) => w.key === 'recent')!,
-  ];
+  const ws = periodWindows(today, recentDays, start, start);
   return [...new Set([...fundDays(ws), ...ws.map((w) => w.from), ...ws.map((w) => w.to)])].sort();
 }
 
@@ -961,11 +973,8 @@ export function positionGains(i: PositionGainsInput): PositionGains {
   const deposits = depositsOf(position);
   const accounts = accountsOf(position);
 
-  // the periods asked for, and the single day of "today"
   const windows = periodWindows(today, recentDays, start, start);
-  const oneDay = periodWindows(today, 1, start, start).find((w) => w.key === 'recent')!;
-  const days = fundDays([...windows, oneDay]);
-  const funds = fundsOf(position, days);
+  const funds = fundsOf(position, fundDays(windows));
 
   const foreign = position.assets.filter(
     (a) => a.currency !== 'INR' && a.type === 'bank_account' && a.status !== 'gifted',
@@ -986,16 +995,28 @@ export function positionGains(i: PositionGainsInput): PositionGains {
     others: (w: Span) => recordedPeriod(rest, c, w, position.current),
   };
   const periods = periodGains(input);
-  const dayGains = periodGains({ ...input, recentDays: 1 });
-  const todayCell = dayGains.total.cells.recent;
-  const nw = new Map<string, number>();
-  const nwOn = (d: string) => {
-    if (!nw.has(d)) nw.set(d, positionAsOf(position, d).total);
-    return nw.get(d)!;
+  const pos = new Map<string, DayPosition>();
+  const posOn = (d: string) => {
+    if (!pos.has(d)) pos.set(d, positionAsOf(position, d));
+    return pos.get(d)!;
+  };
+  const nwOn = (d: string) => posOn(d).total;
+  const fromWhat = (d: string): HeadlineTile['startFrom'] => {
+    const all = posOn(d).holdings.filter(isHeld);
+    const terms = (h: ValuedHolding) => h.basis === 'terms' || h.basis === 'bank_amount';
+    const held = all.filter((h) => !terms(h));
+    const dates = held.map((h) => h.asOf).filter((x): x is string => !!x);
+    return {
+      oldest: dates.sort()[0] ?? null,
+      newest: dates.sort().pop() ?? null,
+      onTheDay: held.filter((h) => h.asOf === d).length,
+      movedForward: held.filter((h) => h.asOf !== null && h.asOf < d).length,
+      fromTerms: all.filter(terms).length,
+    };
   };
   const tile = (key: HeadlineTile['key'], w: PeriodWindow, cell: ClassPeriod): HeadlineTile => ({
     key,
-    label: key === 'today' ? 'Today' : w.label,
+    label: w.label,
     asked: w.asked,
     from: w.from,
     to: w.to,
@@ -1010,18 +1031,12 @@ export function positionGains(i: PositionGainsInput): PositionGains {
     empty: cell.empty,
     coverage: coverageOn(position, w.from),
     netWorth: { start: nwOn(w.from), end: nwOn(w.to), change: nwOn(w.to) - nwOn(w.from) },
+    startFrom: fromWhat(w.from),
   });
   return {
     periods,
     dataStarts: start,
-    tiles: [
-      tile(
-        'today',
-        dayGains.windows.find((w) => w.key === 'recent')!,
-        todayCell,
-      ),
-      ...periods.windows.map((w) => tile(w.key, w, periods.total.cells[w.key])),
-    ],
+    tiles: periods.windows.map((w) => tile(w.key, w, periods.total.cells[w.key])),
   };
 }
 
@@ -1029,8 +1044,7 @@ export function positionGains(i: PositionGainsInput): PositionGains {
  * The words that say where a tile's period begins: "since 1 Apr 2026", or, when the data begins later than the period does,
  * "data starts 3 Mar 2025". Dates as "26 Oct 2026".
  */
-export function sinceWords(t: Pick<HeadlineTile, 'asked' | 'from' | 'clamped' | 'key'>): string {
-  if (t.key === 'today') return 'since yesterday';
+export function sinceWords(t: Pick<HeadlineTile, 'asked' | 'from' | 'clamped'>): string {
   return t.clamped ? `data starts ${niceIso(t.from)}` : `since ${niceIso(t.asked)}`;
 }
 

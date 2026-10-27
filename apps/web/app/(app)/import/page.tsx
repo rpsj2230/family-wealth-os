@@ -1,5 +1,5 @@
 import { DEFAULT_CONFIG, currentFy, personStyles, previousFy, type PersonStyle } from '@fwos/core';
-import { loadCoverage, loadSettings } from '@fwos/data';
+import { loadCoverage, loadSettings, pageAll } from '@fwos/data';
 import { loadGmailModel } from '@/lib/gmail-statements-data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
@@ -110,6 +110,19 @@ export default async function ImportPage({
           () => null,
         )
       : null;
+  // how many month ends the net-worth chart already has a point for (recorded on the day or rebuilt)
+  let chart: { withPoint: number; rebuilt: number } | undefined;
+  if (coverage && householdId) {
+    const snaps = await pageAll<{ taken_on: string; source: string }>((from, to) =>
+      supabase.from('snapshots').select('taken_on, source').order('taken_on').range(from, to),
+    ).catch(() => []);
+    const past = new Set(coverage.months.slice(0, -1));
+    const withPoint = new Set(snaps.map((x) => x.taken_on.slice(0, 7)).filter((m) => past.has(m)));
+    chart = {
+      withPoint: withPoint.size,
+      rebuilt: snaps.filter((x) => x.source === 'rebuilt').length,
+    };
+  }
   const byId = personStyles(ownerRows.map((o) => ({ id: o.id, name: o.name })));
   const people: Record<string, PersonStyle> = {};
   for (const o of ownerRows) if (byId[o.id]) people[o.name] = byId[o.id]!;
@@ -120,7 +133,9 @@ export default async function ImportPage({
         subtitle="Choose a file and the app works out what it is. Most of this arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
       />
       <ImportHub base="/import" tab={tab} data={data} />
-      {coverage && <HistoryCoverage coverage={coverage} people={people} />}
+      {coverage && (
+        <HistoryCoverage coverage={coverage} people={people} {...(chart ? { chart } : {})} />
+      )}
     </>
   );
 }

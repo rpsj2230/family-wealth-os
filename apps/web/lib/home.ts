@@ -18,9 +18,9 @@ import {
   liquidityLadder,
   maturityLadder,
   moversBetween,
-  netWorthChanges,
   paceFromSeries,
-  periodGains,
+  positionAsOf,
+  positionGains,
   raisableWithin,
   rangeView,
   toShares,
@@ -32,29 +32,28 @@ import {
   type BankBlock,
   type BankOverview,
   type BankShare,
-  type Change,
   type ClassCard,
   type DepositInterest,
-  type DepositTerms,
   type FreshnessSummary,
   type GrowthSplit,
   type HomeRange,
   type MaturityYear,
   type ShareMove,
   type OverviewOptions,
+  type GainPeriodKey,
+  type HeadlineTile,
   type PeriodGains,
+  type PositionInput,
   type PersonStyle,
   type Portfolio,
   type RaiseSource,
   type RangeView,
-  type SavingsAccount,
   type SeriesPoint,
   type Share,
   type UpcomingEvent,
   type ValueTrust,
 } from '@fwos/core';
 import type { DepositsView } from './deposits';
-import { fundHoldingOf } from './fund-holdings';
 import type { GoalSummary } from './goals-view';
 import type { fundPace, FundRow, InvestmentView, Totals } from './investments';
 
@@ -64,6 +63,8 @@ export interface HomeSnapshot {
   total: number;
   byType: Record<string, number>;
   byOwner: Record<string, number>;
+  /** where it came from: recorded on the day, or 'rebuilt' from the history on file afterwards */
+  source?: string;
 }
 
 export interface HomeReceivable {
@@ -109,9 +110,8 @@ export interface HomeInput {
   tasks: { id: string; title: string; dueOn: string }[];
   openTasks: number;
   inboxReview: number;
-  /** every fixed deposit with its terms, and every counted savings account with its recorded balances: the profit-by-period input */
-  deposits: DepositTerms[];
-  accounts: SavingsAccount[];
+  /** everything the position engine reads: every record, deposit, fund ledger and price. The period figures, the net worth on a past day and the coverage all come from it */
+  position: PositionInput;
   /** monthly household spending from the retirement plan; 0 until entered */
   monthlySpending: number;
   recent: HomeRecent[];
@@ -146,7 +146,13 @@ export interface FundSnapshot {
   growth: { invested: number; gain: number };
 }
 
-/** The headline money figures: what was put in, what it is worth, what it pays at maturity, what it has earned and earned today. */
+/**
+ * The headline money figures: what was put to work, what it is worth, what it pays at maturity and the profit on it.
+ *  - invested: the money put into deposits (their principal) and funds (the cost of the units still held). Savings and cash balances,
+ *    shares, property and money lent are not "invested": they are in net worth but have no cost to earn a profit on.
+ *  - profit: what those deposits and funds are worth above that money, and its per cent of the money invested (at cost).
+ *  - valueOfInvested: what those deposits and funds are worth now (invested + profit).
+ */
 export interface HomeMoney {
   invested: number;
   /** net worth: the same figure as `total` */
@@ -155,6 +161,14 @@ export interface HomeMoney {
   maturity: number;
   profit: number;
   profitPct: number | null;
+  /** what the invested money is worth now */
+  valueOfInvested: number;
+  /** deposits and funds apart, and the part of net worth that is not invested money */
+  parts: {
+    fd: { invested: number; current: number; profit: number };
+    funds: { invested: number; current: number; profit: number };
+    notInvested: number;
+  };
   /** the profit of at least one kind rests on an estimate */
   estimated: boolean;
 }
@@ -175,11 +189,17 @@ export interface HomeModel {
   asOf: string | null;
   change: {
     today: { amount: number; pct: number | null; banks: number; funds: number };
-    month: Change | null;
-    fy: Change | null;
     monthDays: number;
     fyStart: string;
   };
+  /**
+   * What the family earned in each period (interest, price moves, exchange-rate moves, assumed growth; money put in or taken out
+   * is not in it), from the same figures as the table above: where the period begins, how many holdings it rests on and how net
+   * worth itself moved.
+   */
+  tiles: Record<GainPeriodKey, HeadlineTile>;
+  /** the first day anything can be worked out for */
+  dataStarts: string | null;
   trust: ValueTrust;
   trustDetail: {
     fresh: FreshnessSummary;
@@ -198,11 +218,17 @@ export interface HomeModel {
     projection: SeriesPoint[];
     growth: GrowthSplit;
     history: number;
+    /** points that were worked out afterwards from the history, not recorded on the day */
+    rebuilt: number;
+    /** month ends the data reaches back to that have no point yet: the history can be rebuilt */
+    missingMonths: number;
   };
   whatChanged: {
     since: string;
     partial: boolean;
     change: number;
+    /** against net worth on that day; null when it was not above zero */
+    pct: number | null;
     kinds: ShareMove[];
     people: ShareMove[];
   } | null;
@@ -239,6 +265,23 @@ export interface HomeModel {
   risks: RiskRow[];
   recent: HomeRecent[];
   openTasks: number;
+}
+
+/** Month ends the data reaches back to (before the month of today) that have no snapshot, recorded or rebuilt, in the month. */
+function missingMonths(start: string | null, today: string, snaps: HomeSnapshot[]): number {
+  if (!start) return 0;
+  const have = new Set(snaps.map((s) => s.date.slice(0, 7)));
+  let n = 0;
+  for (let y = Number(start.slice(0, 4)), m = Number(start.slice(5, 7)); ;) {
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    if (key >= today.slice(0, 7)) break;
+    if (!have.has(key)) n++;
+    if (++m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return n;
 }
 
 const cleanTitle = (s: string) => s.replace(/^\[[^\]]+\]\s*/, '');
@@ -292,7 +335,6 @@ export function buildHome(i: HomeInput): HomeModel {
   const fundsDay = i.inv && i.inv.household.dayPct !== null ? i.inv.household.dayAmount : 0;
   const dayAmount = overview.today.change + fundsDay;
   const dayBase = nw.total - dayAmount;
-  const changes = netWorthChanges(trendPoints, today, cfg.home.changeDays);
   const pace = paceFromSeries(trendPoints);
   const projection =
     pace && pace.months >= 2 && trendPoints.length >= 3
@@ -326,14 +368,12 @@ export function buildHome(i: HomeInput): HomeModel {
     othersHeld: overview.parts.others,
     funds: fundsIn,
   };
-  const periods = periodGains({
-    today,
-    recentDays: cfg.home.changeDays,
-    deposits: i.deposits,
-    funds: fundRows.map(fundHoldingOf),
-    accounts: i.accounts,
-    othersValue: classCards({ ...cardsIn, earned: {} }).find((c) => c.key === 'others')!.current,
-  });
+  const gains = positionGains({ position: i.position, recentDays: cfg.home.changeDays });
+  const periods = gains.periods;
+  const tiles = Object.fromEntries(gains.tiles.map((t) => [t.key, t])) as Record<
+    GainPeriodKey,
+    HeadlineTile
+  >;
   const classList = classCards({
     ...cardsIn,
     earned: Object.fromEntries(
@@ -341,8 +381,10 @@ export function buildHome(i: HomeInput): HomeModel {
     ),
   });
   const sumOf = (f: (c: ClassCard) => number) => classList.reduce((a, c) => a + f(c), 0);
-  const moneyInvested = sumOf((c) => c.invested);
-  const moneyProfit = sumOf((c) => c.profit);
+  const card = (k: ClassCard['key']) => classList.find((c) => c.key === k)!;
+  // invested money is the deposits' principal and the cost of the fund units held; cash, shares, property and loans are not invested
+  const moneyInvested = card('fd').invested + card('funds').invested;
+  const moneyProfit = card('fd').profit + card('funds').profit;
 
   const growth = growthSplit([
     {
@@ -364,23 +406,26 @@ export function buildHome(i: HomeInput): HomeModel {
       : []),
   ]);
 
-  // what changed since the comparison day, by kind of holding and by person
-  const fromSnap = changes.month ? i.snapshots.find((s) => s.date === changes.month!.from) : null;
+  // what changed since the start of the last N days, by kind of holding and by person: the position on that day, rebuilt from what is on
+  // file (not from a saved snapshot, so it exists as far back as the data does)
+  const startTile = tiles.recent;
+  const then = gains.dataStarts ? positionAsOf(i.position, startTile.from) : null;
   const whatChanged =
-    fromSnap && Object.keys(fromSnap.byType).length > 0
+    then && then.counted > 0
       ? {
-          since: fromSnap.date,
-          partial: !!changes.month?.partial,
-          change: nw.total - fromSnap.total,
+          since: startTile.from,
+          partial: startTile.clamped,
+          change: nw.total - then.total,
+          pct: then.total > 0 ? (nw.total - then.total) / then.total : null,
           kinds: moversBetween(
-            foldByKind(fromSnap.byType),
+            foldByKind(then.byType as Record<string, number>),
             foldByKind(nw.byType as Record<string, number>),
             (k) => allocLabel(k as AllocShare['key']),
             4,
             1,
           ),
           people: moversBetween(
-            fromSnap.byOwner,
+            then.byOwner,
             nw.byOwner,
             (k) => i.styles[k]?.name ?? 'Unknown',
             4,
@@ -631,7 +676,23 @@ export function buildHome(i: HomeInput): HomeModel {
       maturity: sumOf((c) => c.maturity),
       profit: moneyProfit,
       profitPct: moneyInvested > 0 ? moneyProfit / moneyInvested : null,
-      estimated: classList.some((c) => c.estimated && c.profit !== 0),
+      valueOfInvested: card('fd').current + card('funds').current,
+      parts: {
+        fd: {
+          invested: card('fd').invested,
+          current: card('fd').current,
+          profit: card('fd').profit,
+        },
+        funds: {
+          invested: card('funds').invested,
+          current: card('funds').current,
+          profit: card('funds').profit,
+        },
+        notInvested: nw.total - card('fd').current - card('funds').current,
+      },
+      estimated: classList.some(
+        (c) => (c.key === 'fd' || c.key === 'funds') && c.estimated && c.profit !== 0,
+      ),
     },
     classes: classList,
     periods,
@@ -649,11 +710,11 @@ export function buildHome(i: HomeInput): HomeModel {
         banks: overview.today.change,
         funds: fundsDay,
       },
-      month: changes.month,
-      fy: changes.fy,
       monthDays: cfg.home.changeDays,
-      fyStart: changes.fyStart,
+      fyStart: periods.windows.find((w) => w.key === 'fy')!.asked,
     },
+    tiles,
+    dataStarts: gains.dataStarts,
     trust: valueTrust(i.portfolio.valued, i.portfolio.lines),
     trustDetail: {
       fresh,
@@ -672,6 +733,8 @@ export function buildHome(i: HomeInput): HomeModel {
       projection,
       growth,
       history: trendPoints.length,
+      rebuilt: i.snapshots.filter((s) => s.source === 'rebuilt').length,
+      missingMonths: missingMonths(gains.dataStarts, today, i.snapshots),
     },
     whatChanged,
     liquidity: {

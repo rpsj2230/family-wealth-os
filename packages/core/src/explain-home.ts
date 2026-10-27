@@ -23,7 +23,6 @@ import type { BankOverview } from './bank-overview';
 import type { FreshnessSummary } from './dashboard';
 import type {
   AllocShare,
-  Change,
   ClassCard,
   DepositInterest,
   GrowthSplit,
@@ -31,7 +30,8 @@ import type {
   RangeView,
   ValueTrust,
 } from './home';
-import type { PeriodGains, PeriodWindow } from './period-gains';
+import type { GainPeriodKey, PeriodGains, PeriodWindow } from './period-gains';
+import { coverageWords, sinceWords, type HeadlineTile } from './position';
 import { formatInrCompact } from './money';
 
 export interface HomeExplainInput {
@@ -43,6 +43,12 @@ export interface HomeExplainInput {
     maturity: number;
     profit: number;
     profitPct: number | null;
+    valueOfInvested: number;
+    parts: {
+      fd: { invested: number; current: number; profit: number };
+      funds: { invested: number; current: number; profit: number };
+      notInvested: number;
+    };
     estimated: boolean;
   };
   classes: ClassCard[];
@@ -53,11 +59,13 @@ export interface HomeExplainInput {
   asOf: string | null;
   change: {
     today: { amount: number; pct: number | null; banks: number; funds: number };
-    month: Change | null;
-    fy: Change | null;
     monthDays: number;
     fyStart: string;
   };
+  /** what was earned in each period, with where it begins and what it rests on (position.ts) */
+  tiles: Record<GainPeriodKey, HeadlineTile>;
+  /** the first day anything can be worked out for */
+  dataStarts: string | null;
   trust: ValueTrust;
   trustDetail: {
     fresh: FreshnessSummary;
@@ -72,6 +80,8 @@ export interface HomeExplainInput {
     pace: { monthlyChange: number; annualGrowth: number | null; months: number } | null;
     growth: GrowthSplit;
     history: number;
+    rebuilt: number;
+    missingMonths: number;
   };
   whatChanged: { since: string; partial: boolean; change: number } | null;
   liquidity: {
@@ -172,57 +182,94 @@ function netWorth(i: HomeExplainInput): Explain {
   });
 }
 
-const sinceText = (c: Change) =>
-  c.partial ? `since your first record, ${exDate(c.from)}` : `since ${exDate(c.from)}`;
-
-function changeExplain(
+/**
+ * What the family earned over a period: the gain of each kind of holding between the first day and the last, each valued from the
+ * nearest record on or before the day and moved forward to it. Quotes the dates of the records it rests on.
+ */
+function tileExplain(
   id: string,
   title: string,
   what: string,
-  c: Change | null,
+  key: GainPeriodKey,
   i: HomeExplainInput,
   basisNote: string,
 ): Explain {
-  if (!c)
+  const t = i.tiles[key];
+  const p = i.periods;
+  if (i.dataStarts === null || (t.empty && t.from >= t.to))
     return explain({
       id,
       title,
       what,
-      how: 'Not worked out: it shows once two days of net worth are saved. The page saves one a day when you open it.',
-      inputs: [
-        { label: 'Saved daily net worth', value: `${i.trend.history} days`, basis: 'missing' },
-      ],
+      how: 'Not worked out: nothing is on record for this period yet.',
+      inputs: [{ label: 'Records on file', value: 'none', basis: 'missing' }],
       level: 'missing',
-      completeness: 'Missing: the saved history is too short.',
+      completeness: `Missing: ${i.dataStarts === null ? 'no balance, deposit or fund is recorded' : `the data starts ${exDate(i.dataStarts)}, after this period`}.`,
       notes: [],
     });
+  const rows = p.rows.filter((r) => !r.cells[key].empty);
+  const f = t.startFrom;
+  const records =
+    f.oldest === null
+      ? 'deposit terms only'
+      : f.oldest === f.newest
+        ? `the record of ${exDate(f.oldest)}`
+        : `records from ${exDate(f.oldest)} to ${exDate(f.newest)}`;
+  const kindHow = (r: (typeof rows)[number]) => {
+    const c = r.cells[key];
+    return `${r.label}: ${exSigned(c.profit)} (worth ${exInr(c.startValue)} at the start, ${exInr(c.endValue)} at the end${c.putIn > 0 ? `, ${exInr(c.putIn)} put in` : ''}${c.takenOut > 0 ? `, ${exInr(c.takenOut)} taken out` : ''})`;
+  };
+  const cap = (x: string) => `${x[0]!.toUpperCase()}${x.slice(1)}`;
   return explain({
     id,
     title,
-    exact: exSigned(c.amount),
+    exact: exSigned(t.amount),
     what,
-    how: `Net worth today ${exInr(i.total)} − net worth on ${exDate(c.from)} ${exInr(i.total - c.amount)} = ${exSigned(c.amount)}${c.pct === null ? '' : `; as a share of that starting value: ${ratioHow({ label: 'change', amount: c.amount }, { label: 'starting net worth', amount: i.total - c.amount })}`}.`,
+    how: `${rows.map(kindHow).join('; ')}. Together ${exSigned(t.amount)}${t.pct === null ? '' : `; as a share of the money at work: ${ratioHow({ label: 'earned', amount: t.amount }, { label: 'at work', amount: t.base }, 2)}`}. Each holding is valued on ${exDate(t.from)} from the nearest record on or before that day, moved forward to it at its rate, its fund price or the exchange rate, and the same on the last day; a deposit made from savings, a payout, a fund bought or sold and a balance that jumped are money moving, not earnings.`,
     inputs: [
       {
-        label: 'Net worth saved on',
-        value: exInr(i.total - c.amount),
-        basis: 'recorded',
-        to: c.from,
+        label: 'First day built from',
+        value: records,
+        basis: f.movedForward > 0 ? 'estimated' : 'recorded',
+        from: f.oldest,
+        to: t.from,
+        note:
+          f.movedForward > 0
+            ? `${exPlural(f.movedForward, 'holding')} moved forward from an earlier record to ${exDate(t.from)} (savings at the account’s rate, funds by the price)${f.fromTerms > 0 ? `; ${exPlural(f.fromTerms, 'deposit')} worked out from their own terms` : ''}`
+            : undefined,
       },
       {
-        label: 'Net worth today',
-        value: exInr(i.total),
-        basis: estShare(i) === 'complete' ? 'calculated' : 'estimated',
-        to: i.today,
+        label: 'Holdings with a value on the first day',
+        value: `${t.coverage.withValue} of ${t.coverage.of}`,
+        basis: t.coverage.withValue === t.coverage.of ? 'calculated' : 'missing',
+        count: { n: t.coverage.withValue, of: t.coverage.of, noun: 'holdings' },
+        from: t.from,
+        to: t.from,
+      },
+      ...rows.map((r) => ({
+        label: `${r.label}: earned`,
+        value: exSigned(r.cells[key].profit),
+        basis: (r.cells[key].estimated ? 'estimated' : 'calculated') as 'estimated' | 'calculated',
+        from: t.from,
+        to: t.to,
+      })),
+      {
+        label: 'Net worth on the first day and today',
+        value: `${exInr(t.netWorth.start)} → ${exInr(t.netWorth.end)}`,
+        basis: 'calculated',
+        note: `it moved ${exSigned(t.netWorth.change)}; money added or taken out is in that, not in the earnings above`,
       },
     ],
-    level: c.partial ? 'partly_estimated' : 'complete',
-    completeness: c.partial
-      ? `The history is shorter than the period, so it is measured ${sinceText(c)}.`
-      : `Measured ${sinceText(c)} from the net worth saved each day.`,
+    level:
+      t.clamped || t.estimated || t.coverage.withValue < t.coverage.of
+        ? 'partly_estimated'
+        : 'complete',
+    completeness: t.clamped
+      ? `Data starts ${exDate(t.from)}: nothing is on record before it, so this period begins there and not on ${exDate(t.asked)}. ${cap(coverageWords(t))}.`
+      : `${cap(sinceWords(t))}: built from ${records}. ${cap(coverageWords(t))}.${t.estimated ? ' Part of it is estimated from rates, prices or assumed instalments.' : ''}`,
     notes: [
       basisNote,
-      'Money you added or took out is part of the change, so it differs from the profit shown below.',
+      'The change in net worth is a different figure: it includes money you added or took out.',
     ],
   });
 }
@@ -237,22 +284,34 @@ function money(id: string, i: HomeExplainInput): Explain {
       id,
       title: 'Total invested',
       exact: exInr(k.invested),
-      what: 'The money put in across everything that has a recorded cost.',
-      how: `${parts((c) => c.invested)} = ${exInr(k.invested)}: deposit amounts, the cost of the fund units still held, and the last balance recorded for each account.`,
-      inputs: cls.map((c) => ({
-        label: c.label,
-        value: exInr(c.invested),
-        basis: (c.key === 'funds' && c.estimated ? 'estimated' : 'recorded') as
-          'estimated' | 'recorded',
-        to: i.today,
-        count: COUNT(c.count, 'holdings'),
-      })),
+      what: 'The money put into deposits and funds. Savings and cash balances, shares, property and money lent are in net worth but are not counted as invested.',
+      how: `Deposits ${exInr(k.parts.fd.invested)} (the principal of each) + funds ${exInr(k.parts.funds.invested)} (the cost of the units still held) = ${exInr(k.invested)}. ${exInr(k.parts.notInvested)} of net worth is not invested money: savings and cash, shares, property, pension accounts, money lent.`,
+      inputs: [
+        {
+          label: 'Deposits: principal',
+          value: exInr(k.parts.fd.invested),
+          basis: 'recorded',
+          to: i.today,
+        },
+        {
+          label: 'Funds: cost of the units held',
+          value: exInr(k.parts.funds.invested),
+          basis: (cls.find((c) => c.key === 'funds')?.estimated ? 'estimated' : 'recorded') as
+            'estimated' | 'recorded',
+          to: i.today,
+        },
+        {
+          label: 'Not invested: savings, cash, shares, property, loans',
+          value: exInr(k.parts.notInvested),
+          basis: 'recorded',
+        },
+      ],
       level: k.estimated ? 'partly_estimated' : 'complete',
       completeness: k.estimated
         ? 'Part of it rests on an estimate: a fund with no statement uses the amount entered as its cost.'
         : 'Every cost is recorded.',
       notes: [
-        'Property, shares and money lent have no cost recorded, so they are valued at today’s value and add nothing to the profit.',
+        'This tile used to add the last balance recorded for each savings account; those are not invested money and are no longer counted here.',
       ],
     });
   if (id === 'home.current')
@@ -295,23 +354,33 @@ function money(id: string, i: HomeExplainInput): Explain {
   if (id === 'home.profit')
     return explain({
       id,
-      title: 'Total profit so far',
+      title: 'Profit so far (on invested money)',
       exact: exSigned(k.profit),
-      what: 'Current value less the money put in, on the holdings that have a recorded cost.',
-      how: `${exInr(k.current)} current value − ${exInr(k.invested)} invested = ${exSigned(k.profit)}.${k.profitPct === null ? '' : ` As a share of the amount invested: ${ratioHow({ label: 'profit', amount: k.profit }, { label: 'invested', amount: k.invested })}.`}`,
-      inputs: cls.map((c) => ({
-        label: `${c.label}: profit`,
-        value: exSigned(c.profit),
-        basis: (c.estimated ? 'estimated' : 'calculated') as 'estimated' | 'calculated',
-        to: i.today,
-        count: COUNT(c.count, 'holdings'),
-      })),
+      what: 'What the deposits and funds are worth above the money put into them: the interest the deposits have accrued and the gain on the fund units still held.',
+      how: `Deposits ${exInr(k.parts.fd.current)} now − ${exInr(k.parts.fd.invested)} principal = ${exSigned(k.parts.fd.profit)}; funds ${exInr(k.parts.funds.current)} now − ${exInr(k.parts.funds.invested)} cost of the units held = ${exSigned(k.parts.funds.profit)}; together ${exSigned(k.profit)}${k.profitPct === null ? '' : `. As a share of the money invested, at cost: ${ratioHow({ label: 'profit', amount: k.profit }, { label: 'invested', amount: k.invested })}`}.`,
+      inputs: [
+        {
+          label: 'Deposits: accrued interest',
+          value: exSigned(k.parts.fd.profit),
+          basis: 'calculated',
+          to: i.today,
+          note: 'from each deposit’s terms, up to today',
+        },
+        {
+          label: 'Funds: gain on the units held',
+          value: exSigned(k.parts.funds.profit),
+          basis: (cls.find((c) => c.key === 'funds')?.estimated ? 'estimated' : 'calculated') as
+            'estimated' | 'calculated',
+          to: i.today,
+          note: 'value now − cost of the units still held',
+        },
+      ],
       level: k.estimated ? 'partly_estimated' : 'complete',
       completeness: k.estimated
-        ? 'Part of it is estimated: cash interest, and funds with no statement or with assumed instalments.'
-        : 'Every kind’s profit is calculated from recorded facts.',
+        ? 'Part of it is estimated: funds with no statement or with assumed instalments.'
+        : 'Calculated from deposit terms and recorded units and costs.',
       notes: [
-        'It is profit on what is held now; the profit-by-period table below also counts interest already paid out and gains already booked.',
+        'Savings interest is not in this figure (there is no invested amount to compare it with); it is in the earnings of each period. Interest already paid out and gains already booked are in “Since the start” of the table below.',
       ],
     });
   // earnedToday
@@ -458,14 +527,14 @@ function periods(i: HomeExplainInput): Explain {
     id: 'home.periods',
     title: 'Profit earned, by period',
     what: 'The profit of each kind of holding over the last days, this month, quarter and financial year, the last financial year and since the start.',
-    how: `Worked out from each holding’s own terms, not from saved totals. In all: ${p.windows.map((x) => `${x.label.toLowerCase()} ${tot[x.key].empty ? 'nothing held' : exSigned(tot[x.key].profit)}`).join('; ')}. The % is the profit ÷ the money at work (the value at the start plus each sum put in for the days it was there); money moved in or out is shown apart and is never profit.`,
+    how: `Worked out from each holding’s own terms and records (the nearest record on or before each day, moved forward at its rate, price or exchange rate), not from saved totals. In all: ${p.windows.map((x) => `${x.label.toLowerCase()} ${tot[x.key].empty ? 'nothing held' : exSigned(tot[x.key].profit)}`).join('; ')}. The % is the profit ÷ the money at work (the value at the start plus each sum put in for the days it was there); money moved in or out is shown apart and is never profit.`,
     inputs: p.windows.map((x) => ({
       label: x.label,
       value: `${exRange(x.from, x.through)}`,
       basis: 'calculated' as const,
       from: x.from,
       to: x.through,
-      note: `${x.days} days`,
+      note: `${x.days} days${x.clamped ? `; data starts ${exDate(x.from)}, the period would begin on ${exDate(x.asked)}` : ''}`,
     })),
     level:
       p.basis.fundsFromPlan + p.basis.fundsWithAssumed > 0 ||
@@ -514,19 +583,19 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
       completeness: 'An estimate, not read from a bank.',
       notes: [],
     }),
-    'home.month': changeExplain(
+    'home.month': tileExplain(
       'home.month',
-      `Change over the last ${exPlural(i.change.monthDays, 'day')}`,
-      'How net worth moved over the days set in Settings.',
-      i.change.month,
+      `Earned over the last ${exPlural(i.change.monthDays, 'day')}`,
+      'What the holdings earned over the days set in Settings: interest, price moves and exchange-rate moves, not money you added or took out.',
+      'recent',
       i,
       `The number of days (${i.change.monthDays}) is a Settings value.`,
     ),
-    'home.fy': changeExplain(
+    'home.fy': tileExplain(
       'home.fy',
-      'Change this financial year',
-      `How net worth moved since the close of last year (the financial year starts on ${exDate(i.change.fyStart)}).`,
-      i.change.fy,
+      'Earned this financial year',
+      `What the holdings earned since the financial year began on ${exDate(i.change.fyStart)}: interest, price moves and exchange-rate moves, not money you added or took out.`,
+      'fy',
       i,
       'The financial year starts on 1 April.',
     ),
@@ -718,31 +787,31 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
     'home.changed': explain({
       id: 'home.changed',
       title: 'What changed',
-      what: 'The biggest moves by kind of holding and by person, from the daily snapshots.',
+      what: 'The biggest moves by kind of holding and by person, between the first day of the last days (set in Settings) and today.',
       how: i.whatChanged
-        ? `Each kind’s (and person’s) value today − its value on ${exDate(i.whatChanged.since)}; the total moved ${exSigned(i.whatChanged.change)}. Money added or withdrawn is part of a move.`
-        : 'Not worked out: two saved days are needed.',
+        ? `Each kind’s (and person’s) value today − its value on ${exDate(i.whatChanged.since)}, rebuilt from the nearest record on or before that day and moved forward to it; the total moved ${exSigned(i.whatChanged.change)}. Money added or withdrawn is part of a move.`
+        : 'Not worked out: nothing is on record for that day yet.',
       inputs: [
         {
-          label: 'Saved daily net worth',
+          label: 'Position rebuilt for',
           value: i.whatChanged ? exDate(i.whatChanged.since) : 'none',
-          basis: i.whatChanged ? 'recorded' : 'missing',
+          basis: i.whatChanged ? 'estimated' : 'missing',
           from: i.whatChanged?.since,
           to: i.today,
         },
       ],
       level: !i.whatChanged ? 'missing' : i.whatChanged.partial ? 'partly_estimated' : 'complete',
       completeness: !i.whatChanged
-        ? 'Missing: not enough saved history.'
+        ? 'Missing: nothing is recorded for that day.'
         : i.whatChanged.partial
-          ? 'The history is shorter than the period, so it runs from the first record.'
-          : 'From the net worth saved each day.',
+          ? `Data starts ${exDate(i.whatChanged.since)}: nothing is on record before it.`
+          : 'Each holding valued on that day from its nearest earlier record, at its rate or price.',
       notes: [],
     }),
     'home.trend': explain({
       id: 'home.trend',
       title: 'Net worth over time',
-      what: 'The net worth saved each day over the range chosen, and the change over it.',
+      what: 'The net worth saved over the range chosen, and the change over it. Points for months before the app was used are rebuilt from the history on file and say so.',
       how: trend.view.change
         ? `Last saved value − first value in the range = ${exSigned(trend.view.change.amount)}${trend.view.change.pct === null ? '' : ` (${ratioHow({ label: 'change', amount: trend.view.change.amount }, { label: 'the first value', amount: trend.view.points[0]?.value ?? 0 })})`}. ${trend.pace ? `The dotted line extends the last ${exPlural(trend.pace.months, 'month')}’ pace of ${exSigned(trend.pace.monthlyChange)} a month in a straight line; it is not a forecast.` : ''}`
         : 'The change shows once two days are saved.',
@@ -767,8 +836,17 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
           ? 'Missing: the graph appears once two days are saved.'
           : trend.view.short
             ? 'The saved history is shorter than the range.'
-            : 'Every point is a net worth saved that day.',
-      notes: ['Money you add or take out is part of the change.'],
+            : trend.rebuilt > 0
+              ? `${trend.rebuilt} of ${trend.history} points were rebuilt from your history (month ends worked out from the records on file), the rest were recorded on the day.`
+              : 'Every point is a net worth saved that day.',
+      notes: [
+        'Money you add or take out is part of the change.',
+        ...(trend.missingMonths > 0
+          ? [
+              `${exPlural(trend.missingMonths, 'month')} the records reach back to have no point yet: use “Rebuild the history chart” on Import > History.`,
+            ]
+          : []),
+      ],
     }),
     'home.growth': explain({
       id: 'home.growth',

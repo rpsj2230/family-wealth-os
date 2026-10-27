@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { positionAsOf } from '@fwos/core';
 import { demoHomeInput } from './demo-home';
 import { buildHome } from './home';
 
@@ -92,7 +93,9 @@ describe('Home model for the sample household', () => {
   it('reports what changed by kind and by person', () => {
     expect(h.whatChanged).not.toBeNull();
     const w = h.whatChanged!;
-    expect(w.change).toBeCloseTo(h.total - h.trend.all.find((p) => p.date === w.since)!.value, 2);
+    // the position on the first day of the last days, rebuilt from what was on file by then
+    expect(w.since).toBe(h.tiles.recent.from);
+    expect(w.change).toBeCloseTo(h.total - positionAsOf(input.position, w.since).total, 2);
     expect(w.kinds.length).toBeGreaterThan(0);
   });
 

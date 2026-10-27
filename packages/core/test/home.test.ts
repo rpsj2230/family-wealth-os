@@ -4,14 +4,12 @@ import {
   allocationOf,
   attentionItems,
   bestAndWeakest,
-  changeSinceDate,
   depositInterest,
   foldByKind,
   fyStartOf,
   growthSplit,
   largestShare,
   moversBetween,
-  netWorthChanges,
   parseHomeRange,
   raisableWithin,
   rangeView,
@@ -23,78 +21,12 @@ import type { RaiseSource } from '../src/liquidity';
 
 const TODAY = '2026-10-26';
 
-describe('changeSinceDate', () => {
-  const pts = [
-    { date: '2026-01-10', value: 100 },
-    { date: '2026-09-20', value: 150 },
-    { date: '2026-10-26', value: 180 },
-  ];
-  it('measures from the last value on or before the start', () => {
-    const c = changeSinceDate(pts, '2026-10-01')!;
-    expect(c.from).toBe('2026-09-20');
-    expect(c.amount).toBe(30);
-    expect(c.pct).toBeCloseTo(0.2, 10);
-    expect(c.partial).toBe(false);
-  });
-  it('falls back to the first value on record and says so', () => {
-    const c = changeSinceDate(pts, '2025-12-31')!;
-    expect(c.from).toBe('2026-01-10');
-    expect(c.partial).toBe(true);
-    expect(c.amount).toBe(80);
-  });
-  it('is null with one value, or when the base is the latest value itself', () => {
-    expect(changeSinceDate([pts[0]!], '2026-01-01')).toBeNull();
-    expect(changeSinceDate(pts, '2026-10-26')).toBeNull();
-    expect(
-      changeSinceDate(
-        [
-          { date: '2026-10-26', value: 1 },
-          { date: '2026-10-26', value: 2 },
-        ],
-        '2026-10-26',
-      ),
-    ).toBeNull();
-  });
-  it('has no percentage when the base was not above zero', () => {
-    const c = changeSinceDate(
-      [
-        { date: '2026-01-01', value: 0 },
-        { date: '2026-02-01', value: 5 },
-      ],
-      '2026-01-15',
-    )!;
-    expect(c.pct).toBeNull();
-    expect(c.amount).toBe(5);
-  });
-});
-
-describe('financial year change', () => {
-  it('starts on 1 April and compares with the close of the year before', () => {
+describe('financial year', () => {
+  it('starts on 1 April', () => {
     expect(fyStartOf('2026-10-26')).toBe('2026-04-01');
     expect(fyStartOf('2027-02-01')).toBe('2026-04-01');
-    const trend = [
-      { date: '2026-03-31', value: 1000 },
-      { date: '2026-04-02', value: 1010 },
-      { date: '2026-09-26', value: 1100 },
-      { date: '2026-10-26', value: 1200 },
-    ];
-    const c = netWorthChanges(trend, TODAY, 30);
-    expect(c.fy!.from).toBe('2026-03-31');
-    expect(c.fy!.amount).toBe(200);
-    expect(c.fy!.partial).toBe(false);
-    expect(c.month!.from).toBe('2026-09-26');
-    expect(c.month!.amount).toBe(100);
-  });
-  it('uses the first value when the history starts inside the year', () => {
-    const c = netWorthChanges(
-      [
-        { date: '2026-06-01', value: 100 },
-        { date: '2026-10-26', value: 130 },
-      ],
-      TODAY,
-      30,
-    );
-    expect(c.fy).toMatchObject({ from: '2026-06-01', partial: true, amount: 30 });
+    expect(fyStartOf('2027-03-31')).toBe('2026-04-01');
+    expect(fyStartOf('2027-04-01')).toBe('2027-04-01');
   });
 });
 

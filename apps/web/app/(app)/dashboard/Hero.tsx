@@ -3,9 +3,11 @@ import {
   formatInrCompact,
   LADDER_DAYS,
   formatPct,
+  coverageWords,
+  sinceWords,
   sourceTag,
-  type Change,
   type Explain,
+  type HeadlineTile,
   type ExplainSet,
 } from '@fwos/core';
 import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
@@ -19,21 +21,9 @@ import { MaybeLink, homeLink } from './parts';
 const monthsText = (months: number) =>
   months >= 24 ? `${(months / 12).toFixed(1)} years` : plural(Math.round(months), 'month');
 
-/** A change over a period, or a plain note when the saved history is too short to measure it. */
-function PeriodDelta({
-  label,
-  change,
-  note,
-  missing,
-  why,
-}: {
-  label: string;
-  change: Change | null;
-  note: (c: Change) => string;
-  missing: string;
-  why?: Explain;
-}) {
-  if (!change)
+/** What was earned over a period, from the records on file, with where the period begins and how many holdings it rests on. */
+function TileDelta({ label, tile, why }: { label: string; tile: HeadlineTile; why?: Explain }) {
+  if (tile.dataStarts === null || (tile.empty && tile.from >= tile.to))
     return (
       <div className="bv-delta flat">
         <div className="bv-delta-label">
@@ -43,11 +33,24 @@ function PeriodDelta({
         <div className="bv-delta-value">
           <strong>–</strong>
         </div>
-        <div className="bv-delta-note">{missing}</div>
+        <div className="bv-delta-note">
+          {tile.dataStarts === null
+            ? 'shows once balances or deposits are recorded'
+            : `nothing was recorded in this period: data starts ${niceDate(tile.dataStarts)}`}
+        </div>
       </div>
     );
+  const moved = tile.netWorth.change;
   return (
-    <Delta label={label} amount={change.amount} pct={change.pct} note={note(change)} why={why} />
+    <Delta
+      label={label}
+      amount={tile.amount}
+      pct={tile.pct}
+      estimate={tile.estimated}
+      note={`${sinceWords(tile)}; % of the money at work`}
+      extra={`${coverageWords(tile)}. Net worth moved ${moved < 0 ? '−' : '+'}${formatInrCompact(Math.abs(moved))}, money added or taken out included.`}
+      why={why}
+    />
   );
 }
 
@@ -93,28 +96,12 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
             estimate
             why={ex['home.today']}
           />
-          <PeriodDelta
+          <TileDelta
             label={`Last ${plural(m.change.monthDays, 'day')}`}
-            change={m.change.month}
-            note={(c) =>
-              c.partial
-                ? `since your first record, ${niceDate(c.from)}; % of net worth then`
-                : `since ${niceDate(c.from)}; % of net worth then`
-            }
-            missing="shows once two days of history are saved"
+            tile={m.tiles.recent}
             why={ex['home.month']}
           />
-          <PeriodDelta
-            label="This financial year"
-            change={m.change.fy}
-            note={(c) =>
-              c.partial
-                ? `since your first record, ${niceDate(c.from)}; % of net worth then`
-                : `since the close of last year, ${niceDate(c.from)}; % of net worth then`
-            }
-            missing="shows once two days of history are saved"
-            why={ex['home.fy']}
-          />
+          <TileDelta label="This financial year" tile={m.tiles.fy} why={ex['home.fy']} />
         </div>
       </div>
 
@@ -292,9 +279,13 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
           <li>
             Today is an estimate: what savings and deposits earned since yesterday at each rate,
             plus the move in fund prices over their last two prices. It is not read from a bank. The
-            last {m.change.monthDays} days and the financial year compare today with the net worth
-            saved each day, so money you added or took out is part of them; with less history they
-            start from the first record.
+            last {m.change.monthDays} days and the financial year are what the family’s holdings
+            earned in that time: each holding is valued on the first day from the nearest record on
+            or before it, moved forward at its rate (savings and deposits), by the fund’s price
+            (funds) or the exchange rate, and the same on the last day; money you added or took out,
+            a deposit made from savings, a fund bought or sold are not earnings. A period that
+            begins before the first record begins where the data does (
+            {m.dataStarts ? niceDate(m.dataStarts) : 'once something is recorded'}).
           </li>
           <li>
             Of the total, {formatInrCompact(m.trustDetail.byBasis.calculated)} is calculated from

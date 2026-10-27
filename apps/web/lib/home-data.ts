@@ -7,14 +7,13 @@ import {
   type HomeRange,
   type FundForRaise,
 } from '@fwos/core';
-import { loadSettings, pageAll } from '@fwos/data';
+import { loadPositionInput, loadSettings, pageAll } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Ctx } from './data';
 import { bankOverviewOptions } from './bank-overview-options';
 import { buildDeposits } from './deposits';
 import { loadGoalSummaries } from './goals-view';
 import { buildHome, type HomeInput, type HomeModel } from './home';
-import { periodInputs } from './home-periods';
 import { fundPace, loadInvestmentView } from './investments';
 import { loadPortfolio } from './portfolio-data';
 
@@ -42,10 +41,11 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
         total: number;
         by_type: Record<string, number> | null;
         by_owner: Record<string, number> | null;
+        source: string;
       }>((from, to) =>
         supabase
           .from('snapshots')
-          .select('taken_on, total, by_type, by_owner')
+          .select('taken_on, total, by_type, by_owner, source')
           .order('taken_on', { ascending: true })
           .range(from, to),
       ),
@@ -172,7 +172,9 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       source: o.source,
     }));
   const planned = settingsFromJson(plan.data?.settings);
-  const periods = periodInputs({ assetRows, fdRows, obsRows, blocks, overview });
+  const position = await loadPositionInput(supabase as unknown as SupabaseClient, loaded, {
+    config: settings.config,
+  });
 
   const input: HomeInput = {
     today: todayIso,
@@ -187,6 +189,7 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       total: Number(s.total),
       byType: s.by_type ?? {},
       byOwner: s.by_owner ?? {},
+      source: s.source,
     })),
     inv,
     pace: inv.household.funds > 0 ? fundPace(inv) : null,
@@ -206,8 +209,7 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       .map((t) => ({ id: t.id as string, title: t.title as string, dueOn: t.due_on as string })),
     openTasks: (tasks.data ?? []).length,
     inboxReview: inbox.count ?? 0,
-    deposits: periods.deposits,
-    accounts: periods.accounts,
+    position,
     monthlySpending: planned.monthlySpendingToday,
     recent,
     newestRecorded: obsRows.reduce<string | null>(

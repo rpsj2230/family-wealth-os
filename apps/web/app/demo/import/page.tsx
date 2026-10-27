@@ -127,7 +127,7 @@ export default async function DemoImport({
             demoChanges={demoFundPreview()}
           />
           {(tab === 'start' || tab === 'workbook') && (
-            <HistoryCoverage coverage={demoCoverage()} people={PEOPLE} demo />
+            <HistoryCoverage coverage={demoCoverage()} people={PEOPLE} chart={{ withPoint: 9, rebuilt: 6 }} demo />
           )}
         </main>
       </div>

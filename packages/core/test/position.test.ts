@@ -539,15 +539,6 @@ describe('period gains are gains, not changes of balance', () => {
     expect(span('2028-02-28', '2028-03-01')).toBe(2);
   });
 
-  it('today is one day of interest, and agrees with the table’s one-day period', () => {
-    const d = deposit('d', { principal: 1_000_000 });
-    const g = positionGains({ position: input([d]), recentDays: 30 });
-    expect(day(g.tiles, 'today').amount).toBeCloseTo(
-      fdOn(d.fd!, TODAY) - fdOn(d.fd!, '2026-10-26'),
-      4,
-    );
-  });
-
   it('foreign balances count the exchange-rate move as a gain, labelled estimated', () => {
     const sgd = savings('g', [rec('2026-08-01', 1_000, { currency: 'SGD', fxRate: 60 })], {
       currency: 'SGD',

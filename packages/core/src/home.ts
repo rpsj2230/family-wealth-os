@@ -19,58 +19,10 @@ const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
 const daysBetween = (from: string, to: string) => Math.round((t(to) - t(from)) / DAY);
 
 // ------------------------------------------------------------------------------------------------
-// Change over a period
+// Financial year
 // ------------------------------------------------------------------------------------------------
-export interface Change {
-  amount: number;
-  /** against the value it started from; null when that was not above zero */
-  pct: number | null;
-  /** date of the value it is measured from */
-  from: string;
-  /** the history is shorter than the period, so it is measured from the first value on record */
-  partial: boolean;
-}
-
-/**
- * Change since `start`: the last value on or before that date is the base. With no value that old, the first value on record is
- * used and the result is marked `partial` so the page can say "since 3 Mar" instead of pretending it is a full period.
- */
-export function changeSinceDate(points: Point[], start: string): Change | null {
-  if (points.length < 2) return null;
-  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
-  const last = sorted[sorted.length - 1]!;
-  const before = [...sorted].reverse().find((p) => p.date <= start);
-  const base = before ?? sorted[0]!;
-  if (base.date >= last.date) return null;
-  return {
-    amount: last.value - base.value,
-    pct: base.value > 0 ? last.value / base.value - 1 : null,
-    from: base.date,
-    partial: !before,
-  };
-}
-
 /** First day of the financial year that `today` falls in (India: 1 April). */
 export const fyStartOf = fyStartOn;
-
-export interface NetWorthChanges {
-  /** against the value `monthDays` ago */
-  month: Change | null;
-  /** against the close of the last financial year, or the first value on record when the history starts later */
-  fy: Change | null;
-  fyStart: string;
-}
-
-export function netWorthChanges(trend: Point[], today: string, monthDays: number): NetWorthChanges {
-  const fyStart = fyStartOf(today);
-  // the close of the previous year is the last value before the new year starts
-  const dayBefore = addIsoDays(fyStart, -1);
-  return {
-    month: changeSinceDate(trend, addIsoDays(today, -monthDays)),
-    fy: changeSinceDate(trend, dayBefore),
-    fyStart,
-  };
-}
 
 export const HOME_RANGES: {
   key: Extract<RangeKey, '1M' | '3M' | '6M' | '1Y' | 'ALL'>;

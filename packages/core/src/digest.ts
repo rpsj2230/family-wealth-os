@@ -6,6 +6,7 @@
 import { DEFAULT_CONFIG } from './config';
 import { formatInr, formatInrCompact } from './money';
 import type { NetWorthResult } from './networth';
+import { sinceWords, type HeadlineTile } from './position';
 
 export interface DigestInput {
   date: string; // YYYY-MM-DD, Asia/Singapore date of the report
@@ -34,6 +35,12 @@ export interface DigestInput {
   rateIdeas?: string[];
   /** tax matters already worded: harvest deadline and amounts, refunds still to claim */
   taxIdeas?: string[];
+  /**
+   * What the holdings earned over the last N days and this financial year, from the same function Home uses (position.ts): interest,
+   * price moves and exchange-rate moves, not money added or taken out. When given it replaces the change since the previous snapshot,
+   * so the summary, the WhatsApp text and Home say the same thing.
+   */
+  gains?: { days: number; recent: HeadlineTile; fy: HeadlineTile } | null;
   /** on the first day of a month: how wealth moved since the same day last month, in total and per person */
   monthly?: { since: string; change: number; byPerson: { name: string; change: number }[] } | null;
 }
@@ -63,10 +70,16 @@ export function buildDigest(i: DigestInput): Digest {
   const lines: string[] = [];
   const bullets: string[] = [];
 
-  const change = i.previous ? nw.total - i.previous.total : null;
+  const g = i.gains ?? null;
+  const change = g ? null : i.previous ? nw.total - i.previous.total : null;
+  const earnedOf = (t: HeadlineTile) => `${signed(t.amount)} (${sinceWords(t)})`;
   const headline = `${i.householdName}: ${formatInrCompact(nw.total)} estimated net worth`;
   lines.push(`${headline} on ${niceDate(i.date)}.`);
-  if (change !== null && i.previous) {
+  if (g) {
+    lines.push(
+      `Earned: last ${g.days} days ${earnedOf(g.recent)}; this financial year ${earnedOf(g.fy)}. Interest, fund price moves and exchange rates only: money added or taken out is not counted. It is an estimate.`,
+    );
+  } else if (change !== null && i.previous) {
     lines.push(
       `Since ${niceDate(i.previous.date)}: ${signed(change)}. This is mostly interest accruing and market movement, not new savings. It is an estimate.`,
     );
@@ -195,7 +208,7 @@ ${ret ? `<p style="margin:12px 0">${esc(ret)}</p>` : ''}
 
   const wa = [
     `*${i.householdName}* ${niceDate(i.date)}`,
-    `Net worth (estimate): ${formatInrCompact(nw.total)}${change !== null ? ` (${signed(change)} since ${niceDate(i.previous!.date)})` : ''}`,
+    `Net worth (estimate): ${formatInrCompact(nw.total)}${g ? ` (${signed(g.recent.amount)} earned in ${g.days} days)` : change !== null ? ` (${signed(change)} since ${niceDate(i.previous!.date)})` : ''}`,
     people.join(' | '),
     fresh[0]!,
     ...bullets.slice(0, 3).map((b) => `• ${b}`),
@@ -205,7 +218,7 @@ ${ret ? `<p style="margin:12px 0">${esc(ret)}</p>` : ''}
     .join('\n');
 
   return {
-    subject: `${formatInrCompact(nw.total)} estimated${change !== null ? ` (${change < 0 ? '−' : '+'}${formatInrCompact(Math.abs(change))})` : ''} · ${niceDate(i.date)}`,
+    subject: `${formatInrCompact(nw.total)} estimated${g ? ` (${g.recent.amount < 0 ? '−' : '+'}${formatInrCompact(Math.abs(g.recent.amount))} in ${g.days} days)` : change !== null ? ` (${change < 0 ? '−' : '+'}${formatInrCompact(Math.abs(change))})` : ''} · ${niceDate(i.date)}`,
     text,
     html,
     whatsapp: wa,

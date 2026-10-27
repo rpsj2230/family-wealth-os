@@ -6,6 +6,8 @@ import {
   holdingsFromAssets,
   formatInr,
   harvestPlanSummary,
+  positionAsOf,
+  positionGains,
   maturityAlerts,
   planHarvest,
   overdueMaturities,
@@ -16,6 +18,7 @@ import {
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
+import { loadPositionInput } from './position';
 import { loadSettings } from './settings';
 import { loadRatesContext } from './rates';
 import { loadHarvestPositions } from './harvest';
@@ -42,21 +45,38 @@ export async function buildDigestInput(
     const q = db.from(table).select(cols);
     return opts.householdId ? q.eq('household_id', opts.householdId) : q;
   };
-  const { assetRows, obsRows, fdRows, ownerName, portfolio, marketDates, sipMonthly } =
-    await loadPortfolioData(db, {
-      ...(opts.householdId ? { householdId: opts.householdId } : {}),
-      today,
-    }).then(async (l) => {
-      const pos = await scoped('mf_positions', 'sip_monthly, sip_stopped');
-      const sips = (
-        (pos.data ?? []) as unknown as { sip_monthly: number | null; sip_stopped: boolean }[]
-      )
-        .filter((x) => !x.sip_stopped)
-        .reduce((s, x) => s + Number(x.sip_monthly ?? 0), 0);
-      return { ...l, sipMonthly: sips };
-    });
+  const loadedAll = await loadPortfolioData(db, {
+    ...(opts.householdId ? { householdId: opts.householdId } : {}),
+    today,
+  }).then(async (l) => {
+    const pos = await scoped('mf_positions', 'sip_monthly, sip_stopped');
+    const sips = (
+      (pos.data ?? []) as unknown as { sip_monthly: number | null; sip_stopped: boolean }[]
+    )
+      .filter((x) => !x.sip_stopped)
+      .reduce((s, x) => s + Number(x.sip_monthly ?? 0), 0);
+    return { ...l, sipMonthly: sips };
+  });
+  const { assetRows, obsRows, fdRows, ownerName, portfolio, marketDates, sipMonthly } = loadedAll;
 
   const cfg = (await loadSettings(db, opts.householdId)).config;
+  // what the holdings earned, from the same function Home uses; the summary goes out without it if the records cannot be read
+  let gains: DigestInput['gains'] = null;
+  let position: Awaited<ReturnType<typeof loadPositionInput>> | null = null;
+  try {
+    position = await loadPositionInput(db, loadedAll, {
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
+      config: cfg,
+    });
+    const g = positionGains({ position, recentDays: cfg.home.changeDays });
+    gains = {
+      days: cfg.home.changeDays,
+      recent: g.tiles.find((t) => t.key === 'recent')!,
+      fy: g.tiles.find((t) => t.key === 'fy')!,
+    };
+  } catch {
+    position = null;
+  }
   const [snaps, recv, pays, settings, pols, taskRows] = await Promise.all([
     scoped('snapshots', 'taken_on, total')
       .lt('taken_on', opts.date)
@@ -193,14 +213,27 @@ export async function buildDigestInput(
     const d = new Date(`${opts.date}T00:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() - 1);
     const since = d.toISOString().slice(0, 10);
-    const old = (
-      await scoped('snapshots', 'taken_on, total, by_owner')
-        .lte('taken_on', since)
-        .order('taken_on', { ascending: false })
-        .limit(1)
-    ).data as unknown as
-      { taken_on: string; total: number; by_owner: Record<string, number> }[] | null;
-    if (old?.[0])
+    // rebuilt from the records on file when there are any for that day; else from the snapshot saved nearest before it
+    const then = position ? positionAsOf(position, since) : null;
+    if (then && then.counted > 0)
+      monthly = {
+        since,
+        change: Math.round(portfolio.netWorth.total - then.total),
+        byPerson: Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => ({
+          name: ownerName.get(id) ?? 'Unknown',
+          change: Math.round(v - (then.byOwner[id] ?? 0)),
+        })),
+      };
+    const old = monthly
+      ? null
+      : ((
+          await scoped('snapshots', 'taken_on, total, by_owner')
+            .lte('taken_on', since)
+            .order('taken_on', { ascending: false })
+            .limit(1)
+        ).data as unknown as
+          { taken_on: string; total: number; by_owner: Record<string, number> }[] | null);
+    if (old?.[0] && !monthly)
       monthly = {
         since: old[0].taken_on,
         change: Math.round(portfolio.netWorth.total - Number(old[0].total)),
@@ -267,6 +300,7 @@ export async function buildDigestInput(
     rateIdeas,
     taxIdeas,
     monthly,
+    gains,
     appUrl: opts.appUrl,
   };
 }

@@ -8,6 +8,7 @@ import {
 } from '@fwos/core';
 import { BankBadge } from '@/components/BankBadge';
 import { PersonBadge } from '@/components/Person';
+import { RebuildChart } from './RebuildChart';
 import './history.css';
 
 const STATE_WORD: Record<CoverageState, string> = {
@@ -62,11 +63,14 @@ function Strip({ row, months }: { row: Coverage['rows'][number]; months: string[
 export function HistoryCoverage({
   coverage,
   people,
+  chart,
   demo = false,
 }: {
   coverage: Coverage;
   /** by person name, so a person keeps one colour everywhere */
   people: Record<string, PersonStyle>;
+  /** the net-worth chart's points by month, to say how much of the history is drawn */
+  chart?: { withPoint: number; rebuilt: number };
   demo?: boolean;
 }) {
   const { rows, months, totals } = coverage;
@@ -136,6 +140,14 @@ export function HistoryCoverage({
           </li>
         ))}
       </ul>
+      {chart && (
+        <RebuildChart
+          months={Math.max(0, months.length - 1)}
+          withPoint={chart.withPoint}
+          rebuilt={chart.rebuilt}
+          demo={demo}
+        />
+      )}
       {demo && <p className="small muted">Invented figures for this sample.</p>}
       <p className="small">
         Missing months are filled by importing older monthly tabs:{' '}

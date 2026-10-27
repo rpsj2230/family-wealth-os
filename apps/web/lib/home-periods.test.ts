@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   bankOverview,
   cashBlocks,
+  accountsOf,
   cashByBank,
+  depositsOf,
   depositPeriod,
   depositsByBank,
   fdInterestByFy,
@@ -23,6 +25,8 @@ import { buildPl } from './invest-pl';
 const input = demoHomeInput('1Y');
 const h = buildHome(input);
 const nw = input.portfolio.netWorth;
+const deposits = depositsOf(input.position);
+const accounts = accountsOf(input.position);
 const today = input.today;
 const card = (k: string) => h.classes.find((c) => c.key === k)!;
 /** The pages show whole rupees, and the fund series adds up rounded values, so the same figure is within a rupee. */
@@ -35,11 +39,17 @@ describe('the headline figures and the four cards', () => {
     expect(h.classes.map((c) => c.key)).toEqual(['fd', 'funds', 'cash', 'others']);
     expect(h.classes.reduce((a, c) => a + c.current, 0)).toBeCloseTo(nw.total, 4);
     expect(h.money.current).toBe(nw.total);
-    expect(h.money.invested).toBeCloseTo(
-      h.classes.reduce((a, c) => a + c.invested, 0),
+    // invested money is the deposits' principal and the cost of the fund units held: savings, cash and the rest are not invested
+    expect(h.money.invested).toBeCloseTo(card('fd').invested + card('funds').invested, 4);
+    expect(h.money.profit).toBeCloseTo(card('fd').profit + card('funds').profit, 4);
+    expect(h.money.valueOfInvested).toBeCloseTo(
+      h.money.invested + h.money.profit,
       4,
     );
-    expect(h.money.profit).toBeCloseTo(h.money.current - h.money.invested, 4);
+    expect(h.money.parts.notInvested).toBeCloseTo(
+      card('cash').current + card('others').current,
+      4,
+    );
     expect(h.money.profitPct).toBeCloseTo(h.money.profit / h.money.invested, 10);
     expect(h.classes.reduce((a, c) => a + c.share, 0)).toBeCloseTo(1, 6);
     // deposits pay more at maturity; everything else is counted at today's value
@@ -124,10 +134,10 @@ describe('the same period gives the same figure on every page', () => {
 
   it('earned today on Accounts, Deposits and Cash is the last day of the shared figures', () => {
     const day = recentWindow(today, 1);
-    const fd = depositPeriod(input.deposits, day, today).profit;
+    const fd = depositPeriod(deposits, day, today).profit;
     expect(fd).toBeCloseTo(h.banks.overview.today.fd, 6);
     expect(h.deposits.overview.today.fd).toBeCloseTo(fd, 6);
-    const cash = savingsPeriod(input.accounts, day).profit;
+    const cash = savingsPeriod(accounts, day).profit;
     expect(cash).toBeCloseTo(h.banks.overview.today.savings, 6);
     // the same call the Cash page makes over the cash blocks alone
     const cashPage = bankOverview(cashBlocks(input.blocks), input.overview);
@@ -135,11 +145,11 @@ describe('the same period gives the same figure on every page', () => {
   });
 
   it('interest earned so far on the Deposits overview is the shared figure since the deposits began', () => {
-    const running = input.deposits.filter((d) => d.held && d.maturityOn >= today);
+    const running = deposits.filter((d) => d.held && d.maturityOn >= today);
     const so = depositPeriod(running, spanBetween('2000-01-01', today, today), today);
     expect(so.profit).toBeCloseTo(h.deposits.overview.profit, 4);
     // and the card adds the deposits waiting to be confirmed
-    const held = input.deposits.filter((d) => d.held);
+    const held = deposits.filter((d) => d.held);
     expect(depositPeriod(held, spanBetween('2000-01-01', today, today), today).profit).toBeCloseTo(
       card('fd').profit,
       4,
@@ -147,7 +157,7 @@ describe('the same period gives the same figure on every page', () => {
   });
 
   it('interest by financial year in Reports is the shared figure for that year', () => {
-    const fds: ReportFd[] = input.deposits.map((d) => ({
+    const fds: ReportFd[] = deposits.map((d) => ({
       id: d.assetId,
       bank: 'x',
       owner: 'p',
