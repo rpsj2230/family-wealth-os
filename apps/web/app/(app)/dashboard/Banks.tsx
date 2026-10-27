@@ -1,11 +1,19 @@
-import { formatInr, formatInrCompact, formatPct } from '@fwos/core';
+import { formatInr, formatInrCompact, formatPct, type ExplainSet } from '@fwos/core';
 import { plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
 import { BarRow, CardHead, Signed, homeLink } from './parts';
 
 /** The money in banks: its value, what it earned today (an estimate), and which banks hold it. Same figures as Accounts. */
-export function Banks({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Banks({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   const o = m.banks.overview;
   const top = Math.max(0.0001, m.banks.lines[0]?.share ?? 0);
   return (
@@ -13,6 +21,7 @@ export function Banks({ m, sample }: { m: HomeModel; sample: boolean }) {
       <CardHead
         title="In banks"
         id="hm-banks"
+        why={ex['home.banks']}
         href={homeLink('/accounts', sample)}
         linkLabel="Accounts"
       />
@@ -52,7 +61,15 @@ export function Banks({ m, sample }: { m: HomeModel; sample: boolean }) {
 }
 
 /** The fixed deposits: value, profit and earned today, the journey from put in to maturity, interest, and what matures by year. */
-export function Deposits({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Deposits({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   const d = m.deposits;
   const o = d.overview;
   const done = o.interest.journey;
@@ -62,6 +79,7 @@ export function Deposits({ m, sample }: { m: HomeModel; sample: boolean }) {
       <CardHead
         title="Fixed deposits"
         id="hm-deposits"
+        why={ex['home.deposits']}
         href={homeLink('/deposits', sample)}
         linkLabel="Deposits"
       />

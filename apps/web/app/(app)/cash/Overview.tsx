@@ -5,12 +5,14 @@ import {
   formatPct,
   type BankOverview as Overview,
   type CashBankShare,
+  type ExplainSet,
   type PersonStyle,
 } from '@fwos/core';
 import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
 import '@/app/(app)/accounts/bankoverview.css';
 import '@/app/(app)/deposits/overview.css';
 import { PersonBadge } from '@/components/Person';
+import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 
 /**
@@ -26,7 +28,9 @@ export function CashOverviewPanel({
   styles,
   scope = null,
   sample = false,
+  ex,
 }: {
+  ex: ExplainSet<'cash'>;
   o: Overview;
   banks: CashBankShare[];
   /** estimated interest a year at the rates in force, after tax at source */
@@ -52,7 +56,9 @@ export function CashOverviewPanel({
     <section className="card bv dv" aria-label="Savings and cash overview">
       <div className="bv-top">
         <div className="bv-hero">
-          <h2 className="bv-eyebrow">Cash available today{scope ? ` · ${scope}` : ''}</h2>
+          <WhyHead why={ex['cash.total']}>
+            <h2 className="bv-eyebrow">Cash available today{scope ? ` · ${scope}` : ''}</h2>
+          </WhyHead>
           <div className="bv-big" data-testid="cv-current">
             {formatInrCompact(o.current)}
           </div>
@@ -67,21 +73,25 @@ export function CashOverviewPanel({
               label="Since the last balances"
               amount={o.profit}
               pct={o.profitPct}
-              note="today's estimate against the balance last recorded"
+              note="today's estimate against the balance last recorded; % of that balance"
               estimate
+              why={ex['cash.sinceLast']}
             />
             <Delta
               label="Earned today"
               amount={o.today.change}
               pct={o.today.changePct}
-              note="a day of interest at each account's rate"
+              note="a day of interest at each account's rate; % of yesterday’s value"
               estimate
+              why={ex['cash.today']}
             />
           </div>
         </div>
 
         <div className="bv-journey">
-          <h3 className="bv-h">What it earns</h3>
+          <WhyHead why={ex['cash.earns']}>
+            <h3 className="bv-h">What it earns</h3>
+          </WhyHead>
           <dl className="bv-ends">
             <div>
               <dt>A year</dt>
@@ -106,7 +116,9 @@ export function CashOverviewPanel({
 
       {!empty && (
         <div className="dv-banks">
-          <h3 className="bv-h">Which bank holds how much</h3>
+          <WhyHead why={ex['cash.banks']}>
+            <h3 className="bv-h">Which bank holds how much</h3>
+          </WhyHead>
           <ol className="dv-list" data-testid="cv-banks">
             {banks.map((b) => (
               <li key={b.bankId}>
@@ -144,20 +156,23 @@ export function CashOverviewPanel({
           sub={
             avgRate !== null ? `${formatPct(avgRate, 2)} on average, an estimate` : 'no rate known'
           }
+          why={ex['cash.interestYear']}
         />
         <Stat
           label="Largest balance"
           value={largest ? formatInrCompact(largest.amount) : '–'}
           sub={largest ? `${largest.code} · ${largest.bank}` : 'no account yet'}
+          why={ex['cash.largestBalance']}
         />
         <Stat
           label="Largest bank"
           value={banks[0] ? formatPct(banks[0].share, 0) : '–'}
           sub={
             banks[0]
-              ? `${banks[0].bank} holds ${formatInrCompact(banks[0].balance)}`
+              ? `${banks[0].bank} holds ${formatInrCompact(banks[0].balance)} of the savings`
               : 'no bank yet'
           }
+          why={ex['cash.largestBank']}
         />
         <Stat
           label="Balances out of date"
@@ -171,6 +186,7 @@ export function CashOverviewPanel({
           }
           tone={stale > 0 ? 'warn' : undefined}
           href={to('/monthly')}
+          why={ex['cash.stale']}
         />
         <Stat
           label="Fixed deposits"
@@ -184,7 +200,9 @@ export function CashOverviewPanel({
         <div className="bv-splits">
           {people.length > 1 && (
             <div className="bv-split">
-              <h3 className="bv-h">Whose cash</h3>
+              <WhyHead why={ex['cash.people']}>
+                <h3 className="bv-h">Whose cash</h3>
+              </WhyHead>
               <SplitBar
                 caption="Whose cash"
                 parts={people.map((p) => ({
@@ -209,7 +227,9 @@ export function CashOverviewPanel({
           )}
           {o.accountTypes.length > 0 && (
             <div className="bv-split">
-              <h3 className="bv-h">NRE and NRO</h3>
+              <WhyHead why={ex['cash.types']}>
+                <h3 className="bv-h">NRE and NRO</h3>
+              </WhyHead>
               <SplitBar
                 caption="NRE and NRO"
                 parts={o.accountTypes.map((t) => ({

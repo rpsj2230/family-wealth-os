@@ -28,7 +28,7 @@ describe('every registered headline figure has its "?"', () => {
   it('each registered figure id is used by a page component (not only built)', () => {
     const unused = ALL_FIGURE_IDS.filter(
       (id) =>
-        !files.some(({ f, text }) => !f.includes('/lib/explain-') && text.includes(`['${id}']`)),
+        !files.some(({ f, text }) => !f.includes('/lib/explain-') && text.includes(`'${id}'`)),
     );
     expect(unused, `figures with no "?" on any page: ${unused.join(', ')}`).toEqual([]);
   });

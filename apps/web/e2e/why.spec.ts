@@ -148,6 +148,32 @@ test.describe('the "?" explainer (public sample)', () => {
     }
   });
 
+  test('Home, Accounts, Deposits and Cash explain their figures with dates and denominators', async ({
+    page,
+  }) => {
+    for (const [path, id, text] of [
+      ['/demo/dashboard', 'home.netWorth', /calculated/],
+      ['/demo/dashboard', 'home.profit', /÷ ₹[\d,]+ invested/],
+      ['/demo/dashboard', 'home.periods', /money at work/],
+      ['/demo/dashboard', 'home.classFunds', /÷ ₹[\d,]+ net worth/],
+      ['/demo/accounts', 'accounts.profit', /÷/],
+      ['/demo/deposits', 'deposits.journey', /÷/],
+      ['/demo/cash', 'cash.interestYear', /tax at source/],
+    ] as const) {
+      await page.goto(path);
+      const b = btn(page, id);
+      await b.scrollIntoViewIfNeeded();
+      await b.click();
+      await expect(panel(page)).toBeVisible();
+      await expect(panel(page)).toContainText(text);
+      await expect(panel(page).locator('.why-chip').first()).toBeVisible();
+      await expect(panel(page)).toContainText(/\d{1,2} [A-Z][a-z]{2} 20\d\d/);
+      await inside(page);
+      await page.keyboard.press('Escape');
+      await expect(panel(page)).toHaveCount(0);
+    }
+  });
+
   test('a fund page explains its tiles', async ({ page }) => {
     await page.goto('/demo/asset?kind=fund&id=f1');
     for (const id of ['fund.value', 'fund.moneyIn', 'fund.profit', 'fund.xirr']) {
@@ -206,6 +232,10 @@ test.describe('the "?" explainer (public sample)', () => {
         '/demo/investments?tab=performance',
         '/demo/investments?tab=breakdown',
         '/demo/asset?kind=fund&id=f1',
+        '/demo/dashboard',
+        '/demo/accounts',
+        '/demo/deposits',
+        '/demo/cash',
       ]) {
         await page.goto(path);
         await page.addStyleTag({ content: WIDE_FONT });

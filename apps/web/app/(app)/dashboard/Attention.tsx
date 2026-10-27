@@ -1,4 +1,4 @@
-import type { PersonStyle } from '@fwos/core';
+import type { ExplainSet, PersonStyle } from '@fwos/core';
 import { formatInrCompact } from '@fwos/core';
 import { PersonBadge } from '@/components/Person';
 import { niceDate } from '@/lib/dates';
@@ -106,11 +106,19 @@ export function ComingUp({ m, sample }: { m: HomeModel; sample: boolean }) {
 }
 
 /** What moved since the comparison day: the total, then the biggest moves by kind of holding and by person. */
-export function Changed({ m, styles }: { m: HomeModel; styles: Record<string, PersonStyle> }) {
+export function Changed({
+  m,
+  styles,
+  ex,
+}: {
+  m: HomeModel;
+  styles: Record<string, PersonStyle>;
+  ex: ExplainSet<'home'>;
+}) {
   const w = m.whatChanged;
   return (
     <section className="card hm-card" aria-labelledby="hm-changed">
-      <CardHead title="What changed" id="hm-changed" />
+      <CardHead title="What changed" id="hm-changed" why={ex['home.changed']} />
       {!w ? (
         <p className="muted small">
           Shows once a few days of net worth are saved, so there is something to compare with.

@@ -24,6 +24,7 @@ import { loadFxHint, loadJointHolders } from '@/lib/quick-edit-data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { accountsExplain, bankBase } from '@/lib/explain-money';
 import { BankOverviewPanel } from './BankOverview';
 import { ForeignCard, ManageCards } from './Parts';
 import { saveBankNote } from './actions';
@@ -95,6 +96,18 @@ export default async function AccountsPage({
     ),
     jointHolders,
   });
+  const exA = accountsExplain(
+    overview,
+    bankBase({
+      today: today.toISOString().slice(0, 10),
+      scope: who ? styles[who]!.name : null,
+      blocks,
+      rates: cashRates,
+      savingsRate: settings.config.estimates.savingsRate,
+      tdsRate: settings.config.estimates.interestTdsRate,
+    }),
+    false,
+  );
   const quick = quickModel({
     blocks: all,
     assets: assetRows,
@@ -159,6 +172,7 @@ export default async function AccountsPage({
       <>
         {head}
         <BankOverviewPanel
+          ex={exA}
           o={overview}
           styles={styles}
           month={month}
@@ -192,6 +206,7 @@ export default async function AccountsPage({
     <>
       {head}
       <BankOverviewPanel
+        ex={exA}
         o={overview}
         styles={styles}
         month={month}
@@ -219,6 +234,7 @@ export default async function AccountsPage({
           current={overview.current}
           lines={overview.accounts + overview.deposits}
           scope={who ? styles[who]!.name : null}
+          why={exA['accounts.grand']}
         />
       </ListingTools>
       <ForeignCard lines={foreign} styles={styles} />

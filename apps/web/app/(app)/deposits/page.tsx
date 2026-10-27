@@ -18,6 +18,7 @@ import { Tabs } from '@/components/Tabs';
 import { loadContext } from '@/lib/data';
 import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
+import { bankBase, depositsExplain } from '@/lib/explain-money';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { saveForeignBanks } from './actions';
 import { DepositOverviewPanel } from './Overview';
@@ -99,6 +100,25 @@ export default async function DepositsPage({
   });
   const todayIso = today.toISOString().slice(0, 10);
   const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
+  const depBanks = depositsByBank(scoped, todayIso);
+  const depLadder = maturityLadder(scoped);
+  const exD = depositsExplain(
+    overview,
+    bankBase({
+      today: todayIso,
+      scope: who ? (styles[who]?.name ?? null) : null,
+      blocks: scoped,
+      savingsRate: settings.config.estimates.savingsRate,
+      tdsRate: settings.config.estimates.interestTdsRate,
+    }),
+    false,
+    {
+      cover: { limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks },
+      toConfirm: s.confirm.length,
+      banks: depBanks,
+      ladder: depLadder,
+    },
+  );
 
   return (
     <>
@@ -125,9 +145,10 @@ export default async function DepositsPage({
         }
       />
       <DepositOverviewPanel
+        ex={exD}
         o={overview}
-        banks={depositsByBank(scoped, todayIso)}
-        ladder={maturityLadder(scoped)}
+        banks={depBanks}
+        ladder={depLadder}
         cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks }}
         toConfirm={s.confirm.length}
         styles={styles}

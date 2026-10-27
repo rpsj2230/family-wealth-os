@@ -5,9 +5,12 @@ import {
   formatPct,
   sourceTag,
   type Change,
+  type Explain,
+  type ExplainSet,
 } from '@fwos/core';
 import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { UpdatedCell } from '@/components/BankTable';
+import { Why, WhyHead } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 import { niceDate } from '@/lib/dates';
 import { Money } from './Money';
@@ -22,30 +25,37 @@ function PeriodDelta({
   change,
   note,
   missing,
+  why,
 }: {
   label: string;
   change: Change | null;
   note: (c: Change) => string;
   missing: string;
+  why?: Explain;
 }) {
   if (!change)
     return (
       <div className="bv-delta flat">
-        <div className="bv-delta-label">{label}</div>
+        <div className="bv-delta-label">
+          {label}
+          {why && <Why explain={why} />}
+        </div>
         <div className="bv-delta-value">
           <strong>–</strong>
         </div>
         <div className="bv-delta-note">{missing}</div>
       </div>
     );
-  return <Delta label={label} amount={change.amount} pct={change.pct} note={note(change)} />;
+  return (
+    <Delta label={label} amount={change.amount} pct={change.pct} note={note(change)} why={why} />
+  );
 }
 
 /**
  * The top of Home: what the family is worth, how it changed today, this month and this financial year, how much of that is
  * verified, and the few figures that say what to look at next. Every figure comes from buildHome(); this only draws it.
  */
-export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: ExplainSet<'home'> }) {
   const to = (path: string) => homeLink(path, sample);
   const link = (path: string) => {
     const href = to(path);
@@ -61,7 +71,9 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
     <section className="card hm-hero" aria-label="Net worth">
       <div className="bv-top hm-top">
         <div className="bv-hero">
-          <h2 className="bv-eyebrow">Net worth today</h2>
+          <WhyHead why={ex['home.netWorth']}>
+            <h2 className="bv-eyebrow">Net worth today</h2>
+          </WhyHead>
           <div className="bv-big" data-testid="hm-total">
             {formatInrCompact(m.total)}
           </div>
@@ -77,37 +89,42 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
             label="Today"
             amount={m.change.today.amount}
             pct={m.change.today.pct}
-            note="interest at each rate and fund prices, since yesterday"
+            note="interest at each rate and fund prices, since yesterday; % of yesterday’s net worth"
             estimate
+            why={ex['home.today']}
           />
           <PeriodDelta
             label={`Last ${plural(m.change.monthDays, 'day')}`}
             change={m.change.month}
             note={(c) =>
               c.partial
-                ? `since your first record, ${niceDate(c.from)}`
-                : `since ${niceDate(c.from)}`
+                ? `since your first record, ${niceDate(c.from)}; % of net worth then`
+                : `since ${niceDate(c.from)}; % of net worth then`
             }
             missing="shows once two days of history are saved"
+            why={ex['home.month']}
           />
           <PeriodDelta
             label="This financial year"
             change={m.change.fy}
             note={(c) =>
               c.partial
-                ? `since your first record, ${niceDate(c.from)}`
-                : `since the close of last year, ${niceDate(c.from)}`
+                ? `since your first record, ${niceDate(c.from)}; % of net worth then`
+                : `since the close of last year, ${niceDate(c.from)}; % of net worth then`
             }
             missing="shows once two days of history are saved"
+            why={ex['home.fy']}
           />
         </div>
       </div>
 
-      <Money m={m} />
+      <Money m={m} ex={ex} />
 
       <div className="hm-trust">
         <div>
-          <h3 className="bv-h">How much is verified</h3>
+          <WhyHead why={ex['home.verified']}>
+            <h3 className="bv-h">How much is verified</h3>
+          </WhyHead>
           <p className="hm-trust-line">
             <strong data-testid="hm-verified">{formatPct(t.verifiedShare, 0)}</strong> of the total
             is verified or recent
@@ -174,12 +191,14 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
             liquid.months !== null ? ` · covers ${monthsText(liquid.months)} of spending` : ''
           }`}
           {...link('/accounts')}
+          why={ex['home.cashAndDeposits']}
         />
         <Stat
           label={`Free within ${plural(LADDER_DAYS.d30, 'day')}`}
           value={formatInrCompact(liquid.within30)}
           sub="cash plus deposits that mature, nothing sold"
           {...link('/raise')}
+          why={ex['home.free30']}
         />
         <Stat
           label="Next maturity"
@@ -190,12 +209,14 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
               : 'no deposit is running'
           }
           {...link('/deposits?tab=maturities')}
+          why={ex['home.nextMaturity']}
         />
         <Stat
           label={`Interest in ${m.deposits.interest.fy}`}
           value={formatInrCompact(m.deposits.interest.thisYear)}
           sub={`on running deposits · ${formatInrCompact(m.deposits.interest.ahead)} more over the next 12 months if held`}
           {...link('/deposits')}
+          why={ex['home.interest']}
         />
         <Stat
           label="Mutual funds"
@@ -210,6 +231,7 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
               : 'none recorded'
           }
           {...link('/investments')}
+          why={ex['home.fundsStat']}
         />
         <Stat
           label="Goals on track"
@@ -221,6 +243,7 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
           }
           sub={m.goals.list.length === 0 ? 'no goal yet' : 'see each goal'}
           {...link('/goals')}
+          why={ex['home.goalsStat']}
         />
         <Stat
           label="Needs you"
@@ -232,6 +255,7 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
           }
           tone={m.attention.length > 0 ? 'warn' : undefined}
           href="#hm-needs"
+          why={ex['home.needsStat']}
         />
         <Stat
           label="Above the insured limit"
@@ -245,6 +269,7 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
           }
           tone={m.deposits.cover.uninsured > 0 ? 'warn' : undefined}
           {...link('/deposits?tab=cover')}
+          why={ex['home.insured']}
         />
       </dl>
 

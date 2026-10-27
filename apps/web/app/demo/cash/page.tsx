@@ -15,6 +15,7 @@ import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
+import { bankBase, cashExplain } from '@/lib/explain-money';
 
 export const metadata: Metadata = {
   title: 'Sample cash',
@@ -41,6 +42,19 @@ export default async function DemoCash({
   const banks = cashByBank(blocks, {}, interestTdsRate, savingsRate);
   const interestYear = banks.reduce((s, b) => s + b.interestYear, 0);
   const total = banks.reduce((s, b) => s + b.balance, 0);
+  const avgRate = total > 0 ? interestYear / (1 - interestTdsRate) / total : null;
+  const exC = cashExplain(
+    overview,
+    bankBase({
+      today: DEMO_TODAY.toISOString().slice(0, 10),
+      scope: who ? (styles[who]?.name ?? null) : null,
+      blocks,
+      savingsRate,
+      tdsRate: interestTdsRate,
+    }),
+    true,
+    { banks, interestYear, avgRate, largest: largestCash(blocks) },
+  );
   return (
     <DemoShell>
       <PageHead
@@ -54,10 +68,11 @@ export default async function DemoCash({
         }
       />
       <CashOverviewPanel
+        ex={exC}
         o={overview}
         banks={banks}
         interestYear={interestYear}
-        avgRate={total > 0 ? interestYear / (1 - interestTdsRate) / total : null}
+        avgRate={avgRate}
         largest={largestCash(blocks)}
         styles={styles}
         scope={who ? (styles[who]?.name ?? null) : null}

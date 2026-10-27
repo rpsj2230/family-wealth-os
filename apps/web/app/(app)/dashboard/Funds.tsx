@@ -1,4 +1,10 @@
-import { formatInr, formatInrCompact, formatPct, type PersonStyle } from '@fwos/core';
+import {
+  formatInr,
+  formatInrCompact,
+  formatPct,
+  type ExplainSet,
+  type PersonStyle,
+} from '@fwos/core';
 import { plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { Sparkline } from '@/components/charts';
 import { Est } from '@/components/Est';
@@ -13,10 +19,12 @@ export function Funds({
   m,
   styles,
   sample,
+  ex,
 }: {
   m: HomeModel;
   styles: Record<string, PersonStyle>;
   sample: boolean;
+  ex: ExplainSet<'home'>;
 }) {
   const f = m.funds;
   return (
@@ -24,6 +32,7 @@ export function Funds({
       <CardHead
         title="Mutual funds"
         id="hm-funds"
+        why={ex['home.funds']}
         href={homeLink('/investments', sample)}
         linkLabel="All funds"
       />

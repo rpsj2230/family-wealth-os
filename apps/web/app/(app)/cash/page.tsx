@@ -15,6 +15,7 @@ import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
+import { cashExplain, bankBase } from '@/lib/explain-money';
 import { cashRatesFor, loadOffers } from '@/lib/rates-view';
 import { CashOverviewPanel } from './Overview';
 import { CashRegister } from './Register';
@@ -77,6 +78,20 @@ export default async function CashPage({
         inrBalance
       : null;
 
+  const exC = cashExplain(
+    overview,
+    bankBase({
+      today: today.toISOString().slice(0, 10),
+      scope: who ? styles[who]!.name : null,
+      blocks,
+      rates,
+      savingsRate,
+      tdsRate: interestTdsRate,
+    }),
+    false,
+    { banks, interestYear, avgRate, largest: largestCash(blocks) },
+  );
+
   return (
     <>
       <PageHead
@@ -100,6 +115,7 @@ export default async function CashPage({
         }
       />
       <CashOverviewPanel
+        ex={exC}
         o={overview}
         banks={banks}
         interestYear={interestYear}

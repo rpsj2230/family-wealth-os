@@ -23,6 +23,7 @@ import { Tabs } from '@/components/Tabs';
 import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
+import { bankBase, depositsExplain } from '@/lib/explain-money';
 
 export const metadata: Metadata = {
   title: 'Sample deposits',
@@ -84,6 +85,26 @@ export default async function DemoDeposits({
     defaultSavingsRate: DEFAULT_CONFIG.estimates.savingsRate,
     tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
   });
+  const todayIso = DEMO_TODAY.toISOString().slice(0, 10);
+  const depBanks = depositsByBank(scoped, todayIso);
+  const depLadder = maturityLadder(scoped);
+  const exD = depositsExplain(
+    overview,
+    bankBase({
+      today: todayIso,
+      scope: who ? (m.styles[who]?.name ?? null) : null,
+      blocks: scoped,
+      savingsRate: DEFAULT_CONFIG.estimates.savingsRate,
+      tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
+    }),
+    true,
+    {
+      cover: { limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks },
+      toConfirm: s.confirm.length,
+      banks: depBanks,
+      ladder: depLadder,
+    },
+  );
   return (
     <DemoShell>
       <PageHead
@@ -109,9 +130,10 @@ export default async function DemoDeposits({
         }
       />
       <DepositOverviewPanel
+        ex={exD}
         o={overview}
-        banks={depositsByBank(scoped, DEMO_TODAY.toISOString().slice(0, 10))}
-        ladder={maturityLadder(scoped)}
+        banks={depBanks}
+        ladder={depLadder}
         cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks }}
         toConfirm={s.confirm.length}
         styles={m.styles}

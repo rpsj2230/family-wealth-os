@@ -13,6 +13,7 @@ import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
 import type { ForeignLine } from '@/lib/accounts-summary';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
+import { accountsExplain, bankBase } from '@/lib/explain-money';
 import { quickModel } from '@/lib/quick-edit';
 
 export const metadata: Metadata = {
@@ -51,6 +52,17 @@ export default async function DemoAccounts({
     tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
     insuranceLimit: DEFAULT_CONFIG.deposits.insuranceLimit,
   });
+  const exA = accountsExplain(
+    overview,
+    bankBase({
+      today: DEMO_TODAY.toISOString().slice(0, 10),
+      scope: who ? styles[who]!.name : null,
+      blocks: shown,
+      savingsRate: DEFAULT_CONFIG.estimates.savingsRate,
+      tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
+    }),
+    true,
+  );
   const totals = Object.fromEntries(
     Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
   );
@@ -91,6 +103,7 @@ export default async function DemoAccounts({
           }
         />
         <BankOverviewPanel
+          ex={exA}
           o={overview}
           styles={styles}
           month="October"
@@ -132,6 +145,7 @@ export default async function DemoAccounts({
                 current={overview.current}
                 lines={overview.accounts + overview.deposits}
                 scope={who ? (styles[who]?.name ?? null) : null}
+                why={exA['accounts.grand']}
               />
             </ListingTools>
             <ForeignCard lines={FOREIGN} styles={styles} />

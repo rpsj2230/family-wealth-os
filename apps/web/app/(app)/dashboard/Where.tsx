@@ -1,5 +1,11 @@
 import Link from 'next/link';
-import { formatInrCompact, formatPct, type AllocKey, type PersonStyle } from '@fwos/core';
+import {
+  formatInrCompact,
+  formatPct,
+  type AllocKey,
+  type ExplainSet,
+  type PersonStyle,
+} from '@fwos/core';
 import { SplitBar } from '@/app/(app)/accounts/BankOverview';
 import { PersonBadge } from '@/components/Person';
 import type { HomeModel } from '@/lib/home';
@@ -22,16 +28,18 @@ export function Where({
   m,
   styles,
   sample,
+  ex,
 }: {
   m: HomeModel;
   styles: Record<string, PersonStyle>;
   sample: boolean;
+  ex: ExplainSet<'home'>;
 }) {
   const types = m.banks.overview.accountTypes;
   const foreign = m.currencies.length > 1;
   return (
     <section className="card hm-card" aria-labelledby="hm-where">
-      <CardHead title="Where the money is" id="hm-where" />
+      <CardHead title="Where the money is" id="hm-where" why={ex['home.where']} />
       <SplitBar
         caption="Net worth by kind of holding"
         parts={m.allocation.map((a) => ({

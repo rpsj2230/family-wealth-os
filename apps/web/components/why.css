@@ -19,6 +19,9 @@
   line-height: 0;
   font: inherit;
   -webkit-tap-highlight-color: transparent;
+  /* above a card's stretched link, so the "?" can be pressed on a card that is itself a link */
+  position: relative;
+  z-index: 2;
 }
 .why-btn svg {
   width: 100%;

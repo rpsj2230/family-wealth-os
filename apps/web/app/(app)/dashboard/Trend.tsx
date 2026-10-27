@@ -1,7 +1,14 @@
 import Link from 'next/link';
-import { HOME_RANGES, formatInrCompact, formatPct, type HomeRange } from '@fwos/core';
+import {
+  HOME_RANGES,
+  formatInrCompact,
+  formatPct,
+  type ExplainSet,
+  type HomeRange,
+} from '@fwos/core';
 import { SplitBar, plural } from '@/app/(app)/accounts/BankOverview';
 import { PlotChart, type PlotSeries } from '@/components/PlotChart';
+import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
 import { CardHead, Signed } from './parts';
@@ -37,7 +44,7 @@ function RangeLinks({ base, current }: { base: string; current: HomeRange }) {
  * Net worth over time for the range in the address, what it changed by (and by the same length of time before it), the straight-line
  * "if the pace holds" extension, and how much of the money in banks and funds was put in against how much it has grown.
  */
-export function Trend({ m, base }: { m: HomeModel; base: string }) {
+export function Trend({ m, base, ex }: { m: HomeModel; base: string; ex: ExplainSet<'home'> }) {
   const t = m.trend;
   const v = t.view;
   const g = t.growth;
@@ -64,7 +71,7 @@ export function Trend({ m, base }: { m: HomeModel; base: string }) {
 
   return (
     <section className="card hm-card hm-span2" aria-labelledby="hm-trend">
-      <CardHead title="Net worth over time" id="hm-trend" />
+      <CardHead title="Net worth over time" id="hm-trend" why={ex['home.trend']} />
       <RangeLinks base={base} current={t.range} />
       {v.change ? (
         <p className="hm-line">
@@ -108,7 +115,9 @@ export function Trend({ m, base }: { m: HomeModel; base: string }) {
 
       {g.current > 0 && (
         <div className="hm-growth">
-          <h3 className="bv-h">Money put in and growth, in banks and funds</h3>
+          <WhyHead why={ex['home.growth']}>
+            <h3 className="bv-h">Money put in and growth, in banks and funds</h3>
+          </WhyHead>
           <SplitBar
             caption="Money put in against growth"
             parts={[
@@ -137,7 +146,7 @@ export function Trend({ m, base }: { m: HomeModel; base: string }) {
               </strong>
               <span className="bv-lpct">
                 {g.growthPct !== null
-                  ? `${formatPct(Math.abs(g.growthPct), 1)} on what was put in`
+                  ? `${formatPct(Math.abs(g.growthPct), 1)} on the ${formatInrCompact(g.invested)} put in`
                   : ''}
                 {g.approximate ? ' · approximate: some funds have no statement' : ''}
               </span>

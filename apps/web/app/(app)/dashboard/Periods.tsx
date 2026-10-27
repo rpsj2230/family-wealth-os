@@ -3,11 +3,13 @@ import {
   formatInrCompact,
   formatPct,
   type ClassPeriod,
+  type ExplainSet,
   type PeriodGainsRow,
   type PeriodWindow,
 } from '@fwos/core';
 import { plural } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
+import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
 import { homeLink } from './parts';
@@ -57,7 +59,15 @@ const rowSince = (r: PeriodGainsRow) => (r.since ? `${r.label} from ${niceDate(r
  * kind of holding and in all. Worked out from the terms of each holding (the shared period figures), not from saved totals; money
  * put in or paid out is shown beneath and is never counted as profit. A table on a wide page, a card per kind on a phone.
  */
-export function Periods({ m, sample }: { m: HomeModel; sample: boolean }) {
+export function Periods({
+  m,
+  sample,
+  ex,
+}: {
+  m: HomeModel;
+  sample: boolean;
+  ex: ExplainSet<'home'>;
+}) {
   const p = m.periods;
   const w = p.windows;
   const rows = [...p.rows, p.total];
@@ -73,11 +83,17 @@ export function Periods({ m, sample }: { m: HomeModel; sample: boolean }) {
   return (
     <section className="card hm-card hm-wide hm-periods-card" aria-labelledby="hm-periods">
       <header className="hm-head">
-        <h2 id="hm-periods">Profit earned, by period</h2>
+        <WhyHead why={ex['home.periods']}>
+          <h2 id="hm-periods">Profit earned, by period</h2>
+        </WhyHead>
         <span className="muted small">worked out from the terms, not from saved totals</span>
       </header>
       <p className="small" data-testid="hm-periods-summary">
         In all, {sentence('recent')}; {sentence('month')}; {sentence('fy')}; {sentence('lastFy')}.
+      </p>
+      <p className="small muted">
+        Each % is the profit as a share of the money at work in that period; money put in or paid
+        out is shown beneath and is never counted as profit.
       </p>
       <table className="hm-periods" data-testid="hm-periods">
         <caption className="sr-only">
