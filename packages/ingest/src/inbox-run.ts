@@ -22,6 +22,7 @@ import {
   type KnownAccount,
 } from './bank-email';
 import { looksLikeCas } from './cas';
+import { senderAddress, unwrapForward } from './forwarded';
 import { looksLikeTaxFile } from './taxfiles';
 
 export interface InboxMessage {
@@ -82,7 +83,15 @@ export interface InboxReport {
 export async function runInbox(
   messages: InboxMessage[],
   io: InboxIo,
-  cfg: { today: string; ai: { provider: AiProvider; key: string; model?: string } | null },
+  cfg: {
+    today: string;
+    ai: { provider: AiProvider; key: string; model?: string } | null;
+    /**
+     * Your own mailboxes (the ones that forward the bank's mail to the app): a message from one of them is a forward, and the bank is
+     * recognised by the original sender written inside it. A message from any other address is judged by its own sender.
+     */
+    trustedForwarders?: string[];
+  },
 ): Promise<InboxReport> {
   const report: InboxReport = {
     seen: 0,
@@ -102,7 +111,11 @@ export async function runInbox(
         report.skipped++;
         continue;
       }
-      const domain = senderDomain(m.from);
+      // a forward from one of your own mailboxes: judge the bank by the original sender inside it
+      const own = (cfg.trustedForwarders ?? []).map((a) => a.toLowerCase());
+      const fw = own.includes(senderAddress(m.from)) ? unwrapForward(m.subject, m.text) : null;
+      const from = fw?.found && fw.originalFrom ? fw.originalFrom : m.from;
+      const domain = senderDomain(from);
       const base = {
         messageId: m.messageId,
         receivedOn: m.receivedOn,
@@ -143,7 +156,7 @@ export async function runInbox(
       }
 
       const parsed = parseBankEmail({
-        from: m.from,
+        from,
         subject: m.subject,
         text: m.text,
         attachments: m.attachments.map((a) => a.filename),

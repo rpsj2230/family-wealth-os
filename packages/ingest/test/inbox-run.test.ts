@@ -303,3 +303,43 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
     expect(asked).toBe(1);
   });
 });
+
+describe('runInbox: bank alerts forwarded from your own mailbox', () => {
+  const body = `---------- Forwarded message ---------\nFrom: HDFC Bank <alerts@hdfcbank.bank.in>\nDate: Mon, 26 Oct 2026\nSubject: Alert\nTo: <me@gmail.com>\n\n${HDFC}`;
+  const fwd = (over: Partial<InboxMessage> = {}) =>
+    msg({
+      messageId: 'f1',
+      from: 'Me <me@gmail.com>',
+      subject: 'Fwd: Balance Change Alert',
+      text: body,
+      ...over,
+    });
+  const cfg = { today: '2026-10-26', ai: null, trustedForwarders: ['me@gmail.com'] };
+
+  it('records the balance by itself when your own address forwarded a message from the bank', async () => {
+    const { io, applied, rows } = fakeIo();
+    const r = await runInbox([fwd()], io, cfg);
+    expect(r.applied).toBe(1);
+    expect(applied[0]).toMatchObject({ assetId: 'hdfc1' });
+    expect(rows[0]!.fromDomain).toBe('hdfcbank.bank.in');
+  });
+  it('sends it to review when the forwarder is not one of your addresses', async () => {
+    const { io, applied } = fakeIo();
+    const r = await runInbox([fwd({ from: 'Someone <x@gmail.com>' })], io, cfg);
+    expect(applied).toHaveLength(0);
+    expect(r.needsReview).toBe(1);
+  });
+  it('does not trust a forward whose original sender is not the bank', async () => {
+    const { io, applied } = fakeIo();
+    const evil = body.replace('alerts@hdfcbank.bank.in', 'alerts@hdfc-bank.example');
+    const r = await runInbox([fwd({ text: evil })], io, cfg);
+    expect(applied).toHaveLength(0);
+    expect(r.needsReview).toBe(1);
+  });
+  it('sends it to review when no original sender can be found in the forward', async () => {
+    const { io, applied } = fakeIo();
+    const r = await runInbox([fwd({ text: HDFC })], io, cfg);
+    expect(applied).toHaveLength(0);
+    expect(r.needsReview).toBe(1);
+  });
+});

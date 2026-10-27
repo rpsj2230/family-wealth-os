@@ -16,7 +16,7 @@ import {
   type InboxMessage,
   type KnownAccount,
 } from '@fwos/ingest';
-import { importCasPdf, importTaxFile } from '@fwos/data';
+import { importCasPdf, importTaxFile, loadSettings } from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -315,7 +315,23 @@ async function main() {
     await client.logout();
   }
 
-  const report = await runInbox(messages, io, { today, ai });
+  // your own mailboxes that forward the banks' mail: the addresses listed in Settings and every household member's login address
+  const members = must(
+    await db.from('household_members').select('user_id').eq('household_id', hh),
+    'members',
+  );
+  const trustedForwarders = new Set<string>(
+    (await loadSettings(db, hh)).config.inbox.trustedForwarders,
+  );
+  for (const m of members) {
+    const u = await db.auth.admin.getUserById(m.user_id as string);
+    if (u.data.user?.email) trustedForwarders.add(u.data.user.email.toLowerCase());
+  }
+  const report = await runInbox(messages, io, {
+    today,
+    ai,
+    trustedForwarders: [...trustedForwarders],
+  });
   console.log(
     `Inbox: ${report.seen} messages (${report.skipped} already handled): applied ${report.applied}, to review ${report.needsReview}, ignored ${report.ignored}, errors ${report.errors}`,
   );

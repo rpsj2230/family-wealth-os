@@ -31,7 +31,7 @@ export function RuleGroupForm({
           <Field key={f.name} label={f.label} hint={f.hint} unit={f.unit}>
             <input
               name={f.name}
-              inputMode={f.kind === 'list' ? 'text' : 'decimal'}
+              inputMode={f.kind === 'list' || f.kind === 'emails' ? 'text' : 'decimal'}
               defaultValue={String(values[f.name] ?? '')}
             />
           </Field>

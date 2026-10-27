@@ -5,7 +5,7 @@
  */
 import { DEFAULT_CONFIG, type AppConfig } from '@fwos/core';
 
-export type FieldKind = 'int' | 'money' | 'pct' | 'pct4' | 'list' | 'check';
+export type FieldKind = 'int' | 'money' | 'pct' | 'pct4' | 'list' | 'emails' | 'check';
 
 export interface FieldSpec {
   name: string;
@@ -23,7 +23,7 @@ export interface FieldSpec {
 }
 
 export type RuleGroup =
-  'deposits' | 'reminders' | 'estimates' | 'rates' | 'refunds' | 'harvest' | 'liquidity';
+  'deposits' | 'reminders' | 'estimates' | 'inbox' | 'rates' | 'refunds' | 'harvest' | 'liquidity';
 
 export interface GroupSpec {
   key: Exclude<RuleGroup, 'liquidity'>;
@@ -38,6 +38,7 @@ export const RULE_GROUPS: RuleGroup[] = [
   'deposits',
   'reminders',
   'estimates',
+  'inbox',
   'rates',
   'refunds',
   'harvest',
@@ -48,6 +49,7 @@ export const GROUP_TITLE: Record<RuleGroup, string> = {
   deposits: 'Deposits',
   reminders: 'Reminders',
   estimates: 'Estimated balances',
+  inbox: 'Bank e-mail forwarding',
   rates: 'Interest-rate suggestions',
   refunds: 'Tax refunds on NRO interest',
   harvest: 'Tax-gain harvesting',
@@ -204,6 +206,22 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         hint: 'Includes instalments made since the last recorded value in a fund’s estimated worth.',
         kind: 'check',
         path: ['estimates', 'includeSip'],
+      },
+    ],
+  },
+  {
+    key: 'inbox',
+    id: 'inbox-forwarding',
+    title: 'Bank e-mail forwarding',
+    purpose: 'Your own mailboxes that forward the banks’ e-mails to the app.',
+    fields: [
+      {
+        name: 'trustedForwarders',
+        label: 'Addresses you forward from',
+        hint: 'The bank writes to your mailbox and a filter forwards it here. A message from one of these addresses is read as a forward: the bank is recognised by the original sender inside it, so a balance is recorded by itself instead of waiting for you. Up to 10 addresses, separated by commas, for example yours and Ragini’s.',
+        kind: 'emails',
+        path: ['inbox', 'trustedForwarders'],
+        unit: 'e-mail addresses, separated by commas',
       },
     ],
   },
@@ -464,6 +482,7 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
     case 'check':
       return v === true;
     case 'list':
+    case 'emails':
       return Array.isArray(v) ? v.join(', ') : '';
     case 'pct':
       return String(pctOf(Number(v)));
@@ -530,6 +549,22 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
     const text = (get(f.name) ?? '').trim();
     if (f.kind === 'check') {
       bucket[key] = get(f.name) === 'on';
+      continue;
+    }
+    if (f.kind === 'emails') {
+      const list = text
+        .split(/[\s,;]+/)
+        .filter(Boolean)
+        .map((x) => x.toLowerCase());
+      const bad = list.find((x) => !/^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(x));
+      if (bad || list.length > 10)
+        return {
+          ok: false,
+          message: bad
+            ? `${f.label}: “${bad}” is not an e-mail address.`
+            : `${f.label}: at most 10 addresses.`,
+        };
+      bucket[key] = [...new Set(list)];
       continue;
     }
     if (f.kind === 'list') {

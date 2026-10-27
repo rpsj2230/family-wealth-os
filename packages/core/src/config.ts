@@ -35,6 +35,10 @@ export interface AppConfig {
     /** a fund statement shows a SIP as stopped when its last instalment is more than this many days before the statement ends */
     sipStoppedAfterDays: number;
   };
+  inbox: {
+    /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
+    trustedForwarders: string[];
+  };
   rates: {
     /** an offer not checked within this many days is shown as old */
     staleDays: number;
@@ -201,6 +205,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     includeSip: true,
     sipStoppedAfterDays: 45,
   },
+  inbox: { trustedForwarders: [] },
   rates: {
     staleDays: 30,
     minRateGap: 0.0025,
@@ -384,6 +389,17 @@ export function configFromJson(raw: unknown): AppConfig {
       sipStoppedAfterDays: Math.round(
         num(est.sipStoppedAfterDays, d.estimates.sipStoppedAfterDays, 20, 400),
       ),
+    },
+    inbox: {
+      trustedForwarders: (() => {
+        const raw = obj(r.inbox).trustedForwarders;
+        const list = Array.isArray(raw)
+          ? raw
+              .map((x) => String(x).trim().toLowerCase())
+              .filter((x) => /^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(x))
+          : [];
+        return [...new Set(list)].slice(0, 10);
+      })(),
     },
     rates: {
       staleDays: Math.round(num(rat.staleDays, d.rates.staleDays, 1, 365)),
