@@ -16,7 +16,8 @@ const empty: SetupFacts = {
     'liquidity',
   ],
   taxRules: [],
-  aiKeySet: false,
+  aiKeysTotal: 0,
+  aiKeysOn: 0,
   integrationSaved: false,
   inboxLabel: 'FWOS/Inbox',
   emailsRead: 0,
@@ -40,7 +41,8 @@ const full: SetupFacts = {
   spendingItems: 1,
   unconfirmedRuleGroups: [],
   taxRules: [{ fy: '2026-27', verified: true }],
-  aiKeySet: true,
+  aiKeysTotal: 2,
+  aiKeysOn: 2,
   integrationSaved: true,
   emailsRead: 12,
   telegramSet: true,
@@ -136,6 +138,20 @@ describe('computeSetupStatus', () => {
       'no e-mail has been read',
     );
     expect(byKey({ ...full, integrationSaved: false, emailsRead: 4 }).gmail!.done).toBe(true);
+  });
+
+  it('counts the AI as ready when any one key is switched on', () => {
+    expect(byKey({ ...full, aiKeysTotal: 0, aiKeysOn: 0 })['ai-key']!.done).toBe(false);
+    const off = byKey({ ...full, aiKeysTotal: 2, aiKeysOn: 0 })['ai-key']!;
+    expect(off.done).toBe(false);
+    expect(off.hint).toBe(
+      'All 2 saved keys are switched off. Switch one on so the app can read PDF statements and unfamiliar e-mails.',
+    );
+    const one = byKey({ ...full, aiKeysTotal: 3, aiKeysOn: 1 })['ai-key']!;
+    expect(one.done).toBe(true);
+    expect(one.hint).toContain('One key is switched on (3 saved)');
+    const two = byKey({ ...full, aiKeysTotal: 2, aiKeysOn: 2 })['ai-key']!;
+    expect(two.hint).toContain('2 keys are switched on, tried in the order you chose');
   });
 
   it('needs both 26AS and AIS, and says which one is missing', () => {

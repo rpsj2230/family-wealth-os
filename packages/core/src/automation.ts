@@ -28,7 +28,7 @@ export interface AutomationInput {
     /** messages logged in the last 7 days by outcome */
     week: { applied: number; needs_review: number; ignored: number; error: number };
     waiting: number;
-    aiKeySet: boolean;
+    aiReady: boolean;
     label: string;
   };
   market: { navLatest: string | null; fxLatest: string | null };
@@ -99,8 +99,10 @@ export function buildAutomationCards(i: AutomationInput): AutomationCard[] {
       );
     }
     if (i.inbox.waiting > 0) lines.push(`${i.inbox.waiting} waiting for your review.`);
-    if (!i.inbox.aiKeySet)
-      lines.push('No AI key is set, so PDF statements are not read (Settings, Email and AI).');
+    if (!i.inbox.aiReady)
+      lines.push(
+        'No AI key is switched on, so PDF statements are not read (Settings, Connections, Bank e-mails and AI).',
+      );
     cards.push({
       key: 'email',
       title: 'Bank email reader',

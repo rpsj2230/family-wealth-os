@@ -39,7 +39,7 @@ export default async function InboxPage({
       .order('nickname'),
     supabase.from('institutions').select('id, name'),
     supabase.from('owners').select('id, display_name'),
-    supabase.from('integration_settings').select('ai_key_set, inbox_label').maybeSingle(),
+    supabase.from('integration_settings').select('inbox_label').maybeSingle(),
     loadAutomation(supabase, iso),
   ]);
 
@@ -86,7 +86,7 @@ export default async function InboxPage({
     recordedByYou: recordedBy.has((m.message_id as string).slice(0, 200)),
     bodyText: (m.body_text as string | null) ?? null,
   }));
-  const settings = cfg.data as { ai_key_set?: boolean; inbox_label?: string } | null;
+  const settings = cfg.data as { inbox_label?: string } | null;
   const emailCard = auto.cards.find((c) => c.key === 'email');
 
   return (
@@ -114,7 +114,7 @@ export default async function InboxPage({
         accounts={accounts}
         automation={auto.cards}
         label={settings?.inbox_label ?? 'FWOS/Inbox'}
-        aiKeySet={!!settings?.ai_key_set}
+        aiReady={auto.aiReady}
       />
     </>
   );

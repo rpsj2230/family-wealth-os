@@ -15,7 +15,7 @@ export function demoAutomation(): AutomationCard[] {
       lastLoggedAt: '2026-10-25T14:20:00Z',
       week: { applied: 3, needs_review: 3, ignored: 4, error: 1 },
       waiting: 3,
-      aiKeySet: false,
+      aiReady: false,
       label: 'FWOS/Inbox',
     },
     market: { navLatest: '2026-10-23', fxLatest: '2026-10-26' },

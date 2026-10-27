@@ -1,5 +1,5 @@
 name: Refresh interest rates
-# Every Monday: reads the bank rate pages listed in Settings (Bank rate pages) with your AI key and refreshes the stored offers.
+# Every Monday: reads the bank rate pages listed in Settings (Bank rate pages) with your AI keys (in their order) and refreshes the stored offers.
 on:
   schedule:
     - cron: '40 21 * * 0'

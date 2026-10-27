@@ -165,7 +165,7 @@ first, includes funds with a running SIP, and counts long-term gains you have al
 
 ### Which AI reads the pages and e-mails
 
-Settings → Bank e-mails and AI offers **Anthropic (Claude Haiku)**, OpenRouter, Groq and Google Gemini. Claude Haiku is the most reliable: it answers every time and costs a fraction of a cent for a rate page, so a few dollars of credit lasts years at this volume. Create a key at console.anthropic.com, add a little credit, paste the key and press **Test**. The free providers cost nothing but some of their models are slow or restricted; the reader remembers which model worked and asks it first.
+Settings → Connections → Bank e-mails and AI → **AI keys** lets you save a key for each of **Anthropic (Claude Haiku)**, OpenRouter, Groq and Google Gemini, and put them in order (see *Several AI keys, in order* below). Claude Haiku is the most reliable: it answers every time and costs a fraction of a cent for a rate page, so a few dollars of credit lasts years at this volume. Create a key at console.anthropic.com, add a little credit, paste the key and press **Test this key**. The free providers cost nothing but some of their models are slow or restricted; the reader remembers which model worked and asks it first.
 
 ## Who can open the handbook, and when
 
@@ -192,7 +192,7 @@ Accounts → **Manage** → **Change the order** lists your banks and, inside ea
 
 ## Form 26AS and the AIS
 
-Tax filing papers → "What the tax department holds". Download **Form 26AS** from TRACES (PDF, text or HTML; the PDF opens with your date of birth, which the app already has from Settings) and the **Annual Information Statement** from the income-tax e-filing portal (PDF or JSON), then upload them there, or e-mail them to your inbox label and they are read by themselves. The app lists each deductor and the tax credited, then compares it with the tax it expected on your deposit interest and fund sales, and compares the AIS's interest, dividends and fund sales with your own records. Differences are shown for you to check; nothing is changed automatically. The department does not publish the exact file layouts, so the reader looks for the parts every version has; if it cannot read a file, forward it by e-mail and an AI reader (the key in Settings) tries, marking the result "read by AI: check the figures".
+Tax filing papers → "What the tax department holds". Download **Form 26AS** from TRACES (PDF, text or HTML; the PDF opens with your date of birth, which the app already has from Settings) and the **Annual Information Statement** from the income-tax e-filing portal (PDF or JSON), then upload them there, or e-mail them to your inbox label and they are read by themselves. The app lists each deductor and the tax credited, then compares it with the tax it expected on your deposit interest and fund sales, and compares the AIS's interest, dividends and fund sales with your own records. Differences are shown for you to check; nothing is changed automatically. The department does not publish the exact file layouts, so the reader looks for the parts every version has; if it cannot read a file, forward it by e-mail and an AI reader (the keys in Settings) tries, marking the result "read by AI: check the figures".
 
 ## Getting your fund statements by e-mail
 
@@ -214,7 +214,7 @@ Accounts, **Manage**, **Edit many accounts at once** is one table of every accou
 
 ## Rates, and where to put new money
 
-**Rates** is only about rates. Each bank has a card: its best savings rate and best NRE deposit rate, the savings rate by balance drawn as steps, how the rates last moved, and a **Where from** line that says whether each rate was typed or pasted by you or read from the bank's page (which page, which date). Show _Banks I use_ or _All banks on file_, and sort by highest deposit, highest savings, name or oldest check; the choice is in the address. The weekly refresh runs on Monday; if it could not read a bank's page, the card says why (no AI key, the bank refused, the address has changed, the page needs a browser) and what to do.
+**Rates** is only about rates. Each bank has a card: its best savings rate and best NRE deposit rate, the savings rate by balance drawn as steps, how the rates last moved, and a **Where from** line that says whether each rate was typed or pasted by you or read from the bank's page (which page, which date). Show _Banks I use_ or _All banks on file_, and sort by highest deposit, highest savings, name or oldest check; the choice is in the address. The weekly refresh runs on Monday; if it could not read a bank's page, the card says why (no AI key switched on, the bank refused, the address has changed, the page needs a browser) and what to do.
 
 Open a bank to change its rates in place: edit the figure and press Save. If you change a figure the bank page gave, pick why it was wrong; the refresh checks the page again next time, takes the rate back when the page agrees with you, and otherwise saves a rule (shown under _How it is read_, with an on and off switch, and you can write your own). _History and log_ shows the best rates over time and every change with the old and new figure, who made it and why. Paste your notes or add a rate under _Add or import_.
 
@@ -234,7 +234,7 @@ Every option stays inside the deposit-insurance limit at each bank for the chose
 
 **Banks that refuse automated visits.** Some banks (ESAF, HDFC, Equitas, Yes Bank, AU, IDFC First, IndusInd, RBL) answer a program with "Access Denied" or "request rejected", and a real browser run by a program is refused the same way. That is not worked around. Three things are done instead: the bank's own PDF rate sheets are read where they exist (AU); a labelled public comparison page is read when the bank's own page cannot be (marked third party, with its date, and it never removes a rate already on file); and each bank row in Settings → Bank rate pages has **Paste the page instead**: open the page in your own browser, press Ctrl+A then Ctrl+C, and paste. The AI reads the rates from the text and saves them like a refresh.
 
-**Check sync (Settings → Bank rate pages).** Every listed bank has a **Check sync** button. It reads the saved page (and the bank's own published sheets), asks your AI to find the rates in it, and tells you step by step whether the weekly refresh will work: the page read, the number of characters, and how many fixed-deposit and savings rates were found. Nothing is saved. The check runs from the app's server, while the weekly refresh runs from GitHub, so a page can behave differently in the two places; if the check passes and the weekly run still fails, say so and the page is looked at again.
+**Check sync (Settings → Bank rate pages).** Every listed bank has a **Check sync** button. It reads the saved page (and the bank's own published sheets), asks your AI keys (in their order) to find the rates in it, and tells you step by step whether the weekly refresh will work: the page read, the number of characters, and how many fixed-deposit and savings rates were found. Nothing is saved. The check runs from the app's server, while the weekly refresh runs from GitHub, so a page can behave differently in the two places; if the check passes and the weekly run still fails, say so and the page is looked at again.
 
 ## Rates from banks that block automatic reading
 
@@ -248,11 +248,27 @@ Every bank with a rate page saved in Settings is read, including banks where you
 - **Gifts**: on Others > Money lent, choose *Gift (will not come back, not counted)*, or mark an existing loan as a gift. It stays on the list for the record but is left out of net worth, totals, reminders and the monthly update.
 
 
+## Several AI keys, in order
+
+In **Settings > Connections > Bank e-mails and AI** the **AI keys** list holds one key per service (Anthropic, OpenRouter, Groq, Google Gemini). Each key has:
+
+- **a place in the order.** The first key that is switched on is the **First choice**; the next ones are **Fallback 2**, **Fallback 3**. Change the order with **Move up** and **Move down** (they work with the keyboard too).
+- **an On / Off switch.** A key switched off is kept but never used. Switch it back on when you want it again.
+- **a status**: when it last worked (and with which model), or why and when it last failed in plain words (for example "Groq answered 429 (busy, or its limit is used up for now)"), and when it was last tested.
+
+**How the fail-over works.** Everything that asks the AI (reading unfamiliar bank e-mails and PDF statements, reading bank rate pages, **Check sync** and **Paste the page instead** in Settings, the self-test) asks the first key. If it fails, because the service refused the key, has no credit, is busy, did not answer in time, could not be reached, or gave an answer that could not be used, the next key that is on is asked, and so on; the first usable answer is taken. Inside one service the model fallback still applies (OpenRouter tries its free models one after another). During one job run a key that was **refused or out of credit is skipped** for the rest of the run, so every bank page does not wait for the same failure; a key that was only busy or slow is tried again on the next item (and left out after three failures in a row). If no key can answer, the message lists every key's reason with what to do. The result says which key answered: the Check sync steps and the "Saved" message after pasting a page say, for example, "Groq answered after Anthropic answered 402 (no credit left)", and the inbox log and the weekly rates line say the same.
+
+**Buttons.** **Test this key** tests that key alone (even if it is switched off) and says so. **Test the whole chain** asks the keys that are on, in order, with a made-up bank alert, exactly as a job would, and says which key answers and what each earlier key did; keys after the answering one are not asked. **Replace the key** swaps a key for a new one and keeps its place. **Remove** (it asks first) deletes it from the server. **Add a key** offers only the services that have no key yet. A key is write-only: it is never shown again after saving.
+
+**What it costs.** Nothing extra: the free services stay free, and a pay-per-use key is only asked when the keys before it fail. If you keep Anthropic first, it is used for every reading; put a free key first if you would rather spend nothing and keep Anthropic as the fallback.
+
+The key you had before this was added became the **First choice** automatically. The Gmail label is saved separately, under the keys.
+
 ## AI key: OpenRouter with automatic fallback
 
-In **Settings > Bank emails and AI** choose **OpenRouter** and paste a free key from openrouter.ai/keys (the key is write-only). The reader asks OpenRouter for its free text models, orders them (large instruction models first, reasoning models last) and tries them one after another: if one is busy, rate limited, withdrawn or does not answer in the expected form, the next one is used, up to six per request. Groq and Google Gemini still work as before. To check the chain at any time, run **Check email and AI reading** in GitHub > Actions: it reads back a made-up alert and lists the models in the order they will be tried. Free models have daily limits; adding a small credit on openrouter.ai raises them.
+Add **OpenRouter** under **AI keys** and paste a free key from openrouter.ai/keys (the key is write-only). The reader asks OpenRouter for its free text models, orders them (large instruction models first, reasoning models last) and tries them one after another: if one is busy, rate limited, withdrawn or does not answer in the expected form, the next one is used, up to six per request. Groq and Google Gemini still work as before. To check the chain at any time, run **Check email and AI reading** in GitHub > Actions: it reads back a made-up alert and lists the models in the order they will be tried. Free models have daily limits; adding a small credit on openrouter.ai raises them.
 
-**Testing the AI connection.** Settings > Connections shows which AI service is connected, when it was last tested and how it went. **Test the AI connection** asks the service to read a made-up bank alert and says what worked or what to fix (for example a key with no free access). The key is used once on the server for the test and is never shown. The same check runs in GitHub > Actions > *Check email and AI reading*, which also checks the Gmail label.
+**Testing the AI connection.** Each key in Settings > Connections shows when it was last tested and how it went. **Test this key** asks that service to read a made-up bank alert and says what worked or what to fix (for example a key with no free access). The key is used once on the server for the test and is never shown. The same check runs in GitHub > Actions > *Check email and AI reading*, which tests every key that is switched on (each on its own, so a broken fallback shows too) and also checks the Gmail label.
 
 
 ## Reports

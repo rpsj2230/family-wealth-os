@@ -98,7 +98,10 @@ describe('sourceStatus', () => {
     expect(s.fix?.href).toBe('/settings#rates');
   });
   it('says a missing AI key is the reason and points to the setting', () => {
-    const s = sourceStatus(src({ lastResult: 'Not read: no AI key is saved. Add a free key.' }), t);
+    const s = sourceStatus(
+      src({ lastResult: 'Not read: no AI key is switched on. Add a free key.' }),
+      t,
+    );
     expect(s.health).toBe('bad');
     expect(s.fix?.href).toBe('/settings#email');
   });
@@ -134,6 +137,45 @@ describe('sourceStatus', () => {
     expect(
       sourceStatus(src({ lastResult: 'could not refresh: AI service answered 429' }), t).health,
     ).toBe('warn');
+  });
+  it('reads the answer of several AI keys', () => {
+    const refused = sourceStatus(
+      src({
+        lastResult:
+          'could not refresh: AI service: Anthropic answered 401 (the key was refused); Groq answered 402 (no credit left)',
+      }),
+      t,
+    );
+    expect(refused.headline).toBe('The AI service refused every saved key.');
+    expect(refused.fix?.href).toBe('/settings#email');
+    expect(
+      sourceStatus(
+        src({
+          lastResult:
+            'could not refresh: AI service: Groq answered 429 (busy, or its limit is used up for now); Gemini answered 429 (busy, or its limit is used up for now)',
+        }),
+        t,
+      ).health,
+    ).toBe('warn');
+    expect(
+      sourceStatus(
+        src({
+          lastResult:
+            'could not refresh: AI service: Anthropic answered 401 (the key was refused); Groq answered 429 (busy)',
+        }),
+        t,
+      ).headline,
+    ).toBe('The AI service could not answer (401, 429).');
+  });
+  it('says a read that needed the next AI key was still a read', () => {
+    const s = sourceStatus(
+      src({
+        lastResult:
+          'read 12 rates: 0 new, 0 changed, 12 unchanged; read by Groq after Anthropic answered 401 (the key was refused)',
+      }),
+      t,
+    );
+    expect(s.health).toBe('ok');
   });
   it('treats a clean read as ok and a read with differences as needing a look', () => {
     expect(

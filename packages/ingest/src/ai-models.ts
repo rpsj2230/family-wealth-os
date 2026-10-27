@@ -171,6 +171,14 @@ type Fetch = (
   init?: Record<string, unknown>,
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text?(): Promise<string> }>;
 
+/** How the AI services are reached. The jobs pass the real `fetch`; the tests pass a fake, so nothing here touches the network. */
+export type AiFetch = (
+  u: string,
+  init?: Record<string, unknown>,
+) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text(): Promise<string> }>;
+
+export const realFetch: AiFetch = (u, init) => fetch(u, init as RequestInit | undefined);
+
 /** The model to use for this key, or null when the provider's list cannot be read (the caller then uses its default). */
 export async function resolveModel(
   f: Fetch,

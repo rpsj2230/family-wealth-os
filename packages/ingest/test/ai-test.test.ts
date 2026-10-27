@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { testAiConnection } from '../src/ai-test';
+import { createAiChain } from '../src/ai-chain';
+import { testAiChain, testAiConnection } from '../src/ai-test';
+import { chatReply, failure, fakeAiFetch } from './fake-ai';
 
 const today = '2026-10-26';
 const reading = (amount: number, last4: string) =>
@@ -82,5 +84,68 @@ describe('testAiConnection', () => {
     const r = await testAiConnection({ provider: 'groq', key: 'k', today });
     expect(r.ok).toBe(false);
     expect(r.steps[r.steps.length - 1]!.text).toContain('read wrongly');
+  });
+});
+
+describe('testAiChain', () => {
+  const alertRead = (amount: number, last4: string) => chatReply(reading(amount, last4));
+  const keys = [
+    { provider: 'anthropic' as const, key: 'sk-ant-secret-1' },
+    { provider: 'groq' as const, key: 'gsk-secret-2' },
+    { provider: 'gemini' as const, key: 'AIza-secret-3' },
+  ];
+
+  it('asks the keys in order and says which one answers, what the failed ones did, and that later ones were not needed', async () => {
+    const fake = fakeAiFetch((c) =>
+      c.body === null
+        ? undefined
+        : c.provider === 'anthropic'
+          ? failure(401)
+          : alertRead(123456.78, '4321'),
+    );
+    const r = await testAiChain(createAiChain(keys, { fetch: fake.fetch }), today);
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('groq');
+    expect(r.steps.map((s) => [s.ok, s.neutral ?? false])).toEqual([
+      [false, false],
+      [true, false],
+      [true, true],
+    ]);
+    expect(r.steps[0]!.text).toContain('1. Anthropic (Claude Haiku): Anthropic refused the key');
+    expect(r.steps[1]!.text).toContain(
+      '2. Groq: answered; the made-up alert was read back correctly',
+    );
+    expect(r.steps[2]!.text).toContain('3. Google Gemini: not asked');
+    expect(fake.chatCalls().map((c) => c.provider)).toEqual(['anthropic', 'groq']);
+    expect(JSON.stringify(r)).not.toMatch(/secret/);
+  });
+
+  it('moves on from a key that reads the alert wrongly', async () => {
+    const fake = fakeAiFetch((c) =>
+      c.body === null
+        ? undefined
+        : c.provider === 'anthropic'
+          ? alertRead(1, '9999')
+          : alertRead(123456.78, '4321'),
+    );
+    const r = await testAiChain(createAiChain(keys.slice(0, 2), { fetch: fake.fetch }), today);
+    expect(r).toMatchObject({ ok: true, provider: 'groq' });
+    expect(r.steps[0]!.text).toContain('nothing usable');
+  });
+
+  it('fails with a line per key when none can answer', async () => {
+    const fake = fakeAiFetch((c) =>
+      c.body === null ? undefined : failure(c.provider === 'groq' ? 429 : 500),
+    );
+    const r = await testAiChain(createAiChain(keys.slice(0, 2), { fetch: fake.fetch }), today);
+    expect(r).toMatchObject({ ok: false, provider: null, model: null });
+    expect(r.steps).toHaveLength(2);
+    expect(r.steps.every((s) => !s.ok)).toBe(true);
+  });
+
+  it('says so when no key is switched on', async () => {
+    const r = await testAiChain(createAiChain([]), today);
+    expect(r.ok).toBe(false);
+    expect(r.steps[0]!.text).toContain('No AI key is switched on');
   });
 });

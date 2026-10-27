@@ -1,4 +1,5 @@
 import {
+  callAi,
   build26asRequest,
   buildAisRequest,
   casPdfText,
@@ -10,7 +11,7 @@ import {
   parseAisText,
   sniffTaxFile,
   type Ais,
-  type AiProvider,
+  type AiChain,
   type Form26as,
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -36,7 +37,8 @@ const htmlToPlain = (h: string) =>
 /**
  * Reads an uploaded Form 26AS or AIS (PDF, text, saved web page or JSON), checks that it belongs to the chosen person and stores
  * the figures. `passwords` are tried in turn for a protected PDF (26AS: date of birth as DDMMYYYY; AIS: PAN in lower case then the
- * date of birth). If the plain reader finds nothing and an AI key is given, the AI is asked for the same table.
+ * date of birth). If the plain reader finds nothing and AI keys are given, the AI is asked for the same table (each key in order, until
+ * one answers).
  */
 export async function importTaxFile(
   db: SupabaseClient,
@@ -45,12 +47,8 @@ export async function importTaxFile(
   bytes: Uint8Array,
   opts: {
     passwords: string[];
-    ai: { provider: AiProvider; key: string; model?: string } | null;
+    ai: AiChain | null;
     fyHint?: string | null;
-    fetchJson?: (
-      url: string,
-      init: { method: 'POST'; headers: Record<string, string>; body: string },
-    ) => Promise<unknown>;
   },
 ): Promise<TaxFileResult> {
   const fail = (message: string): TaxFileResult => ({
@@ -106,27 +104,27 @@ export async function importTaxFile(
     parsed.kind === '26as'
       ? parsed.deductors.length === 0 && parsed.taxPaid.length === 0
       : parsed.lines.length === 0;
-  if (empty && opts.ai && opts.fetchJson && (text !== null || json !== null)) {
+  if (empty && opts.ai && !opts.ai.empty && (text !== null || json !== null)) {
     const body = text ?? JSON.stringify(json);
-    const req =
-      parsed.kind === '26as'
-        ? build26asRequest(opts.ai.provider, opts.ai.key, body, opts.ai.model)
-        : buildAisRequest(opts.ai.provider, opts.ai.key, body, opts.ai.model);
-    try {
-      const answer = await opts.fetchJson(req.url, req.init);
-      const viaAi =
-        parsed.kind === '26as'
-          ? parse26asAi(opts.ai.provider, answer)
-          : parseAisAi(opts.ai.provider, answer);
-      const found =
-        viaAi.kind === '26as' ? viaAi.deductors.length + viaAi.taxPaid.length : viaAi.lines.length;
-      if (found > 0) {
-        viaAi.fy ??= parsed.fy;
-        viaAi.panLast4 = parsed.panLast4;
-        parsed = viaAi;
-      }
-    } catch {
-      /* keep the plain result and its warnings */
+    const kind = parsed.kind;
+    const size = (t: Form26as | Ais) =>
+      t.kind === '26as' ? t.deductors.length + t.taxPaid.length : t.lines.length;
+    const res = await callAi<Form26as | Ais>(opts.ai, {
+      build: (provider, key, model) =>
+        kind === '26as'
+          ? build26asRequest(provider, key, body, model)
+          : buildAisRequest(provider, key, body, model),
+      parse: (provider, answer) => {
+        const viaAi =
+          kind === '26as' ? parse26asAi(provider, answer) : parseAisAi(provider, answer);
+        return size(viaAi) > 0 ? viaAi : null;
+      },
+    });
+    // when no key can read it, the plain result and its warnings are kept
+    if (res.ok) {
+      res.value.fy ??= parsed.fy;
+      res.value.panLast4 = parsed.panLast4;
+      parsed = res.value;
     }
   }
   const stillEmpty =

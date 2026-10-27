@@ -252,11 +252,11 @@ export function sourceStatus(
     return {
       ...base,
       health: 'bad',
-      headline: 'Not read: no AI key is saved.',
+      headline: 'Not read: no AI key is switched on.',
       fix: {
-        text: 'Add an Anthropic, OpenRouter, Groq or Gemini key, then run the refresh again.',
+        text: 'Add an Anthropic, OpenRouter, Groq or Gemini key, or switch a saved one on, then run the refresh again.',
         href: '/settings#email',
-        hrefLabel: 'Add the key in Settings',
+        hrefLabel: 'Open the AI keys in Settings',
       },
     };
   if (lower.startsWith('skipped'))
@@ -286,20 +286,25 @@ export function sourceStatus(
     lower.includes('answered') ||
     lower.includes('no rates')
   ) {
-    const code = /answered (\d{3})/.exec(lower)?.[1];
+    // with several AI keys the message names each key's answer ("Anthropic answered 401 (...); Groq answered 429 (...)")
+    const codes = [...lower.matchAll(/answered (\d{3})/g)].map((m) => m[1]);
+    const code = codes[0];
     const ai = lower.includes('ai service');
-    if (ai && (code === '401' || code === '403'))
+    if (ai && codes.length > 0 && codes.every((c) => c === '401' || c === '402' || c === '403'))
       return {
         ...base,
         health: 'bad',
-        headline: 'The AI service refused the saved key.',
+        headline:
+          codes.length > 1
+            ? 'The AI service refused every saved key.'
+            : 'The AI service refused the saved key.',
         fix: {
-          text: 'The key may be wrong or expired. Save a fresh one.',
+          text: 'The key may be wrong, expired or out of credit. Save a fresh one, or add another key.',
           href: '/settings#email',
           hrefLabel: 'Check the key in Settings',
         },
       };
-    if (ai && code === '429')
+    if (ai && codes.length > 0 && codes.every((c) => c === '429'))
       return {
         ...base,
         health: 'warn',
@@ -312,7 +317,7 @@ export function sourceStatus(
       return {
         ...base,
         health: 'bad',
-        headline: `The AI service could not answer${code ? ` (${code})` : ''}.`,
+        headline: `The AI service could not answer${codes.length > 0 ? ` (${[...new Set(codes)].join(', ')})` : ''}.`,
         fix: { text: 'Rates on file are unchanged. It is tried again next Monday.' },
       };
     if (code === '404' || code === '410')

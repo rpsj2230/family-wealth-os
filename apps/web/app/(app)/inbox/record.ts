@@ -10,7 +10,18 @@ export interface RecordArgs {
   source: 'email' | 'statement';
   confidence: 'verified' | 'manual_confirmed' | 'imported_unverified';
   note: string;
+  /** a value you typed or imported with a later date stops counting, so this reading becomes the current balance (it stays in the history, marked as replaced) */
+  replaceNewer?: boolean;
 }
+
+export interface Replaced {
+  amount: number;
+  asOf: string;
+  source: string;
+}
+
+/** What the bank itself said: never replaced by an older reading. */
+const FROM_BANK = ['email', 'statement', 'cas', 'api'];
 
 /**
  * Records a balance taken from an email. Observations are append-only, so a number that already came from this same email is
@@ -19,7 +30,7 @@ export interface RecordArgs {
 export async function recordBalance(
   supabase: SupabaseClient,
   a: RecordArgs,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<{ ok: true; replaced: Replaced[] } | { ok: false; message: string }> {
   let fx: number | null = null;
   if (a.currency !== 'INR') {
     const { data: f } = await supabase
@@ -68,7 +79,28 @@ export async function recordBalance(
       .from('observations')
       .update({ superseded_by: added.id as string })
       .eq('id', o.id as string);
-  return { ok: true };
+  const replaced: Replaced[] = [];
+  if (a.replaceNewer) {
+    const { data: newer } = await supabase
+      .from('observations')
+      .select('id, amount, as_of, source')
+      .eq('asset_id', a.assetId)
+      .is('superseded_by', null)
+      .gt('as_of', a.asOf)
+      .neq('id', added.id as string);
+    for (const o of (newer ?? []).filter((x) => !FROM_BANK.includes(x.source as string))) {
+      await supabase
+        .from('observations')
+        .update({ superseded_by: added.id as string })
+        .eq('id', o.id as string);
+      replaced.push({
+        amount: Number(o.amount),
+        asOf: o.as_of as string,
+        source: o.source as string,
+      });
+    }
+  }
+  return { ok: true, replaced };
 }
 
 /** "₹1,23,456.78", "123456.78" or "1,23,456" → a number; anything else → null. */

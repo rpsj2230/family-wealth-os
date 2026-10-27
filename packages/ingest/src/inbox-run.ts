@@ -8,8 +8,12 @@
  *   - the reading is newer than the value on record,
  *   - an AI-read amount is within a plausible range of the current value (0.1x to 10x).
  * Everything else is logged for review with the reason. A failure on one message never stops the others.
+ *
+ * The AI is a chain of keys (see `ai-chain`): when one fails the next is asked, and a key refused earlier in the run is not asked again.
  */
+import { answeredBy, callAi, type AiChain } from './ai-chain';
 import {
+  aiJson,
   buildAiRequest,
   matchAccount,
   parseAiResponse,
@@ -17,7 +21,6 @@ import {
   parseBankEmail,
   senderDomain,
   senderMatchesBank,
-  type AiProvider,
   type BalanceReading,
   type KnownAccount,
 } from './bank-email';
@@ -55,7 +58,10 @@ export interface InboxRow {
 
 export interface InboxIo {
   accounts(): Promise<KnownAccount[]>;
-  latestObservation(assetId: string): Promise<{ amount: number; asOf: string } | null>;
+  /** the value now on record: its amount, its date and where it came from (email, statement, workbook, manual, ...) */
+  latestObservation(
+    assetId: string,
+  ): Promise<{ amount: number; asOf: string; source?: string | null } | null>;
   alreadySeen(messageId: string): Promise<boolean>;
   record(row: InboxRow): Promise<void>;
   apply(args: {
@@ -63,11 +69,9 @@ export interface InboxIo {
     reading: BalanceReading;
     messageId: string;
     source: 'email' | 'statement';
+    /** you asked for this reading, and a value you typed or imported has a later date: the reading replaces it and becomes the current balance */
+    replaceNewer?: boolean;
   }): Promise<void>;
-  fetchJson(
-    url: string,
-    init: { method: 'POST'; headers: Record<string, string>; body: string },
-  ): Promise<unknown>;
   /** Imports a fund statement (CAS) attached to the message; absent when this run cannot do it. */
   casImport?(
     m: InboxMessage,
@@ -88,12 +92,15 @@ export interface InboxReport {
   lines: string[];
 }
 
+/** Where a value came from when the bank itself said it: such a value is only replaced by a newer one from the bank. */
+const BANK_SOURCES = new Set(['email', 'statement', 'cas', 'api']);
+
 export async function runInbox(
   messages: InboxMessage[],
   io: InboxIo,
   cfg: {
     today: string;
-    ai: { provider: AiProvider; key: string; model?: string } | null;
+    ai: AiChain | null;
     /**
      * Your own mailboxes (the ones that forward the bank's mail to the app): a message from one of them is a forward, and the bank is
      * recognised by the original sender written inside it. A message from any other address is judged by its own sender.
@@ -111,6 +118,24 @@ export async function runInbox(
     lines: [],
   };
   const accounts = await io.accounts();
+  const chain = cfg.ai && !cfg.ai.empty ? cfg.ai : null;
+  /** The AI's readings of one message's text; throws with every key's reason when none could answer. */
+  const readWithAi = async (ai: AiChain, text: string, domain: string, youAsked = false) => {
+    const res = await callAi(ai, {
+      build: (provider, key, model) => buildAiRequest(provider, key, text, model),
+      parse: (provider, json) =>
+        aiJson(provider, json) === null
+          ? null
+          : parseAiResponse(provider, json, { today: cfg.today }),
+    });
+    if (!res.ok) throw new Error(`AI service: ${res.brief}`);
+    report.lines.push(`ai: ${answeredBy(res)}`);
+    // an email you asked to be read again is taken as the bank's own
+    return res.value.map((r) => ({
+      ...r,
+      senderVerified: youAsked || senderMatchesBank(domain, r.bank),
+    }));
+  };
 
   for (const m of messages) {
     report.seen++;
@@ -190,10 +215,10 @@ export async function runInbox(
           });
           continue;
         }
-        if (!cfg.ai) {
+        if (!chain) {
           await log({
             outcome: 'needs_review',
-            reason: 'statement found; add an AI key in Settings to read it',
+            reason: 'statement found; add an AI key in Settings, or switch one on, to read it',
             reading: null,
             assetId: null,
           });
@@ -211,45 +236,31 @@ export async function runInbox(
           });
           continue;
         }
-        const req = buildAiRequest(
-          cfg.ai.provider,
-          cfg.ai.key,
-          `${m.subject}\n${text}`,
-          cfg.ai.model,
-        );
-        const json = await io.fetchJson(req.url, req.init);
-        readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
-          ...r,
-          senderVerified: senderMatchesBank(domain, r.bank),
-        }));
+        readings = await readWithAi(chain, `${m.subject}\n${text}`, domain);
         if (readings.length === 0) note = 'the AI found no balance in the statement';
       } else if (!m.reread && !mentionsBalance(m.subject, m.text)) {
         await log({ outcome: 'ignored', reason: null, reading: null, assetId: null });
         continue;
-      } else if (!cfg.ai) {
+      } else if (!chain) {
         // it looks like a balance alert in a format the rules do not know: say so instead of calling it "not a balance email"
         await log({
           outcome: 'needs_review',
           reason: m.reread
-            ? 'add an AI key in Settings to read this email'
-            : 'balance email in a format the rules do not know; add an AI key to read it',
+            ? 'add an AI key (or switch one on) in Settings to read this email'
+            : 'balance email in a format the rules do not know; add an AI key (or switch one on) to read it',
           reading: null,
           assetId: null,
         });
         continue;
       } else {
         // an unfamiliar format: the AI reads it, and what it finds is still checked like any other reading (sender, account, size)
-        const req = buildAiRequest(
-          cfg.ai.provider,
-          cfg.ai.key,
-          `${m.subject}\n${m.text}`,
-          cfg.ai.model,
+        readings = await readWithAi(
+          chain,
+          `${m.subject}
+${m.text}`,
+          domain,
+          !!m.reread,
         );
-        const json = await io.fetchJson(req.url, req.init);
-        readings = parseAiResponse(cfg.ai.provider, json, { today: cfg.today }).map((r) => ({
-          ...r,
-          senderVerified: m.reread || senderMatchesBank(domain, r.bank),
-        }));
         if (readings.length === 0) {
           await log({
             outcome: 'ignored',
@@ -292,8 +303,9 @@ export async function runInbox(
           continue;
         }
         const latest = await io.latestObservation(match.assetId);
-        // a re-read may replace a value of the same date (the one this email gave before); anything older is still not added
-        if (latest && (m.reread ? r.asOf < latest.asOf : r.asOf <= latest.asOf)) {
+        // a value from the bank that is newer is never replaced; a value you typed or imported that is newer is replaced when you asked for this reading
+        const newerFromBank = !!latest && BANK_SOURCES.has(latest.source ?? '');
+        if (latest && (m.reread ? r.asOf < latest.asOf && newerFromBank : r.asOf <= latest.asOf)) {
           await log({
             outcome: 'ignored',
             reason: `not newer than the value on record (${latest.asOf})`,
@@ -323,7 +335,13 @@ export async function runInbox(
             continue;
           }
         }
-        await io.apply({ assetId: match.assetId, reading: r, messageId: m.messageId, source });
+        await io.apply({
+          assetId: match.assetId,
+          reading: r,
+          messageId: m.messageId,
+          source,
+          ...(m.reread && latest && r.asOf < latest.asOf ? { replaceNewer: true } : {}),
+        });
         await log({ outcome: 'applied', reason: null, reading: r, assetId: match.assetId });
       }
     } catch (e) {

@@ -2,16 +2,17 @@
 
 import { revalidatePath } from 'next/cache';
 import { formatInr, longDate, readingAmount, type InboxReading } from '@fwos/core';
-import {
-  aiErrorHint,
-  prepareAi,
-  runInbox,
-  type InboxIo,
-  type InboxRow,
-  type KnownAccount,
-} from '@fwos/ingest';
+import { runInbox, type InboxIo, type InboxRow, type KnownAccount } from '@fwos/ingest';
+import { aiChainFor } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
-import { parseAmount, recordBalance } from './record';
+import { parseAmount, recordBalance, type Replaced } from './record';
+
+/** "It replaced your imported ₹X dated 26 Oct." */
+const replacedNote = (r: Replaced[]) =>
+  r.length === 0
+    ? ''
+    : ` It replaced ${r.map((x) => `the ${x.source === 'workbook' ? 'imported' : 'typed'} ${formatInr(x.amount)} dated ${longDate(x.asOf)}`).join(' and ')}, which stays in the history as replaced.`;
 
 const uuid = /^[0-9a-f-]{36}$/;
 
@@ -87,6 +88,7 @@ export async function applyReading(
     note: edited
       ? 'Number corrected by you in the bank-email inbox'
       : 'Confirmed by you from the bank-email inbox',
+    replaceNewer: true,
   });
   if (!saved.ok) return { ok: false, message: saved.message };
   if (edited)
@@ -106,7 +108,7 @@ export async function applyReading(
   const shown = r.currency === 'INR' ? formatInr(amount) : `${r.currency} ${amount}`;
   return {
     ok: true,
-    message: `Recorded ${shown} as of ${longDate(r.asOf)} on ${a.nickname as string}.`,
+    message: `Recorded ${shown} as of ${longDate(r.asOf)} on ${a.nickname as string}.${replacedNote(saved.replaced)}`,
     amount,
     asOf: r.asOf,
     recorded: true,
@@ -180,23 +182,24 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
     };
   }
 
-  const { data: cred, error: credError } = await supabase.rpc('ai_credentials_for_test', {
-    p_household: householdId,
-  });
-  const key = (
-    cred as { provider: Parameters<typeof prepareAi>[0]; api_key: string }[] | null
-  )?.[0];
-  if (credError) return { ok: false, message: 'The saved AI key could not be read.' };
-  if (!key)
+  const today = new Date().toISOString().slice(0, 10);
+  let chain;
+  try {
+    chain = await aiChainFor(supabase as unknown as SupabaseClient, householdId, 'member', {
+      limits: AI_LIMITS,
+    });
+  } catch {
+    return { ok: false, message: 'The saved AI keys could not be read.' };
+  }
+  if (chain.empty)
     return {
       ok: false,
-      message: 'No AI key is saved. Add one in Settings (Bank e-mails and AI), then try again.',
+      message:
+        'No AI key is switched on. Add one in Settings (Bank e-mails and AI), then try again.',
     };
-
-  const today = new Date().toISOString().slice(0, 10);
-  const rt = await prepareAi(key.provider, key.api_key, AI_LIMITS);
   let last: InboxRow | null = null;
   let accountName = '';
+  let replaced: Replaced[] = [];
   const io: InboxIo = {
     async accounts() {
       const [assets, inst] = await Promise.all([
@@ -220,19 +223,25 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
     async latestObservation(assetId) {
       const { data } = await supabase
         .from('observations')
-        .select('amount, as_of')
+        .select('amount, as_of, source')
         .eq('asset_id', assetId)
         .is('superseded_by', null)
         .order('as_of', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(1);
-      return data?.[0] ? { amount: Number(data[0].amount), asOf: data[0].as_of as string } : null;
+      return data?.[0]
+        ? {
+            amount: Number(data[0].amount),
+            asOf: data[0].as_of as string,
+            source: data[0].source as string,
+          }
+        : null;
     },
     alreadySeen: async () => false,
     async record(row) {
       last = row;
     },
-    async apply({ assetId, reading, messageId, source }) {
+    async apply({ assetId, reading, messageId, source, replaceNewer }) {
       const res = await recordBalance(supabase, {
         householdId,
         assetId,
@@ -243,6 +252,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
         source,
         confidence: reading.source === 'rule' ? 'verified' : 'imported_unverified',
         note: 'Read again from the bank email; correct the number in the inbox if it is wrong',
+        replaceNewer: !!replaceNewer,
       });
       if (!res.ok) throw new Error(res.message);
       const { data: a } = await supabase
@@ -251,15 +261,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
         .eq('id', assetId)
         .maybeSingle();
       accountName = (a?.nickname as string | undefined) ?? '';
-    },
-    async fetchJson(url, init) {
-      const res = await rt.call(url, init as unknown as Record<string, unknown>);
-      if (!res.ok) {
-        const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-        const hint = aiErrorHint(key.provider, res.status, body);
-        throw new Error(`AI service answered ${res.status}: ${body}${hint ? ` — ${hint}` : ''}`);
-      }
-      return res.json();
+      replaced = res.replaced;
     },
     async pdfText() {
       throw new Error('attachments are not read here');
@@ -280,10 +282,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
         },
       ],
       io,
-      {
-        today,
-        ai: { provider: key.provider, key: key.api_key, ...(rt.model ? { model: rt.model } : {}) },
-      },
+      { today, ai: chain },
     );
   } catch (e) {
     return { ok: false, message: `It could not be read again: ${(e as Error).message}` };
@@ -309,7 +308,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
       recorded: true,
       amount: rd.amount,
       asOf: rd.asOf,
-      message: `Read ${readingAmount(rd)} as of ${longDate(rd.asOf)} and recorded it${accountName ? ` on ${accountName}` : ''}. Check it against the email below; if it is wrong, type the right number and press Save number.`,
+      message: `Read ${readingAmount(rd)} as of ${longDate(rd.asOf)} and recorded it${accountName ? ` on ${accountName}` : ''}. Check it against the email below; if it is wrong, type the right number and press Save number.${replacedNote(replaced)}`,
     };
   if (rd)
     return {
@@ -362,6 +361,7 @@ export async function saveNumber(_p: InboxResult | null, formData: FormData): Pr
     source: 'email',
     confidence: 'manual_confirmed',
     note: 'Number corrected by you in the bank-email inbox',
+    replaceNewer: true,
   });
   if (!saved.ok) return { ok: false, message: saved.message };
   const { error } = await supabase.rpc('save_inbox_result', {
@@ -386,6 +386,6 @@ export async function saveNumber(_p: InboxResult | null, formData: FormData): Pr
     recorded: true,
     amount,
     asOf: r.asOf,
-    message: `Updated to ${readingAmount({ ...r, amount })} as of ${longDate(r.asOf)}. The earlier ${readingAmount(r)} stays in the history as replaced.`,
+    message: `Updated to ${readingAmount({ ...r, amount })} as of ${longDate(r.asOf)}. The earlier ${readingAmount(r)} stays in the history as replaced.${replacedNote(saved.replaced)}`,
   };
 }

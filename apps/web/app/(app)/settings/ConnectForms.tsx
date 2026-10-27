@@ -6,9 +6,7 @@ import {
   checkRatePage,
   readPastedRatePage,
   saveDigestSettings,
-  saveIntegrations,
-  testAi,
-  type AiTestState,
+  saveInboxLabel,
 } from './actions';
 import type { RateCheck } from '@fwos/ingest';
 import { Field, SaveRow, Tick, useForm } from './fields';
@@ -48,57 +46,18 @@ export function DigestForm({
   );
 }
 
-/** The AI key is write-only: a saved key is never shown, only replaced or removed. */
-export function IntegrationsForm({
-  provider,
-  keySet,
-  label,
-}: {
-  provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
-  keySet: boolean;
-  label: string;
-}) {
-  const { res, act, pending } = useForm(saveIntegrations);
+/** The Gmail label the reader looks at. (The AI keys are in AiKeysCard.) */
+export function InboxLabelForm({ label }: { label: string }) {
+  const { res, act, pending } = useForm(saveInboxLabel);
   return (
     <form action={act} className="form" aria-busy={pending}>
-      <div className="formgrid g3">
-        <Field
-          label="AI service"
-          hint="Claude Haiku is the most reliable and costs well under a rupee a month here; the others are free but some of their models are slow or restricted."
-        >
-          <select name="provider" defaultValue={provider ?? 'anthropic'}>
-            <option value="anthropic">
-              Anthropic Claude Haiku (pay per use, a fraction of a cent a reading)
-            </option>
-            <option value="openrouter">OpenRouter (free models, tried one after another)</option>
-            <option value="groq">Groq</option>
-            <option value="gemini">Google Gemini</option>
-          </select>
-        </Field>
-        <Field
-          label={keySet ? 'API key (one is saved)' : 'API key'}
-          hint={
-            keySet
-              ? 'Leave empty to keep the saved key. It cannot be shown again; a new one replaces it.'
-              : 'Paste the key once. It is stored on the server and cannot be shown again.'
-          }
-        >
-          <input
-            name="key"
-            type="password"
-            autoComplete="off"
-            placeholder={keySet ? '••••••••' : 'paste key'}
-          />
-        </Field>
-        <Field
-          label="Gmail label with forwarded bank e-mails"
-          hint="The reader looks only at e-mails carrying this label."
-        >
-          <input name="label" defaultValue={label} />
-        </Field>
-      </div>
-      {keySet && <Tick name="clear" label="Remove the saved key" />}
-      <SaveRow label="Save" pending={pending} res={res} />
+      <Field
+        label="Gmail label with forwarded bank e-mails"
+        hint="The reader looks only at e-mails carrying this label."
+      >
+        <input name="label" defaultValue={label} />
+      </Field>
+      <SaveRow label="Save label" pending={pending} res={res} />
     </form>
   );
 }
@@ -121,79 +80,6 @@ export function RateSourceForm() {
       </div>
       <SaveRow label="Add page" pending={pending} res={res} />
     </form>
-  );
-}
-
-const PROVIDER_NAME = {
-  anthropic: 'Anthropic (Claude Haiku)',
-  openrouter: 'OpenRouter (free models, tried one after another)',
-  groq: 'Groq',
-  gemini: 'Google Gemini',
-} as const;
-
-export interface AiStatus {
-  provider: 'anthropic' | 'groq' | 'gemini' | 'openrouter' | null;
-  keySet: boolean;
-  testedAt: string | null;
-  testOk: boolean | null;
-  testNote: string | null;
-}
-
-/** Which AI is connected, when it was last tested and how it went, and a button that tests it now. */
-export function AiConnection({ status, demo = false }: { status: AiStatus; demo?: boolean }) {
-  const [state, setState] = useState<AiTestState | null>(null);
-  const [pending, start] = useTransition();
-  if (!status.keySet || !status.provider)
-    return (
-      <p className="notice warn small" role="status">
-        <strong>No AI connected.</strong> Choose a service below, paste a key and press Save; then
-        come back here to test it.
-      </p>
-    );
-  const last = status.testedAt
-    ? `${new Date(status.testedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}: ${status.testOk ? 'working' : 'not working'}${status.testNote ? ` (${status.testNote})` : ''}`
-    : 'not tested yet';
-  return (
-    <div className="aiconn" aria-live="polite">
-      <div className="row" style={{ alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div>
-            <strong>Connected: {PROVIDER_NAME[status.provider]}</strong>
-          </div>
-          <div className={`small ${status.testedAt ? (status.testOk ? 'ok' : 'fail') : 'muted'}`}>
-            Last test {last}
-          </div>
-        </div>
-        <button
-          type="button"
-          className="btn"
-          disabled={pending || demo}
-          title={demo ? 'The public sample cannot test a key' : undefined}
-          onClick={() => start(async () => setState(await testAi()))}
-        >
-          {pending ? 'Testing… (up to a minute)' : 'Test the AI connection'}
-        </button>
-      </div>
-      {state && !pending && (
-        <>
-          <p
-            className={`notice ${state.ok ? 'ok' : 'warn'} small`}
-            role={state.ok ? 'status' : 'alert'}
-          >
-            {state.ok
-              ? 'All good: the AI is connected and reads bank alerts correctly.'
-              : 'Not working yet. See below.'}
-          </p>
-          <ul className="list small">
-            {state.steps.map((x, i) => (
-              <li key={i} className={x.ok ? 'pass' : 'fail'}>
-                <strong>{x.ok ? 'OK' : 'Problem'}</strong> — {x.text}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
   );
 }
 

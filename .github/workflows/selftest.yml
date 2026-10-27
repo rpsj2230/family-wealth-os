@@ -1,5 +1,5 @@
 name: Check email and AI reading
-# Run by hand (Actions tab > Run workflow). Checks the AI key, a made-up bank alert, Gmail access and the label, and says which link is broken.
+# Run by hand (Actions tab > Run workflow). Checks every AI key that is switched on, a made-up bank alert, Gmail access and the label, and says which link is broken.
 on:
   workflow_dispatch:
 permissions:

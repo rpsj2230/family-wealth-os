@@ -127,12 +127,12 @@ test.describe('Settings (public sample)', () => {
     expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
 
-  test('connections: the AI key is write-only', async ({ page }) => {
+  test('connections: the AI keys are write-only', async ({ page }) => {
     await page.goto('/demo/settings?tab=connections');
     const key = page.getByLabel(/^API key/);
     await expect(key).toHaveAttribute('type', 'password');
     await expect(key).toHaveValue('');
-    await expect(page.getByText('AI key saved')).toBeVisible();
+    await expect(page.getByText('2 AI keys on')).toBeVisible();
     await expect(page.getByText('12 rates read', { exact: false })).toBeVisible();
   });
 

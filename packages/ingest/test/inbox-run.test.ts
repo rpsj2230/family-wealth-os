@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { runInbox, type InboxIo, type InboxMessage, type InboxRow } from '../src/inbox-run';
+import { createAiChain, type AiKeyEntry } from '../src/ai-chain';
 import type { BalanceReading, KnownAccount } from '../src/bank-email';
+import { failure, fakeAiFetch, type FakeReply } from './fake-ai';
+
+/** An AI chain whose services answer from `reply`. */
+const chainReplying = (
+  reply: (provider: string) => FakeReply | unknown,
+  keys: AiKeyEntry[] = [{ provider: 'groq', key: 'gsk_test_12345' }],
+) => {
+  const fake = fakeAiFetch((c) => {
+    if (c.body === null) return undefined;
+    const r = reply(c.provider) as FakeReply & { choices?: unknown };
+    return 'choices' in r ? { json: r } : r;
+  });
+  return { chain: createAiChain(keys, { fetch: fake.fetch }), fake };
+};
 
 const HDFC = `Available balance in your account ending XX7240 is Rs. INR 10,711.96 as on 25-OCT-26.`;
 const accounts: KnownAccount[] = [
@@ -24,7 +39,10 @@ const msg = (o: Partial<InboxMessage> = {}): InboxMessage => ({
 
 function fakeIo(
   over: Partial<InboxIo> = {},
-  latest: { amount: number; asOf: string } | null = { amount: 9000, asOf: '2026-09-30' },
+  latest: { amount: number; asOf: string; source?: string } | null = {
+    amount: 9000,
+    asOf: '2026-09-30',
+  },
 ) {
   const rows: InboxRow[] = [];
   const applied: { assetId: string; reading: BalanceReading; source: string }[] = [];
@@ -40,7 +58,6 @@ function fakeIo(
     apply: async (a) => {
       applied.push(a);
     },
-    fetchJson: async () => ({}),
     pdfText: async () => 'statement text',
     ...over,
   };
@@ -127,28 +144,29 @@ describe('runInbox: statements read by AI', () => {
       },
     ],
   });
-  const ai = { provider: 'groq' as const, key: 'gsk_test_12345' };
+  const ai = () => chainReplying(() => aiReply(12000)).chain;
 
   it('applies a plausible AI reading from the bank’s own address, recorded as a statement', async () => {
-    const { io, applied } = fakeIo({ fetchJson: async () => aiReply(12000) });
-    const r = await runInbox([stmt()], io, { today: '2026-10-26', ai });
+    const { io, applied } = fakeIo();
+    const r = await runInbox([stmt()], io, { today: '2026-10-26', ai: ai() });
     expect(r.applied).toBe(1);
     expect(applied[0]).toMatchObject({ source: 'statement' });
     expect(applied[0]!.reading.source).toBe('ai');
   });
 
   it('sends an implausible amount to review', async () => {
-    const { io, applied } = fakeIo({ fetchJson: async () => aiReply(900_000) });
-    const r = await runInbox([stmt()], io, { today: '2026-10-26', ai });
+    const { io, applied } = fakeIo();
+    const big = chainReplying(() => aiReply(900_000)).chain;
+    const r = await runInbox([stmt()], io, { today: '2026-10-26', ai: big });
     expect(applied).toHaveLength(0);
     expect(r.needsReview).toBe(1);
   });
 
   it('sends a statement from an unverified sender to review even if the amount is fine', async () => {
-    const { io, applied } = fakeIo({ fetchJson: async () => aiReply(12000) });
+    const { io, applied } = fakeIo();
     const r = await runInbox([stmt({ from: 'someone@gmail.com' })], io, {
       today: '2026-10-26',
-      ai,
+      ai: ai(),
     });
     expect(applied).toHaveLength(0);
     expect(r.needsReview).toBe(1);
@@ -163,13 +181,14 @@ describe('runInbox: statements read by AI', () => {
         throw new Error('password required');
       },
     });
-    await runInbox([stmt()], b.io, { today: '2026-10-26', ai });
+    await runInbox([stmt()], b.io, { today: '2026-10-26', ai: ai() });
     expect(b.rows[0]!.reason).toContain('password-protected');
   });
 
   it('never trusts an AI answer that fails validation', async () => {
-    const { io, applied } = fakeIo({ fetchJson: async () => aiReply('abc') });
-    const r = await runInbox([stmt()], io, { today: '2026-10-26', ai });
+    const { io, applied } = fakeIo();
+    const junk = chainReplying(() => aiReply('abc')).chain;
+    const r = await runInbox([stmt()], io, { today: '2026-10-26', ai: junk });
     expect(applied).toHaveLength(0);
     expect(r.needsReview).toBe(1);
   });
@@ -261,11 +280,14 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
       },
     ],
   };
-  const withAi = { today: '2026-10-26', ai: { provider: 'groq' as const, key: 'k' } };
+  const withAi = (reply: () => unknown = () => aiAnswer) => ({
+    today: '2026-10-26',
+    ai: chainReplying(reply).chain,
+  });
 
   it('asks the AI, and a reading from a forwarded mail goes to review (the sender is not the bank)', async () => {
-    const { io, rows, applied } = fakeIo({ fetchJson: async () => aiAnswer });
-    const r = await runInbox([forwarded], io, withAi);
+    const { io, rows, applied } = fakeIo();
+    const r = await runInbox([forwarded], io, withAi());
     expect(applied).toHaveLength(0);
     expect(r.needsReview).toBe(1);
     expect(rows[0]).toMatchObject({
@@ -284,13 +306,12 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
 
   it('ignores it when the AI finds no balance, and never asks about an offer', async () => {
     let asked = 0;
-    const { io, rows } = fakeIo({
-      fetchJson: async () => {
-        asked++;
-        return { choices: [{ message: { content: '{"readings":[]}' } }] };
-      },
+    const { io, rows } = fakeIo();
+    const cfg = withAi(() => {
+      asked++;
+      return { choices: [{ message: { content: '{"readings":[]}' } }] };
     });
-    await runInbox([forwarded], io, withAi);
+    await runInbox([forwarded], io, cfg);
     expect(rows[0]).toMatchObject({
       outcome: 'ignored',
       reason: 'the AI found no balance in this email',
@@ -298,9 +319,65 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
     await runInbox(
       [msg({ messageId: 'o1', subject: 'Offers', text: 'Festive offers up to 50% off' })],
       io,
-      withAi,
+      cfg,
     );
     expect(asked).toBe(1);
+  });
+
+  it('goes to the next key when the first is refused, and says who answered', async () => {
+    const { io, rows } = fakeIo();
+    const { chain } = chainReplying(
+      (provider) => (provider === 'anthropic' ? failure(401, 'invalid x-api-key') : aiAnswer),
+      [
+        { provider: 'anthropic', key: 'sk-ant-first' },
+        { provider: 'groq', key: 'gsk_second' },
+      ],
+    );
+    const r = await runInbox([forwarded], io, { today: '2026-10-26', ai: chain });
+    expect(r.needsReview).toBe(1);
+    expect(rows[0]!.reading).toMatchObject({ amount: 12345.67 });
+    expect(r.lines.join('\n')).toMatch(/ai: Groq answered after Anthropic answered 401/);
+  });
+
+  it('logs every key’s reason as the message error when none can answer, without the keys', async () => {
+    const { io, rows } = fakeIo();
+    const { chain } = chainReplying(
+      (provider) => (provider === 'anthropic' ? failure(401, 'bad') : failure(429, 'busy')),
+      [
+        { provider: 'anthropic', key: 'sk-ant-first' },
+        { provider: 'groq', key: 'gsk_second' },
+      ],
+    );
+    const r = await runInbox([forwarded], io, { today: '2026-10-26', ai: chain });
+    expect(r.errors).toBe(1);
+    expect(rows[0]).toMatchObject({ outcome: 'error' });
+    expect(rows[0]!.reason).toContain('Anthropic answered 401');
+    expect(rows[0]!.reason).toContain('Groq answered 429');
+    expect(rows[0]!.reason).not.toMatch(/sk-ant-first|gsk_second/);
+  });
+
+  it('does not ask a refused key again for the next message in the same run', async () => {
+    const { io } = fakeIo();
+    const { chain, fake } = chainReplying(
+      (provider) => (provider === 'anthropic' ? failure(401, 'bad') : aiAnswer),
+      [
+        { provider: 'anthropic', key: 'sk-ant-first' },
+        { provider: 'groq', key: 'gsk_second' },
+      ],
+    );
+    await runInbox(
+      [forwarded, { ...forwarded, messageId: 'fwd2' }, { ...forwarded, messageId: 'fwd3' }],
+      io,
+      { today: '2026-10-26', ai: chain },
+    );
+    expect(fake.chatCalls().filter((c) => c.provider === 'anthropic')).toHaveLength(1);
+    expect(fake.chatCalls().filter((c) => c.provider === 'groq')).toHaveLength(3);
+  });
+
+  it('treats a chain with no key switched on as no AI', async () => {
+    const { io, rows } = fakeIo();
+    await runInbox([forwarded], io, { today: '2026-10-26', ai: createAiChain([]) });
+    expect(rows[0]!.reason).toContain('add an AI key');
   });
 });
 
@@ -365,36 +442,44 @@ describe('runInbox: an email you ask to be read again', () => {
       },
     ],
   });
-  const cfg = { today: '2026-10-26', ai: { provider: 'groq' as const, key: 'k' } };
+  const cfgFor = (reply: unknown) => ({
+    today: '2026-10-26',
+    ai: chainReplying(() => reply).chain,
+  });
 
   it('reads it even when it was seen before, applies the number at once and keeps a copy of the text', async () => {
-    const { io, rows, applied } = fakeIo({ fetchJson: async () => answer(12345.67) });
-    await io.record({ ...rows, messageId: 'r1' } as unknown as InboxRow);
-    const r = await runInbox([odd()], io, cfg);
+    const { io, rows, applied } = fakeIo();
+    await io.record({ messageId: 'r1' } as unknown as InboxRow);
+    const r = await runInbox([odd()], io, cfgFor(answer(12345.67)));
     expect(r.applied).toBe(1);
     expect(applied[0]!.reading.amount).toBe(12345.67);
     expect(rows.at(-1)!.bodyText).toContain('12,345.67');
   });
   it('does not need the email to say "balance", and does not hold back an amount far from the current value', async () => {
-    const { io, applied } = fakeIo({ fetchJson: async () => answer(500000) });
-    const r = await runInbox([odd()], io, cfg);
+    const { io, applied } = fakeIo();
+    const r = await runInbox([odd()], io, cfgFor(answer(500000)));
     expect(r.applied).toBe(1);
     expect(applied[0]!.reading.amount).toBe(500000);
   });
-  it('does not add a value older than the one on record', async () => {
-    const { io, applied, rows } = fakeIo({ fetchJson: async () => answer(1, '2026-08-01') });
-    await runInbox([odd()], io, cfg);
+  it('replaces a typed or imported value with a later date, because you asked for this reading', async () => {
+    const { io, applied } = fakeIo({}, { amount: 9000, asOf: '2026-10-26', source: 'workbook' });
+    const r = await runInbox([odd()], io, cfgFor(answer(1234, '2026-10-25')));
+    expect(r.applied).toBe(1);
+    expect(applied[0]).toMatchObject({ replaceNewer: true });
+    expect(applied[0]!.reading.amount).toBe(1234);
+  });
+  it('never replaces a newer value that the bank itself gave', async () => {
+    const { io, applied, rows } = fakeIo({}, { amount: 9000, asOf: '2026-10-26', source: 'email' });
+    await runInbox([odd()], io, cfgFor(answer(1234, '2026-10-25')));
     expect(applied).toHaveLength(0);
     expect(rows.at(-1)).toMatchObject({ outcome: 'ignored' });
   });
-  it('lets a value of the same date replace the earlier one', async () => {
-    const { io, applied } = fakeIo(
-      { fetchJson: async () => answer(7, '2026-10-26') },
-      { amount: 9, asOf: '2026-10-26' },
-    );
-    const r = await runInbox([odd()], io, cfg);
+  it('lets a value of the same date replace the earlier one without replacing anything newer', async () => {
+    const { io, applied } = fakeIo({}, { amount: 9, asOf: '2026-10-26', source: 'email' });
+    const r = await runInbox([odd()], io, cfgFor(answer(7, '2026-10-26')));
     expect(r.applied).toBe(1);
     expect(applied[0]!.reading.amount).toBe(7);
+    expect(applied[0]).not.toHaveProperty('replaceNewer');
   });
   it('says what to do when there is no AI key', async () => {
     const { io, rows } = fakeIo();
@@ -402,9 +487,9 @@ describe('runInbox: an email you ask to be read again', () => {
     expect(rows.at(-1)!.reason).toContain('add an AI key');
   });
   it('a message that is not marked for re-reading is still skipped once seen', async () => {
-    const { io } = fakeIo({ fetchJson: async () => answer(1) });
+    const { io } = fakeIo();
     await io.record({ messageId: 'r1' } as unknown as InboxRow);
-    const r = await runInbox([odd({ reread: false })], io, cfg);
+    const r = await runInbox([odd({ reread: false })], io, cfgFor(answer(1)));
     expect(r.skipped).toBe(1);
   });
 });
