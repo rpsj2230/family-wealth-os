@@ -8,6 +8,7 @@ import {
   type PersonStyle,
 } from '@fwos/core';
 import './bankoverview.css';
+import { Est } from '@/components/Est';
 import { PersonBadge } from '@/components/Person';
 import { niceDate } from '@/lib/dates';
 
@@ -34,7 +35,7 @@ export function Delta({
     <div className={`bv-delta ${dir}`}>
       <div className="bv-delta-label">
         {label}
-        {estimate && <span className="bv-est">estimate</span>}
+        {estimate && <Est />}
       </div>
       <div className="bv-delta-value">
         <span aria-hidden="true" className="bv-arrow">

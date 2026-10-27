@@ -36,6 +36,12 @@ export interface PerfFundIn {
   flows: Flow[];
   /** the flows are worked out from the start date and SIP plan, not read from a statement */
   flowsEstimated: boolean;
+  /**
+   * The first day the figures about this fund rest on estimates, when that is not simply the start of its history (instalments
+   * assumed from a SIP plan make only the days after them estimated). Left out, a fund with estimated flows is estimated throughout.
+   * The same rule as `estimatedSince` of a fund in period-gains, so a period carries the same est. mark on every page.
+   */
+  estimatedSince?: string | null;
   value: number;
 }
 
@@ -83,8 +89,14 @@ export function fundsPeriods(funds: PerfFundIn[]): {
     value: p.value,
   }));
   const est = funds
-    .filter((f) => f.flowsEstimated && f.perf.length > 0)
-    .map((f) => f.perf[0]!.date)
+    .map((f) =>
+      f.estimatedSince !== undefined
+        ? f.estimatedSince
+        : f.flowsEstimated
+          ? (f.perf[0]?.date ?? null)
+          : null,
+    )
+    .filter((d): d is string => d !== null)
     .sort()[0];
   return {
     periods: chainPeriods(
@@ -123,7 +135,9 @@ export function portfolioPerformance(args: {
   for (const t of profile.trailing)
     if (t.r) periodGains[t.def.key] = sumGain(periods, t.r.from, t.r.to);
   const totalValue = args.funds.reduce((a, f) => a + f.value, 0);
-  const estimated = args.funds.filter((f) => f.flowsEstimated).reduce((a, f) => a + f.value, 0);
+  const estimated = args.funds
+    .filter((f) => f.flowsEstimated || (f.estimatedSince ?? null) !== null)
+    .reduce((a, f) => a + f.value, 0);
   const bench = returnProfileLite(args.benchmark, args.today, args.cfg);
   const vs = profile.trailing.map(({ def, r }) => {
     const b = bench.find((x) => x.def.key === def.key)?.r ?? null;

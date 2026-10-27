@@ -10,13 +10,15 @@
  *  - invested: deposit principal + the last recorded balance of every savings account and holding
  *  - maturity: the amount each deposit pays at maturity + today's value of savings and holdings (they have no maturity)
  *  - current: today's value of each line, as estimated by the portfolio
- *  - today's change: what the lines earned in the last day. A deposit earns the difference between its value today and its value
- *    yesterday on its own terms; a savings account earns its balance at its rate for one day. It is an estimate (the bank credits
+ *  - today's change: what the lines earned in the last day, worked out by period-gains (the one module for every period figure). A
+ *    deposit earns the difference between its value today and its value yesterday on its own terms; a savings account earns its last
+ *    recorded balance at its rate, after tax at source, for one day. It is an estimate (the bank credits
  *    savings interest in lumps), and money held by others earns nothing in this figure.
  * Foreign-currency lines are counted at today's rupee value with no gain or loss (the exchange rate is not interest).
  */
 import { dicgcPosition, capacityKeyFor } from './dicgc';
-import { daysBetween, fdValueOn } from './fd';
+import { daysBetween } from './fd';
+import { depositPeriod, recentWindow, savingsPeriod } from './period-gains';
 import { OTHER_HOLDINGS_KEY, type BankBlock, type BankRow } from './accounts-view';
 
 export interface OverviewPart {
@@ -175,7 +177,9 @@ export function bankRowFigures(r: BankRow): {
 }
 
 export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOverview {
-  const yesterday = new Date(opts.today.getTime() - 86_400_000);
+  // "earned today" is the last day of the shared period figures (period-gains), so it agrees with Home and the other pages
+  const todayIso = opts.today.toISOString().slice(0, 10);
+  const lastDay = recentWindow(todayIso, 1);
   const parts = { cash: emptyPart(), fd: emptyPart(), others: emptyPart() };
   const byOwner = new Map<string, { current: number; invested: number }>();
   const byType = { NRE: 0, NRO: 0, unset: 0 };
@@ -231,18 +235,24 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
           fdRateSum += fd.principal * fd.rate;
           fdRateWeight += fd.principal;
           if (fd.daysLeft >= 0) {
-            const booked = new Date(`${fd.bookedOn}T00:00:00Z`);
-            const maturityOn = new Date(`${fd.maturityOn}T00:00:00Z`);
-            const at = (asOf: Date) =>
-              fdValueOn({
-                principal: fd.principal,
-                annualRate: fd.rate,
-                bookedOn: booked,
-                asOf,
-                maturityOn,
-                compounding: fd.compounding,
-              });
-            todayFd += Math.max(0, at(opts.today) - at(yesterday));
+            todayFd += Math.max(
+              0,
+              depositPeriod(
+                [
+                  {
+                    assetId: r.assetId,
+                    principal: fd.principal,
+                    rate: fd.rate,
+                    bookedOn: fd.bookedOn,
+                    maturityOn: fd.maturityOn,
+                    compounding: fd.compounding,
+                    held: true,
+                  },
+                ],
+                lastDay,
+                todayIso,
+              ).profit,
+            );
             nextCandidates.push({ row: r, bank: b.name });
             if (fd.daysLeft <= opts.soonDays) {
               soonCount++;
@@ -250,8 +260,19 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
             }
           }
         } else if (r.kind === 'cash' && r.status === 'active' && r.currency === 'INR') {
-          const rate = opts.savingsRates?.[r.assetId] ?? opts.defaultSavingsRate;
-          todaySavings += (Math.max(0, current) * rate * (1 - tds)) / 365;
+          todaySavings += savingsPeriod(
+            [
+              {
+                assetId: r.assetId,
+                currency: r.currency,
+                rate: opts.savingsRates?.[r.assetId] ?? opts.defaultSavingsRate,
+                tdsRate: tds,
+                balances:
+                  r.asOf && r.recorded !== null ? [{ date: r.asOf, amount: r.recorded }] : [],
+              },
+            ],
+            lastDay,
+          ).profit;
         }
 
         if (

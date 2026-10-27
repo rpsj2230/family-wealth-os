@@ -20,6 +20,7 @@ import { DEMO_TODAY as DEMO_DATE, demoModel } from './demo-fixture';
 import { demoView } from './demo-funds';
 import { DEFAULT_INFLATION, returnFor, type GoalSummary } from './goals-view';
 import type { HomeInput, HomeSnapshot } from './home';
+import { periodInputs } from './home-periods';
 import { fundPace } from './investments';
 
 const TODAY = DEMO_DATE.toISOString().slice(0, 10);
@@ -112,6 +113,26 @@ export function demoHomeInput(range: HomeRange): HomeInput {
   for (const [id, owner, type, name, amount, asOf, fresh] of OTHER)
     add(id, owner, type, name, amount, asOf, fresh, 'manual');
 
+  // earlier balances for most rupee savings accounts, so their interest is worked from what was recorded then (money paid in or taken
+  // out shows as a change of balance, never as profit); every fourth account has a single record, as if opened recently
+  let savingsSeen = 0;
+  for (const o of m.observations) {
+    const a = assets.find((x) => x.id === o.asset_id);
+    if (!a || a.type !== 'bank_account' || a.currency !== 'INR' || !a.institution_id) continue;
+    if (savingsSeen++ % 4 === 3) continue;
+    for (const [asOf, k] of [
+      ['2026-03-18', 0.8],
+      ['2026-06-27', 1.15],
+    ] as const)
+      observations.push({
+        ...o,
+        id: `oh${++n}`,
+        amount: Math.round(o.amount * k),
+        as_of: asOf,
+        created_at: `${asOf}T00:00:00Z`,
+      });
+  }
+
   const portfolio = buildPortfolio(assets, observations, m.fds, DEMO_DATE);
   const nw = portfolio.netWorth;
   const config = DEFAULT_CONFIG;
@@ -153,6 +174,14 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     config: config.liquidity,
     nri: config.harvest.nri,
   });
+
+  const overview: HomeInput['overview'] = {
+    today: DEMO_DATE,
+    soonDays: config.reminders.maturitySoonDays,
+    defaultSavingsRate: config.estimates.savingsRate,
+    tdsRate: config.estimates.interestTdsRate,
+    insuranceLimit: config.deposits.insuranceLimit,
+  };
 
   const goal = (
     id: string,
@@ -204,13 +233,7 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     styles: m.styles,
     portfolio,
     blocks: m.blocks,
-    overview: {
-      today: DEMO_DATE,
-      soonDays: config.reminders.maturitySoonDays,
-      defaultSavingsRate: config.estimates.savingsRate,
-      tdsRate: config.estimates.interestTdsRate,
-      insuranceLimit: config.deposits.insuranceLimit,
-    },
+    overview,
     currencyOf: Object.fromEntries(assets.map((a) => [a.id, a.currency])),
     snapshots: snapshotsFor(nw.byType as Record<string, number>, nw.byOwner),
     inv,
@@ -244,6 +267,13 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     ],
     openTasks: 4,
     inboxReview: demoInbox().filter((x) => queueOf(x) === 'review').length,
+    ...periodInputs({
+      assetRows: assets,
+      fdRows: m.fds,
+      obsRows: observations,
+      blocks: m.blocks,
+      overview,
+    }),
     monthlySpending: 180_000,
     recent,
     newestRecorded: observations.reduce<string | null>(

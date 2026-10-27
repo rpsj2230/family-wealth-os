@@ -10,6 +10,7 @@ import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankO
 import { UpdatedCell } from '@/components/BankTable';
 import type { HomeModel } from '@/lib/home';
 import { niceDate } from '@/lib/dates';
+import { Money } from './Money';
 import { MaybeLink, homeLink } from './parts';
 
 const monthsText = (months: number) =>
@@ -101,6 +102,8 @@ export function Hero({ m, sample }: { m: HomeModel; sample: boolean }) {
           />
         </div>
       </div>
+
+      <Money m={m} />
 
       <div className="hm-trust">
         <div>

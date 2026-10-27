@@ -159,6 +159,10 @@
   text-transform: none;
   font-weight: 600;
 }
+abbr.bv-est {
+  text-decoration: none;
+  cursor: help;
+}
 .bv-delta-value {
   display: flex;
   align-items: baseline;

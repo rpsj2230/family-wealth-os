@@ -8,6 +8,7 @@ import {
 } from '@fwos/core';
 import type { PersonRow } from '@/components/invest/OverviewParts';
 import type { InvestmentView } from './investments';
+import { perfFundIn } from './fund-holdings';
 import { profileConfig } from './invest-perf';
 
 /** One row per person: the totals, the return of the latest year and the shares, for the person comparison. */
@@ -20,15 +21,7 @@ export function personRows(
   const year = PERF_PERIODS.find((p) => p.key === '1y')!;
   return view.groups.map((g) => {
     const s = byOwner[g.ownerId];
-    const p = fundsPeriods(
-      g.funds.map((f) => ({
-        assetId: f.assetId,
-        perf: f.perf,
-        flows: f.flows,
-        flowsEstimated: f.flowsEstimated,
-        value: f.value,
-      })),
-    );
+    const p = fundsPeriods(g.funds.map(perfFundIn));
     const r = trailingReturn(buildIndex(p.periods), view.today, year, cfg);
     return {
       ownerId: g.ownerId,

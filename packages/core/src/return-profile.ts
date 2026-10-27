@@ -15,6 +15,7 @@
  * A figure that the history cannot support is null; nothing is invented.
  */
 import { addDaysIso, addMonthsIso } from './harvest-lots';
+import { fyStartOn } from './period-gains';
 import { fyOf } from './tax';
 
 export interface IndexPoint {
@@ -164,11 +165,9 @@ export function periodAnchor(key: PeriodKey, today: string): string | null {
       return addDaysIso(today, -7);
     case 'ytd':
       return `${Number(today.slice(0, 4)) - 1}-12-31`;
-    case 'fy': {
-      const y = Number(today.slice(0, 4));
-      const start = Number(today.slice(5, 7)) >= 4 ? y : y - 1;
-      return `${start}-03-31`;
-    }
+    case 'fy':
+      // the close of the day before the financial year starts, the day period-gains values a fund on to open the year
+      return addDaysIso(fyStartOn(today), -1);
     case 'all':
       return null;
     default: {

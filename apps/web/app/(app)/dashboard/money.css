@@ -1,0 +1,285 @@
+/* Home: the five money figures, the four small cards by kind of holding, and the profit by period. Uses the tokens and the signed
+   colours of home.css and bankoverview.css; layouts answer to the width of the page area (the .hm container), not of the window. */
+
+/* ---- the five money figures under the net worth ---- */
+.hm-money {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.hm-money .hm-mtile:last-child {
+  grid-column: 1 / -1;
+}
+@container (min-width: 560px) {
+  .hm-money {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .hm-money .hm-mtile:last-child {
+    grid-column: auto;
+  }
+}
+@container (min-width: 900px) {
+  .hm-money {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+.hm-mtile {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 12px;
+}
+.hm-mtile .bv-delta-value strong {
+  font-size: 1.3rem;
+}
+.hm-mtile .bv-exact {
+  margin-top: 0;
+  font-size: 0.82rem;
+  color: inherit;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+.hm-mtile .bv-delta-note {
+  margin-top: 4px;
+}
+
+/* ---- by kind of holding: four small cards ---- */
+.hm-classes {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  min-width: 0;
+}
+.hm-classes > * {
+  min-width: 0;
+  margin: 0;
+}
+.hm-class-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+@container (min-width: 560px) {
+  .hm-class-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (min-width: 900px) {
+  .hm-class-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.hm-class {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--soft);
+  min-width: 0;
+}
+.hm-class:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.hm-class:has(a:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.hm-class-title {
+  margin: 0 0 2px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.hm-class-link {
+  color: inherit;
+  text-decoration: none;
+}
+.hm-class-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+}
+.hm-class-now {
+  font-size: 1.7rem;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.hm-class .bv-exact {
+  margin-top: 0;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.hm-class-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.hm-class-facts dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.hm-class-facts dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.hm-class-facts dd .bv-est {
+  margin-left: 6px;
+}
+.hm-class-pl,
+.hm-class-share,
+.hm-class-note {
+  margin: 2px 0 0;
+}
+.hm-class-note {
+  line-height: 1.3;
+}
+
+/* ---- profit by period ---- */
+.hm-periods {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.hm-periods th,
+.hm-periods td {
+  padding: 8px 6px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
+}
+.hm-periods thead th {
+  border-top: 0;
+  vertical-align: bottom;
+  line-height: 1.25;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.hm-periods thead th:first-child,
+.hm-periods tbody th {
+  width: 15%;
+}
+.hm-periods tbody th {
+  font-weight: 600;
+}
+.hm-pspan {
+  display: block;
+  font-weight: 400;
+  font-size: 0.7rem;
+}
+.hm-ptotal th,
+.hm-ptotal td {
+  border-top: 2px solid var(--border);
+  font-weight: 650;
+}
+.hm-pcell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.hm-pcell.up {
+  color: var(--bv-gain);
+}
+.hm-pcell.down {
+  color: var(--bv-loss);
+}
+.hm-signed-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+}
+.hm-signed-pct {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.hm-pcell .bv-est {
+  font-size: 0.62rem;
+}
+.hm-moved {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.25;
+}
+.hm-nil {
+  color: var(--muted);
+}
+@container (max-width: 859px) {
+  .hm-periods thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .hm-periods,
+  .hm-periods tbody,
+  .hm-periods tr,
+  .hm-periods th,
+  .hm-periods td {
+    display: block;
+    width: 100%;
+  }
+  .hm-periods tr {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--soft);
+  }
+  .hm-periods tr.hm-ptotal {
+    border-width: 2px;
+  }
+  .hm-periods th,
+  .hm-periods td {
+    border-top: 0;
+  }
+  .hm-periods tbody th {
+    width: 100%;
+    padding: 0 0 4px;
+    font-size: 1rem;
+  }
+  .hm-periods td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 6px 0;
+    border-top: 1px dashed var(--border);
+  }
+  .hm-periods td::before {
+    content: attr(data-label);
+    flex: none;
+    max-width: 45%;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .hm-periods td .hm-pcell {
+    align-items: flex-end;
+    text-align: right;
+  }
+  .hm-periods td .hm-signed-line {
+    justify-content: flex-end;
+  }
+}

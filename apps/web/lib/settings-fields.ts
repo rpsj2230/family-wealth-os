@@ -133,7 +133,7 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       {
         name: 'changeDays',
         label: 'Home: “this month” compares with this many days ago',
-        hint: 'Sets the month change in the headline of Home and the “What changed” list.',
+        hint: 'Sets the month change in the headline of Home, the “What changed” list and the “Last N days” column of the profit table.',
         kind: 'int',
         path: ['home', 'changeDays'],
         unit: 'days',

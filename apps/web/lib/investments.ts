@@ -17,6 +17,7 @@ import {
   type StatTxn,
   isEstimatedTxn,
   paceFromSeries,
+  periodDates,
   projectCorpus,
   projectionPath,
   fundSeries,
@@ -91,6 +92,8 @@ export interface FundRow {
   navReturns: { def: PeriodDef; r: TrailingReturn | null }[];
   /** the fund valued on every month end, the start of each period and today: the input of the performance figures */
   perf: SeriesPoint[];
+  /** the fund valued on each day the profit-by-period figures are measured on (see periodDates in core): a few points, not the history */
+  periodPoints: SeriesPoint[];
   /** money in (positive) and out (negative), from the statement or, marked estimated, from the start date and SIP */
   flows: Flow[];
   flowsEstimated: boolean;
@@ -513,6 +516,20 @@ export async function loadInvestmentView(
             })
           : [],
       perf,
+      periodPoints: firstDate
+        ? fundSeries(
+            {
+              txns: txBy.get(p.asset_id) ?? [],
+              navs: navBy.get(code ?? '') ?? [],
+              observations: obsBy.get(p.asset_id) ?? [],
+              snapshots: snapBy.get(p.asset_id) ?? [],
+              plan: { invested, startedOn: p.started_on },
+            },
+            today,
+            { value: v, invested },
+            periodDates(today, settings.config.home.changeDays),
+          )
+        : [],
       flows: fl.flows,
       flowsEstimated: fl.estimated,
       // lines assumed from the SIP plan (source 'estimate') are not a statement

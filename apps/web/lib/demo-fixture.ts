@@ -29,7 +29,11 @@ const BANKS: Record<string, string> = {
   id: 'Sample IDF Bank',
 };
 
-export function demoModel() {
+/**
+ * `periodCases` adds the deposits, the dollar account and the history that Home's profit-by-period figures need to show every case
+ * (money put in, paid out, renewed, foreign). The "I need money" sample has its own funds and plan and leaves them out.
+ */
+export function demoModel(periodCases = true) {
   const assets: AssetRow[] = [];
   const observations: ObservationRow[] = [];
   const fds: FdRow[] = [];
@@ -105,6 +109,82 @@ export function demoModel() {
       }
     });
   });
+  if (periodCases) {
+    // deposits that exercise the periods on Home: one booked inside the last 30 days, one paid out inside this quarter, and one renewed
+    // inside this financial year (the old deposit is marked renewed and the new one starts with what it paid)
+    const extraFd = (
+      id: string,
+      bank: string,
+      owner: string,
+      status: string,
+      principal: number,
+      rate: number,
+      booked: string,
+      maturity: string,
+      ref: number,
+    ) => {
+      assets.push(
+        base({
+          id,
+          owner_id: owner,
+          institution_id: bank,
+          type: 'fixed_deposit',
+          status,
+          nickname: 'FD',
+          account_kind: null,
+        }),
+      );
+      fds.push({
+        asset_id: id,
+        principal,
+        rate,
+        booked_on: booked,
+        maturity_on: maturity,
+        compounding: 'quarterly',
+        bank_maturity_amount: null,
+        fd_ref_last4: String(ref),
+        fd_ref: `30001779${ref}-1`,
+      });
+    };
+    extraFd('f-eq-new', 'eq', 'p1', 'active', 750_000, 0.0725, '2026-10-06', '2027-10-06', 4101);
+    extraFd('f-ja-paid', 'ja', 'p2', 'closed', 400_000, 0.071, '2025-10-08', '2026-10-08', 4102);
+    extraFd('f-es-old', 'es', 'p1', 'renewed', 1_000_000, 0.072, '2025-08-18', '2026-08-18', 4103);
+    extraFd(
+      'f-es-renewed',
+      'es',
+      'p1',
+      'active',
+      1_073_900,
+      0.0735,
+      '2026-08-18',
+      '2027-08-18',
+      4104,
+    );
+    // a dollar account: its balance is in dollars and moves with the exchange rate, which is not interest
+    assets.push(
+      base({
+        id: 's-ja-usd',
+        owner_id: 'p2',
+        institution_id: 'ja',
+        currency: 'USD',
+        account_kind: 'NRE',
+        identifier_last4: '9911',
+      }),
+    );
+    observations.push({
+      id: `o${++n}`,
+      asset_id: 's-ja-usd',
+      kind: 'balance',
+      amount: 6_200,
+      currency: 'USD',
+      fx_rate: 83.5,
+      as_of: '2026-09-30',
+      confidence: 'manual_confirmed',
+      source: 'manual',
+      created_at: '2026-09-30T00:00:00Z',
+      superseded_by: null,
+    });
+  }
   // money kept for a relative: it is not in any bank, so it sits under "Other holdings"
   assets.push(
     base({
@@ -140,7 +220,7 @@ export function demoModel() {
 
 /** The same invented household plus a few funds, shares and a property, for the public "I need money" sample. */
 export function demoRaiseSources() {
-  const m = demoModel();
+  const m = demoModel(false);
   const assets = [...m.assets];
   const observations = [...m.observations];
   const extra: [string, string, AssetRow['type'], string, number][] = [

@@ -1,6 +1,7 @@
 import { formatInr, formatInrCompact, formatPct, type PersonStyle } from '@fwos/core';
 import { plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { Sparkline } from '@/components/charts';
+import { Est } from '@/components/Est';
 import { PersonBadge } from '@/components/Person';
 import type { HomeModel } from '@/lib/home';
 import { CardHead, MaybeLink, Signed, homeLink, pct, rupees, tone } from './parts';
@@ -76,7 +77,7 @@ export function Funds({
                 <span className="hm-mname">{f.bestWorst.best.name}</span>
                 <strong className="gain">
                   {pct(f.bestWorst.best.xirr as number, 1)}
-                  {f.bestWorst.best.estimated ? ' ~' : ''}
+                  {f.bestWorst.best.estimated && <Est />}
                 </strong>
               </li>
               <li>
@@ -84,7 +85,7 @@ export function Funds({
                 <span className="hm-mname">{f.bestWorst.weakest.name}</span>
                 <strong className={tone(f.bestWorst.weakest.xirr)}>
                   {pct(f.bestWorst.weakest.xirr as number, 1)}
-                  {f.bestWorst.weakest.estimated ? ' ~' : ''}
+                  {f.bestWorst.weakest.estimated && <Est />}
                 </strong>
               </li>
             </ul>

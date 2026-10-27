@@ -9,6 +9,7 @@ import {
   type ProfileConfig,
   returnsFor,
 } from '@fwos/core';
+import { perfFundIn } from './fund-holdings';
 import type { FundRow, InvestmentView } from './investments';
 
 /** The numbers behind the return tables, taken from the saved configuration. */
@@ -27,13 +28,7 @@ const allFunds = (view: InvestmentView) => view.groups.flatMap((g) => g.funds);
 /** How the funds shown have performed as a whole, with the benchmark alongside when its prices are loaded. */
 export function investPerformance(view: InvestmentView): PortfolioPerformance {
   return portfolioPerformance({
-    funds: allFunds(view).map((f) => ({
-      assetId: f.assetId,
-      perf: f.perf,
-      flows: f.flows,
-      flowsEstimated: f.flowsEstimated,
-      value: f.value,
-    })),
+    funds: allFunds(view).map(perfFundIn),
     today: view.today,
     cfg: profileConfig(view.config),
     benchmark: view.benchmark?.navs ?? [],

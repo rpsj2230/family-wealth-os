@@ -56,3 +56,4 @@ export * from './invest-overview';
 export * from './perf-inputs';
 export * from './period-pl';
 export * from './home';
+export * from './period-gains';

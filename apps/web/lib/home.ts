@@ -5,6 +5,7 @@ import {
   attentionItems,
   bankOverview,
   bestAndWeakest,
+  classCards,
   depositInterest,
   depositsByBank,
   fixedDepositBlocks,
@@ -19,6 +20,7 @@ import {
   moversBetween,
   netWorthChanges,
   paceFromSeries,
+  periodGains,
   raisableWithin,
   rangeView,
   toShares,
@@ -31,23 +33,28 @@ import {
   type BankOverview,
   type BankShare,
   type Change,
+  type ClassCard,
   type DepositInterest,
+  type DepositTerms,
   type FreshnessSummary,
   type GrowthSplit,
   type HomeRange,
   type MaturityYear,
   type ShareMove,
   type OverviewOptions,
+  type PeriodGains,
   type PersonStyle,
   type Portfolio,
   type RaiseSource,
   type RangeView,
+  type SavingsAccount,
   type SeriesPoint,
   type Share,
   type UpcomingEvent,
   type ValueTrust,
 } from '@fwos/core';
 import type { DepositsView } from './deposits';
+import { fundHoldingOf } from './fund-holdings';
 import type { GoalSummary } from './goals-view';
 import type { fundPace, FundRow, InvestmentView, Totals } from './investments';
 
@@ -102,6 +109,9 @@ export interface HomeInput {
   tasks: { id: string; title: string; dueOn: string }[];
   openTasks: number;
   inboxReview: number;
+  /** every fixed deposit with its terms, and every counted savings account with its recorded balances: the profit-by-period input */
+  deposits: DepositTerms[];
+  accounts: SavingsAccount[];
   /** monthly household spending from the retirement plan; 0 until entered */
   monthlySpending: number;
   recent: HomeRecent[];
@@ -136,10 +146,30 @@ export interface FundSnapshot {
   growth: { invested: number; gain: number };
 }
 
+/** The headline money figures: what was put in, what it is worth, what it pays at maturity, what it has earned and earned today. */
+export interface HomeMoney {
+  invested: number;
+  /** net worth: the same figure as `total` */
+  current: number;
+  /** what deposits pay on their dates; everything else at today's value */
+  maturity: number;
+  profit: number;
+  profitPct: number | null;
+  /** the profit of at least one kind rests on an estimate */
+  estimated: boolean;
+}
+
 export interface HomeModel {
   today: string;
   styles: Record<string, PersonStyle>;
   total: number;
+  money: HomeMoney;
+  /** deposits, funds, cash and the rest: together they are net worth */
+  classes: ClassCard[];
+  /** profit earned in the last N days, this month, quarter and financial year, last financial year and since the start */
+  periods: PeriodGains;
+  /** the assumptions behind the cash figures, from Settings: the rate for an account with none of its own, and the tax at source */
+  assumptions: { savingsRate: number; tdsRate: number };
   counted: number;
   people: number;
   asOf: string | null;
@@ -270,6 +300,50 @@ export function buildHome(i: HomeInput): HomeModel {
       : [];
   const funds = i.inv && i.inv.household.funds > 0 ? i.inv : null;
   const fundRows: FundRow[] = funds ? funds.groups.flatMap((g) => g.funds) : [];
+  // --- the four kinds of holding, and what each earned in each period
+  const awaitingRows = rows.filter((r) => r.fd?.needsConfirmation && r.status === 'active');
+  const awaiting = {
+    count: awaitingRows.length,
+    invested: awaitingRows.reduce((a, r) => a + r.fd!.principal, 0),
+    current: awaitingRows.reduce((a, r) => a + (r.current ?? 0), 0),
+  };
+  const fundsIn = funds
+    ? {
+        count: funds.household.funds,
+        invested: funds.household.invested,
+        value: funds.household.value,
+        today: fundsDay,
+        withoutStatement: fundRows.filter((f) => !f.hasStatement).length,
+      }
+    : null;
+  const cardsIn = {
+    netWorth: nw.total,
+    fd: overview.parts.fd,
+    fdToday: overview.today.fd,
+    awaiting,
+    cash: overview.parts.cash,
+    cashToday: overview.today.savings,
+    othersHeld: overview.parts.others,
+    funds: fundsIn,
+  };
+  const periods = periodGains({
+    today,
+    recentDays: cfg.home.changeDays,
+    deposits: i.deposits,
+    funds: fundRows.map(fundHoldingOf),
+    accounts: i.accounts,
+    othersValue: classCards({ ...cardsIn, earned: {} }).find((c) => c.key === 'others')!.current,
+  });
+  const classList = classCards({
+    ...cardsIn,
+    earned: Object.fromEntries(
+      periods.rows.map((r) => [r.key, r.cells.start.empty ? null : r.cells.start.profit]),
+    ),
+  });
+  const sumOf = (f: (c: ClassCard) => number) => classList.reduce((a, c) => a + f(c), 0);
+  const moneyInvested = sumOf((c) => c.invested);
+  const moneyProfit = sumOf((c) => c.profit);
+
   const growth = growthSplit([
     {
       key: 'banks',
@@ -551,6 +625,20 @@ export function buildHome(i: HomeInput): HomeModel {
     today,
     styles: i.styles,
     total: nw.total,
+    money: {
+      invested: moneyInvested,
+      current: nw.total,
+      maturity: sumOf((c) => c.maturity),
+      profit: moneyProfit,
+      profitPct: moneyInvested > 0 ? moneyProfit / moneyInvested : null,
+      estimated: classList.some((c) => c.estimated && c.profit !== 0),
+    },
+    classes: classList,
+    periods,
+    assumptions: {
+      savingsRate: cfg.estimates.savingsRate,
+      tdsRate: cfg.estimates.interestTdsRate,
+    },
     counted: nw.counted,
     people: Object.keys(nw.byOwner).length,
     asOf: i.newestRecorded,

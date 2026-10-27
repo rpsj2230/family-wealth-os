@@ -46,7 +46,7 @@ say where each figure came from, and make the next action obvious. Follow this w
 The top of Accounts, Deposits and Home share one language, built from the pieces in `app/(app)/accounts/BankOverview.tsx` and `bankoverview.css`:
 
 - a **hero**: the value in lakh/crore form (`.bv-big`) with the exact rupees beneath (`.bv-exact`), then signed **Delta** chips. Each chip has an arrow
-  and a word ("Up", "Down", for screen readers) as well as the colour, and an "estimate" tag when it is worked out from rates, not read from a statement;
+  and a word ("Up", "Down", for screen readers) as well as the colour, and the shared **`Est`** mark ("est.", `components/Est.tsx`, with the explanation as its title) when it is worked out from rates, prices or a plan, not read from a statement. Use `Est` everywhere a figure is an estimate; do not invent another tag;
 - a **journey track** (put in, now, at maturity) where there is something to earn;
 - a **split bar** (`SplitBar`) whose legend carries the name, the amount and the share of every cut, so colour is never the only cue;
 - a grid of small labelled **stats** (`Stat`), each linking to the page that explains it;
@@ -54,6 +54,10 @@ The top of Accounts, Deposits and Home share one language, built from the pieces
 
 Home (`app/(app)/dashboard/`) reuses these, adds `Signed` (an inline signed figure), `hm-tag` status words (Late, Soon, Note, OK, Watch) and `BarRow`, and
 lays its cards out with a container query so a narrow page area (the sidebar takes a share of the window) gets one column, a wider one two and the widest three.
+Home's top also has `Money` (five tiles in the Delta language: invested, current value, maturity value, profit, earned today), `Classes` (four small
+cards, `.hm-class`, 4 then 2 then 1 columns by the width of the page area, each linking to its page) and `Periods` (profit by period: a table on a wide page, one
+card per kind on a narrow one with each cell labelled by its period; the header row stays for screen readers; styles in `money.css`). Every gain cell is an arrow, a
+word and the figure; money put in or paid out is a separate muted line; an empty cell says "nothing held". Period figures come from `packages/core/src/period-gains.ts`.
 The signed-in page and `/demo/dashboard` both draw `HomeView` from a `HomeModel` (`lib/home.ts`), so the sample can never look different.
 
 ## Dashboard research (Home)
@@ -104,6 +108,8 @@ Across all of them a person opening the page wants these answered, in this order
 
 | On Home | Because |
 |---|---|
+| Five money figures (invested, current value, maturity value, profit so far, earned today) and four small cards (deposits, funds, cash, others) that add up to net worth | Asked for by the family; the same two-line figures (big compact number, exact amount beneath) as the Accounts overview. The cards partition net worth, so nothing is counted twice. |
+| Profit by period (last N days, month, quarter, financial year, last financial year, since the start), per kind and in total | Worked out from each holding's terms (`period-gains.ts`), not from snapshots, so a deposit or a withdrawal is never profit. Quarter and financial-year boundaries are calendar facts; last N days is the existing Settings value. The Deposits, Cash and Accounts "earned today", Reports interest by financial year and the Investments profit and loss take their figures from, or are tested to agree with, the same module. |
 | Hero: net worth, today / last 30 days / financial year, each with arrow and word | Questions 1 and 2. Periods follow Ghostfolio and Monarch. The financial year (1 April) is how Indian families and the tax rules count a year. |
 | "How much is verified" split bar (confirmed recently, from deposit terms, older or unconfirmed) | Question 3. It reconciles to net worth: the same holdings are counted. Estimated SIP ledger lines are never treated as statement-backed. |
 | Needs you, ranked: late, then dated, then housekeeping | Question 4. Replaces a flat list; each line carries its count and a link. Thresholds are Settings. |
@@ -114,7 +120,7 @@ Across all of them a person opening the page wants these answered, in this order
 | Allocation (split bar, legend), whose money, NRE or NRO, currency | Question 6. NRE or NRO matters for an NRI household and is already computed for Accounts. |
 | Liquidity: the ladder with nothing sold, then what could be in the bank by each window from Settings, at no cost and with sales and early breaks | Question 7. The windows are the "I need money" scenario days, so the two pages agree. |
 | Banks and Deposits snapshots; deposit interest this financial year and over the next twelve months | Reuse of the Accounts and Deposits overviews (same functions). The forward figure follows Snowball's "next twelve months", limited to the days each deposit has left. |
-| Mutual funds: value, gain, XIRR, today, best and weakest, per person, whether a statement is on file | Question 10. The "~" mark shows a return worked out from the plan you entered, not from a statement. |
+| Mutual funds: value, gain, XIRR, today, best and weakest, per person, whether a statement is on file | Question 10. The "est." mark shows a return worked out from the plan you entered, not from a statement. |
 | Goals with a word and a bar | Question 8. |
 | What to watch: insurance limit, largest bank (threshold in Settings), largest kind of holding, late loans | Question 9. |
 
