@@ -4,6 +4,9 @@ import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { demoAutomation } from '@/lib/demo-datain';
 import { demoFundPreview } from '@/lib/demo-fund-import';
+import { demoCoverage } from '@/lib/demo-history';
+import { personStyles } from '@fwos/core';
+import { HistoryCoverage } from '@/app/(app)/import/HistoryCoverage';
 import { DEMO_SYNC_INFO, demoSyncView } from '@/lib/demo-sheet-sync';
 import { IMPORT_TABS, ImportHub, type ImportData, type ImportTab } from '@/app/(app)/import/Hub';
 
@@ -15,6 +18,15 @@ export const metadata: Metadata = {
 async function noSignOut() {
   'use server';
 }
+
+const PEOPLE = Object.fromEntries(
+  Object.values(
+    personStyles([
+      { id: 'p1', name: 'Anil' },
+      { id: 'p2', name: 'Beena' },
+    ]),
+  ).map((p) => [p.name, p]),
+);
 
 const DATA: ImportData = {
   today: '2026-10-26',
@@ -112,6 +124,9 @@ export default async function DemoImport({
             demoSync={demoSyncView()}
             demoChanges={demoFundPreview()}
           />
+          {(tab === 'start' || tab === 'workbook') && (
+            <HistoryCoverage coverage={demoCoverage()} people={PEOPLE} demo />
+          )}
         </main>
       </div>
       <BottomNav />

@@ -83,6 +83,11 @@ export interface FdRow {
   fd_ref_last4?: string | null;
   /** the full deposit number, when it has been entered */
   fd_ref?: string | null;
+  /** the day a deposit that is no longer held left (paid out or closed); null: its maturity date is used */
+  ended_on?: string | null;
+  /** the end date, or the booking date, was read from the monthly tabs rather than from the bank */
+  ended_estimated?: boolean;
+  start_estimated?: boolean;
 }
 
 export interface PortfolioDefaults {

@@ -1,0 +1,289 @@
+/* Import > History from all monthly tabs (the form) and the History coverage panel. */
+.hist {
+  min-width: 0;
+}
+.hist .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.hist-headline {
+  font-weight: 600;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.hist-table td,
+.hist-table th {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.hist-table .num {
+  white-space: nowrap;
+}
+.hist-row:not(.on) > td {
+  opacity: 0.85;
+}
+.hist-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--soft);
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: normal;
+}
+.hist-src {
+  display: block;
+}
+.hist-check {
+  display: inline-flex;
+  gap: 4px;
+  align-items: baseline;
+  font-weight: 600;
+  white-space: normal;
+}
+.hist-check.ok {
+  color: var(--ok-fg);
+}
+.hist-check.mismatch {
+  color: var(--fail);
+}
+.hist-check.unchecked {
+  color: var(--muted);
+}
+.hist-doubt,
+.hist-fine {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  max-width: 100%;
+}
+.hist-doubt {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.hist-fine {
+  background: var(--soft);
+}
+.hist-doubt p,
+.hist-fine p {
+  margin: 0 0 6px;
+}
+.hist-doubt label,
+.hist-fine label {
+  display: grid;
+  gap: 4px;
+}
+.hist-doubt select,
+.hist-fine select {
+  max-width: 100%;
+  min-width: 0;
+}
+.hist-warn {
+  margin-top: 4px;
+}
+.hist-block {
+  margin: 14px 0;
+}
+.hist-block h3,
+.hist-block h4 {
+  margin: 8px 0 4px;
+}
+.hist-list {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+.hist-cell {
+  display: inline-block;
+  min-width: 2.2em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.hist-conflicts {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hist-conflicts fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 0;
+  min-width: 0;
+}
+.hist-conflicts legend {
+  padding: 0 4px;
+  overflow-wrap: anywhere;
+}
+.hist-conflicts label {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 14px;
+}
+.hist-go {
+  margin-top: 14px;
+}
+.hist-progress {
+  margin: 10px 0;
+}
+.hist-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.hist-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+/* ---- coverage panel ---- */
+.hist-cov {
+  min-width: 0;
+}
+.hist-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+.cov-leg {
+  white-space: nowrap;
+}
+.cov-key {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 2px;
+  vertical-align: -2px;
+  border: 1px solid var(--border);
+}
+.cov-list {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.cov-row {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  min-width: 0;
+}
+.cov-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+}
+.cov-name {
+  overflow-wrap: anywhere;
+}
+.cov-strip {
+  margin: 6px 0 2px;
+  min-width: 0;
+}
+.cov-cells,
+.cov-years {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+}
+.cov-cell {
+  display: block;
+  height: 14px;
+  min-width: 0;
+  background: var(--soft);
+  border-radius: 1px;
+}
+.cov-cell.value,
+.cov-key.value {
+  background: #16a34a;
+}
+.cov-cell.terms,
+.cov-key.terms {
+  background: var(--primary);
+  opacity: 0.55;
+}
+.cov-cell.gap,
+.cov-key.gap {
+  background: repeating-linear-gradient(45deg, var(--fail) 0 2px, var(--card) 2px 4px);
+  border: 1px solid var(--fail);
+}
+.cov-cell.late,
+.cov-key.late {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-fg);
+}
+.cov-cell.none,
+.cov-key.none {
+  background: var(--soft);
+}
+.cov-years {
+  font-size: 0.65rem;
+  color: var(--muted);
+  line-height: 1.2;
+  margin-top: 2px;
+}
+.cov-years > span {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.cov-text {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+/* a month is a compact card on a phone: tab and date on top, the four counts in one row, then the check */
+@media (max-width: 719px) {
+  table.responsive.hist-table tr {
+    display: grid;
+    grid-template-columns: auto repeat(4, minmax(0, 1fr));
+    column-gap: 8px;
+    row-gap: 4px;
+    padding: 10px 12px;
+    align-items: start;
+  }
+  table.responsive.hist-table td {
+    display: block;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    grid-column: 2 / span 4;
+  }
+  table.responsive.hist-table td:first-child {
+    grid-column: 1;
+    grid-row: 1 / span 4;
+  }
+  table.responsive.hist-table td.num {
+    grid-column: auto;
+    text-align: left;
+    white-space: normal;
+  }
+  table.responsive.hist-table td.num::before {
+    display: block;
+    font-size: 0.68rem;
+    line-height: 1.2;
+  }
+  table.responsive.hist-table td[data-label='Tab']::before,
+  table.responsive.hist-table td[data-label='As of']::before,
+  table.responsive.hist-table td[data-label='Check']::before {
+    display: none;
+  }
+  .hist-src {
+    display: inline;
+    margin-left: 6px;
+  }
+}

@@ -81,7 +81,12 @@ export default async function CashPage({
     <>
       <PageHead
         title="Cash"
-        subtitle="The savings and cash accounts: what is available today, what it earns, and which bank holds how much."
+        subtitle={
+          <>
+            The savings and cash accounts: what is available today, what it earns, and which bank
+            holds how much. <Link href="/import#history-coverage">Balance history</Link>
+          </>
+        }
         pills={[
           { label: `${overview.accounts} accounts`, tone: 'info' },
           overview.staleBalances > 0

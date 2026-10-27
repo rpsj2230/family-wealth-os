@@ -199,6 +199,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'instalments',
       },
       {
+        name: 'historyStarts',
+        label: 'A monthly tab is flagged when a deposit on it starts more than',
+        hint: 'Import > History from all monthly tabs: a tab whose deposits start this many days after the month it is named for is probably a copy of a later month. It is not selected by default. 62 days by default.',
+        kind: 'int',
+        path: ['estimates', 'historyStartsAfterDays'],
+        unit: 'days after its month',
+      },
+      {
         name: 'savingsRate',
         label: 'Savings interest assumed when no rate is known',
         hint: 'Estimating today’s balance of a savings account uses, in this order: the rate set on the account, then the Rates list for its bank (NRE or NRO, and the slab its balance falls in), then this figure.',

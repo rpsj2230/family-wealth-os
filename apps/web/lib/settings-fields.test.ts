@@ -82,6 +82,7 @@ describe('settings fields', () => {
       form({
         freshness: '40',
         sipMinInstalments: '3',
+        historyStarts: '62',
         savingsRate: '3.5',
         tdsRate: '0',
         includeSip: 'on',
@@ -93,6 +94,7 @@ describe('settings fields', () => {
         estimates: {
           freshnessDays: 40,
           sipMinInstalments: 3,
+          historyStartsAfterDays: 62,
           savingsRate: 0.035,
           interestTdsRate: 0,
           includeSip: true,

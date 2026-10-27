@@ -37,6 +37,7 @@ export function periodInputs(args: {
         compounding: f.compounding,
         // the same rule as the Deposits figures and net worth: a running deposit is held, even past its date
         held: a.status === 'active',
+        endedOn: f.ended_on ?? null,
       },
     ];
   });

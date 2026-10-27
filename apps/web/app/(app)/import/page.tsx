@@ -1,9 +1,12 @@
-import { currentFy, previousFy } from '@fwos/core';
+import { currentFy, personStyles, previousFy, type PersonStyle } from '@fwos/core';
+import { loadCoverage } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
 import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
 import { IMPORT_TABS, ImportHub, changeRecord, type ImportData, type ImportTab } from './Hub';
+import { HistoryCoverage } from './HistoryCoverage';
 
 export const dynamic = 'force-dynamic';
 // the Google Sheet preview and sync wait for Google
@@ -18,7 +21,7 @@ export default async function ImportPage({
   const tab: ImportTab = (IMPORT_TABS as readonly string[]).includes(sp.tab ?? '')
     ? (sp.tab as ImportTab)
     : 'start';
-  const { supabase } = await loadContext();
+  const { supabase, householdId } = await loadContext();
   const today = new Date().toISOString().slice(0, 10);
   const [owners, batch, cas, tax, auto, sheet] = await Promise.all([
     supabase.from('owners').select('id, display_name, pan_last4, dob').order('created_at'),
@@ -86,6 +89,16 @@ export default async function ImportPage({
     email: auto.cards.find((c) => c.key === 'email') ?? null,
     sheet,
   };
+  // how far back the balances and deposits go, month by month (shown under the front door and the workbook tab)
+  const coverage =
+    householdId && (tab === 'start' || tab === 'workbook')
+      ? await loadCoverage(supabase as unknown as SupabaseClient, householdId, today).catch(
+          () => null,
+        )
+      : null;
+  const byId = personStyles(ownerRows.map((o) => ({ id: o.id, name: o.name })));
+  const people: Record<string, PersonStyle> = {};
+  for (const o of ownerRows) if (byId[o.id]) people[o.name] = byId[o.id]!;
   return (
     <>
       <PageHead
@@ -93,6 +106,7 @@ export default async function ImportPage({
         subtitle="Choose a file and the app works out what it is. Most of this arrives by itself when you forward the email to your Gmail label; use this page when you have the file in hand."
       />
       <ImportHub base="/import" tab={tab} data={data} />
+      {coverage && <HistoryCoverage coverage={coverage} people={people} />}
     </>
   );
 }

@@ -137,7 +137,13 @@ export default async function AccountsPage({
   const head = (
     <PageHead
       title="Accounts"
-      subtitle="Every bank in your sheet's order, with each person's savings and deposits. Press Edit on a line to change it."
+      subtitle={
+        <>
+          Every bank in your sheet&rsquo;s order, with each person&rsquo;s savings and deposits.
+          Press Edit on a line to change it.{' '}
+          <Link href="/import#history-coverage">Balance history</Link>
+        </>
+      }
       pills={pills}
       actions={
         <>

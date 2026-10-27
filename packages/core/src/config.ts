@@ -35,6 +35,8 @@ export interface AppConfig {
     includeSip: boolean;
     /** a fund statement or transactions file shows a SIP (new, resumed or changed) only when at least this many similar instalments came in a row, one cadence apart */
     sipMinInstalments: number;
+    /** Import history: a monthly tab with a deposit that starts more than this many days after the month it is named for is flagged (probably a copy of a later month) */
+    historyStartsAfterDays: number;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -222,6 +224,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     interestTdsRate: 0,
     includeSip: true,
     sipMinInstalments: 3,
+    historyStartsAfterDays: 62,
   },
   inbox: { trustedForwarders: [] },
   rates: {
@@ -427,6 +430,9 @@ export function configFromJson(raw: unknown): AppConfig {
       includeSip: bool(est.includeSip, d.estimates.includeSip),
       sipMinInstalments: Math.round(
         num(est.sipMinInstalments, d.estimates.sipMinInstalments, 2, 12),
+      ),
+      historyStartsAfterDays: Math.round(
+        num(est.historyStartsAfterDays, d.estimates.historyStartsAfterDays, 0, 400),
       ),
     },
     inbox: {

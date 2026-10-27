@@ -78,6 +78,8 @@ export interface PlannedAsset {
   row?: number;
   /** joint with a spouse or child ("JO" in the sheet) */
   isJoint?: boolean;
+  /** the sheet does not say whose it is; the household's first owner was assumed */
+  ownerAssumed?: boolean;
   identifierLast4?: string;
   accountKind?: 'NRE' | 'NRO' | 'SB' | 'joint' | 'other';
   currency: 'INR' | 'SGD';
@@ -103,7 +105,8 @@ export interface PlannedFd {
   rate: number;
   bookedOn: string;
   maturityOn: string;
-  bankMaturityAmount: number;
+  /** null when an older tab does not give it (history only) */
+  bankMaturityAmount: number | null;
   compounding: 'quarterly';
   refLast4?: string;
   /** the full deposit number as written in the sheet (deposit numbers are shown in full; account numbers and PANs are not) */
@@ -198,10 +201,75 @@ export interface ImportPlan {
   reconciliation: { check: string; expected: number | null; actual: number; ok: boolean }[];
 }
 
+/** Which column holds what. A column a tab does not have is null (the sheet's history tabs differ from year to year). */
+export interface SheetColumns {
+  /** the bank-and-person heading */
+  a: string;
+  /** category / type: FD, Cash, a fund's name */
+  b: string;
+  c: string;
+  d: string;
+  /** maturity date (a deposit) or an overloaded tag (Cash-NRE, SIP ..., Cash Loan) */
+  e: string;
+  f: string;
+  g: string | null;
+  /** invested */
+  h: string | null;
+  /** a stray marker ("today") */
+  j: string | null;
+  /** changes required */
+  m: string | null;
+  /** notes */
+  n: string | null;
+}
+
+export const STANDARD_COLUMNS: SheetColumns = {
+  a: 'A',
+  b: 'B',
+  c: 'C',
+  d: 'D',
+  e: 'E',
+  f: 'F',
+  g: 'G',
+  h: 'H',
+  j: 'J',
+  m: 'M',
+  n: 'N',
+};
+
+/** Where a month's register sits on its tab. The default is the layout the importer was written for. */
+export interface SheetLayout {
+  columns: SheetColumns;
+  firstRow: number;
+  lastRow: number;
+  /** the cell holding the sheet's own total of column F, when the tab has one */
+  totalRef: string | null;
+  /** read the register only: no insurance, property or task blocks, and no checks at fixed positions in the side panel */
+  registerOnly?: boolean;
+}
+
+export const STANDARD_LAYOUT: SheetLayout = {
+  columns: STANDARD_COLUMNS,
+  firstRow: 3,
+  lastRow: 113,
+  totalRef: 'F114',
+};
+
+/** What a history row is when the shared grammar cannot say (older tabs wrote the lines differently). */
+export type RowClassifier = typeof classifyRegisterRow;
+export type HistoryOnlyClass =
+  { kind: 'cash'; accountKind?: 'NRE' | 'NRO'; heldByOther: boolean } | { kind: 'fund_summary' };
+
 export interface ImportOptions {
   /** Date the balances in the workbook represent. Default: today's date supplied by the caller. */
   asOf: string;
   sheetName?: string;
+  /** Where the register sits (history tabs). Default: the layout of the current month's tab. */
+  layout?: SheetLayout;
+  /** A classifier for older tabs; it must give the shared grammar's answer wherever that grammar has one. */
+  classify?: (...a: Parameters<RowClassifier>) => ReturnType<RowClassifier> | HistoryOnlyClass;
+  /** History tabs: a deposit whose start date the sheet does not give is read with an empty start date, never an invented one. */
+  allowMissingStart?: boolean;
   /** Owner assumed for rows whose owner is not stated in the workbook (Singapore banks, loans, third-party). */
   defaultOwner?: string;
   /** Your confirmed answers to ambiguous cells, keyed by cell ref. */
@@ -214,7 +282,7 @@ export interface ImportOptions {
 // ----------------------------------------------------------------------------------------------
 // Cell helpers
 // ----------------------------------------------------------------------------------------------
-function cellValue(ws: ExcelJS.Worksheet, ref: string): Raw {
+export function cellValue(ws: ExcelJS.Worksheet, ref: string): Raw {
   const v = ws.getCell(ref).value as unknown;
   if (v === null || v === undefined) return null;
   if (v instanceof Date) return v;
@@ -274,6 +342,26 @@ export async function planWorkbook(
   else await wb.xlsx.load(source as unknown as ArrayBuffer);
   const ws = opts.sheetName ? wb.getWorksheet(opts.sheetName) : wb.worksheets[0];
   if (!ws) throw new Error(`worksheet not found${opts.sheetName ? `: ${opts.sheetName}` : ''}`);
+  return planWorksheet(ws, opts);
+}
+
+/** Plans one tab that is already open. `planWorkbook` is this on the first (or named) tab; the history planner calls it for every month. */
+export function planWorksheet(ws: ExcelJS.Worksheet, opts: ImportOptions): ImportPlan {
+  const layout = opts.layout ?? STANDARD_LAYOUT;
+  const L = layout.columns;
+  const colOf: Record<string, string | null> = {
+    A: L.a,
+    B: L.b,
+    C: L.c,
+    D: L.d,
+    E: L.e,
+    F: L.f,
+    G: L.g,
+    H: L.h,
+    J: L.j,
+    M: L.m,
+    N: L.n,
+  };
 
   const ownerNames = opts.ownerNames ?? DEFAULT_OWNERS;
   const minors = new Set((opts.minors ?? DEFAULT_MINORS).map((m) => m.toLowerCase()));
@@ -348,20 +436,21 @@ export async function planWorkbook(
   // -------------------------------------------------------------------------------------------
   // Register block: rows 3..113
   // -------------------------------------------------------------------------------------------
-  for (let r = 3; r <= 113; r++) {
-    const a = cellValue(ws, `A${r}`);
+  for (let r = layout.firstRow; r <= layout.lastRow; r++) {
+    const at = (c: string): Raw => (colOf[c] ? cellValue(ws, `${colOf[c]}${r}`) : null);
+    const a = at('A');
     if (str(a)) group = parseGroup(String(a), ownerNames);
-    const B = str(cellValue(ws, `B${r}`));
-    const Cc = cellValue(ws, `C${r}`);
-    const D = cellValue(ws, `D${r}`);
-    const E = cellValue(ws, `E${r}`);
-    const F = num(cellValue(ws, `F${r}`));
-    const G = num(cellValue(ws, `G${r}`));
-    const H = num(cellValue(ws, `H${r}`));
-    const M = str(cellValue(ws, `M${r}`));
-    const N = str(cellValue(ws, `N${r}`));
-    const Nraw = String(cellValue(ws, `N${r}`) ?? '');
-    const cell = (c: string) => `${c}${r}`;
+    const B = str(at('B'));
+    const Cc = at('C');
+    const D = at('D');
+    const E = at('E');
+    const F = num(at('F'));
+    const G = num(at('G'));
+    const H = num(at('H'));
+    const M = str(at('M'));
+    const N = str(at('N'));
+    const Nraw = String(at('N') ?? '');
+    const cell = (c: string) => `${colOf[c] ?? c}${r}`;
 
     // Tasks from "Changes Req" (column M) apply to the current group
     if (M && group) {
@@ -376,7 +465,7 @@ export async function planWorkbook(
     }
 
     // which kind of line this is: the rules (R1 to R8) live in sheet-rows.ts and are shared with the Google Sheet sync
-    const cls = classifyRegisterRow({ b: B, e: E, f: F }, group);
+    const cls = (opts.classify ?? classifyRegisterRow)({ b: B, e: E, f: F }, group);
     if (cls.kind === 'blank') continue;
     if (cls.kind === 'no_group' || !group) {
       ex(
@@ -399,12 +488,17 @@ export async function planWorkbook(
       const ownerName = group.owner ?? defaultOwner;
       const D_ = D instanceof Date ? D : null;
       const rate = num(Cc);
-      if (!D_ || rate === null || G === null || !group.institution) {
+      if (
+        (!D_ && !opts.allowMissingStart) ||
+        rate === null ||
+        (G === null && !opts.allowMissingStart) ||
+        !group.institution
+      ) {
         ex(
           'fd_incomplete',
           'needs_input',
           cell('B'),
-          `FD "${B}" is missing a start date, rate, maturity value or institution; not imported.`,
+          `FD "${B}" is missing ${opts.allowMissingStart ? '' : 'a start date, '}a rate${opts.allowMissingStart ? '' : ', maturity value'} or institution; not imported.`,
         );
         continue;
       }
@@ -433,7 +527,7 @@ export async function planWorkbook(
           );
         else fdRefs.set(dupKey, cell('N'));
       }
-      const baseNick = `${B || 'FD'} (${iso(D_)}, ${F.toLocaleString('en-IN')})`;
+      const baseNick = `${B || 'FD'} (${D_ ? iso(D_) : 'to ' + iso(E)}, ${F.toLocaleString('en-IN')})`;
       const nick = uniqueNickname(instK, ownerK, 'fixed_deposit', baseNick, cell('B'));
       const key = `fd:${r}`;
       assets.push({
@@ -456,7 +550,7 @@ export async function planWorkbook(
         assetKey: key,
         principal: F,
         rate,
-        bookedOn: iso(D_),
+        bookedOn: D_ ? iso(D_) : '',
         maturityOn: iso(E),
         bankMaturityAmount: G,
         compounding: 'quarterly',
@@ -465,7 +559,7 @@ export async function planWorkbook(
         sourceRef: cell('B'),
       });
       fdPrincipal += F;
-      fdMaturity += G;
+      fdMaturity += G ?? 0;
       if (matured)
         ex(
           'fd_matured_unconfirmed',
@@ -501,7 +595,7 @@ export async function planWorkbook(
             `Account held by ${group.holder}`,
             cell('B'),
           ),
-          accountKind: kind,
+          ...(kind ? { accountKind: kind } : {}),
           currency: 'INR',
           status: 'active',
           ...rowNotes(N, M),
@@ -549,14 +643,14 @@ export async function planWorkbook(
           instK,
           ownerK,
           'bank_account',
-          `${label} ${kind}`.replace(/\s+/g, ' '),
+          `${label}${kind ? ' ' + kind : ''}`.replace(/\s+/g, ' '),
           cell('B'),
         ),
         label,
         row: r,
         isJoint: joint,
         ...(last4Of(label) ? { identifierLast4: last4Of(label)! } : {}),
-        accountKind: kind,
+        ...(kind ? { accountKind: kind } : {}),
         currency: 'INR',
         status: 'active',
         ...rowNotes(N, M),
@@ -656,6 +750,7 @@ export async function planWorkbook(
           name,
           cell('B'),
         ),
+        ...(group.owner ? {} : { ownerAssumed: true }),
         currency: 'INR',
         status: stopped ? 'stopped' : 'active',
         ...rowNotes(N, M),
@@ -703,12 +798,12 @@ export async function planWorkbook(
           );
         }
       }
-      if (cellValue(ws, `J${r}`))
+      if (at('J'))
         ex(
           'unexplained_marker',
           'info',
           cell('J'),
-          `Marker "${str(cellValue(ws, `J${r}`))}" has no known meaning; ignored.`,
+          `Marker "${str(at('J'))}" has no known meaning; ignored.`,
         );
       continue;
     }
@@ -854,8 +949,22 @@ export async function planWorkbook(
       continue;
     }
 
+    // a combined "SIP/Share" line of an older tab: counted in the sheet's total, not tied to one fund
+    if (cls.kind === 'fund_summary') {
+      importedF += F;
+      ex(
+        'fund_summary_line',
+        'info',
+        cell('B'),
+        `"${B}" is one combined line for several funds or shares; its amount is counted in the tab's total but it cannot be tied to one fund.`,
+      );
+      continue;
+    }
+
     // R7: memo rows
     if (cls.kind === 'memo') {
+      // an older tab put an amount on this row and counted it in its total
+      if (opts.allowMissingStart) importedF += F;
       ex(
         'memo_ignored',
         'info',
@@ -877,93 +986,95 @@ export async function planWorkbook(
   // Plans block: insurance, ULIP, NPS, property (rows 118..124)
   // -------------------------------------------------------------------------------------------
   const peopleCols: Record<string, string> = { B: 'Rupash', D: 'Ragini', F: 'Advika', N: 'Viraj' };
-  const plan = (row: number, label: RegExp, kind: PlannedPolicy['kind']) => {
-    if (!label.test(str(cellValue(ws, `A${row}`)))) return;
-    // The sheet repeats one policy across several people's columns (merged cells / family floaters): one policy, many insured.
-    const byText = new Map<string, { cols: string[]; text: string }>();
-    for (const col of Object.keys(peopleCols)) {
-      const text = str(cellValue(ws, `${col}${row}`));
-      if (!text) continue;
-      const g = byText.get(text) ?? { cols: [], text };
-      g.cols.push(col);
-      byText.set(text, g);
-    }
-    for (const { cols, text } of byText.values()) {
-      const insurer = text.split(/\s+-\s+/)[0]!.trim();
-      const paidBy = /By Company\s+([A-Za-z ]+)/i.exec(text)?.[1]?.trim();
+  if (!layout.registerOnly) {
+    const plan = (row: number, label: RegExp, kind: PlannedPolicy['kind']) => {
+      if (!label.test(str(cellValue(ws, `A${row}`)))) return;
+      // The sheet repeats one policy across several people's columns (merged cells / family floaters): one policy, many insured.
+      const byText = new Map<string, { cols: string[]; text: string }>();
+      for (const col of Object.keys(peopleCols)) {
+        const text = str(cellValue(ws, `${col}${row}`));
+        if (!text) continue;
+        const g = byText.get(text) ?? { cols: [], text };
+        g.cols.push(col);
+        byText.set(text, g);
+      }
+      for (const { cols, text } of byText.values()) {
+        const insurer = text.split(/\s+-\s+/)[0]!.trim();
+        const paidBy = /By Company\s+([A-Za-z ]+)/i.exec(text)?.[1]?.trim();
+        policies.push({
+          kind,
+          insurer,
+          coverage: maskIdentifiers(text),
+          insuredKeys: cols.map((c) => ownerKey(peopleCols[c]!)),
+          ...(paidBy ? { paidBy } : {}),
+          sourceRef: `${cols[0]}${row}`,
+        });
+      }
+    };
+    plan(119, /Term/i, 'term');
+    plan(120, /Health.*Singapore/i, 'health_sg');
+    plan(121, /Health.*India/i, 'health_in');
+    if (/ULIP/i.test(str(cellValue(ws, 'A122')))) {
       policies.push({
-        kind,
-        insurer,
-        coverage: maskIdentifiers(text),
-        insuredKeys: cols.map((c) => ownerKey(peopleCols[c]!)),
-        ...(paidBy ? { paidBy } : {}),
-        sourceRef: `${cols[0]}${row}`,
+        kind: 'ulip',
+        insurer: 'Aditya Birla',
+        coverage: 'Wealth Smart Plus (policy stopped)',
+        insuredKeys: [ownerKey('Rupash')],
+        note: 'Value counted once, from the fund block (not here).',
+        sourceRef: 'B122',
       });
     }
-  };
-  plan(119, /Term/i, 'term');
-  plan(120, /Health.*Singapore/i, 'health_sg');
-  plan(121, /Health.*India/i, 'health_in');
-  if (/ULIP/i.test(str(cellValue(ws, 'A122')))) {
-    policies.push({
-      kind: 'ulip',
-      insurer: 'Aditya Birla',
-      coverage: 'Wealth Smart Plus (policy stopped)',
-      insuredKeys: [ownerKey('Rupash')],
-      note: 'Value counted once, from the fund block (not here).',
-      sourceRef: 'B122',
-    });
-  }
-  if (/NPS/i.test(str(cellValue(ws, 'A123'))) && !str(cellValue(ws, 'B123'))) {
-    ex(
-      'nps_empty',
-      'info',
-      'A123',
-      'NPS row is empty; nothing imported (confirm that you have no NPS account).',
-    );
-  }
-  const house = str(cellValue(ws, 'D124'));
-  if (house) {
-    const priceText = str(cellValue(ws, 'E124'));
-    const lakh = /([\d.]+)\s*Lakh/i.exec(priceText);
-    const when = parseTextDate(priceText);
-    if (lakh && when) {
-      const ownerK = ownerKey(defaultOwner);
-      const key = 'property:124';
-      assets.push({
-        key,
-        type: 'property',
-        ownerKey: ownerK,
-        nickname: house.replace(/\s+,/g, ','),
-        currency: 'INR',
-        status: 'active',
-        notes: priceText,
-        sourceRef: 'D124',
-      });
-      const value = Number(lakh[1]) * 100_000;
-      observations.push({
-        assetKey: key,
-        kind: 'valuation',
-        amount: value,
-        currency: 'INR',
-        asOf: when,
-        confidence: 'manual_unverified',
-        sourceRef: 'E124',
-      });
-      properties.push({ assetKey: key, name: house, value, valuedOn: when, sourceRef: 'E124' });
+    if (/NPS/i.test(str(cellValue(ws, 'A123'))) && !str(cellValue(ws, 'B123'))) {
       ex(
-        'property_value_is_purchase_price',
-        'warning',
-        'E124',
-        `Property is valued at its purchase price (₹${value.toLocaleString('en-IN')} on ${when}); please provide a current estimate.`,
+        'nps_empty',
+        'info',
+        'A123',
+        'NPS row is empty; nothing imported (confirm that you have no NPS account).',
       );
-    } else
-      ex(
-        'property_unparsed',
-        'needs_input',
-        'E124',
-        `Could not read the property price from "${priceText}".`,
-      );
+    }
+    const house = str(cellValue(ws, 'D124'));
+    if (house) {
+      const priceText = str(cellValue(ws, 'E124'));
+      const lakh = /([\d.]+)\s*Lakh/i.exec(priceText);
+      const when = parseTextDate(priceText);
+      if (lakh && when) {
+        const ownerK = ownerKey(defaultOwner);
+        const key = 'property:124';
+        assets.push({
+          key,
+          type: 'property',
+          ownerKey: ownerK,
+          nickname: house.replace(/\s+,/g, ','),
+          currency: 'INR',
+          status: 'active',
+          notes: priceText,
+          sourceRef: 'D124',
+        });
+        const value = Number(lakh[1]) * 100_000;
+        observations.push({
+          assetKey: key,
+          kind: 'valuation',
+          amount: value,
+          currency: 'INR',
+          asOf: when,
+          confidence: 'manual_unverified',
+          sourceRef: 'E124',
+        });
+        properties.push({ assetKey: key, name: house, value, valuedOn: when, sourceRef: 'E124' });
+        ex(
+          'property_value_is_purchase_price',
+          'warning',
+          'E124',
+          `Property is valued at its purchase price (₹${value.toLocaleString('en-IN')} on ${when}); please provide a current estimate.`,
+        );
+      } else
+        ex(
+          'property_unparsed',
+          'needs_input',
+          'E124',
+          `Could not read the property price from "${priceText}".`,
+        );
+    }
   }
 
   // -------------------------------------------------------------------------------------------
@@ -971,18 +1082,18 @@ export async function planWorkbook(
   // -------------------------------------------------------------------------------------------
   const sheetNum = (ref: string): number | null => num(cellValue(ws, ref));
   const sheetGoalTotals: Record<string, number> = {};
-  for (let r = 39; r <= 52; r++) {
+  for (let r = 39; r <= (layout.registerOnly ? 38 : 52); r++) {
     const label = str(cellValue(ws, `V${r}`));
     const v = sheetNum(`W${r}`);
     if (/^SIP /i.test(label) && v !== null) sheetGoalTotals[label] = v;
   }
   const ct: ControlTotals = {
-    sheetSumF: sheetNum('F114'),
+    sheetSumF: layout.totalRef ? sheetNum(layout.totalRef) : null,
     importedF: Math.round(importedF * 100) / 100,
     fdPrincipal,
     fdMaturityValue: fdMaturity,
-    sheetFdPrincipal: sheetNum('AA29'),
-    sheetFdMaturity: sheetNum('AB29'),
+    sheetFdPrincipal: layout.registerOnly ? null : sheetNum('AA29'),
+    sheetFdMaturity: layout.registerOnly ? null : sheetNum('AB29'),
     cashNre,
     cashNro,
     cashSgInr,
@@ -1003,19 +1114,25 @@ export async function planWorkbook(
       actual,
       ok: expected !== null && Math.abs(expected - actual) < 1,
     });
-  check('Sum of all classified amounts equals the sheet total (F114)', ct.sheetSumF, ct.importedF);
-  check('FD principal equals the sheet summary (AA29)', ct.sheetFdPrincipal, ct.fdPrincipal);
   check(
-    'FD maturity value equals the sheet summary (AB29)',
-    ct.sheetFdMaturity,
-    ct.fdMaturityValue,
+    `Sum of all classified amounts equals the sheet total (${layout.totalRef ?? 'no total found'})`,
+    ct.sheetSumF,
+    ct.importedF,
   );
-  check('Singapore cash equals the sheet category (W40)', sheetNum('W40'), ct.cashSgInr);
-  check('NRE cash equals the sheet category (W41)', sheetNum('W41'), ct.cashNre);
-  check('NRO cash equals the sheet category (W42)', sheetNum('W42'), ct.cashNro);
-  check('Loans equal the sheet category (W39)', sheetNum('W39'), ct.loans);
-  for (const [label, v] of Object.entries(sheetGoalTotals))
-    check(`Goal "${label}" equals the sheet total`, v, ct.goalTotals[label] ?? 0);
+  if (!layout.registerOnly) {
+    check('FD principal equals the sheet summary (AA29)', ct.sheetFdPrincipal, ct.fdPrincipal);
+    check(
+      'FD maturity value equals the sheet summary (AB29)',
+      ct.sheetFdMaturity,
+      ct.fdMaturityValue,
+    );
+    check('Singapore cash equals the sheet category (W40)', sheetNum('W40'), ct.cashSgInr);
+    check('NRE cash equals the sheet category (W41)', sheetNum('W41'), ct.cashNre);
+    check('NRO cash equals the sheet category (W42)', sheetNum('W42'), ct.cashNro);
+    check('Loans equal the sheet category (W39)', sheetNum('W39'), ct.loans);
+    for (const [label, v] of Object.entries(sheetGoalTotals))
+      check(`Goal "${label}" equals the sheet total`, v, ct.goalTotals[label] ?? 0);
+  }
 
   // every asset remembers its sheet row (your order) and the label exactly as you wrote it
   for (const a of assets) {

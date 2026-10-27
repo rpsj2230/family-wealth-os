@@ -104,7 +104,12 @@ export default async function DepositsPage({
     <>
       <PageHead
         title="Deposits"
-        subtitle="Every fixed deposit, when it matures and what comes back, and how much of your money the deposit insurance covers."
+        subtitle={
+          <>
+            Every fixed deposit, when it matures and what comes back, and how much of your money the
+            deposit insurance covers. <Link href="/import#history-coverage">Balance history</Link>
+          </>
+        }
         pills={[
           s.confirm.length > 0
             ? { label: `${s.confirm.length} to confirm`, tone: 'warn' }

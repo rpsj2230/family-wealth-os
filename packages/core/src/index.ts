@@ -62,3 +62,4 @@ export * from './ledger-check';
 export * from './fund-tax-panel';
 export * from './realised-ytd';
 export * from './fund-import-diff';
+export * from './history-coverage';

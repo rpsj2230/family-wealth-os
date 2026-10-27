@@ -157,4 +157,44 @@ describe('loadPortfolioData with years of prices and values', () => {
     // the newest value of an account is among them
     expect(l.obsRows.some((o) => o.asset_id === 'acct-3' && o.amount === 1059)).toBe(true);
   });
+  it('leaves out a fund value copied from the monthly sheet: it is only for checking, never a valuation', async () => {
+    const withSheet = {
+      ...tables,
+      observations: [
+        ...obs,
+        {
+          id: 'o-sheet',
+          asset_id: 'fund',
+          kind: 'valuation',
+          amount: 123,
+          currency: 'INR',
+          fx_rate: null,
+          as_of: '2026-09-30',
+          confidence: 'imported_unverified',
+          source: 'workbook',
+          created_at: '2026-10-01T00:00:00Z',
+          superseded_by: null,
+          source_ref: 'histfund:Sep 2026:F12',
+        },
+        {
+          id: 'o-hist',
+          asset_id: 'acct-3',
+          kind: 'balance',
+          amount: 77,
+          currency: 'INR',
+          fx_rate: null,
+          as_of: '2020-01-31',
+          confidence: 'imported_unverified',
+          source: 'workbook',
+          created_at: '2026-10-01T00:00:00Z',
+          superseded_by: null,
+          source_ref: 'hist:Jan 2020:F5',
+        },
+      ],
+    };
+    const l = await loadPortfolioData(fakeDb(withSheet), { today: TODAY });
+    expect(l.obsRows.some((o) => o.id === 'o-sheet')).toBe(false);
+    // a balance from the monthly sheet for an account is an ordinary dated value
+    expect(l.obsRows.some((o) => o.id === 'o-hist')).toBe(true);
+  });
 });

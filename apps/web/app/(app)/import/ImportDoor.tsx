@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { KIND_CHOICES, detectMany, guessOwner, type ImportKind } from '@/lib/import-detect';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
+import { HistoryForm } from './HistoryForm';
 import '@/components/quickedit.css';
 
 interface Chosen {
@@ -39,7 +40,7 @@ export function ImportDoor({
   const inputId = useId();
   const [chosen, setChosen] = useState<Chosen[]>([]);
   const [override, setOverride] = useState<ImportKind | ''>('');
-  const [workbookMode, setWorkbookMode] = useState<'layout' | 'import'>(
+  const [workbookMode, setWorkbookMode] = useState<'layout' | 'import' | 'history'>(
     hasWorkbook ? 'layout' : 'import',
   );
   const [reading, setReading] = useState(false);
@@ -153,9 +154,19 @@ export function ImportDoor({
                 >
                   Import balances and deposits
                 </button>
+                <button
+                  type="button"
+                  className={workbookMode === 'history' ? 'on' : ''}
+                  aria-pressed={workbookMode === 'history'}
+                  onClick={() => setWorkbookMode('history')}
+                >
+                  History from all monthly tabs
+                </button>
               </div>
-              <fieldset disabled={demo} className="plain">
-                {workbookMode === 'layout' ? (
+              <fieldset disabled={demo && workbookMode !== 'history'} className="plain">
+                {workbookMode === 'history' ? (
+                  <HistoryForm key={pick.name + pick.size} file={pick} demo={demo} />
+                ) : workbookMode === 'layout' ? (
                   <>
                     <p className="muted small">
                       Makes the screens follow your sheet&rsquo;s order, names (NRE, NRO, joint),
