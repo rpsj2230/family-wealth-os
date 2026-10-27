@@ -43,6 +43,14 @@ export interface AppConfig {
     historyJumpFloor: number;
     /** Import history: of two accounts a line could be, the one whose neighbouring balances are at least this many times closer is taken as likely */
     historyTieRatio: number;
+    /** a savings account whose recorded balances grow at a rate this far (0.02 = 2 points) from the rate it is valued at is flagged: "earning about X% (from your records)" */
+    observedRateGap: number;
+    /** yearly growth assumed for holdings with no price or rate to follow, as fractions (0 = none, the value recorded is held flat): property, pension accounts (NPS, ULIP) and everything else recorded by hand */
+    assumedGrowthProperty: number;
+    assumedGrowthRetirement: number;
+    assumedGrowthOther: number;
+    /** the history rebuilt by the app agrees with the workbook's Summary totals when within this share of the total (0.01 = 1%) */
+    reconcileTolerance: number;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -236,6 +244,11 @@ export const DEFAULT_CONFIG: AppConfig = {
     historyJumpFactor: 50,
     historyJumpFloor: 100_000,
     historyTieRatio: 3,
+    observedRateGap: 0.02,
+    assumedGrowthProperty: 0,
+    assumedGrowthRetirement: 0,
+    assumedGrowthOther: 0,
+    reconcileTolerance: 0.01,
   },
   inbox: { trustedForwarders: [] },
   rates: {
@@ -449,6 +462,21 @@ export function configFromJson(raw: unknown): AppConfig {
       historyJumpFactor: num(est.historyJumpFactor, d.estimates.historyJumpFactor, 2, 10_000),
       historyJumpFloor: num(est.historyJumpFloor, d.estimates.historyJumpFloor, 0, 1_000_000_000),
       historyTieRatio: num(est.historyTieRatio, d.estimates.historyTieRatio, 1, 100),
+      observedRateGap: num(est.observedRateGap, d.estimates.observedRateGap, 0, 0.5),
+      assumedGrowthProperty: num(
+        est.assumedGrowthProperty,
+        d.estimates.assumedGrowthProperty,
+        -0.2,
+        0.5,
+      ),
+      assumedGrowthRetirement: num(
+        est.assumedGrowthRetirement,
+        d.estimates.assumedGrowthRetirement,
+        -0.2,
+        0.5,
+      ),
+      assumedGrowthOther: num(est.assumedGrowthOther, d.estimates.assumedGrowthOther, -0.2, 0.5),
+      reconcileTolerance: num(est.reconcileTolerance, d.estimates.reconcileTolerance, 0, 1),
     },
     inbox: {
       trustedForwarders: (() => {

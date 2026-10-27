@@ -70,8 +70,12 @@ export interface PeriodWindow {
   key: GainPeriodKey;
   /** "Last 30 days", "This month", ... */
   label: string;
-  /** the first day of the period: the period starts at the start of this day */
+  /** the first day of the period the figures rest on: the period starts at the start of this day. It is `asked` unless the data starts later. */
   from: string;
+  /** the real first day of the period (1 April for the financial year); later `from` means the data begins after it */
+  asked: string;
+  /** the data starts after the real start of the period, so the figures begin where it does */
+  clamped: boolean;
   /** where it ends: the start of this day, or today for a period that ends now */
   to: string;
   /** the last day inside the period, for words ("1 Apr to 31 Mar"); equals `to` for a period that ends today */
@@ -97,7 +101,26 @@ const make = (
   from: string,
   to: string,
   through = to,
-): PeriodWindow => ({ key, label, from, to, through, days: Math.max(0, span(from, to)) });
+): PeriodWindow => ({
+  key,
+  label,
+  from,
+  asked: from,
+  clamped: false,
+  to,
+  through,
+  days: Math.max(0, span(from, to)),
+});
+
+/**
+ * Starts a period no earlier than `clampFrom`, the first day anything can be worked out for ("data starts"). A period that ended
+ * before then is left with no days. The real start stays in `asked`.
+ */
+function clampWindow(w: PeriodWindow, clampFrom: string | null | undefined): PeriodWindow {
+  if (!clampFrom || w.key === 'start' || w.from >= clampFrom) return w;
+  const from = clampFrom < w.to ? clampFrom : w.to;
+  return { ...w, from, clamped: true, days: Math.max(0, span(from, w.to)) };
+}
 
 /** The last N days (N from Settings: Home, "Last N days"); one day is "earned today". */
 export function recentWindow(today: string, recentDays: number): PeriodWindow {
@@ -118,6 +141,7 @@ export function periodWindows(
   today: string,
   recentDays: number,
   since: string | null,
+  clampFrom: string | null = null,
 ): PeriodWindow[] {
   const fyStart = fyStartOn(today);
   return [
@@ -133,7 +157,7 @@ export function periodWindows(
       addDaysIso(fyStart, -1),
     ),
     make('start', 'Since the start', since ?? today, today),
-  ];
+  ].map((w) => clampWindow(w, clampFrom));
 }
 
 /** The days a fund is valued on to measure a period: the day before it starts and its last day. */
@@ -386,6 +410,15 @@ export interface PeriodGainsInput {
   accounts: SavingsAccount[];
   /** worth of the rest (shares, property, money lent, held by others...), at the value recorded */
   othersValue: number;
+  /**
+   * The first day anything can be worked out for ("data starts"). A period that begins earlier begins here instead, and says so
+   * (`clamped`, `asked`). Left out, every period begins on its real first day.
+   */
+  clampFrom?: string | null;
+  /** the rest, worked out per period from the records and any growth assumed (position.ts); without it they are held flat at `othersValue` */
+  others?: (w: Span) => ClassPeriod;
+  /** the move of foreign-currency balances with the exchange rate (position.ts); added to the cash figures */
+  foreignCash?: (w: Span) => ClassPeriod;
 }
 
 export interface PeriodGainsRow {
@@ -419,7 +452,26 @@ export interface PeriodGains {
   since: string | null;
 }
 
-const emptyCell = (): ClassPeriod => ({
+/** Two figures of one kind of holding side by side: their rupees add, and the per cent is of both bases together. */
+export function addPeriods(a: ClassPeriod, b: ClassPeriod): ClassPeriod {
+  if (b.empty) return a;
+  if (a.empty) return b;
+  const profit = a.profit + b.profit;
+  const base = a.base + b.base;
+  return {
+    profit,
+    pct: base > 0 ? profit / base : null,
+    startValue: a.startValue + b.startValue,
+    endValue: a.endValue + b.endValue,
+    putIn: a.putIn + b.putIn,
+    takenOut: a.takenOut + b.takenOut,
+    base,
+    estimated: a.estimated || b.estimated,
+    empty: false,
+  };
+}
+
+export const emptyCell = (): ClassPeriod => ({
   profit: 0,
   pct: null,
   startValue: 0,
@@ -441,7 +493,8 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
     ),
   };
   const since = first(Object.values(sinceOf).filter((d): d is string => d !== null));
-  const windows = periodWindows(i.today, i.recentDays, since);
+  const clamp = i.clampFrom ?? null;
+  const windows = periodWindows(i.today, i.recentDays, since, clamp);
 
   /**
    * One cell for every period. "Since the start" begins on the day that kind of holding was first held, not on the family's first
@@ -456,7 +509,9 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
     Object.fromEntries(
       windows.map((w) => {
         if (w.key !== 'start') return [w.key, build(w)];
-        const own = periodWindows(i.today, i.recentDays, sinceDay).find((x) => x.key === 'start')!;
+        const own = periodWindows(i.today, i.recentDays, sinceDay, clamp).find(
+          (x) => x.key === 'start',
+        )!;
         const cell = build(own);
         return [
           w.key,
@@ -466,12 +521,15 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
         ];
       }),
     ) as Record<GainPeriodKey, ClassPeriod>;
-  const others = (w: PeriodWindow): ClassPeriod => ({
-    ...emptyCell(),
-    startValue: i.othersValue,
-    endValue: i.othersValue,
-    empty: !(i.othersValue > 0) || w.days === 0,
-  });
+  const others = (w: PeriodWindow): ClassPeriod =>
+    i.others
+      ? i.others(w)
+      : {
+          ...emptyCell(),
+          startValue: i.othersValue,
+          endValue: i.othersValue,
+          empty: !(i.othersValue > 0) || w.days === 0,
+        };
   const rows: PeriodGainsRow[] = [
     {
       key: 'fd',
@@ -489,7 +547,10 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
       key: 'cash',
       label: 'Cash',
       since: sinceOf.cash,
-      cells: byClass(sinceOf.cash, (w) => savingsPeriod(i.accounts, w)),
+      cells: byClass(sinceOf.cash, (w) => {
+        const own = savingsPeriod(i.accounts, w);
+        return i.foreignCash ? addPeriods(own, i.foreignCash(w)) : own;
+      }),
     },
     { key: 'others', label: 'Others', since: null, cells: byClass(since, others) },
   ];

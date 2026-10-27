@@ -23,6 +23,8 @@ export interface LoadedPortfolio {
   today: Date;
   assetRows: AssetRow[];
   obsRows: ObservationRow[];
+  /** a fund's value copied from the monthly sheet: kept only to check against, never a valuation; the history engine uses it as a last resort */
+  sheetObs: ObservationRow[];
   fdRows: FdRow[];
   ownerName: Map<string, string>;
   portfolio: Portfolio;
@@ -130,9 +132,10 @@ export async function loadPortfolioData(
       ]),
   );
   // a fund's value copied from the monthly sheet is kept only to check against: it is never a valuation
-  const obsRows = obsRowsRead.filter(
-    (o) => !((o as { source_ref?: string | null }).source_ref ?? '').startsWith(HIST_FUND_REF),
-  );
+  const isSheet = (o: ObservationRow) =>
+    ((o as { source_ref?: string | null }).source_ref ?? '').startsWith(HIST_FUND_REF);
+  const obsRows = obsRowsRead.filter((o) => !isSheet(o));
+  const sheetObs = obsRowsRead.filter(isSheet);
   // a savings account with no rate of its own earns what the rate list says for its bank, kind and balance slab
   const bankName = new Map(
     ((institutions.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [
@@ -184,6 +187,7 @@ export async function loadPortfolioData(
     tdsRate: config.estimates.interestTdsRate,
     includeSip: config.estimates.includeSip,
     freshnessDays: config.estimates.freshnessDays,
+    fdRateGap: config.estimates.observedRateGap,
   };
   const marketDates: LoadedPortfolio['marketDates'] = { navLatest: null, fx: {} };
   const fundDay: LoadedPortfolio['fundDay'] = {};
@@ -269,6 +273,7 @@ export async function loadPortfolioData(
     today,
     assetRows,
     obsRows,
+    sheetObs,
     fdRows,
     ownerName,
     portfolio: buildPortfolio(assetRows, obsRows, fdRows, today, market),
@@ -294,3 +299,5 @@ export * from './fund-snapshots';
 export * from './paging';
 export * from './ai-keys';
 export * from './history';
+export * from './position';
+export * from './snapshots';

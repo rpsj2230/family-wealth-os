@@ -3,6 +3,7 @@
  * Pure: no I/O. The web app fetches rows and calls buildPortfolio().
  */
 import { DEFAULT_CONFIG } from './config';
+import { fdEffectiveRate } from './fd';
 import {
   carryForward,
   estimateFd,
@@ -102,6 +103,8 @@ export interface PortfolioDefaults {
   includeSip?: boolean;
   /** days after which a balance is out of date, unless the account has its own */
   freshnessDays?: number;
+  /** a deposit grows at the rate that reaches the bank's maturity amount when that is within this many points of its stated rate (Settings) */
+  fdRateGap?: number;
 }
 
 export const DEFAULT_ASSUMPTIONS: PortfolioDefaults = {
@@ -163,9 +166,18 @@ export function buildPortfolio(
     const fd = a.type === 'fixed_deposit' ? fdByAsset.get(a.id) : undefined;
     if (fd) {
       // An FD is valued from its contract, so it is never "stale"; only a matured-but-unconfirmed FD needs attention.
-      estimate = estimateFd({
+      const eff = fdEffectiveRate({
         principal: fd.principal,
         annualRate: fd.rate,
+        bookedOn: dt(fd.booked_on),
+        maturityOn: dt(fd.maturity_on),
+        compounding: fd.compounding,
+        bankMaturityAmount: fd.bank_maturity_amount,
+        ...(defaults.fdRateGap !== undefined ? { maxGap: defaults.fdRateGap } : {}),
+      });
+      estimate = estimateFd({
+        principal: fd.principal,
+        annualRate: eff.rate,
         bookedOn: dt(fd.booked_on),
         today,
         maturityOn: dt(fd.maturity_on),

@@ -41,6 +41,48 @@ export function fdValueOn(args: {
   return principal * Math.pow(1 + annualRate / n, n * years);
 }
 
+/**
+ * The yearly rate at which a deposit really grows, worked out from the bank's own maturity amount when it is on file: the rate that
+ * takes the principal to that amount between the booking and the maturity date on the deposit's compounding. This follows the bank's
+ * figure whatever the rounding or the day count it used; without the amount (or when it is not above the principal, or the dates
+ * leave no time) the rate on the deposit is used. `from` says which one it is.
+ */
+export function fdEffectiveRate(args: {
+  principal: number;
+  annualRate: number;
+  bookedOn: Date;
+  maturityOn: Date;
+  compounding?: Compounding;
+  bankMaturityAmount?: number | null;
+  /** the implied rate is used only when it is within this many points of the stated one (Settings); a larger gap is more likely a typing error in one of them */
+  maxGap?: number;
+}): { rate: number; from: 'bank_amount' | 'stated' } {
+  const stated = { rate: Math.max(0, args.annualRate), from: 'stated' as const };
+  const target = args.bankMaturityAmount;
+  if (!target || !(target > args.principal) || !(args.principal > 0)) return stated;
+  if (daysBetween(args.bookedOn, args.maturityOn) <= 0) return stated;
+  const at = (r: number) =>
+    fdValueOn({
+      principal: args.principal,
+      annualRate: r,
+      bookedOn: args.bookedOn,
+      asOf: args.maturityOn,
+      maturityOn: args.maturityOn,
+      ...(args.compounding ? { compounding: args.compounding } : {}),
+    });
+  let lo = 0;
+  let hi = 1;
+  if (at(hi) < target) return stated;
+  for (let k = 0; k < 60; k++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid) < target) lo = mid;
+    else hi = mid;
+  }
+  const implied = (lo + hi) / 2;
+  if (Math.abs(implied - stated.rate) > (args.maxGap ?? Infinity)) return stated;
+  return { rate: implied, from: 'bank_amount' };
+}
+
 export interface FdVariance {
   modelled: number;
   bank: number;
