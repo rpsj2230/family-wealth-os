@@ -273,7 +273,7 @@ test.describe('Import (public sample)', () => {
     page,
   }) => {
     await page.goto('/demo/import?tab=cas');
-    await expect(page.getByText('Password.', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText('Password.', { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/PAN on file/)).toBeVisible();
     await expect(page.getByText('Check some items')).toBeVisible();
     await expect(page.getByText(/need a look/)).toBeVisible();

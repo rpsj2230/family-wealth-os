@@ -1,5 +1,6 @@
-import { currentFy, personStyles, previousFy, type PersonStyle } from '@fwos/core';
-import { loadCoverage } from '@fwos/data';
+import { DEFAULT_CONFIG, currentFy, personStyles, previousFy, type PersonStyle } from '@fwos/core';
+import { loadCoverage, loadSettings } from '@fwos/data';
+import { loadGmailModel } from '@/lib/gmail-statements-data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { loadAutomation } from '@/lib/automation';
@@ -89,6 +90,19 @@ export default async function ImportPage({
     email: auto.cards.find((c) => c.key === 'email') ?? null,
     sheet,
   };
+  // the Gmail statements card belongs to the Fund statement tab
+  if (tab === 'cas') {
+    const settings = householdId
+      ? await loadSettings(supabase as unknown as SupabaseClient, householdId).catch(() => null)
+      : null;
+    data.gmail = await loadGmailModel(
+      supabase,
+      householdId,
+      (settings?.config ?? DEFAULT_CONFIG).statementMail,
+      ownerRows,
+      today,
+    ).catch(() => null);
+  }
   // how far back the balances and deposits go, month by month (shown under the front door and the workbook tab)
   const coverage =
     householdId && (tab === 'start' || tab === 'workbook')

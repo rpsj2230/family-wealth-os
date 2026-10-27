@@ -33,6 +33,8 @@ import { TelegramForm } from './TelegramForm';
 import { DOC_KIND_LABEL, DOC_KINDS, type DocKind } from '@fwos/core';
 import { deleteRateSource, updateRateSourceKind } from './actions';
 import { GoogleSheetCard } from './GoogleSheetCard';
+import { GmailConnection } from './GmailConnection';
+import type { GmailModel } from '@/lib/gmail-statements';
 import type { GsheetTestState } from '../gsheet/actions';
 import type { SheetSyncInfo } from '@/lib/sheet-sync-status';
 
@@ -434,9 +436,12 @@ export function ConnectionsSection({
   ai,
   sources,
   gsheet,
+  gmail,
   demoTest,
   demo = false,
 }: {
+  /** the Gmail fund-statements scan: its state in one line */
+  gmail?: GmailModel | null;
   ai: {
     /** the saved AI keys with their order, switch and status (never the keys themselves) */
     keys: AiKeyRow[];
@@ -477,6 +482,8 @@ export function ConnectionsSection({
         </ol>
         <InboxLabelForm label={ai.label} />
       </section>
+
+      {gmail && <GmailConnection model={gmail} base={demo ? '/demo/import' : '/import'} />}
 
       <GoogleSheetCard info={gsheet} demo={demo} {...(demoTest ? { demoTest } : {})} />
 
