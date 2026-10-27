@@ -59,6 +59,8 @@ export * from './home';
 export * from './period-gains';
 export * from './position';
 export * from './position-build';
+export * from './valuation-history';
+export * from './explain-valuation';
 export * from './snapshot-rebuild';
 export * from './ai-cost';
 export * from './ledger-check';

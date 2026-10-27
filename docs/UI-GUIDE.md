@@ -9,7 +9,7 @@ say where each figure came from, and make the next action obvious. Follow this w
    only filled button (`btn primary`).
 2. Optional KPI strip (`.kpis` / `.kpi` / `.kpi.main`): at most six tiles, the first one the headline. Home, Accounts and Deposits use the richer overview panel instead (see "Overview panels" below).
 3. `Tabs` (components/Tabs.tsx) when a page has more than one job. Tabs are links (`?tab=`), so each view has an address and the back
-   button works. Four tabs at most, named by what the person does ("Gain harvest", not "Module 1"). Investments has seven: five to read (Overview, Performance, Funds, Transactions, Breakdown) and two for the work of keeping it current (Update funds, Match funds). They are different jobs and each is a link with its own address; the strip scrolls sideways on a phone. A fund's own page has five (Overview, Returns, Transactions, Lots and gains, Records).
+   button works. Four tabs at most, named by what the person does ("Gain harvest", not "Module 1"). Investments has eight: six to read (Overview, Performance, Value by period, Funds, Transactions, Breakdown) and two for the work of keeping it current (Update funds, Match funds). They are different jobs and each is a link with its own address; the strip scrolls sideways on a phone. A fund's own page has five (Overview, Returns, Transactions, Lots and gains, Records).
 4. Cards (`.card`, `.personcard` for a person's block, `.pickcard` in a `.cardgrid` for things to act on). One idea per card.
 5. Detail the person does not need every time goes in `<details className="disclose">`.
 6. `Meter` (components/Meter.tsx) for "used / planned / free" shares. `Sparkline`, `Donut`, `BarList`, `TrendChart` (components/charts.tsx,
@@ -57,7 +57,7 @@ lays its cards out with a container query so a narrow page area (the sidebar tak
 Home's top also has `Money` (five tiles in the Delta language: invested, current value, maturity value, profit, earned today), `Classes` (four small
 cards, `.hm-class`, 4 then 2 then 1 columns by the width of the page area, each linking to its page) and `Periods` (profit by period: a table on a wide page, one
 card per kind on a narrow one with each cell labelled by its period; the header row stays for screen readers; styles in `money.css`). Every gain cell is an arrow, a
-word and the figure; money put in or paid out is a separate muted line; an empty cell says "nothing held". Period figures come from `packages/core/src/period-gains.ts`.
+word and the figure; money put in or paid out is a separate muted line; an empty cell says "nothing held". Period figures come from `packages/core/src/period-gains.ts`, with every start and end value built by the position engine (`packages/core/src/position.ts`): each holding is valued from the nearest record on or before the day (see "Period figures" below).
 The signed-in page and `/demo/dashboard` both draw `HomeView` from a `HomeModel` (`lib/home.ts`), so the sample can never look different.
 
 ## Dashboard research (Home)
@@ -171,6 +171,7 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Investments, Performance | `invest.pl`, `invest.monthGrid`, `invest.growth100`, `invest.drawdown`, `invest.risk`, `invest.rolling`, `invest.whatIf`, `invest.chgValue`, `invest.chgChange`, `invest.chgNewMoney`, `invest.chgMarket`, `invest.contrib`, `invest.pace` |
 | Investments, Breakdown | `invest.byKind`, `invest.byHouse`, `invest.byFund`, `invest.keyFigures`, `invest.plans`, `invest.ageing`, `invest.gainByFund`, `invest.longTermCard`, `invest.sipCard`, `invest.bookedCard` |
 | A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.cagr`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns` |
+| Investments, Value by period | `valuation.chart`, `valuation.table` |
 | Home, hero | `home.netWorth`, `home.today`, `home.month`, `home.fy`, `home.invested`, `home.current`, `home.maturity`, `home.profit`, `home.earnedToday`, `home.verified`, `home.cashAndDeposits`, `home.free30`, `home.nextMaturity`, `home.interest`, `home.fundsStat`, `home.goalsStat`, `home.needsStat`, `home.insured` |
 | Home, cards | `home.classDeposits`, `home.classFunds`, `home.classCash`, `home.classOthers`, `home.periods`, `home.changed`, `home.trend`, `home.growth`, `home.where`, `home.liquidity`, `home.banks`, `home.deposits`, `home.funds`, `home.goals`, `home.risks` |
 | Accounts | `accounts.total`, `accounts.profit`, `accounts.today`, `accounts.journey`, `accounts.where`, `accounts.deposits`, `accounts.cash`, `accounts.toEarn`, `accounts.next`, `accounts.soon`, `accounts.largestBank`, `accounts.cover`, `accounts.updated`, `accounts.people`, `accounts.types`, `accounts.grand` |
@@ -183,3 +184,13 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Rates | `rates.freshness`, `rates.best` |
 
 Not yet covered (no "?" on these pages): Goals, I need money (Raise), Can I retire now, Lent, policies and property (Others), the Tax filing papers, Settings, the Import pages, the AI cost page, the monthly grid's per-row estimates and the per-bank pages. They show the same figures as the covered pages in places (net worth, deposit values) but their own derived numbers have no explainer yet.
+
+## Period figures
+
+One function, `positionGains` (`packages/core/src/position.ts`), gives every period figure: the Home tiles and table, the daily summary e-mail and the WhatsApp text, and the Value by period table (via the same `fundPeriod` kernel). Rules for a page that shows one:
+
+- Say where the period begins (`sinceWords`: "since 28 Sep 2026", or "data starts 3 Mar 2025" only when no record exists before the start) and how many holdings it rests on (`coverageWords`: "86 of 100 holdings had a value then").
+- Show a gain as earnings (interest, price and exchange-rate moves), and the change in net worth separately in quieter type: money added or taken out is never a gain.
+- The "?" names the record dates the first day is built from (`HeadlineTile.startFrom`) and whether holdings were moved forward from an earlier record; a figure resting on a rate, a price move, a plan or an assumed growth carries the shared `Est` mark.
+- A value for "no record" is "no data", never zero.
+- Points on the net worth line that were worked out afterwards from the history are marked "rebuilt from history" (`snapshots.source = 'rebuilt'`); a point recorded on the day is never replaced by one.

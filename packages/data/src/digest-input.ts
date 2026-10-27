@@ -75,7 +75,7 @@ export async function buildDigestInput(
       fy: g.tiles.find((t) => t.key === 'fy')!,
     };
   } catch {
-    position = null;
+    // the records could not be read: no earnings line, and the month review falls back to the saved snapshots
   }
   const [snaps, recv, pays, settings, pols, taskRows] = await Promise.all([
     scoped('snapshots', 'taken_on, total')

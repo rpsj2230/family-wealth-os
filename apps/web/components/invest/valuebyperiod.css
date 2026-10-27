@@ -1,0 +1,136 @@
+/* Investments > Value by period */
+.vbp-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin: 10px 0 14px;
+}
+.vbp-between {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.vbp-between label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.vbp-between input[type='date'] {
+  max-width: 11rem;
+}
+.vbp-chartbox {
+  margin: 4px 0 12px;
+}
+.vbp-charthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.vbp-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+}
+.vbp-table th[scope='row'] {
+  text-align: left;
+  font-weight: 600;
+}
+.vbp-sub {
+  display: block;
+  font-weight: 400;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.vbp-table .loss {
+  color: var(--fail);
+}
+.vbp-table .gain {
+  color: var(--ok-fg);
+}
+.vbp-nil {
+  color: var(--muted);
+}
+.vbp-table td.num {
+  white-space: nowrap;
+}
+
+/* the table lays itself out by the width of its card, not of the window (the sidebar takes a share of a tablet) */
+.vbp-tablebox {
+  container-type: inline-size;
+  min-width: 0;
+}
+.vbp-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+@container (min-width: 761px) {
+  .vbp-table th,
+  .vbp-table td {
+    padding: 6px 8px;
+  }
+  .vbp-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: right;
+  }
+  .vbp-table thead th:first-child {
+    text-align: left;
+  }
+  .vbp-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+@container (max-width: 760px) {
+  .vbp-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .vbp-table,
+  .vbp-table tbody {
+    display: block;
+  }
+  .vbp-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .vbp-table th[scope='row'] {
+    grid-column: 1 / -1;
+    padding: 0;
+  }
+  .vbp-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .vbp-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .vbp-table td.num {
+    white-space: normal;
+  }
+}

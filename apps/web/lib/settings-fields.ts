@@ -751,6 +751,23 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
         max: 1000,
       },
+      {
+        name: 'valuationPeriods',
+        label: 'Value by period: how many periods “recent” shows',
+        hint: 'Investments > Value by period shows this many weeks, months, quarters or years by default; the longer choice is twice as many, and “All” shows everything on record.',
+        kind: 'int',
+        path: ['funds', 'valuationPeriods'],
+        unit: 'periods',
+        min: 2,
+        max: 60,
+      },
+      {
+        name: 'financialQuarters',
+        label: 'Quarters follow the financial year (April to June is Q1)',
+        hint: 'Used by Value by period on Investments. Switch off to count calendar quarters instead (January to March is Q1).',
+        kind: 'check',
+        path: ['funds', 'financialQuarters'],
+      },
     ],
   },
 ];

@@ -731,6 +731,7 @@ export function dataStarts(input: PositionInput): string | null {
       a.fd?.bookedOn,
       ...a.records.filter((r) => !r.sheet).map((r) => r.date),
       a.fund?.txns[0]?.date,
+      a.fund?.flows[0]?.date,
       ...(a.fund?.snapshots ?? []).map((s) => s.date),
       ...a.records.filter((r) => r.sheet).map((r) => r.date),
     ].filter((x): x is string => !!x);

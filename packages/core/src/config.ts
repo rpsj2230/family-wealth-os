@@ -218,6 +218,10 @@ export interface AppConfig {
     weeksShown: number;
     plRows: number;
     compareFunds: number;
+    /** Investments > Value by period: how many periods "recent" shows (the longer choice is twice this) */
+    valuationPeriods: number;
+    /** quarters follow the financial year (April to June is Q1); off: calendar quarters (January to March is Q1) */
+    financialQuarters: boolean;
   };
   /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
   sheetSync: {
@@ -368,6 +372,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     weeksShown: 26,
     plRows: 24,
     compareFunds: 4,
+    valuationPeriods: 12,
+    financialQuarters: true,
   },
   sheetSync: {
     timeZone: 'Asia/Singapore',
@@ -690,6 +696,8 @@ export function configFromJson(raw: unknown): AppConfig {
       weeksShown: Math.round(num(fun.weeksShown, d.funds.weeksShown, 4, 104)),
       plRows: Math.round(num(fun.plRows, d.funds.plRows, 4, 120)),
       compareFunds: Math.round(num(fun.compareFunds, d.funds.compareFunds, 2, 8)),
+      valuationPeriods: Math.round(num(fun.valuationPeriods, d.funds.valuationPeriods, 2, 60)),
+      financialQuarters: bool(fun.financialQuarters, d.funds.financialQuarters),
     },
     sheetSync: (() => {
       const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));

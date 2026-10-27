@@ -29,14 +29,34 @@ describe('settings fields', () => {
 
   it('the fund history card holds a date and two tolerances, and a date that is not one is named', () => {
     const v = groupValues(group('funds'), DEFAULT_CONFIG);
-    expect(v).toEqual({ historyFrom: '2021-01-01', unitTolerance: '0.001', moneyTolerance: '1' });
+    expect(v).toEqual({
+      historyFrom: '2021-01-01',
+      unitTolerance: '0.001',
+      moneyTolerance: '1',
+      valuationPeriods: '12',
+      financialQuarters: true,
+    });
     const ok = parseGroup(
       group('funds'),
-      form({ historyFrom: '2019-04-01', unitTolerance: '0.002', moneyTolerance: '2' }),
+      form({
+        historyFrom: '2019-04-01',
+        unitTolerance: '0.002',
+        moneyTolerance: '2',
+        valuationPeriods: '12',
+        financialQuarters: 'on',
+      }),
     );
     expect(ok).toEqual({
       ok: true,
-      raw: { funds: { historyFrom: '2019-04-01', unitTolerance: 0.002, moneyTolerance: 2 } },
+      raw: {
+        funds: {
+          historyFrom: '2019-04-01',
+          unitTolerance: 0.002,
+          moneyTolerance: 2,
+          valuationPeriods: 12,
+          financialQuarters: true,
+        },
+      },
     });
     const bad = parseGroup(
       group('funds'),

@@ -162,7 +162,9 @@ export async function loadPositionInput(
   }
   for (const list of navBy.values()) list.sort((a, b) => a.date.localeCompare(b.date));
 
-  const posOf = new Map(((positions.data ?? []) as unknown as Row[]).map((p) => [p.asset_id as string, p]));
+  const posOf = new Map(
+    ((positions.data ?? []) as unknown as Row[]).map((p) => [p.asset_id as string, p]),
+  );
   const linesBy = new Map<string, Row[]>();
   for (const l of lines) {
     const id = l.asset_id as string;

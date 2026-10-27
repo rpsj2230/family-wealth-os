@@ -42,14 +42,8 @@ describe('the headline figures and the four cards', () => {
     // invested money is the deposits' principal and the cost of the fund units held: savings, cash and the rest are not invested
     expect(h.money.invested).toBeCloseTo(card('fd').invested + card('funds').invested, 4);
     expect(h.money.profit).toBeCloseTo(card('fd').profit + card('funds').profit, 4);
-    expect(h.money.valueOfInvested).toBeCloseTo(
-      h.money.invested + h.money.profit,
-      4,
-    );
-    expect(h.money.parts.notInvested).toBeCloseTo(
-      card('cash').current + card('others').current,
-      4,
-    );
+    expect(h.money.valueOfInvested).toBeCloseTo(h.money.invested + h.money.profit, 4);
+    expect(h.money.parts.notInvested).toBeCloseTo(card('cash').current + card('others').current, 4);
     expect(h.money.profitPct).toBeCloseTo(h.money.profit / h.money.invested, 10);
     expect(h.classes.reduce((a, c) => a + c.share, 0)).toBeCloseTo(1, 6);
     // deposits pay more at maturity; everything else is counted at today's value

@@ -7,6 +7,7 @@ import { FundTransactionForm } from '@/components/FundTransactionForm';
 import { FundUpdateGrid, type FundInput } from '@/components/FundUpdateGrid';
 import { ListingTools } from '@/components/ListingTools';
 import { DEMO_PEOPLE, DEMO_TODAY, demoView } from '@/lib/demo-funds';
+import { fundsPosition } from '@/lib/fund-holdings';
 import type { MatchRow } from '@/lib/match-data';
 import { sampleSave } from '../sample-actions';
 
@@ -80,6 +81,9 @@ export default async function DemoInvestments({
     heat?: string;
     group?: string;
     edit?: string;
+    g?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -114,6 +118,7 @@ export default async function DemoInvestments({
         styles={styles}
         owners={PEOPLE}
         noPrice={noPrice}
+        position={tab === 'valuation' ? fundsPosition(full) : undefined}
       >
         {tab === 'update' && (
           <>

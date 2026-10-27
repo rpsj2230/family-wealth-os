@@ -572,6 +572,72 @@ describe('period gains are gains, not changes of balance', () => {
   });
 });
 
+describe('a period starts from the nearest earlier record, rolled forward (the user’s example)', () => {
+  // there is a record on 22 Aug and none on the day the last 30 days begin; today is 28 Oct
+  const c = cfg({ today: '2026-10-28' });
+  const sav = savings('s', [rec('2026-08-22', 1_000_000)], {
+    rate: { own: 0.06, listed: null, tds: null },
+  });
+
+  it('values the first day from the 22 Aug record at the account’s rate, and the last day the same way', () => {
+    const g = positionGains({ position: input([sav], c), recentDays: 30 });
+    const t = g.tiles.find((x) => x.key === 'recent')!;
+    expect(t.from).toBe('2026-09-28');
+    expect(t.clamped).toBe(false);
+    expect(sinceWords(t)).toBe('since 28 Sep 2026');
+    // 1,000,000 recorded on 22 Aug, 37 days to 28 Sep, 67 days to 28 Oct, at 6%
+    const start = 1_000_000 + (1_000_000 * 0.06 * 37) / 365;
+    const end = 1_000_000 + (1_000_000 * 0.06 * 67) / 365;
+    expect(t.netWorth.start).toBeCloseTo(start, 1);
+    expect(t.netWorth.end).toBeCloseTo(end, 1);
+    // the earning of the period is 30 days of interest on the recorded balance
+    expect(t.amount).toBeCloseTo((1_000_000 * 0.06 * 30) / 365, 4);
+    // and it says which record the first day rests on
+    expect(t.startFrom).toEqual({
+      oldest: '2026-08-22',
+      newest: '2026-08-22',
+      onTheDay: 0,
+      movedForward: 1,
+      fromTerms: 0,
+    });
+    expect(t.coverage).toEqual({ withValue: 1, of: 1 });
+  });
+
+  it('the financial year does the same from a record before 1 April, and a deposit from its terms', () => {
+    const old = savings('o', [rec('2026-03-22', 500_000)], {
+      rate: { own: 0.04, listed: null, tds: null },
+    });
+    const fd = deposit('d', {
+      bookedOn: '2026-01-15',
+      maturityOn: '2027-01-15',
+      principal: 300_000,
+    });
+    const g = positionGains({ position: input([sav, old, fd], c), recentDays: 30 });
+    const fy = g.tiles.find((x) => x.key === 'fy')!;
+    expect(fy.from).toBe('2026-04-01');
+    expect(fy.clamped).toBe(false);
+    // the savings account recorded in August was not there on 1 April: nothing is invented for it
+    expect(fy.startFrom.oldest).toBe('2026-03-22');
+    expect(fy.coverage).toEqual({ withValue: 2, of: 3 });
+    const interestOld = (500_000 * 0.04 * span('2026-04-01', '2026-10-28')) / 365;
+    const interestSav = (1_000_000 * 0.06 * span('2026-08-22', '2026-10-28')) / 365;
+    const interestFd = fdOn(fd.fd!, '2026-10-28') - fdOn(fd.fd!, '2026-04-01');
+    expect(fy.amount).toBeCloseTo(interestOld + interestSav + interestFd, 3);
+  });
+
+  it('only with no record at all before the day does it say the data starts', () => {
+    const late = positionGains({
+      position: input([savings('n', [rec('2026-10-10', 100_000)])], c),
+      recentDays: 30,
+    });
+    const t = late.tiles.find((x) => x.key === 'recent')!;
+    expect(t.clamped).toBe(true);
+    expect(sinceWords(t)).toBe('data starts 10 Oct 2026');
+    expect(t.from).toBe('2026-10-10');
+    expect(t.asked).toBe('2026-09-28');
+  });
+});
+
 const span = (a: string, b: string) =>
   Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 

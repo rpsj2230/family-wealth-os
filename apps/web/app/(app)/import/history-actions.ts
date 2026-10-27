@@ -17,7 +17,7 @@ import {
 } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
-import { toView, type HistoryView } from '@/lib/history-view';
+import { rebuildText, toView, type HistoryView } from '@/lib/history-view';
 
 export interface HistoryPreviewState {
   ok: boolean;
@@ -189,13 +189,4 @@ export async function rebuildHistoryChart(): Promise<RebuildResult & { message: 
   const r = await rebuildSnapshots(supabase as unknown as SupabaseClient, householdId);
   revalidatePath('/', 'layout');
   return { ...r, message: rebuildText(r) };
-}
-
-/** What a rebuild did, in words. */
-export function rebuildText(r: RebuildResult): string {
-  if (!r.ok)
-    return `The history chart could not be rebuilt (${r.error ?? 'unknown problem'}). Try again.`;
-  if (r.planned === 0 && r.keptRecorded === 0)
-    return 'Nothing to rebuild yet: no balance or deposit is recorded for an earlier month.';
-  return `History chart rebuilt from ${r.from ?? 'the first record'}: ${r.written} month${r.written === 1 ? '' : 's'} saved as “rebuilt from history”${r.keptRecorded > 0 ? `, ${r.keptRecorded} left as recorded on the day` : ''}.`;
 }
