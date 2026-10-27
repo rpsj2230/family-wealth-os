@@ -219,6 +219,25 @@ export interface AppConfig {
     /** added to a month tab's name for the hidden safety copy made before its data is replaced */
     backupSuffix: string;
   };
+  /** reading the fund statements that CAMS, KFintech, NSDL and CDSL e-mail you, from your whole Gmail, with no AI */
+  statementMail: {
+    /** the daily scan is on */
+    enabled: boolean;
+    /** who the statements may come from: a domain (camsonline.com, which also covers its sub-domains) or one full address, one per entry */
+    senders: string[];
+    /** the first scan looks back this many days, so last year's statements are picked up */
+    firstDays: number;
+    /** every later scan looks back this many days (messages already read are skipped, so overlap is harmless) */
+    regularDays: number;
+    /** a PDF larger than this many megabytes is not downloaded */
+    maxMb: number;
+    /** at most this many statements are imported in one scan; the rest wait for the next one */
+    maxPerRun: number;
+    /** the scheduled job does not scan again within this many hours (pressing Scan now overrides it) */
+    minGapHours: number;
+    /** a requested full statement that has not arrived after this many days is flagged and leaves a task */
+    requestWaitDays: number;
+  };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -340,7 +359,41 @@ export const DEFAULT_CONFIG: AppConfig = {
     lastRow: 113,
     backupSuffix: ' - before sync',
   },
+  statementMail: {
+    enabled: true,
+    // Where CAS e-mails come from (checked 27 Oct 2026, see packages/ingest/src/statement-mail.ts): CAMS donotreply@camsonline.com,
+    // KFintech samfS@kfintech.com, NSDL NSDL-CAS@nsdl.co.in, CDSL eCAS@cdslstatement.com; MF Central and the older Karvy and CDSL
+    // domains are listed as well. A domain also covers its sub-domains. Edit the list in Settings.
+    senders: [
+      'camsonline.com',
+      'kfintech.com',
+      'karvy.com',
+      'nsdl.co.in',
+      'nsdl.com',
+      'cdslstatement.com',
+      'cdslindia.com',
+      'mfcentral.com',
+    ],
+    firstDays: 400,
+    regularDays: 35,
+    maxMb: 15,
+    maxPerRun: 40,
+    minGapHours: 20,
+    requestWaitDays: 2,
+  },
 };
+
+/**
+ * One allowed sender as written in Settings: a domain ("camsonline.com", "@camsonline.com" and "*.camsonline.com" all mean the
+ * domain and its sub-domains) or one full address. Lower case; null when it is neither.
+ */
+export function cleanSender(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const x = raw.trim().toLowerCase().replace(/^\*\./, '').replace(/^@/, '');
+  if (/^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(x)) return x;
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(x)) return x;
+  return null;
+}
 
 const num = (v: unknown, d: number, lo: number, hi: number) =>
   typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? v : d;
@@ -409,6 +462,7 @@ export function configFromJson(raw: unknown): AppConfig {
   const hom = obj(r.home);
   const aiSec = obj(r.ai);
   const sheet = obj(r.sheetSync);
+  const stm = obj(r.statementMail);
   const days = Array.isArray(dep.maturityAlertDays)
     ? [
         ...new Set(
@@ -614,6 +668,25 @@ export function configFromJson(raw: unknown): AppConfig {
         backupSuffix: tabSuffix(sheet.backupSuffix, d.sheetSync.backupSuffix),
       };
     })(),
+    statementMail: {
+      enabled: bool(stm.enabled, d.statementMail.enabled),
+      senders: (() => {
+        const list = Array.isArray(stm.senders)
+          ? [
+              ...new Set(
+                (stm.senders as unknown[]).map(cleanSender).filter((x): x is string => !!x),
+              ),
+            ]
+          : [];
+        return list.length > 0 ? list.slice(0, 40) : d.statementMail.senders;
+      })(),
+      firstDays: Math.round(num(stm.firstDays, d.statementMail.firstDays, 1, 1500)),
+      regularDays: Math.round(num(stm.regularDays, d.statementMail.regularDays, 1, 400)),
+      maxMb: num(stm.maxMb, d.statementMail.maxMb, 1, 40),
+      maxPerRun: Math.round(num(stm.maxPerRun, d.statementMail.maxPerRun, 1, 200)),
+      minGapHours: Math.round(num(stm.minGapHours, d.statementMail.minGapHours, 1, 168)),
+      requestWaitDays: Math.round(num(stm.requestWaitDays, d.statementMail.requestWaitDays, 1, 60)),
+    },
   };
 }
 

@@ -21,6 +21,7 @@ import {
 } from '@/app/(app)/settings/sections';
 import '@/app/(app)/settings/settings.css';
 import { SafetyDemoShell } from '../SafetyDemoShell';
+import { demoGmailModel } from '@/lib/demo-gmail';
 
 export const metadata: Metadata = {
   title: 'Sample settings',
@@ -209,6 +210,7 @@ export default async function DemoSettings({
               ai={{ keys: DEMO_AI_KEYS, label: 'FWOS/Inbox' }}
               demo
               gsheet={DEMO_SYNC_INFO}
+              gmail={demoGmailModel()}
               demoTest={DEMO_TEST}
               sources={[
                 {

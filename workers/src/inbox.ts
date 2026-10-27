@@ -7,7 +7,7 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { extractText, getDocumentProxy } from 'unpdf';
-import { createClient } from '@supabase/supabase-js';
+import { connectDb, householdId, must, need } from './shared';
 import {
   PROVIDER_SHORT,
   runInbox,
@@ -16,37 +16,13 @@ import {
   type InboxMessage,
   type KnownAccount,
 } from '@fwos/ingest';
-import { aiChainFor, importCasPdf, importTaxFile, loadSettings } from '@fwos/data';
+import { aiChainFor, importCasAttachments, importTaxFile, loadSettings } from '@fwos/data';
 
-const need = (n: string) => {
-  const v = process.env[n];
-  if (!v) {
-    console.error(`${n} is required`);
-    process.exit(2);
-  }
-  return v;
-};
-const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), {
-  auth: { persistSession: false },
-});
-const must = <T>(r: { data: T | null; error: { message: string } | null }, what: string): T => {
-  if (r.error) throw new Error(`${what}: ${r.error.message}`);
-  return r.data as T;
-};
+const db = connectDb();
 
 const today = new Date().toISOString().slice(0, 10);
 const logAiFailure = (a: AiAttempt) =>
   console.log(`AI: ${a.brief}${a.detail ? ` - ${a.detail}` : ''}`);
-
-async function householdId(): Promise<string> {
-  if (process.env.INBOX_HOUSEHOLD_ID) return process.env.INBOX_HOUSEHOLD_ID;
-  const rows = must(await db.from('households').select('id'), 'households');
-  if (rows.length !== 1)
-    throw new Error(
-      `Expected exactly one household, found ${rows.length}; set INBOX_HOUSEHOLD_ID.`,
-    );
-  return rows[0]!.id as string;
-}
 
 const stripHtml = (h: string) =>
   h
@@ -58,7 +34,7 @@ const stripHtml = (h: string) =>
     .trim();
 
 async function main() {
-  const hh = await householdId();
+  const hh = await householdId(db);
   const settings = must(
     await db
       .from('integration_settings')
@@ -185,40 +161,9 @@ async function main() {
       );
     },
     async casImport(m) {
-      const pans = must(
-        await db.from('owner_pan').select('owner_id, pan').eq('household_id', hh),
-        'saved PANs',
-      ) as { owner_id: string; pan: string }[];
-      const candidates = pans.map((p) => ({
-        ownerId: p.owner_id,
-        passwords: [p.pan, p.pan.toLowerCase()],
-        panLast4: p.pan.slice(-4),
-      }));
-      const results = [];
-      for (const a of m.attachments)
-        results.push(
-          await importCasPdf(db, hh, a.content, candidates, {
-            sourceRef: `${m.messageId}|${a.filename}`,
-            today,
-            receivedOn: m.receivedOn,
-          }),
-        );
-      const ok = results.filter((r) => r.outcome !== 'failed');
-      if (ok.length === 0)
-        return {
-          outcome: 'failed',
-          reason: results
-            .map((r) => r.detail)
-            .join(' ')
-            .slice(0, 300),
-        };
-      const review = ok.flatMap((r) => r.report?.needsReview ?? []);
-      // what changed, in one line (the full list is kept with the import: Import > Fund statement, recent statements)
-      const changed = ok.map((r) => r.summary).filter((x) => x.length > 0);
-      return {
-        outcome: review.length > 0 ? 'partial' : 'imported',
-        reason: `${changed.join(' | ')}${review.length ? `; check: ${review.join(', ')}` : ''}`,
-      };
+      // shared with the Gmail statements scan (packages/data/src/cas.ts)
+      const r = await importCasAttachments(db, hh, m, today);
+      return { outcome: r.outcome, reason: r.reason };
     },
     async taxImport(m) {
       const owners = must(

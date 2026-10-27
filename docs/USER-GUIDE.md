@@ -263,7 +263,28 @@ Tax filing papers → "What the tax department holds". Download **Form 26AS** fr
 
 1. Go to the CAMS or KFintech statement page (or MF Central) and request a **Consolidated Account Statement**: type **Detailed**, period **from the first investment to today**, include folios with zero balance, to the Gmail address the app reads.
 2. When the form asks for a password, **type your PAN in capital letters** (the same one saved in Settings). The password is whatever you choose on that form.
-3. In Gmail, make a filter: from `camsonline.com`, `kfintech.com`, `mfcentral.com`, `cdslindia.com` or `nsdl.com` and has an attachment, then apply the label `FWOS/Inbox`. Statements are then imported by themselves, now and when the registrars send you monthly ones.
+3. Nothing more is needed: the Gmail scan (next section) finds the e-mail wherever it is in the mailbox. (The older way still works: a Gmail filter that applies the label `FWOS/Inbox` to mail from the registrars.)
+
+## Fund statements from Gmail
+
+**Import > Fund statement** has a card, "Read my fund statements from Gmail". Once a day the app looks through your whole Gmail (not just one label) for e-mails from CAMS, KFintech, NSDL, CDSL and MF Central that carry a PDF, opens each with the PAN saved in Settings and imports it with the same rules as an uploaded statement. **No AI is used**, so it costs nothing, and the app never sends, deletes, labels, moves or marks anything in your Gmail.
+
+- **What it shows:** the mailbox (masked, for example `a***@g***.com`), whether it is on, the senders it accepts, the last scan ("Last scan 27 Oct 2026, 08:40: 2 statements found, 2 imported, 0 problems"), and the statements it read: date, who sent it, whose it is, and one sentence ("Fund statement from CAMS: 3 funds, 12 transactions added" or "Could not open: none of the saved passwords fits…"). What each import changed is under **Recent statements** on the same tab.
+- **The first scan** looks back 400 days, so last year's statements arrive together, oldest first; later scans look back 35 days. A message already read is skipped, so running twice changes nothing. All the numbers, the list of senders and the on/off switch are in **Settings > Money rules > Gmail statements**.
+- **Scan now** leaves a request for the job. The app cannot start a GitHub job by itself, so the request is picked up the next time the job starts, which is every 6 hours (at 0:40, 6:40, 12:40 and 18:40 UTC), and the card says so. To run it at once: on GitHub open **Actions > Read fund statements from Gmail > Run workflow**. A request also tries again the statements that could not be opened before, which is what you want after saving a password.
+- **Switch off** stops the scan at once; nothing already imported is changed.
+- **Which statements are accepted:** only e-mails whose real sender address belongs to a listed domain (the name shown in the From line is never trusted, and `camsonline.com.example` is not `camsonline.com`), whose PDF opens with a saved password and is recognised as a fund statement. A statement that mentions demat holdings, or lists balances only, cannot show that a fund was sold, so it never marks a fund as sold.
+- **A family member's statements** arrive in their own mailbox. Forward the e-mail (a normal forward, with the PDF attached) to the Gmail the app reads from an address listed under Settings > Bank e-mail forwarding; it is read the same way, judged by the original sender written inside the forward.
+
+### Asking for a full detailed statement
+
+The same card has **Request a full detailed statement**. CAMS and KFintech put a security check (a CAPTCHA) on their request pages, and MF Central needs your own sign-in and a one-time code. A program must not get past those, so the app does not ask for you: you choose the person, press **Open CAMS** (or KFintech, or MF Central), which opens the registrar's own page in a new tab, and fill the form with exactly the choices listed on the card (Detailed, from the first investment to today, include folios with zero balance, your Gmail address, your PAN in capitals as the password). Then press **I have asked**. The card then says "Requested from CAMS for Asha on 27 Oct 2026: waiting"; when a statement for that person is imported (by the scan or an upload) it changes to "arrived", and if nothing has come after the number of days in Settings (2) it says so and leaves a task. MF Central allows up to 365 days a request, so a full history there needs several requests.
+
+KFintech asks for a password of 8 to 12 characters with a capital, a small letter, a number and a special character, which a PAN does not have. Use CAMS' page (its combined statement covers both CAMS and KFintech funds), or choose a password on KFintech's page and save it as below.
+
+### Statement passwords
+
+If a statement was protected with a password other than your PAN (some services pick a random one and mail it to you separately), open **Statement passwords** on the card, choose the person, type the password and Save. It is write-only like the PAN: it can be removed but never shown or read back, only the number saved is displayed, and the app never reads a password out of an e-mail. Then press Scan now.
 
 ## The overview at the top of Accounts
 

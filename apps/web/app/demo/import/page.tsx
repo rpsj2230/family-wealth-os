@@ -4,6 +4,7 @@ import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { demoAutomation } from '@/lib/demo-datain';
 import { demoFundPreview } from '@/lib/demo-fund-import';
+import { demoGmailModel } from '@/lib/demo-gmail';
 import { demoCoverage } from '@/lib/demo-history';
 import { personStyles } from '@fwos/core';
 import { HistoryCoverage } from '@/app/(app)/import/HistoryCoverage';
@@ -86,6 +87,7 @@ const DATA: ImportData = {
   ],
   email: demoAutomation().find((c) => c.key === 'email') ?? null,
   sheet: DEMO_SYNC_INFO,
+  gmail: demoGmailModel(),
 };
 
 /** Public preview of the import hub with invented results: the forms are shown but cannot be used. */

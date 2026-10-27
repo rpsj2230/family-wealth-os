@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { configFromJson, fyOf, profileFromJson, RULES } from '@fwos/core';
+import { configFromJson, DEFAULT_CONFIG, fyOf, profileFromJson, RULES } from '@fwos/core';
 import { isAiProvider, type AiProvider } from '@fwos/ingest';
 import type { AiKeyRow } from '@/lib/ai-key-view';
 import type { TaxRuleRow } from '@fwos/core';
@@ -7,6 +7,7 @@ import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { loadContext } from '@/lib/data';
+import { loadGmailModel } from '@/lib/gmail-statements-data';
 import { confirmedGroups } from '@/lib/settings-fields';
 import { SETTINGS_TABS, settingsTabOf, todoByTab } from '@/lib/settings-tabs';
 import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
@@ -204,6 +205,14 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
     db.from('rate_sources').select('id, bank, url, last_run_on, last_result').order('bank'),
     loadSheetSyncInfo(db as unknown as Parameters<typeof loadSheetSyncInfo>[0]),
   ]);
+  const gmail = await loadGmailModel(
+    db as unknown as Parameters<typeof loadGmailModel>[0],
+    null,
+    (await loadSettings(db).catch(() => null))?.config.statementMail ??
+      DEFAULT_CONFIG.statementMail,
+    [],
+    new Date().toISOString().slice(0, 10),
+  ).catch(() => null);
   const i = integ.data as { inbox_label: string } | null;
   const keys: AiKeyRow[] = ((aiKeys.data ?? []) as unknown as Record<string, unknown>[])
     .filter((r) => isAiProvider(r.provider))
@@ -233,6 +242,7 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
       ai={{ keys, label: i?.inbox_label ?? 'FWOS/Inbox' }}
       sources={rows}
       gsheet={gsheet}
+      gmail={gmail}
     />
   );
 }
