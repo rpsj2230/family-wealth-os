@@ -43,13 +43,21 @@
 .why-btn.on-dark:focus-visible {
   outline-color: #fff;
 }
-/* a phone finger needs 44 px: the button is 44 px square (padding) and its negative margin keeps the layout footprint small */
+/* a phone finger needs 44 px, but the "?" must take as little room as the drawn icon: the button is a 44 px hit area (padding) whose layout footprint is
+   only the 16 px icon plus a 2 px gap (negative margins), drawn faintly; it is fully visible when pressed, hovered or focused. The hit area reaches 14 px past
+   the footprint, inside the page gutter, so it can never cause sideways scrolling. */
 @media (max-width: 640px), (pointer: coarse) {
   .why-btn {
     width: 44px;
     height: 44px;
-    padding: 13px;
-    margin: -14px -12px -14px -8px;
+    padding: 14px;
+    margin: -14px -14px -14px -12px;
+    opacity: 0.5;
+  }
+  .why-btn:hover,
+  .why-btn:focus-visible,
+  .why-btn.open {
+    opacity: 1;
   }
 }
 
