@@ -4,6 +4,7 @@ import {
   formatInr,
   formatInrCompact,
   rebase,
+  type PerfExplainSet,
   type PersonStyle,
   type PortfolioPerformance,
   type StatBlock,
@@ -26,6 +27,7 @@ import {
   type PeriodRow,
 } from '@/components/invest/PerfParts';
 import { PlotChart, type PlotMarker, type PlotSeries } from '@/components/PlotChart';
+import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import type { Growth } from '@/lib/growth-view';
 import type { PlView } from '@/lib/invest-pl';
@@ -48,6 +50,7 @@ const at = (points: { date: string; value: number }[], d: string) => {
  * figures, the what-if against the index fund, value against money put in, the monthly investments and the pace forecast.
  */
 export function PerformanceTab({
+  ex,
   view,
   stats,
   perf,
@@ -59,6 +62,7 @@ export function PerformanceTab({
   heat,
   link,
 }: {
+  ex: PerfExplainSet;
   view: InvestmentView;
   stats: StatBlock;
   perf: PortfolioPerformance;
@@ -131,6 +135,7 @@ export function PerformanceTab({
       label: 'Value now',
       value: formatInr(Math.round(h.value)),
       note: `as of ${niceDate(view.today)}`,
+      why: ex['invest.chgValue'],
     },
     c
       ? {
@@ -138,8 +143,14 @@ export function PerformanceTab({
           value: rupees(c.endValue - c.startValue),
           note: `since ${niceDate(c.from)}`,
           tone: tone(c.endValue - c.startValue),
+          why: ex['invest.chgChange'],
         }
-      : { label: 'Change', value: '–', note: 'needs two dated values' },
+      : {
+          label: 'Change',
+          value: '–',
+          note: 'needs two dated values',
+          why: ex['invest.chgChange'],
+        },
     {
       label: 'New money put in',
       value: c?.netIn === null || c?.netIn === undefined ? '–' : rupees(c.netIn),
@@ -147,6 +158,7 @@ export function PerformanceTab({
         c?.netIn === null || c?.netIn === undefined
           ? 'cost not recorded for the start'
           : 'purchases less sales',
+      why: ex['invest.chgNewMoney'],
     },
     {
       label: 'Made by the market',
@@ -156,6 +168,7 @@ export function PerformanceTab({
           ? 'change in value less new money'
           : `${pct(c.returnPct, 1)} on average money at work`,
       tone: tone(c?.gain ?? null),
+      why: ex['invest.chgMarket'],
     },
   ];
   const sellMarkers = growth.markers.some((m) => m.kind === 'sale');
@@ -176,7 +189,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="rp">
         <div className="cardhead">
-          <h2 id="rp">Return over time</h2>
+          <WhyHead why={ex['invest.returns']}>
+            <h2 id="rp">Return over time</h2>
+          </WhyHead>
           <span className="small muted">
             {who ? `${styles[who]?.name}'s funds` : 'All funds shown'}
           </span>
@@ -187,7 +202,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="plp">
         <div className="cardhead">
-          <h2 id="plp">Profit and loss by period</h2>
+          <WhyHead why={ex['invest.pl']}>
+            <h2 id="plp">Profit and loss by period</h2>
+          </WhyHead>
           <span className="small muted">
             Rupees and per cent; deposits and withdrawals are not counted as gains
           </span>
@@ -205,7 +222,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="hm">
         <div className="cardhead">
-          <h2 id="hm">Month by month</h2>
+          <WhyHead why={ex['invest.monthGrid']}>
+            <h2 id="hm">Month by month</h2>
+          </WhyHead>
           <span className="small muted">Return in each month, with the total for the year</span>
         </div>
         <Chips<YearKind>
@@ -240,7 +259,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="gv">
         <div className="cardhead">
-          <h2 id="gv">Growth of 100{hasBench ? ' against the benchmark' : ''}</h2>
+          <WhyHead why={ex['invest.growth100']}>
+            <h2 id="gv">Growth of 100{hasBench ? ' against the benchmark' : ''}</h2>
+          </WhyHead>
           <span className="small muted">Time-weighted: money put in does not lift the line</span>
         </div>
         <PlotChart
@@ -259,14 +280,18 @@ export function PerformanceTab({
       <div className="invgrid two">
         <section className="card" aria-labelledby="dd">
           <div className="cardhead">
-            <h2 id="dd">Fall from the highest point</h2>
+            <WhyHead why={ex['invest.drawdown']}>
+              <h2 id="dd">Fall from the highest point</h2>
+            </WhyHead>
             <span className="small muted">Drawdown</span>
           </div>
           <DrawdownCard d={profile.drawdown} />
         </section>
         <section className="card" aria-labelledby="rk">
           <div className="cardhead">
-            <h2 id="rk">Risk</h2>
+            <WhyHead why={ex['invest.risk']}>
+              <h2 id="rk">Risk</h2>
+            </WhyHead>
             <span className="small muted">Volatility, Sharpe, Sortino</span>
           </div>
           <RiskCard risk={profile.risk} months={view.config.riskMinMonths} />
@@ -275,7 +300,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="ro">
         <div className="cardhead">
-          <h2 id="ro">Rolling returns</h2>
+          <WhyHead why={ex['invest.rolling']}>
+            <h2 id="ro">Rolling returns</h2>
+          </WhyHead>
           <span className="small muted">What any holding period would have earned</span>
         </div>
         <RollingCard rolling={profile.rolling} minWindows={view.config.rollingMinWindows} />
@@ -283,7 +310,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="wi">
         <div className="cardhead">
-          <h2 id="wi">The same money in the index fund</h2>
+          <WhyHead why={ex['invest.whatIf']}>
+            <h2 id="wi">The same money in the index fund</h2>
+          </WhyHead>
           <span className="small muted">Benchmark proxy</span>
         </div>
         <WhatIfCard
@@ -335,7 +364,9 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="mc">
         <div className="cardhead">
-          <h2 id="mc">Money put in each month</h2>
+          <WhyHead why={ex['invest.contrib']}>
+            <h2 id="mc">Money put in each month</h2>
+          </WhyHead>
           <span className="small muted">Last {view.config.contributionMonths} months</span>
         </div>
         {growth.statementFunds === 0 ? (
@@ -367,7 +398,9 @@ export function PerformanceTab({
 
       <section className="card pace" aria-labelledby="pc">
         <div className="cardhead">
-          <h2 id="pc">If you carry on like this</h2>
+          <WhyHead why={ex['invest.pace']}>
+            <h2 id="pc">If you carry on like this</h2>
+          </WhyHead>
           <span className="small muted">A projection, not a promise</span>
         </div>
         <p className="muted small">

@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { formatInr, unitsText, type FundTaxPanel, type PanelRow } from '@fwos/core';
+import { formatInr, unitsText, type Explain, type FundTaxPanel, type PanelRow } from '@fwos/core';
 import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { rupees, tone } from '@/components/InvestHeadline';
+import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import { TakeOutBox } from './TakeOutBox';
 import './invest.css';
@@ -43,7 +44,9 @@ export function TaxPanel({
   taxHref,
   setExitLoadHref,
   fundName,
+  why,
 }: {
+  why?: Explain;
   panel: FundTaxPanel;
   taxHref: string;
   setExitLoadHref: string;
@@ -57,7 +60,13 @@ export function TaxPanel({
   return (
     <section className="card wide taxpanel" aria-labelledby="tp-h" data-testid="tax-panel">
       <div className="cardhead">
-        <h2 id="tp-h">Exit load and tax</h2>
+        {why ? (
+          <WhyHead why={why}>
+            <h2 id="tp-h">Exit load and tax</h2>
+          </WhyHead>
+        ) : (
+          <h2 id="tp-h">Exit load and tax</h2>
+        )}
         <span className="small muted">
           {p.classLabel}
           {p.classCertain ? '' : ' (guessed from the name)'}

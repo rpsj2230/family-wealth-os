@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatInr, formatInrCompact } from '@fwos/core';
+import { formatInr, formatInrCompact, type ExplainSet } from '@fwos/core';
 import type { FundDetail, DetailFund } from '@/lib/fund-detail-model';
 import { niceDate } from '@/lib/dates';
 import {
@@ -42,7 +42,10 @@ export function FundDetailPanel({
   links,
   holdingMonths,
   colour = 'var(--viz-1)',
+  ex,
 }: {
+  /** the "?" explainers of this fund */
+  ex?: ExplainSet<'fund'>;
   fund: DetailFund;
   detail: FundDetail;
   /** this page's address, for the range switch */
@@ -63,8 +66,9 @@ export function FundDetailPanel({
       note:
         d.unrealisedPct === null
           ? 'no cost recorded'
-          : `${pct(d.unrealisedPct, 1)} on money put in`,
+          : `${pct(d.unrealisedPct, 1)} on the ${formatInrCompact(f.invested)} put in`,
       tone: f.invested > 0 ? tone(d.unrealised) : null,
+      why: ex?.['fund.profit'],
     },
     {
       label: 'Return a year (XIRR)',
@@ -81,6 +85,7 @@ export function FundDetailPanel({
             ? 'from the start date and SIP'
             : 'from the transactions',
       tone: tone(f.xirr),
+      why: ex?.['fund.xirr'],
     },
     {
       label: 'Compound growth (CAGR)',
@@ -90,6 +95,7 @@ export function FundDetailPanel({
           ? `single investment on ${niceDate(d.cagrFrom!)}`
           : 'single investments only; with a SIP see XIRR',
       tone: tone(d.cagr),
+      why: ex?.['fund.cagr'],
     },
     {
       label: 'Average cost per unit',
@@ -114,6 +120,7 @@ export function FundDetailPanel({
       label: 'Units held',
       value: f.units === null ? '–' : f.units.toLocaleString('en-IN', { maximumFractionDigits: 3 }),
       note: f.folioLast4 ? `folio …${f.folioLast4}` : undefined,
+      why: ex?.['fund.units'],
     },
     {
       label: 'Held since',
@@ -123,8 +130,9 @@ export function FundDetailPanel({
     {
       label: 'Today',
       value: f.dayAmount === null ? '–' : rupees(f.dayAmount),
-      note: f.dayPct === null ? 'no price change yet' : pct(f.dayPct),
+      note: f.dayPct === null ? 'no price change yet' : `${pct(f.dayPct)} on yesterday’s value`,
       tone: tone(f.dayAmount),
+      why: ex?.['fund.today'],
     },
     {
       label: 'Already long-term',
@@ -144,6 +152,7 @@ export function FundDetailPanel({
         : sip.active
           ? `${sip.monthsRunning === null ? '' : `running ${monthsText(sip.monthsRunning)}`}${sip.nextOn ? `${sip.monthsRunning === null ? '' : ' · '}next ${niceDate(sip.nextOn)}${sip.basis === 'statement' ? '' : ' (expected)'}` : ''}`
           : undefined,
+      why: ex?.['fund.sip'],
     },
     {
       label: 'Paid by SIP so far',
@@ -162,6 +171,7 @@ export function FundDetailPanel({
             ? 'no sale on the statement'
             : 'needs a fund statement'
           : `${d.realised.sales} sale line${d.realised.sales === 1 ? '' : 's'}, ${inr(d.realised.proceeds)} received`,
+      why: ex?.['fund.booked'],
     },
   ];
 

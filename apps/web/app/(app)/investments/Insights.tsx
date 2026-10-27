@@ -4,6 +4,7 @@ import {
   CATEGORY_ORDER,
   foldShares,
   type AgeBucket,
+  type InvestOverviewSet,
   type PlanSplit,
   formatInr,
   formatInrCompact,
@@ -12,6 +13,7 @@ import {
   type StatBlock,
 } from '@fwos/core';
 import { Donut } from '@/components/charts';
+import { WhyHead } from '@/components/Why';
 import { BasisChip, GainBars, StackBar, StatList, type Stat } from '@/components/FundViz';
 import { pct, rupees } from '@/components/InvestHeadline';
 import { niceDate } from '@/lib/dates';
@@ -35,7 +37,15 @@ const monthsText = (n: number) => {
 
 /* ---------------------------------------------------------------------------------------- breakdown */
 
-function Allocation({ view, stats }: { view: InvestmentView; stats: StatBlock }) {
+function Allocation({
+  view,
+  stats,
+  ex,
+}: {
+  view: InvestmentView;
+  stats: StatBlock;
+  ex: InvestOverviewSet;
+}) {
   const cfg = view.config;
   const catColour = slotColours(CATEGORY_ORDER.filter((k) => view.palette.categories.includes(k)));
   const amcColour = slotColours(view.palette.amcs);
@@ -56,7 +66,9 @@ function Allocation({ view, stats }: { view: InvestmentView; stats: StatBlock })
     <div className="insightgrid">
       <section className="card" aria-labelledby="al1">
         <div className="cardhead">
-          <h2 id="al1">By kind of fund</h2>
+          <WhyHead why={ex['invest.byKind']}>
+            <h2 id="al1">By kind of fund</h2>
+          </WhyHead>
           <span className="small muted">Large, mid, small, hybrid, debt…</span>
         </div>
         {cat.length === 0 ? (
@@ -78,7 +90,9 @@ function Allocation({ view, stats }: { view: InvestmentView; stats: StatBlock })
       </section>
       <section className="card" aria-labelledby="al2">
         <div className="cardhead">
-          <h2 id="al2">By fund house</h2>
+          <WhyHead why={ex['invest.byHouse']}>
+            <h2 id="al2">By fund house</h2>
+          </WhyHead>
           <span className="small muted">Share of value</span>
         </div>
         {amc.length === 0 ? (
@@ -95,7 +109,9 @@ function Allocation({ view, stats }: { view: InvestmentView; stats: StatBlock })
       </section>
       <section className="card" aria-labelledby="al3">
         <div className="cardhead">
-          <h2 id="al3">By fund</h2>
+          <WhyHead why={ex['invest.byFund']}>
+            <h2 id="al3">By fund</h2>
+          </WhyHead>
           <span className="small muted">
             Top {cfg.concentrationTop} = {share(c.topShare)}
           </span>
@@ -117,6 +133,7 @@ function Allocation({ view, stats }: { view: InvestmentView; stats: StatBlock })
 }
 
 export function BreakdownTab({
+  ex,
   view,
   stats,
   who,
@@ -125,6 +142,7 @@ export function BreakdownTab({
   plans,
   ageing,
 }: {
+  ex: InvestOverviewSet;
   view: InvestmentView;
   stats: StatBlock;
   who: string | null;
@@ -152,14 +170,18 @@ export function BreakdownTab({
       label: 'Money put in',
       value: formatInr(Math.round(stats.invested)),
       note: 'cost of the units held',
+      why: ex['invest.moneyIn'],
     },
-    { label: 'Value now', value: formatInr(Math.round(stats.value)) },
+    { label: 'Value now', value: formatInr(Math.round(stats.value)), why: ex['invest.value'] },
     {
       label: 'Gain on units held',
       value: rupees(stats.unrealised),
       note:
-        stats.unrealisedPct === null ? undefined : `${pct(stats.unrealisedPct, 1)} on money put in`,
+        stats.unrealisedPct === null
+          ? undefined
+          : `${pct(stats.unrealisedPct, 1)} on the ${formatInrCompact(stats.invested)} put in`,
       tone: tone(stats.unrealised),
+      why: ex['invest.profit'],
     },
     {
       label: 'Return a year (XIRR)',
@@ -179,6 +201,7 @@ export function BreakdownTab({
           ? `${stats.estimated} of ${stats.funds} funds have no fund statement`
           : 'every fund has a fund statement',
       tone: tone(h.xirr),
+      why: ex['invest.xirr'],
     },
     stats.best
       ? {
@@ -186,6 +209,7 @@ export function BreakdownTab({
           value: pct(stats.best.pct, 1),
           note: <Link href={`/asset/${stats.best.assetId}`}>{stats.best.name}</Link>,
           tone: tone(stats.best.pct),
+          why: ex['invest.movers'],
         }
       : { label: 'Best fund', value: '–', note: 'needs two funds with a cost' },
     stats.worst
@@ -194,6 +218,7 @@ export function BreakdownTab({
           value: pct(stats.worst.pct, 1),
           note: <Link href={`/asset/${stats.worst.assetId}`}>{stats.worst.name}</Link>,
           tone: tone(stats.worst.pct),
+          why: ex['invest.movers'],
         }
       : { label: 'Weakest fund', value: '–', note: 'needs two funds with a cost' },
     stats.bestDay
@@ -202,6 +227,7 @@ export function BreakdownTab({
           value: pct(stats.bestDay.pct, 2),
           note: <Link href={`/asset/${stats.bestDay.assetId}`}>{stats.bestDay.name}</Link>,
           tone: tone(stats.bestDay.pct),
+          why: ex['invest.movers'],
         }
       : { label: 'Best today', value: '–', note: 'needs two live prices' },
     stats.worstDay
@@ -210,6 +236,7 @@ export function BreakdownTab({
           value: pct(stats.worstDay.pct, 2),
           note: <Link href={`/asset/${stats.worstDay.assetId}`}>{stats.worstDay.name}</Link>,
           tone: tone(stats.worstDay.pct),
+          why: ex['invest.movers'],
         }
       : { label: 'Weakest today', value: '–', note: 'needs two live prices' },
     {
@@ -230,7 +257,9 @@ export function BreakdownTab({
       {!who && view.groups.length > 1 && (
         <section className="card wide" aria-labelledby="bp">
           <div className="cardhead">
-            <h2 id="bp">By person</h2>
+            <WhyHead why={ex['invest.people']}>
+              <h2 id="bp">By person</h2>
+            </WhyHead>
             <span className="small muted">Each PAN holder on one line</span>
           </div>
           {people}
@@ -239,18 +268,22 @@ export function BreakdownTab({
 
       <section className="card wide" aria-labelledby="kf">
         <div className="cardhead">
-          <h2 id="kf">Key figures</h2>
+          <WhyHead why={ex['invest.keyFigures']}>
+            <h2 id="kf">Key figures</h2>
+          </WhyHead>
           <span className="small muted">As of {niceDate(view.today)}</span>
         </div>
         <StatList items={headline} label="Key figures for the mutual funds shown" />
       </section>
 
-      <Allocation view={view} stats={stats} />
+      <Allocation view={view} stats={stats} ex={ex} />
 
       <div className="insightgrid">
         <section className="card" aria-labelledby="pl">
           <div className="cardhead">
-            <h2 id="pl">Direct and Regular plans</h2>
+            <WhyHead why={ex['invest.plans']}>
+              <h2 id="pl">Direct and Regular plans</h2>
+            </WhyHead>
             <span className="small muted">Share of value</span>
           </div>
           {plans.length === 0 ? (
@@ -284,7 +317,9 @@ export function BreakdownTab({
 
         <section className="card" aria-labelledby="ag">
           <div className="cardhead">
-            <h2 id="ag">How old the units are</h2>
+            <WhyHead why={ex['invest.ageing']}>
+              <h2 id="ag">How old the units are</h2>
+            </WhyHead>
             <span className="small muted">By the date each purchase was made</span>
           </div>
           {ageing.total <= 0 ? (
@@ -318,7 +353,9 @@ export function BreakdownTab({
 
       <section className="card wide" aria-labelledby="gb">
         <div className="cardhead">
-          <h2 id="gb">Gain or loss by fund</h2>
+          <WhyHead why={ex['invest.gainByFund']}>
+            <h2 id="gb">Gain or loss by fund</h2>
+          </WhyHead>
           <span className="small muted">Value less money put in, on the units still held</span>
         </div>
         {stats.gainBars.length === 0 ? (
@@ -339,7 +376,9 @@ export function BreakdownTab({
       <div className="insightgrid">
         <section className="card" aria-labelledby="hp">
           <div className="cardhead">
-            <h2 id="hp">How much is long-term already</h2>
+            <WhyHead why={ex['invest.longTermCard']}>
+              <h2 id="hp">How much is long-term already</h2>
+            </WhyHead>
             {months !== null && (
               <span className="small muted">Equity funds, over {months} months</span>
             )}
@@ -433,7 +472,9 @@ export function BreakdownTab({
 
         <section className="card" aria-labelledby="sp">
           <div className="cardhead">
-            <h2 id="sp">Monthly investments (SIP)</h2>
+            <WhyHead why={ex['invest.sipCard']}>
+              <h2 id="sp">Monthly investments (SIP)</h2>
+            </WhyHead>
             <span className="small muted">
               {sip.running} running{sip.stopped ? `, ${sip.stopped} stopped` : ''}
             </span>
@@ -476,7 +517,9 @@ export function BreakdownTab({
 
       <section className="card wide" aria-labelledby="rg">
         <div className="cardhead">
-          <h2 id="rg">Gains already booked by selling</h2>
+          <WhyHead why={ex['invest.bookedCard']}>
+            <h2 id="rg">Gains already booked by selling</h2>
+          </WhyHead>
           <span className="small muted">From the sales on fund statements, oldest units first</span>
         </div>
         {real.sales === 0 ? (

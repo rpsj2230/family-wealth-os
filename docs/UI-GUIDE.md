@@ -148,3 +148,26 @@ Across all of them a person opening the page wants these answered, in this order
 - A figure the app worked out from rates or prices carries the word "estimate". A change over a period is measured from the daily snapshots and includes money added or taken out.
 - The thresholds on Home are Settings (Money rules, Reminders): how many days "last month" means, how far ahead Coming up looks, and the bank share that is flagged.
   The other windows reuse existing settings: maturity "soon" days, task and policy days, the "I need money" scenario days and the deposit-insurance limit.
+
+## The "?" next to a figure
+
+Every headline figure and derived number carries a small round **?** (`components/Why.tsx`). It opens a card (a sheet from the bottom on a phone) that says what the figure is, how it was worked out **with the actual numbers plugged in** (and the denominator of every percentage), which data it rests on with a basis chip and the dates it covers, and how complete that data is. The five data states are always a colour **and** a word: `statement`, `recorded`, `calculated`, `estimated`, `missing`; completeness is `Complete`, `Partly estimated`, `Estimated` or `Missing data`. Where a figure is shown rounded (₹8.04 L) the exact rupees are in the card and in a `title`.
+
+How to add one:
+
+1. Register the figure id in `FIGURES` (`packages/core/src/explain.ts`). The type of each page's `ExplainSet` then forces a builder to return an explainer for it.
+2. Write the builder in `packages/core/src/explain-*.ts`. It takes the numbers and flags the page already has (ledger verdict, lots basis, flows estimated, freshness, as-of dates) and **never recomputes** a figure by its own rule; say plainly when data is missing or assumed and from/to which dates.
+3. Put `<Why explain={ex['page.figure']} />` beside the figure, or wrap a heading in `<WhyHead why={...}><h2>..</h2></WhyHead>`. Shared tiles take an optional `why` (`Stat`, `Cell`, `Tile`).
+4. Add the id to the checklist below. `apps/web/lib/explain-coverage.test.ts` fails when a registered id is not used by a page component, is missing from this list, or a component names an unregistered id; `packages/core/test/explain.test.ts` fails when a builder leaves a registered figure without a title, sentence, formula or completeness.
+
+Wording rule: a percentage always names what it is a share of ("+18.7% on the ₹43.01 L put in", "16% of today's value is growth").
+
+### Coverage checklist (page -> figures that have a "?")
+
+| Page | Figures |
+|---|---|
+| Investments, headline (Overview) | `invest.value`, `invest.profit`, `invest.today`, `invest.ring`, `invest.moneyIn`, `invest.xirr`, `invest.booked`, `invest.totalGain`, `invest.sip`, `invest.longTerm`, `invest.statements`, `invest.projection` |
+| Investments, Overview cards and Funds | `invest.dataCheck`, `invest.valueChart`, `invest.returns`, `invest.goals`, `invest.mix`, `invest.movers`, `invest.nextSips`, `invest.people`, `invest.fundsTable` |
+| Investments, Performance | `invest.pl`, `invest.monthGrid`, `invest.growth100`, `invest.drawdown`, `invest.risk`, `invest.rolling`, `invest.whatIf`, `invest.chgValue`, `invest.chgChange`, `invest.chgNewMoney`, `invest.chgMarket`, `invest.contrib`, `invest.pace` |
+| Investments, Breakdown | `invest.byKind`, `invest.byHouse`, `invest.byFund`, `invest.keyFigures`, `invest.plans`, `invest.ageing`, `invest.gainByFund`, `invest.longTermCard`, `invest.sipCard`, `invest.bookedCard` |
+| A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.cagr`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns` |

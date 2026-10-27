@@ -1,9 +1,26 @@
 import Link from 'next/link';
-import { formatInr, formatInrCompact, type Hero, type SeriesPoint } from '@fwos/core';
+import { formatInr, formatInrCompact, type Explain, type Hero, type SeriesPoint } from '@fwos/core';
 import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
+import { Why } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import './invest.css';
+
+/** The explainers the hero carries: one for each headline figure. */
+export interface HeroExplain {
+  'invest.value': Explain;
+  'invest.profit': Explain;
+  'invest.today': Explain;
+  'invest.ring': Explain;
+  'invest.moneyIn': Explain;
+  'invest.xirr': Explain;
+  'invest.booked': Explain;
+  'invest.totalGain': Explain;
+  'invest.sip': Explain;
+  'invest.longTerm': Explain;
+  'invest.statements': Explain;
+  'invest.projection': Explain;
+}
 
 export interface HeroProjection {
   years: number;
@@ -120,6 +137,8 @@ function Cell({
   cls,
   href,
   est,
+  exact,
+  why,
 }: {
   label: string;
   value: string;
@@ -128,18 +147,29 @@ function Cell({
   href?: string | undefined;
   /** the figure rests on a fund history that does not add up */
   est?: boolean | undefined;
+  /** the exact rupees, for a figure shown rounded (lakhs, crores) */
+  exact?: string | undefined;
+  /** the "?" that says how the figure was worked out */
+  why?: Explain | undefined;
 }) {
   const body = (
     <>
-      <dt>{label}</dt>
-      <dd className={`v ${cls ?? ''}`}>
+      <dd className={`v ${cls ?? ''}`} {...(exact ? { title: exact } : {})}>
         {value}
         {est && <Est title={LEDGER_EST_TITLE} />}
       </dd>
       {sub && <dd className="s">{sub}</dd>}
     </>
   );
-  return <div>{href ? <Link href={href}>{body}</Link> : body}</div>;
+  return (
+    <div>
+      <dt>
+        {label}
+        {why && <Why explain={why} tone="on-dark" />}
+      </dt>
+      {href ? <Link href={href}>{body}</Link> : body}
+    </div>
+  );
 }
 
 /**
@@ -157,7 +187,9 @@ export function PortfolioHero({
   holdingMonths,
   base,
   tabLinks,
+  ex,
 }: {
+  ex: HeroExplain;
   hero: Hero;
   asOf: string;
   history: SeriesPoint[];
@@ -174,9 +206,14 @@ export function PortfolioHero({
     <section className="invhero" aria-label="Mutual funds at a glance">
       <div className="invhero-top">
         <div className="invhero-main">
-          <div className="hero-label">Current value of mutual funds</div>
+          <div className="hero-label">
+            Current value of mutual funds
+            <Why explain={ex['invest.value']} tone="on-dark" />
+          </div>
           <div className="hero-value">
-            {formatInr(Math.round(h.value))}
+            <span title={`${formatInr(Math.round(h.value))} exactly`}>
+              {formatInr(Math.round(h.value))}
+            </span>
             {h.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
           </div>
           <div className="hero-pills">
@@ -185,7 +222,11 @@ export function PortfolioHero({
               {rupees(h.unrealised)}
               {h.unrealisedPct !== null && <b>{pct(h.unrealisedPct, 1)}</b>}
               {h.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
-              <span className="hp-sub">profit or loss on units held</span>
+              <span className="hp-sub">
+                {h.unrealised >= 0 ? 'profit' : 'loss'} on units held
+                {h.unrealisedPct !== null ? `, on the ${formatInrCompact(h.invested)} put in` : ''}
+              </span>
+              <Why explain={ex['invest.profit']} tone="on-dark" />
             </span>
             <span className={`hpill ${day === null ? '' : day >= 0 ? 'up' : 'down'}`}>
               {day === null ? (
@@ -195,9 +236,10 @@ export function PortfolioHero({
                   <span aria-hidden="true">{day >= 0 ? '▲' : '▼'}</span>
                   {rupees(day)}
                   <b>{pct(h.dayPct!)}</b>
-                  <span className="hp-sub">today</span>
+                  <span className="hp-sub">today, on yesterday’s value</span>
                 </>
               )}
+              <Why explain={ex['invest.today']} tone="on-dark" />
             </span>
           </div>
           <div className="hero-asof">
@@ -209,18 +251,30 @@ export function PortfolioHero({
           {h.split ? (
             <>
               <Ring cost={h.split.cost} growth={h.split.growth} />
-              <ul className="hero-key">
-                <li>
-                  <span className="sw cost" aria-hidden="true" />
-                  <span>Your money</span>
-                  <b>{formatInrCompact(Math.min(h.invested, h.value))}</b>
-                </li>
-                <li>
-                  <span className="sw growth" aria-hidden="true" />
-                  <span>{h.value >= h.invested ? 'Growth' : 'Shortfall'}</span>
-                  <b>{formatInrCompact(Math.abs(h.value - h.invested))}</b>
-                </li>
-              </ul>
+              <div className="hero-keybox">
+                <p className="ring-cap">
+                  {h.value >= h.invested
+                    ? `${Math.round(h.split.growth * 100)}% of today’s value is growth`
+                    : `${Math.round(h.split.cost * 100)}% of your money is left`}
+                  <Why explain={ex['invest.ring']} tone="on-dark" />
+                </p>
+                <ul className="hero-key">
+                  <li>
+                    <span className="sw cost" aria-hidden="true" />
+                    <span>Your money</span>
+                    <b title={formatInr(Math.round(Math.min(h.invested, h.value)))}>
+                      {formatInrCompact(Math.min(h.invested, h.value))}
+                    </b>
+                  </li>
+                  <li>
+                    <span className="sw growth" aria-hidden="true" />
+                    <span>{h.value >= h.invested ? 'Growth' : 'Shortfall'}</span>
+                    <b title={formatInr(Math.round(Math.abs(h.value - h.invested)))}>
+                      {formatInrCompact(Math.abs(h.value - h.invested))}
+                    </b>
+                  </li>
+                </ul>
+              </div>
             </>
           ) : (
             <p className="hero-note">The money put in is needed to split the value.</p>
@@ -242,10 +296,12 @@ export function PortfolioHero({
 
       <dl className="invhero-grid">
         <Cell
-          label="Invested"
+          label="Money put in"
           value={formatInrCompact(h.invested)}
+          exact={formatInr(Math.round(h.invested))}
           sub="cost of the units still held"
           est={h.unreconciled > 0}
+          why={ex['invest.moneyIn']}
         />
         <Cell
           label="Profit or loss"
@@ -253,10 +309,11 @@ export function PortfolioHero({
           sub={
             h.unrealisedPct === null
               ? 'no cost recorded'
-              : `${pct(h.unrealisedPct, 1)} on money put in`
+              : `${pct(h.unrealisedPct, 1)} on the ${formatInrCompact(h.invested)} put in`
           }
           cls={tone(h.unrealised)}
           est={h.unreconciled > 0}
+          why={ex['invest.profit']}
         />
         <Cell
           label="Annual return (XIRR)"
@@ -271,6 +328,7 @@ export function PortfolioHero({
           cls={tone(h.xirr)}
           href={tabLinks.performance}
           est={h.unreconciled > 0}
+          why={ex['invest.xirr']}
         />
         <Cell
           label="Booked by selling"
@@ -282,6 +340,7 @@ export function PortfolioHero({
           }
           cls={h.realised.sales === 0 ? null : tone(h.realised.total)}
           href={tabLinks.breakdown}
+          why={ex['invest.booked']}
         />
         <Cell
           label="Total gain"
@@ -289,11 +348,14 @@ export function PortfolioHero({
           sub="held plus booked"
           cls={tone(h.totalGain)}
           est={h.unreconciled > 0}
+          why={ex['invest.totalGain']}
         />
         <Cell
           label="SIP a month"
           value={h.sipMonthly > 0 ? formatInrCompact(h.sipMonthly) : 'None'}
+          {...(h.sipMonthly > 0 ? { exact: formatInr(Math.round(h.sipMonthly)) } : {})}
           sub={h.sipMonthly > 0 ? 'running instalments' : 'no running SIP'}
+          why={ex['invest.sip']}
         />
         <Cell
           label="Long-term share"
@@ -301,9 +363,10 @@ export function PortfolioHero({
           sub={
             h.longShare === null
               ? 'needs statement or prices'
-              : `equity funds held over ${holdingMonths} months`
+              : `of equity value held over ${holdingMonths} months`
           }
           href={tabLinks.breakdown}
+          why={ex['invest.longTerm']}
         />
         <Cell
           label="Statements"
@@ -319,6 +382,7 @@ export function PortfolioHero({
               : 'every fund is exact'
           }
           href={tabLinks.transactions}
+          why={ex['invest.statements']}
         />
       </dl>
 
@@ -340,6 +404,7 @@ export function PortfolioHero({
                 .join(', ')}
               .
             </span>
+            <Why explain={ex['invest.projection']} tone="on-dark" />
           </>
         )}
         <span className="sr-only"> {base}</span>
