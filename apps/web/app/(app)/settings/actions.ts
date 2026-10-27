@@ -17,7 +17,7 @@ import {
   type AiProvider,
   type RateCheck,
 } from '@fwos/ingest';
-import { saveRatesRead } from '@fwos/data';
+import { loadSettings, saveRatesRead } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { CONFIG_GROUPS, mergeGroup, parseGroup, withConfirmed } from '@/lib/settings-fields';
@@ -170,7 +170,10 @@ export async function checkRatePage(sourceId: string): Promise<RateCheck> {
   if (!row) return fail('This page is no longer in the list.');
   const { data } = await supabase.rpc('ai_credentials_for_test', { p_household: householdId });
   const cred = (data as { provider: AiProvider; api_key: string }[] | null)?.[0] ?? null;
+  const maxAmount = (await loadSettings(supabase as unknown as SupabaseClient)).config.rates
+    .maxAmount;
   return checkRateSource({
+    maxAmount,
     bank: row.bank,
     url: row.url,
     ai: cred ? { provider: cred.provider, key: cred.api_key } : null,
@@ -220,6 +223,8 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
     revalidatePath('/rates');
   };
   try {
+    const maxAmount = (await loadSettings(supabase as unknown as SupabaseClient)).config.rates
+      .maxAmount;
     const rt = await prepareAi(cred.provider, cred.api_key, {
       listMs: 8_000,
       callMs: 30_000,
@@ -238,6 +243,7 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
       `### ${row.bank}: text pasted by the account holder from the bank's page\n${pasted.slice(0, 60_000)}`,
       rt.model || undefined,
       ((hints.data ?? []) as { hint: string }[]).map((h) => h.hint),
+      maxAmount,
     );
     const res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
     if (!res.ok) {
@@ -245,7 +251,7 @@ export async function readPastedRatePage(sourceId: string, text: string): Promis
       await note(`pasted page not read: ${msg}`);
       return fail(msg);
     }
-    const read = parseRatesResponse(cred.provider, await res.json(), row.bank);
+    const read = parseRatesResponse(cred.provider, await res.json(), row.bank, { maxAmount });
     if (read.length === 0) {
       const msg =
         'No rates could be found in the pasted text. Check it is the page with the rate table.';

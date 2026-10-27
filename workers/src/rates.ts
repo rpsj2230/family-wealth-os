@@ -6,7 +6,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { sameBank } from '@fwos/core';
-import { saveRatesRead } from '@fwos/data';
+import { loadSettings, saveRatesRead } from '@fwos/data';
 import {
   buildRatesRequest,
   parseRatesResponse,
@@ -45,6 +45,8 @@ async function main() {
   let failed = 0;
   for (const h of hh.data ?? []) {
     const household = h.id as string;
+    // rates that apply only above the most you would put with one bank are not read
+    const maxAmount = (await loadSettings(db, household)).config.rates.maxAmount;
     const cfg = await db
       .from('integration_settings')
       .select('ai_provider, ai_api_key')
@@ -133,7 +135,6 @@ async function main() {
           throw new Error(
             `no page could be read (${problems.join('; ')}). Paste the rates from your notes on the Rates page, or save another address for this bank.`,
           );
-        const text = parts.join('\n\n');
         // rules written when you corrected this bank's rates earlier are passed to the reader
         const bankHints = await db
           .from('rate_hints')
@@ -147,25 +148,43 @@ async function main() {
           .map((h) => h.hint);
         // providers retire models without notice, so the model is checked first; OpenRouter's free models fall back one to the next
         runtime ??= await prepareAi(ai.ai_provider, ai.ai_api_key, { callMs: 30_000, tries: 3 });
-        const model = runtime.model;
-        const req = buildRatesRequest(
-          ai.ai_provider,
-          ai.ai_api_key,
-          bankName,
-          text,
-          model || undefined,
-          forThisBank,
-        );
-        const res = await runtime.call(req.url, req.init as unknown as Record<string, unknown>);
-        if (!res.ok) {
-          const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300);
-          const hint = aiErrorHint(ai.ai_provider, res.status, body);
-          throw new Error(
-            `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}${hint ? ` — ${hint}` : ''}`,
+        const rt = runtime;
+        const model = rt.model;
+        const provider = ai.ai_provider!;
+        const apiKey = ai.ai_api_key!;
+        const ask = async (text: string) => {
+          const req = buildRatesRequest(
+            provider,
+            apiKey,
+            bankName,
+            text,
+            model || undefined,
+            forThisBank,
+            maxAmount,
           );
+          const res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
+          if (!res.ok) {
+            const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300);
+            const hint = aiErrorHint(provider, res.status, body);
+            throw new Error(
+              `AI service answered ${res.status}${model ? ` for model ${model}` : ''}: ${body}${hint ? ` — ${hint}` : ''}`,
+            );
+          }
+          return parseRatesResponse(provider, await res.json(), bankName, { maxAmount });
+        };
+        let read = await ask(parts.join('\n\n'));
+        // a bank page that loads but builds its table with a script has text and no rates: then the public comparison pages are tried
+        if (read.length === 0 && !thirdParty && docs.reference.length > 0) {
+          parts.length = 0;
+          used.length = 0;
+          for (const d of docs.reference)
+            thirdParty = (await add(d.url, d.label, 15_000)) || thirdParty;
+          if (parts.length > 0) read = await ask(parts.join('\n\n'));
         }
-        const read = parseRatesResponse(ai.ai_provider, await res.json(), bankName);
-        if (read.length === 0) throw new Error('no rates could be read from the page');
+        if (read.length === 0)
+          throw new Error(
+            `no rates could be read from the page${problems.length ? ` (${problems.join('; ')})` : ''}`,
+          );
 
         const summary = await saveRatesRead({
           db,

@@ -112,7 +112,7 @@ describe('computeSetupStatus', () => {
       unconfirmedRuleGroups: ['deposits', 'harvest', 'liquidity'],
     }).rules!;
     expect(r.done).toBe(false);
-    expect(r.hint).toContain('3 of 7');
+    expect(r.hint).toContain('3 of 8');
     expect(r.hint).toContain('Deposits, Tax-gain harvesting and 1 more');
   });
 

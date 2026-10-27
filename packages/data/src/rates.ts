@@ -1,6 +1,7 @@
 import {
   buildBankBlocks,
   rateOfferFromRow,
+  withinReach,
   type AppConfig,
   type RateHolding,
   type RateOffer,
@@ -95,8 +96,9 @@ export async function loadRatesContext(
       }
     }
   }
-  const offers: RateOffer[] = ((offerRows.data ?? []) as unknown as Record<string, unknown>[]).map(
-    rateOfferFromRow,
+  const offers: RateOffer[] = withinReach(
+    ((offerRows.data ?? []) as unknown as Record<string, unknown>[]).map(rateOfferFromRow),
+    st.config.rates.maxAmount,
   );
   return {
     offers,

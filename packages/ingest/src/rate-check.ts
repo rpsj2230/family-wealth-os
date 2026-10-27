@@ -8,7 +8,7 @@ import { prepareAi, type AiLimits } from './ai-runtime';
 import type { AiProvider } from './bank-email';
 import { casPdfText } from './cas-pdf';
 import { isPdf, rateDocsFor } from './rate-docs';
-import { buildRatesRequest, htmlToText, parseRatesResponse } from './rates-ai';
+import { buildRatesRequest, htmlToText, parseRatesResponse, type ParsedOffer } from './rates-ai';
 
 const AGENT = 'family-wealth-os/1.0 (personal use)';
 
@@ -63,6 +63,8 @@ export async function checkRateSource(args: {
   limits?: AiLimits;
   /** milliseconds allowed for each page */
   pageMs?: number;
+  /** the most you would put with one bank: rates above it are left out */
+  maxAmount?: number;
 }): Promise<RateCheck> {
   const t0 = Date.now();
   const steps: RateCheckStep[] = [];
@@ -116,42 +118,69 @@ export async function checkRateSource(args: {
     );
 
   const rt = await prepareAi(args.ai.provider, args.ai.key, args.limits);
-  const req = buildRatesRequest(
-    args.ai.provider,
-    args.ai.key,
-    args.bank,
-    parts.join('\n\n'),
-    rt.model || undefined,
-    [],
-  );
-  let res;
-  try {
-    res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
-  } catch (e) {
-    steps.push({ ok: false, text: `The AI service did not answer (${(e as Error).message}).` });
-    return done(false, 'Cannot sync: the AI service did not answer. Try again in a minute.');
-  }
-  if (!res.ok) {
-    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-    const hint = aiErrorHint(args.ai.provider, res.status, body);
-    steps.push({
-      ok: false,
-      text: `The AI service answered ${res.status}: ${body}${hint ? ` ${hint}` : ''}`,
-    });
-    return done(
-      false,
-      `Cannot sync: the AI service answered ${res.status}.${hint ? ` ${hint}` : ''}`,
+  const ask = async (): Promise<{ read: ParsedOffer[] } | { stop: RateCheck }> => {
+    const req = buildRatesRequest(
+      args.ai!.provider,
+      args.ai!.key,
+      args.bank,
+      parts.join('\n\n'),
+      rt.model || undefined,
+      [],
+      args.maxAmount,
     );
-  }
-  let read;
-  try {
-    read = parseRatesResponse(args.ai.provider, await res.json(), args.bank);
-  } catch (e) {
+    let res;
+    try {
+      res = await rt.call(req.url, req.init as unknown as Record<string, unknown>);
+    } catch (e) {
+      steps.push({ ok: false, text: `The AI service did not answer (${(e as Error).message}).` });
+      return {
+        stop: done(false, 'Cannot sync: the AI service did not answer. Try again in a minute.'),
+      };
+    }
+    if (!res.ok) {
+      const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
+      const hint = aiErrorHint(args.ai!.provider, res.status, body);
+      steps.push({
+        ok: false,
+        text: `The AI service answered ${res.status}: ${body}${hint ? ` ${hint}` : ''}`,
+      });
+      return {
+        stop: done(
+          false,
+          `Cannot sync: the AI service answered ${res.status}.${hint ? ` ${hint}` : ''}`,
+        ),
+      };
+    }
+    try {
+      return {
+        read: parseRatesResponse(args.ai!.provider, await res.json(), args.bank, {
+          maxAmount: args.maxAmount,
+        }),
+      };
+    } catch (e) {
+      steps.push({
+        ok: false,
+        text: `The AI answer could not be understood (${(e as Error).message}).`,
+      });
+      return { stop: done(false, 'Cannot sync: the AI answer could not be understood.') };
+    }
+  };
+  let first = await ask();
+  if ('stop' in first) return first.stop;
+  let read = first.read;
+  // a bank page that loads but builds its table with a script has text and no rates: try the public comparison pages
+  if (read.length === 0 && !thirdParty && docs.reference.length > 0) {
     steps.push({
       ok: false,
-      text: `The AI answer could not be understood (${(e as Error).message}).`,
+      text: 'The bank’s own page had no rates in its text (its table is probably built by a script). Trying the public comparison pages.',
     });
-    return done(false, 'Cannot sync: the AI answer could not be understood.');
+    parts.length = 0;
+    for (const d of docs.reference) thirdParty = (await add(d.url, d.label, 15_000)) || thirdParty;
+    if (parts.length > 0) {
+      first = await ask();
+      if ('stop' in first) return first.stop;
+      read = first.read;
+    }
   }
   if (read.length === 0) {
     steps.push({ ok: false, text: 'The AI found no rates in the text.' });

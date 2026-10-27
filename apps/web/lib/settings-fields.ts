@@ -336,6 +336,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
       },
       {
+        name: 'rateMaxAmount',
+        label: 'The most I will put with one bank',
+        hint: 'Rates that apply only to amounts above this (for example a savings slab above ₹1 crore) are not read from bank pages and are not shown, so a rate you could never use does not become “the best rate”.',
+        kind: 'money',
+        path: ['rates', 'maxAmount'],
+        unit: '₹',
+      },
+      {
         name: 'rateStale',
         label: 'A bank rate counts as old after',
         hint: 'Older rates are shown as old and not used for a suggestion without a warning.',

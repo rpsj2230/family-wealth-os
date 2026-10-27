@@ -38,6 +38,7 @@ export function htmlToText(html: string, max = 30_000): string {
 
 const PROMPT = (
   bank: string,
+  maxAmount?: number,
 ) => `You read a bank's public interest-rate page and list ONLY these rates for ${bank}:
  (1) the savings account interest rate, with every balance slab as its own offer;
  (2) fixed deposit rates for NRE deposits (if the page does not separate NRE from domestic rates, give the general fixed deposit rates).
@@ -47,7 +48,12 @@ Rules: ratePct is the yearly rate in percent exactly as printed (7.25 means 7.25
 (1 year = 12; "2 years to less than 3 years" = 24 to 35; days: 7-45 days = 0 to 1). For savings use "any", 0 and 0, with balanceFromRupees (above)
 and balanceToRupees (up to; null when there is no upper limit), both null when the rate has no slab. Use accountKind "NRE" for a deposit only when the
 page says NRE, otherwise "any". Give the rate for regular (not senior-citizen) customers and mention a senior-citizen premium in conditions.
-Never invent a rate: if the page has none of these, return {"offers":[]}.`;
+Never invent a rate: if the page has none of these, return {"offers":[]}.${
+  maxAmount
+    ? `
+The account holder will never place more than ₹${Math.round(maxAmount).toLocaleString('en-IN')} with one bank. Leave out any savings slab that starts at or above that balance and any deposit rate that applies only to amounts at or above it (bulk, large-value or special-rate deposits); keep a slab that covers part of the range below it.`
+    : ''
+}`;
 
 /** Corrections you made earlier, as rules the reader must follow for this bank (kept short, newest first). */
 export const withHints = (prompt: string, hints: string[]) =>
@@ -65,11 +71,12 @@ export function buildRatesRequest(
   pageText: string,
   model?: string,
   hints: string[] = [],
+  maxAmount?: number,
 ): AiHttp {
   return buildAiChat(
     provider,
     apiKey,
-    withHints(PROMPT(bank), hints),
+    withHints(PROMPT(bank, maxAmount), hints),
     pageText.slice(0, 30_000),
     model,
   );
@@ -82,6 +89,7 @@ export function parseRatesResponse(
   provider: AiProvider,
   json: unknown,
   bank: string,
+  opts: { maxAmount?: number | undefined } = {},
 ): ParsedOffer[] {
   const parsed = aiJson(provider, json) as { offers?: unknown } | null;
   const rows = parsed?.offers;
@@ -109,6 +117,8 @@ export function parseRatesResponse(
     const bFrom = product === 'savings' ? num(r.balanceFromRupees) : null;
     const bTo = product === 'savings' ? num(r.balanceToRupees) : null;
     if (bTo !== null && bTo <= (bFrom ?? 0)) continue;
+    // a slab that starts at or above the most you would ever put in is of no use to you
+    if (opts.maxAmount && bFrom !== null && bFrom >= opts.maxAmount) continue;
     const key = `${product}|${kind}|${tFrom}|${tTo}|${bFrom ?? 0}|${bTo ?? -1}`;
     if (out.has(key)) continue;
     out.set(key, {

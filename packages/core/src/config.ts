@@ -74,6 +74,8 @@ export interface AppConfig {
     insuranceBuffer: number;
     /** New money: the smallest amount worth putting in one deposit */
     minPiece: number;
+    /** the most you will ever put with one bank in savings or a deposit: rates that apply only above this amount are not read, stored or shown */
+    maxAmount: number;
   };
   refunds: {
     /** income per person per year up to which no Indian tax is due (the basic exemption); tax withheld on NRO interest is then refunded */
@@ -224,6 +226,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     flexibleLiquidShare: 0.5,
     insuranceBuffer: 0.1,
     minPiece: 25_000,
+    maxAmount: 10_000_000,
   },
   refunds: { incomeLimit: 400_000, otherIncome: 0 },
   liquidity: {
@@ -432,6 +435,7 @@ export function configFromJson(raw: unknown): AppConfig {
       flexibleLiquidShare: num(rat.flexibleLiquidShare, d.rates.flexibleLiquidShare, 0, 1),
       insuranceBuffer: num(rat.insuranceBuffer, d.rates.insuranceBuffer, 0, 0.5),
       minPiece: num(rat.minPiece, d.rates.minPiece, 0, 1e9),
+      maxAmount: num(rat.maxAmount, d.rates.maxAmount, 100_000, 1e11),
     },
     refunds: {
       incomeLimit: num(ref.incomeLimit, d.refunds.incomeLimit, 0, 1e9),

@@ -57,7 +57,11 @@ export async function saveRatesRead(args: {
   const touch = {
     checked_on: today,
     source_url: args.sourceUrl,
-    source_note: args.sourceNote,
+    // the column holds at most 120 characters; a longer note must shorten, not fail the whole bank
+    source_note:
+      args.sourceNote.length > 120
+        ? `${args.sourceNote.slice(0, 117).trimEnd()}…`
+        : args.sourceNote,
   };
   if (plan.insert.length)
     must(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../src/config';
 import {
+  withinReach,
   afterTaxRate,
   compareHoldings,
   exposureByBank,
@@ -250,5 +251,17 @@ describe('placeNewMoney', () => {
       ['Beta', 300_000],
       ['Gamma', 100_000],
     ]);
+  });
+});
+
+describe('withinReach', () => {
+  it('leaves out a slab that starts at or above the most you would put with one bank', () => {
+    const o = [
+      { balanceFrom: null },
+      { balanceFrom: 0 },
+      { balanceFrom: 5_000_000 },
+      { balanceFrom: 10_000_000 },
+    ];
+    expect(withinReach(o, 10_000_000)).toHaveLength(3);
   });
 });

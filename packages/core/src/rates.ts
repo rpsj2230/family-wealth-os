@@ -39,6 +39,14 @@ export type RatePrefs = AppConfig['rates'];
 
 /** Interest after Indian tax: NRO is taxed at the configured rate, NRE is not. */
 /** A stored rate (database row) as a rate offer. */
+/** Offers you could actually use: a savings slab that starts at or above the most you would ever put with one bank is left out. */
+export function withinReach<T extends { balanceFrom?: number | null }>(
+  offers: T[],
+  maxAmount: number,
+): T[] {
+  return offers.filter((o) => (o.balanceFrom ?? 0) < maxAmount);
+}
+
 export function rateOfferFromRow(o: Record<string, unknown>): RateOffer {
   return {
     id: o.id as string,

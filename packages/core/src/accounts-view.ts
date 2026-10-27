@@ -107,15 +107,27 @@ export type SourceTag = { label: string; kind: 'auto' | 'manual' | 'calc' | 'imp
 const SHORT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const shortDate = (iso: string) => SHORT.format(new Date(`${iso}T00:00:00Z`));
 
-/** "Email, 25 Oct" / "You, 12 Oct" / "Calculated" so the reader sees what is automatic and what is typed. */
-export function sourceTag(source: string | null, asOf: string | null, isFd: boolean): SourceTag {
+/**
+ * "Email, 25 Oct" / "You, 12 Oct" / "Calculated" so the reader sees what is automatic and what is typed. A value that an
+ * automatic source added today says so ("Email, 25 Oct · updated today"), because the date of the balance and the day the app
+ * fetched it are not the same thing.
+ */
+export function sourceTag(
+  source: string | null,
+  asOf: string | null,
+  isFd: boolean,
+  fetchedAt: string | null = null,
+  today: string | null = null,
+): SourceTag {
   if (isFd) return { label: 'Calculated from the deposit terms', kind: 'calc' };
   if (!source || !asOf) return { label: 'No value yet', kind: 'none' };
   const d = shortDate(asOf);
-  if (source === 'email') return { label: `Email, ${d}`, kind: 'auto' };
-  if (source === 'statement') return { label: `Statement, ${d}`, kind: 'auto' };
-  if (source === 'cas') return { label: `Fund statement, ${d}`, kind: 'auto' };
-  if (source === 'api') return { label: `Automatic, ${d}`, kind: 'auto' };
+  const fresh =
+    !!fetchedAt && !!today && fetchedAt.slice(0, 10) === today ? ' · updated today' : '';
+  if (source === 'email') return { label: `Email, ${d}${fresh}`, kind: 'auto' };
+  if (source === 'statement') return { label: `Statement, ${d}${fresh}`, kind: 'auto' };
+  if (source === 'cas') return { label: `Fund statement, ${d}${fresh}`, kind: 'auto' };
+  if (source === 'api') return { label: `Automatic, ${d}${fresh}`, kind: 'auto' };
   if (source === 'workbook') return { label: `Imported sheet, ${d}`, kind: 'import' };
   if (source === 'calculated') return { label: 'Calculated', kind: 'calc' };
   return { label: `You, ${d}`, kind: 'manual' };
@@ -303,7 +315,13 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       current: est,
       recorded: obs ? obs.amount : null,
       asOf: obs?.as_of ?? null,
-      source: sourceTag(obs?.source ?? null, obs?.as_of ?? null, a.type === 'fixed_deposit'),
+      source: sourceTag(
+        obs?.source ?? null,
+        obs?.as_of ?? null,
+        a.type === 'fixed_deposit',
+        obs?.created_at ?? null,
+        i.today.toISOString().slice(0, 10),
+      ),
       stale: line?.freshness === 'stale' || line?.freshness === 'missing',
       holderName: a.holder_name ?? null,
       fd: null,

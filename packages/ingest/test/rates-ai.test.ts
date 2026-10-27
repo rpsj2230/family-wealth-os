@@ -174,3 +174,43 @@ describe('buildRatesRequest: corrections are passed to the reader', () => {
     expect(hinted).toContain('the right rate is 8%');
   });
 });
+
+describe('the most you would put with one bank', () => {
+  const wrapIt = (offers: unknown[]) => ({
+    choices: [{ message: { content: JSON.stringify({ offers }) } }],
+  });
+  const slabs = [
+    {
+      product: 'savings',
+      accountKind: 'any',
+      ratePct: 3,
+      balanceFromRupees: 0,
+      balanceToRupees: 5_000_000,
+    },
+    {
+      product: 'savings',
+      accountKind: 'any',
+      ratePct: 4,
+      balanceFromRupees: 5_000_000,
+      balanceToRupees: 20_000_000,
+    },
+    {
+      product: 'savings',
+      accountKind: 'any',
+      ratePct: 7.5,
+      balanceFromRupees: 10_000_000,
+      balanceToRupees: null,
+    },
+  ];
+  it('drops a savings slab that starts at or above the ceiling and keeps one that reaches into the range below it', () => {
+    const r = parseRatesResponse('groq', wrapIt(slabs), 'X', { maxAmount: 10_000_000 });
+    expect(r.map((o) => o.rate)).toEqual([0.03, 0.04]);
+  });
+  it('keeps everything when no ceiling is given', () => {
+    expect(parseRatesResponse('groq', wrapIt(slabs), 'X')).toHaveLength(3);
+  });
+  it('tells the reader about the ceiling', () => {
+    const req = buildRatesRequest('groq', 'k', 'X', 'page', undefined, [], 10_000_000);
+    expect(JSON.stringify(req.init.body)).toContain('1,00,00,000');
+  });
+});
