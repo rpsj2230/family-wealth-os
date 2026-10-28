@@ -9,6 +9,7 @@ import {
   parseJsonLoosely,
   redactForAi,
   senderDomain,
+  senderMatchesBank,
   type BalanceReading,
   type KnownAccount,
 } from '../src/bank-email';
@@ -245,5 +246,83 @@ describe('OpenRouter request and answers', () => {
   it('parseJsonLoosely finds the object or gives null', () => {
     expect(parseJsonLoosely('x {"a":1} y')).toEqual({ a: 1 });
     expect(parseJsonLoosely('nothing')).toBeNull();
+  });
+});
+
+describe('YES Bank credit alerts and the new .bank.in domains', () => {
+  const YES_TEXT = `Dear Customer,
+
+An amount of INR 5,56,750.00 has been credited to your A/C. No. XX0037 on 28-OCT-2026 12:57:59 on account of RTGS:RATNR0000000000000001/From:SOMEONE.
+
+Available Balance on 28-OCT-26 is INR 5,57,006.53 and Total available balance (including linked deposits and Limit) is INR 5,57,006.53.`;
+
+  it('knows the banks by their new domains as well as the old ones', () => {
+    expect(senderMatchesBank('yes.bank.in', 'YES Bank')).toBe(true);
+    expect(senderMatchesBank('yesbank.in', 'YES Bank')).toBe(true);
+    expect(senderMatchesBank('rbl.bank.in', 'RBL Bank')).toBe(true);
+    expect(senderMatchesBank('sbi.bank.in', 'SBI')).toBe(true);
+    expect(senderMatchesBank('yes.bank.in.evil.com', 'YES Bank')).toBe(false);
+  });
+
+  it('reads the available balance, not the amount credited, from the bank itself without the AI', () => {
+    const out = parseBankEmail({
+      from: '<alerts@yes.bank.in>',
+      subject: 'RTGS Credit Alert',
+      text: YES_TEXT,
+      receivedOn: '2026-10-28',
+    });
+    expect(out).toEqual({
+      kind: 'balance',
+      reading: {
+        bank: 'YES Bank',
+        last4: '0037',
+        amount: 557006.53,
+        currency: 'INR',
+        asOf: '2026-10-28',
+        source: 'rule',
+        senderVerified: true,
+      },
+    });
+  });
+
+  it('leaves the same words from an unknown sender to the AI reader, never trusted', () => {
+    const out = parseBankEmail({
+      from: '<alerts@yes-bank-alerts.com>',
+      subject: 'RTGS Credit Alert',
+      text: YES_TEXT,
+      receivedOn: '2026-10-28',
+    });
+    expect(out.kind).toBe('unknown');
+  });
+
+  it('matches a YES Bank account by its last four digits', () => {
+    const accounts: KnownAccount[] = [
+      {
+        assetId: 'y1',
+        institution: 'Yes Bank',
+        last4: '0037',
+        currency: 'INR',
+        type: 'bank_account',
+      },
+      {
+        assetId: 'y2',
+        institution: 'Yes Bank',
+        last4: '9999',
+        currency: 'INR',
+        type: 'bank_account',
+      },
+    ];
+    const out = parseBankEmail({
+      from: '<alerts@yes.bank.in>',
+      subject: 'RTGS Credit Alert',
+      text: YES_TEXT,
+      receivedOn: '2026-10-28',
+    });
+    if (out.kind !== 'balance') throw new Error('not read');
+    expect(matchAccount(out.reading, accounts)).toEqual({
+      status: 'matched',
+      assetId: 'y1',
+      autoApply: true,
+    });
   });
 });

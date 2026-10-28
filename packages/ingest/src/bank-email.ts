@@ -83,21 +83,33 @@ export function parseAmount(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Domains banks send alerts and statements from. A bank missing here is never auto-trusted; its mail goes to review. */
+/**
+ * Domains banks send alerts and statements from. A bank missing here is never auto-trusted; its mail goes to review. Indian banks are
+ * moving to the RBI's reserved ".bank.in" domains (yes.bank.in, rbl.bank.in, ...); both the new and the old domains are listed.
+ */
 const BANK_DOMAINS: Record<string, string[]> = {
-  HDFC: ['hdfcbank.bank.in', 'hdfcbank.net', 'hdfcbank.com'],
-  ICICI: ['icicibank.com'],
-  SBI: ['sbi.co.in', 'onlinesbi.com'],
+  HDFC: ['hdfcbank.bank.in', 'hdfc.bank.in', 'hdfcbank.net', 'hdfcbank.com'],
+  ICICI: ['icici.bank.in', 'icicibank.bank.in', 'icicibank.com'],
+  SBI: ['sbi.bank.in', 'sbi.co.in', 'onlinesbi.com'],
   AXIS: ['axisbank.com', 'axis.bank.in'],
   KOTAK: ['kotak.com', 'kotak.bank.in'],
-  RBL: ['rblbank.com'],
-  YES: ['yesbank.in'],
-  IDFC: ['idfcfirstbank.com'],
-  INDUSIND: ['indusind.com'],
+  RBL: ['rbl.bank.in', 'rblbank.com'],
+  YES: ['yes.bank.in', 'yesbank.in'],
+  IDFC: ['idfcfirst.bank.in', 'idfcfirstbank.com'],
+  INDUSIND: ['indusind.bank.in', 'indusind.com'],
   DBS: ['dbs.com', 'dbs.com.sg'],
   OCBC: ['ocbc.com'],
   UOB: ['uob.com.sg'],
   SC: ['sc.com'],
+};
+
+/** The name a reading carries for a bank key, matched loosely against the bank names on the accounts. */
+const BANK_NAMES: Record<string, string> = {
+  YES: 'YES Bank',
+  RBL: 'RBL Bank',
+  SC: 'Standard Chartered',
+  INDUSIND: 'IndusInd',
+  IDFC: 'IDFC First',
 };
 
 /** Which bank a sender domain belongs to, or null. */
@@ -150,6 +162,31 @@ export function parseBankEmail(e: EmailInput): EmailOutcome {
           asOf,
           source: 'rule',
           senderVerified: domainBelongs(domain, 'HDFC'),
+        },
+      };
+  }
+
+  // YES Bank and others: "credited to your A/C. No. XX0037 on ... Available Balance on 28-OCT-26 is INR 5,57,006.53". Read only from a
+  // bank's own domain, so the bank is known; any other sender goes to the AI reader
+  const sender = bankForDomain(domain);
+  const avail =
+    /A\/?C\.?\s*No\.?\s*:?\s*[Xx*]*(\d{3,4})\b.{0,400}?Available Balance on\s+(\d{1,2}-[A-Za-z]{3}-\d{2,4})\s+is\s+(?:Rs\.?\s*)?(?:INR\s*)?([\d,]+(?:\.\d+)?)/i.exec(
+      text,
+    );
+  if (avail && sender) {
+    const amount = parseAmount(avail[3]!);
+    const asOf = parseBankDate(avail[2]!);
+    if (amount !== null && asOf)
+      return {
+        kind: 'balance',
+        reading: {
+          bank: BANK_NAMES[sender] ?? sender,
+          last4: avail[1]!.slice(-4),
+          amount,
+          currency: 'INR',
+          asOf,
+          source: 'rule',
+          senderVerified: true,
         },
       };
   }

@@ -1,0 +1,33 @@
+name: Inbox match check (read-only)
+# Manual: shows why bank emails went to review instead of updating an account. Prints, for the emails waiting for review, the sender
+# domain and what was read from them (bank, last four digits, currency, date); and, for the bank accounts, the bank, type, currency,
+# status and last four digits. Never balances, amounts, people's names or full account numbers. Changes nothing.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Emails waiting for review, and the accounts they could belong to
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=0 <<'SQL'
+          \echo '== emails waiting for review (last 14 days)'
+          select received_on, from_domain, left(subject, 60) as subject, reading->>'bank' as read_bank,
+                 reading->>'last4' as read_last4, reading->>'currency' as read_currency, reading->>'asOf' as read_as_of,
+                 reading->>'senderVerified' as sender_verified, reason
+            from public.inbox_messages
+           where outcome = 'needs_review' and resolved_at is null and created_at > now() - interval '14 days'
+           order by created_at desc limit 30;
+          \echo '== bank accounts: bank, type, currency, status, last four (no balances, no names)'
+          select i.name as bank, a.type, a.currency, a.status, a.identifier_last4 as last4
+            from public.assets a left join public.institutions i on i.id = a.institution_id
+           where a.type in ('bank_account', 'third_party_held')
+           order by i.name, a.identifier_last4;
+          SQL
