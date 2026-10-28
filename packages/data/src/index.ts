@@ -6,6 +6,8 @@
 import {
   buildPortfolio,
   lastNavMove,
+  addDaysIso,
+  planLedger,
   rateOfferFromRow,
   savingsRateFor,
   type AssetRow,
@@ -16,6 +18,7 @@ import {
 } from '@fwos/core';
 import { HIST_FUND_REF } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadNavHistory } from './nav-history';
 import { pageAll } from './paging';
 import { loadSettings } from './settings';
 
@@ -51,6 +54,7 @@ interface PositionRow {
   sip_monthly: number | null;
   sip_stopped: boolean;
   started_on: string | null;
+  invested: number | null;
 }
 
 export async function loadPortfolioData(
@@ -87,7 +91,7 @@ export async function loadPortfolioData(
       ),
       sel(
         'mf_positions',
-        'asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of',
+        'asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of, invested',
       ),
       sel('institutions', 'id, name'),
       sel(
@@ -184,6 +188,63 @@ export async function loadPortfolioData(
 
   // Public market data for what the household holds. Failure only means "no market movement shown".
   const { config } = await settingsP;
+  const todayIso0 = today.toISOString().slice(0, 10);
+  // A fund with no unit count (nothing was counted, no statement was read) has its units rebuilt from the plan the household gave: the
+  // start date, the amount invested and the SIP with its changes, each instalment bought at the price of its day. One function (core
+  // fund-plan.ts) shared with the position engine, so today's value here and the value on any past day agree. A counted unit count or
+  // a statement replaces them. Prices are public and read once (nav-history.ts); without them the fund is valued from its last record.
+  const planUnits = new Map<string, number>();
+  try {
+    const startedOf = new Map(
+      ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [p.asset_id, p]),
+    );
+    const wants = assetRows.flatMap((a) => {
+      const p = startedOf.get(a.id);
+      return a.type === 'mutual_fund' &&
+        a.status !== 'gifted' &&
+        a.currency === 'INR' &&
+        a.amfi_code &&
+        !(typeof a.units === 'number' && a.units > 0) &&
+        p?.started_on
+        ? [{ a, p, from: addDaysIso(p.started_on, -config.funds.navGapDays) }]
+        : [];
+    });
+    if (wants.length > 0) {
+      const hist = await loadNavHistory(
+        supabase,
+        wants.map((w) => ({ code: w.a.amfi_code!, from: w.from })),
+      );
+      for (const { a, p } of wants) {
+        const dates = [...obsRows, ...sheetObs]
+          .filter((o) => o.asset_id === a.id && !o.superseded_by)
+          .map((o) => o.as_of)
+          .sort();
+        const pl = planLedger(
+          {
+            startedOn: p.started_on,
+            invested: p.invested === null ? null : Number(p.invested),
+            investedAsOf: dates.pop() ?? null,
+            sip: a.sip ?? null,
+          },
+          hist.get(a.amfi_code!) ?? [],
+          todayIso0,
+          {
+            gapDays: config.funds.navGapDays,
+            tolerance: config.funds.planTolerance,
+            includeSip: config.estimates.includeSip,
+          },
+        );
+        if (pl && pl.units > 0) {
+          planUnits.set(a.id, pl.units);
+          a.units = pl.units;
+          a.units_as_of = todayIso0;
+          a.units_source = 'plan';
+        }
+      }
+    }
+  } catch {
+    // prices are optional: the fund is valued from its last record
+  }
   const market: PortfolioDefaults = {
     savingsRate: config.estimates.savingsRate,
     tdsRate: config.estimates.interestTdsRate,
@@ -262,8 +323,8 @@ export async function loadPortfolioData(
       );
       if (pos)
         fundInfo[a.id] = {
-          units: pos.units === null ? null : Number(pos.units),
-          unitsAsOf: pos.units_as_of,
+          units: planUnits.get(a.id) ?? (pos.units === null ? null : Number(pos.units)),
+          unitsAsOf: planUnits.has(a.id) ? todayIso0 : pos.units_as_of,
           nav: latest?.nav ?? null,
           navDate: latest?.date ?? null,
         };
@@ -286,6 +347,7 @@ export async function loadPortfolioData(
   };
 }
 export * from './digest-input';
+export * from './nav-history';
 export * from './harvest';
 export * from './columns';
 export * from './price-source';

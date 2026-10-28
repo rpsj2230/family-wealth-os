@@ -1,4 +1,4 @@
-import type { AppConfig, AssetRow, BankBlock, OverviewOptions } from '@fwos/core';
+import type { AppConfig, AssetRow, BankBlock, FxOnFile, OverviewOptions } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cashRatesFor, loadOffers } from './rates-view';
 import { loadJointHolders } from './quick-edit-data';
@@ -16,8 +16,10 @@ export async function bankOverviewOptions(args: {
   institutions: { id: string; deposit_insured?: boolean | null }[];
   config: AppConfig;
   today: Date;
+  /** the latest exchange rate on file per currency, to date the rate behind a foreign balance */
+  fx?: FxOnFile;
 }): Promise<OverviewOptions> {
-  const { supabase, blocks, assetRows, institutions, config, today } = args;
+  const { supabase, blocks, assetRows, institutions, config, today, fx } = args;
   const [offers, jointHolders] = await Promise.all([
     loadOffers(supabase),
     loadJointHolders(supabase as unknown as SupabaseClient),
@@ -41,5 +43,6 @@ export async function bankOverviewOptions(args: {
       institutions.filter((i) => i.deposit_insured === false).map((i) => i.id),
     ),
     jointHolders,
+    ...(fx ? { fx } : {}),
   };
 }

@@ -528,3 +528,52 @@ describe('safety of the HTML and the text', () => {
       expect(e.text).toContain(needle);
   });
 });
+
+describe('foreign cash under the savings tile', () => {
+  const sgd = {
+    currency: 'SGD',
+    native: 41_250,
+    inr: 2_314_125,
+    rate: 56.1,
+    accounts: 1,
+    asOf: '2026-10-12',
+    rateDate: '2026-10-27',
+    rateLive: true,
+  };
+  const withSgd = base({ wealth: wealthOf(6_200_000, { cashForeign: [sgd] }) });
+  const e = buildDigestEmail(withSgd);
+
+  it('keeps the savings figure and adds the S$ balance with the rupee value in small type', () => {
+    const text = strip(e.html);
+    expect(text).toContain('₹10.00 L');
+    expect(text).toContain('S$ 41,250');
+    expect(text).toContain('≈ ₹23.14 L at ₹56.1 (27 Oct)');
+    expect(emailProblems(e.html)).toEqual([]);
+  });
+
+  it('adds one small line to the text and the chat message under the savings line', () => {
+    for (const t of [e.text, e.chat]) {
+      const lines = t.split('\n');
+      const at = lines.findIndex((l) => l.startsWith('Savings'));
+      expect(lines[at]).toContain('₹10.00 L');
+      expect(lines[at + 1]).toContain('of it S$ 41,250 ≈ ₹23.14 L at ₹56.1 (27 Oct)');
+    }
+  });
+
+  it('shows nothing extra when all cash is in rupees', () => {
+    const plain = buildDigestEmail(base());
+    expect(plain.text).not.toContain('of it');
+    expect(strip(plain.html)).not.toContain('S$');
+  });
+
+  it('writes one line per currency and stays within the message limit', () => {
+    const usd = { ...sgd, currency: 'USD', native: 2_000, inr: 168_400, rate: 84.2 };
+    const two = buildDigestEmail(
+      base({ wealth: wealthOf(6_200_000, { cashForeign: [sgd, usd] }) }),
+    );
+    expect(two.text.match(/of it /g)?.length).toBe(2);
+    expect(two.text).toContain('US$ 2,000');
+    expect(two.text.length).toBeLessThanOrEqual(DIGEST_TEXT_LIMIT);
+    expect(two.chat.length).toBeLessThanOrEqual(DIGEST_TEXT_LIMIT);
+  });
+});

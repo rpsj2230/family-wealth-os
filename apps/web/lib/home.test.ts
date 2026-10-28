@@ -41,6 +41,28 @@ describe('Home model for the sample household', () => {
     );
   });
 
+  it('the Cash card keeps the rupee total of all cash and lists the foreign part beneath it', () => {
+    const cash = h.classes.find((c) => c.key === 'cash')!;
+    const inrAccounts = input.portfolio.valued
+      .filter((v) => v.type === 'bank_account' && !['s-ja-usd', 's-ja-sgd'].includes(v.assetId))
+      .reduce((s, v) => s + (v.estimate?.estimatedAmount ?? 0), 0);
+    const foreignInr = cash.foreign.reduce((s, f) => s + f.inr, 0);
+    // the card's figure is all the cash: the rupee accounts plus the foreign accounts converted, as net worth counts them
+    expect(cash.foreign.map((f) => f.currency)).toEqual(['SGD', 'USD']);
+    expect(foreignInr).toBeGreaterThan(0);
+    expect(cash.current).toBeGreaterThanOrEqual(foreignInr);
+    expect(inrAccounts + foreignInr).toBeCloseTo(nw.byType.bank_account!, 1);
+    const sgd = cash.foreign[0]!;
+    expect(sgd.native).toBe(41_250);
+    expect(sgd.inr).toBeCloseTo(41_250 * 56.1, 2);
+    expect(sgd.rate).toBeCloseTo(56.1, 6);
+    expect(sgd.rateDate).toBe('2026-10-26');
+    // no other card carries a foreign line
+    expect(h.classes.filter((c) => c.key !== 'cash').every((c) => c.foreign.length === 0)).toBe(
+      true,
+    );
+  });
+
   it('today’s change is what the banks earned plus what the funds moved', () => {
     expect(h.change.today.amount).toBeCloseTo(
       h.banks.overview.today.change + (input.inv!.household.dayAmount ?? 0),

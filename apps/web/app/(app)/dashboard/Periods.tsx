@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   formatInrCompact,
   formatPct,
+  unexplainedWords,
   type ClassPeriod,
   type ExplainSet,
   type PeriodGainsRow,
@@ -13,6 +14,7 @@ import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
 import { homeLink } from './parts';
+import { FundNote } from './Hero';
 
 /** "26 Sep to today", "1 Apr 2025 to 31 Mar 2026". */
 function span(w: PeriodWindow, today: string): string {
@@ -80,6 +82,12 @@ export function Periods({
     return `${win.label.toLowerCase()} ${c.empty ? 'nothing held' : `${c.profit < 0 ? 'lost' : 'earned'} ${formatInrCompact(Math.abs(c.profit))}`}`;
   };
   const basis = p.basis;
+  const apart = w
+    .map((x) => ({
+      x,
+      words: unexplainedWords(p.rows.find((r) => r.key === 'funds')!.cells[x.key]),
+    }))
+    .filter((r) => r.words !== null);
   const starts = p.rows.map(rowSince).filter((x): x is string => x !== null);
   return (
     <section className="card hm-card hm-wide hm-periods-card" aria-labelledby="hm-periods">
@@ -127,6 +135,16 @@ export function Periods({
           ))}
         </tbody>
       </table>
+      {apart.length > 0 && (
+        <ul className="hm-apart small muted" data-testid="hm-apart">
+          {apart.map(({ x, words }) => (
+            <li key={x.key}>
+              {x.label}: {words}.
+            </li>
+          ))}
+        </ul>
+      )}
+      <FundNote m={m} sample={sample} testId="hm-fund-note-table" />
       <details className="bv-how">
         <summary>How these are worked out</summary>
         <ul className="list small muted">
@@ -156,10 +174,16 @@ export function Periods({
             <strong>Mutual funds:</strong> the change in value over the period less the money put
             in, so a purchase is not a gain and a sale is not a loss; a gain already booked by
             selling counts in the period it was sold. Value is the units held then times the price
-            of the day. <Est /> marks a period that rests on instalments assumed from a SIP plan or
-            on a fund with no statement
+            of the day, and the units come from your fund statement when one is imported. A fund
+            with no transactions has its units worked out from the start date, the amount invested
+            and the SIP amount and its changes you entered: each instalment buys its amount divided
+            by the price of its day. The money put in is that plan’s, and the monthly values in your
+            sheet are used only as a last resort, for a fund with no start date or no price. If a
+            sheet or counted value differs from what the plan and the prices give, that difference
+            is not counted as profit. <Est /> marks a period that rests on instalments assumed from
+            a SIP plan or on a fund with no statement
             {basis.fundsFromPlan > 0
-              ? ` (${plural(basis.fundsFromPlan, 'fund')}, rebuilt from the start date and plan you entered)`
+              ? ` (${plural(basis.fundsFromPlan, 'fund')}; of the ${plural(basis.fundsHeld, 'fund')} held, ${basis.fundsValuedFromLedger} are valued from a statement ledger, ${basis.fundsValuedFromPlan} from the plan and the price of each day, ${basis.fundsValuedFromRecords} from a value on file as a last resort)`
               : ''}
             .
           </li>

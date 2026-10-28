@@ -209,7 +209,7 @@ describe('the same period gives the same figure on every page', () => {
     expect(funds.putIn).toBeGreaterThan(0);
     expect(funds.takenOut).toBeGreaterThan(0);
     expect(h.periods.basis.fundsFromPlan).toBe(2);
-    expect(h.periods.basis.foreignAccounts).toBe(1);
+    expect(h.periods.basis.foreignAccounts).toBe(2);
     expect(h.periods.basis.depositsEnded).toBeGreaterThanOrEqual(2);
     // since the start counts what was paid out and sold, so it is more than the profit on what is still held
     expect(cell('fd', 'start').profit).toBeGreaterThan(card('fd').profit);

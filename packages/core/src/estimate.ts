@@ -211,6 +211,15 @@ export function sipInstalments(
     .filter((x) => x.amount > 0);
 }
 
+/** The instalments a SIP plan makes between two dates; none when the plan is stopped or has no amount. */
+export function plannedInstalments(
+  plan: SipPlan | null | undefined,
+  after: Date,
+  until: Date,
+): { date: string; amount: number }[] {
+  return sipRuns(plan ?? null) ? sipInstalments(plan!, after, until) : [];
+}
+
 /** "3 SIP instalments of ₹5,000" for one amount, "3 SIP instalments totalling ₹14,000" when the amount changed. */
 function sipNote(items: { amount: number }[], since: string): string {
   const total = items.reduce((a, x) => a + x.amount, 0);

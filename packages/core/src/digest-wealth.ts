@@ -63,6 +63,7 @@ export function digestWealth(i: DigestWealthInput): DigestWealth {
     awaiting: awaitingDeposits(i.blocks),
     cash: o.parts.cash,
     cashToday: o.today.savings,
+    cashForeign: o.foreign,
     othersHeld: o.parts.others,
     funds: i.funds,
     earned: {},

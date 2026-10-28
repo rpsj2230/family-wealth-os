@@ -8,6 +8,13 @@ const panel = (page: Page) => page.getByTestId('vbp');
 const rows = (page: Page) => page.getByTestId('vbp-row');
 
 test.describe('Investments > Value by period (public sample)', () => {
+  test('carries the same note about funds without a ledger as Home', async ({ page }) => {
+    await page.goto('/demo/investments?tab=valuation');
+    await expect(page.getByTestId('vbp-fund-note')).toContainText(
+      'Fund gains are approximate until you import your fund statements',
+    );
+  });
+
   test('shows the total valuation over a table of value, change and gain by month', async ({
     page,
   }) => {

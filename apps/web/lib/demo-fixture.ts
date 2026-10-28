@@ -1,9 +1,12 @@
 import {
+  DEFAULT_ASSUMPTIONS,
   buildBankBlocks,
   buildPortfolio,
   personStyles,
   type AssetRow,
   type FdRow,
+  type FxOnFile,
+  type PortfolioDefaults,
   type ObservationRow,
 } from '@fwos/core';
 
@@ -18,6 +21,19 @@ const PEOPLE = [
   { id: 'p3', name: 'Chaya' },
   { id: 'p4', name: 'Dev' },
 ];
+/**
+ * The exchange rates the sample household is valued at (rupees per unit and the day they are from), so the sample shows the same
+ * "rate of 26 Oct" line the real pages show. Invented, near enough to real rates to look right.
+ */
+export const DEMO_FX: FxOnFile = {
+  SGD: { rate: 56.1, date: '2026-10-26' },
+  USD: { rate: 84.1, date: '2026-10-26' },
+};
+/** The assumptions the sample is valued with: the defaults plus today's exchange rates, as the real pages load them. */
+export const DEMO_PORTFOLIO_DEFAULTS: PortfolioDefaults = {
+  ...DEFAULT_ASSUMPTIONS,
+  fxToday: Object.fromEntries(Object.entries(DEMO_FX).map(([c, v]) => [c, v.rate])),
+};
 const BANKS: Record<string, string> = {
   eq: 'Sample Equity Bank',
   ja: 'Sample Jan Bank',
@@ -212,6 +228,30 @@ export function demoModel(periodCases = true) {
       created_at: '2026-09-30T00:00:00Z',
       superseded_by: null,
     });
+    // a Singapore-dollar savings account: the balance is in S$ and the rupee value moves with the exchange rate
+    assets.push(
+      base({
+        id: 's-ja-sgd',
+        owner_id: 'p1',
+        institution_id: 'ja',
+        currency: 'SGD',
+        account_kind: 'NRE',
+        identifier_last4: '9922',
+      }),
+    );
+    observations.push({
+      id: `o${++n}`,
+      asset_id: 's-ja-sgd',
+      kind: 'balance',
+      amount: 41_250,
+      currency: 'SGD',
+      fx_rate: 55.2,
+      as_of: '2026-10-12',
+      confidence: 'manual_confirmed',
+      source: 'manual',
+      created_at: '2026-10-12T00:00:00Z',
+      superseded_by: null,
+    });
   }
   // money kept for a relative: it is not in any bank, so it sits under "Other holdings"
   assets.push(
@@ -225,7 +265,7 @@ export function demoModel(periodCases = true) {
     }),
   );
   obs('held-1', 450_000, '2026-10-18');
-  const portfolio = buildPortfolio(assets, observations, fds, DEMO_TODAY);
+  const portfolio = buildPortfolio(assets, observations, fds, DEMO_TODAY, DEMO_PORTFOLIO_DEFAULTS);
   const blocks = buildBankBlocks({
     assets,
     observations,
@@ -243,6 +283,7 @@ export function demoModel(periodCases = true) {
     observations,
     fds,
     institutionNames: BANKS,
+    fx: DEMO_FX,
   };
 }
 

@@ -3,6 +3,7 @@
  * only arranges them, so the web app, the daily summary and the history rebuild all start from the same input.
  */
 import type { AppConfig } from './config';
+import type { SipPlan } from './estimate';
 import { isEstimateLine, openingFlow, orderLines } from './ledger-check';
 import { flowsOfFund } from './perf-inputs';
 import type { AssetRow, FdRow, ObservationRow } from './portfolio';
@@ -30,6 +31,8 @@ export function positionConfig(
     savingsRate: cfg.estimates.savingsRate,
     tdsRate: cfg.estimates.interestTdsRate,
     navGapDays: cfg.funds.navGapDays,
+    includeSip: cfg.estimates.includeSip,
+    planTolerance: cfg.funds.planTolerance,
     rateGap: cfg.estimates.observedRateGap,
     growth: {
       property: cfg.estimates.assumedGrowthProperty,
@@ -153,6 +156,8 @@ export function posFundFrom(args: {
     sipMonthly: number | null;
     sipStopped: boolean;
   } | null;
+  /** the SIP plan with its dated changes, for a fund with no ledger (instalments since its last value) */
+  sip?: SipPlan | null;
   today: string;
   unitTolerance: number;
 }): PosFund {
@@ -201,5 +206,9 @@ export function posFundFrom(args: {
     flows: fl.flows,
     hasStatement,
     estimatedSince: planned ? (first ?? '0000-01-01') : (assumed ?? null),
+    ...(args.sip ? { sip: args.sip } : {}),
+    ...(args.plan
+      ? { plan: { invested: args.plan.invested, startedOn: args.plan.startedOn } }
+      : {}),
   };
 }

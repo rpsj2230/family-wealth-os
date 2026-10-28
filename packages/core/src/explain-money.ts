@@ -21,6 +21,7 @@ import {
 } from './explain';
 import type { BankOverview } from './bank-overview';
 import { maturedRuleText } from './deposit-state';
+import { foreignExplain } from './foreign-cash';
 import { formatInrCompact } from './money';
 
 export interface BankFacts {
@@ -117,6 +118,17 @@ function rateInputs(f: BankFacts): ExplainInput[] {
   ];
 }
 
+/** One input per foreign currency: its balance in its own money, what it is worth in rupees, and the rate with its date. */
+function foreignInputs(o: BankOverview): ExplainInput[] {
+  return (foreignExplain(o.foreign)?.lines ?? []).map((l) => ({
+    label: l.label,
+    value: l.value,
+    basis: 'calculated' as const,
+    to: l.to,
+    note: `${l.note}${l.live ? '' : ' (no rate on file)'}`,
+  }));
+}
+
 const levelFor = (o: BankOverview, _f: BankFacts): ExplainLevel => {
   const est = Math.max(0, o.parts.cash.current - o.parts.cash.invested);
   return levelOfShare(est > 0.5 ? est : 0, o.current > 0 ? o.current : 1);
@@ -209,7 +221,11 @@ export function bankFigure(
           .filter(Boolean)
           .join(' + ')
           .concat(` = ${exInr(o.current)} over ${exPlural(o.accounts + o.deposits, 'line')}.`),
-        inputs: [...partsInputs(), ...(page !== 'deposits' ? rateInputs(f) : [])],
+        inputs: [
+          ...partsInputs(),
+          ...(page !== 'deposits' ? rateInputs(f) : []),
+          ...(page !== 'deposits' ? foreignInputs(o) : []),
+        ],
         level: page === 'deposits' ? 'complete' : levelFor(o, f),
         completeness:
           page === 'deposits'
@@ -220,6 +236,7 @@ export function bankFigure(
         notes: [
           staleNote,
           `${maturedRuleText()} Foreign-currency balances are counted at today’s rupee value.`,
+          page !== 'deposits' ? (foreignExplain(o.foreign)?.sentence ?? null) : null,
         ],
         fix: f.balances.stale > 0 || cashEst > 0.5 ? monthlyFix : undefined,
       });
@@ -404,12 +421,16 @@ export function bankFigure(
                 count: { n: p.count, noun: 'accounts' },
               },
               ...rateInputs(f),
+              ...foreignInputs(o),
             ],
         level: isFd ? 'complete' : cashEst > 0.5 ? 'partly_estimated' : 'complete',
         completeness: isFd
           ? 'Worked out from each deposit’s contract terms.'
           : `${exInr(cashEst)} of it is interest estimated since the balances were recorded.`,
-        notes: [isFd ? null : staleNote],
+        notes: [
+          isFd ? null : staleNote,
+          isFd ? null : (foreignExplain(o.foreign)?.sentence ?? null),
+        ],
         fix: isFd ? undefined : monthlyFix,
       });
     }

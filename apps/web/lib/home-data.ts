@@ -28,7 +28,7 @@ const RECENT = 6;
  */
 export async function loadHome(supabase: Supabase, range: HomeRange): Promise<HomeModel | null> {
   const loaded = await loadPortfolio(supabase);
-  const { today, assetRows, obsRows, fdRows, ownerName, portfolio } = loaded;
+  const { today, assetRows, obsRows, fdRows, ownerName, portfolio, marketDates } = loaded;
   if (assetRows.length === 0) return null;
   const todayIso = today.toISOString().slice(0, 10);
   const [settings, inv, goals, snaps, insts, pols, tasks, recv, pays, assetsFull, plan, inbox] =
@@ -90,6 +90,7 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
     })),
     config: settings.config,
     today,
+    fx: marketDates.fx,
   });
   const cover = buildDeposits(
     (assetsFull.data ?? []).map((a) => ({

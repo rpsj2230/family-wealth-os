@@ -1,0 +1,43 @@
+/* Cash held in another currency, under a Cash figure that already counts it in rupees. */
+.fxc {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.fxc li {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+.fxc-native {
+  font-weight: 650;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fxc-inr {
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* in a header: one quiet line, wrapping rather than widening the page */
+.fxc-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-width: 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fxc-inline-item {
+  white-space: nowrap;
+}

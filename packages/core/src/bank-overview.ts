@@ -20,6 +20,14 @@ import { dicgcPosition, capacityKeyFor } from './dicgc';
 import { daysBetween } from './fd';
 import { depositPeriod, recentWindow, savingsPeriod } from './period-gains';
 import { OTHER_HOLDINGS_KEY, type BankBlock, type BankRow } from './accounts-view';
+import {
+  datedForeignCash,
+  rowForeignItem,
+  sumForeignCash,
+  type ForeignCash,
+  type ForeignCashItem,
+  type FxOnFile,
+} from './foreign-cash';
 
 export interface OverviewPart {
   /** number of lines (accounts or deposits) */
@@ -45,6 +53,8 @@ export interface OverviewPerson {
   profit: number;
   /** 0 to 1 of the total today */
   share: number;
+  /** the part of this person's savings and cash that is in another currency (already inside `current`) */
+  foreign: ForeignCash[];
 }
 
 export interface OverviewNextMaturity {
@@ -84,6 +94,11 @@ export interface BankOverview {
   };
 
   parts: { cash: OverviewPart; fd: OverviewPart; others: OverviewPart };
+  /**
+   * The part of `parts.cash` that is held in another currency, one entry per currency, the biggest in rupees first: the balance in its
+   * own currency and its worth in rupees today. It is already inside `parts.cash.current`, which stays the rupee total of all cash.
+   */
+  foreign: ForeignCash[];
   /** the three places the money sits, in a fixed order, with their share of the total */
   where: OverviewShare[];
 
@@ -134,6 +149,8 @@ export interface OverviewOptions {
   uninsuredBanks?: ReadonlySet<string>;
   /** second holder of a joint account, by asset id, so cover is counted per ownership name */
   jointHolders?: Record<string, string>;
+  /** the latest exchange rate on file per currency, to date the rate behind a foreign balance's rupee value */
+  fx?: FxOnFile;
 }
 
 const WHERE_LABEL = { cash: 'Savings and cash', fd: 'Fixed deposits', others: 'Other holdings' };
@@ -182,6 +199,8 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
   const lastDay = recentWindow(todayIso, 1);
   const parts = { cash: emptyPart(), fd: emptyPart(), others: emptyPart() };
   const byOwner = new Map<string, { current: number; invested: number }>();
+  const foreignItems: ForeignCashItem[] = [];
+  const foreignByOwner = new Map<string, ForeignCashItem[]>();
   const byType = { NRE: 0, NRO: 0, unset: 0 };
   const byBank = new Map<string, { name: string; amount: number }>();
   const coverRows: Parameters<typeof dicgcPosition>[0] = [];
@@ -218,6 +237,15 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
         bucket.invested += invested;
         bucket.current += current;
         bucket.maturity += maturity;
+        if (bucket === parts.cash) {
+          const fi = rowForeignItem(r);
+          if (fi) {
+            foreignItems.push(fi);
+            (
+              foreignByOwner.get(r.ownerId) ?? foreignByOwner.set(r.ownerId, []).get(r.ownerId)!
+            ).push(fi);
+          }
+        }
 
         const o = byOwner.get(r.ownerId) ?? { current: 0, invested: 0 };
         o.current += current;
@@ -346,6 +374,7 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
       basis: 'estimate',
     },
     parts,
+    foreign: datedForeignCash(sumForeignCash(foreignItems), opts.fx),
     where: (['cash', 'fd', 'others'] as const).map((key) => ({
       key,
       label: WHERE_LABEL[key],
@@ -381,6 +410,7 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
         invested: v.invested,
         profit: v.current - v.invested,
         share: ratio(v.current, current),
+        foreign: datedForeignCash(sumForeignCash(foreignByOwner.get(ownerId) ?? []), opts.fx),
       }))
       .sort((a, b) => b.current - a.current),
     cover: pos

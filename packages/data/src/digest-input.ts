@@ -143,6 +143,7 @@ export async function buildDigestInput(
     savingsRates: Object.fromEntries(Object.entries(rates).map(([id, c]) => [id, c.rate])),
     defaultSavingsRate: cfg.estimates.savingsRate,
     tdsRate: cfg.estimates.interestTdsRate,
+    fx: marketDates.fx,
   });
   const cover = depositCover({
     assets: assetRows,

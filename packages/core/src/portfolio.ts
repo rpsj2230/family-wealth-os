@@ -51,6 +51,8 @@ export interface AssetRow {
   /** units held and the date they were counted (from a fund statement or the monthly update) */
   units?: number | null;
   units_as_of?: string | null;
+  /** where the units come from when they were not counted: 'plan' = rebuilt from the start date, amount invested and SIP plan (an estimate) */
+  units_source?: 'plan' | null;
   /** active SIP for this fund, if any (from the fund register) */
   sip?: {
     monthly: number;
@@ -262,6 +264,28 @@ export function buildPortfolio(
       } else {
         estimate = carryForward({ amount: obs.amount, asOf, today });
       }
+    } else if (
+      a.type === 'mutual_fund' &&
+      a.units_source === 'plan' &&
+      typeof a.units === 'number' &&
+      a.units > 0 &&
+      a.amfi_code &&
+      defaults.navs?.[a.amfi_code]?.length
+    ) {
+      // No value was ever recorded, but the units are rebuilt from the plan: units times the latest price
+      const last = defaults.navs[a.amfi_code]!.slice(-1)[0]!;
+      estimate = estimateFundUnitsWithSip({
+        units: a.units,
+        unitsAsOf: dt(a.units_as_of ?? todayIso),
+        anchorAmount: a.units * last.nav,
+        anchorAsOf: dt(a.units_as_of ?? todayIso),
+        navToday: last.nav,
+        navOn: () => last.nav,
+        sip: null,
+        today,
+      });
+      marketDate = last.date;
+      freshness = 'calculated';
     }
     valued.push({
       assetId: a.id,

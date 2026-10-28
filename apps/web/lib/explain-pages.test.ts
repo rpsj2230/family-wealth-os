@@ -28,6 +28,7 @@ const baseOf = (blocks: ReturnType<typeof demoModel>['blocks']) =>
   });
 const opts = {
   today: DEMO_TODAY,
+  fx: demoModel().fx,
   soonDays: cfg.reminders.maturitySoonDays,
   defaultSavingsRate: cfg.estimates.savingsRate,
   tdsRate: cfg.estimates.interestTdsRate,
@@ -39,6 +40,17 @@ describe('Home explainers (sample household)', () => {
 
   it('every registered Home figure has an explainer', () => {
     expect(missingFigures('home', ex)).toEqual([]);
+  });
+
+  it('the Cash card says the foreign balance is inside the figure and how its rate was chosen', () => {
+    const c = ex['home.classCash'];
+    expect(c.notes.join(' ')).toMatch(/held in SGD, USD/);
+    expect(c.notes.join(' ')).toContain('already inside the figure');
+    expect(c.notes.join(' ')).toContain('rate of 26 Oct');
+    expect(c.notes.join(' ')).toContain('with no rate on file');
+    expect(c.inputs.map((i) => i.label)).toEqual(
+      expect.arrayContaining(['Held in SGD', 'Held in USD']),
+    );
   });
 
   it('net worth names its three kinds of basis and the date of the latest record', () => {
@@ -76,6 +88,8 @@ describe('Accounts, Deposits and Cash explainers (sample household)', () => {
     expect(ex['accounts.total'].exact).toContain('₹');
     expect(ex['accounts.profit'].how).toContain('÷');
     expect(ex['accounts.today'].completeness.level).toBe('estimated');
+    expect(ex['accounts.cash'].notes.join(' ')).toContain('S$');
+    expect(ex['accounts.total'].inputs.some((i) => i.label === 'Held in SGD')).toBe(true);
   });
 
   it('Deposits covers every registered figure and is worked out from the deposits’ terms', () => {

@@ -261,6 +261,39 @@ export function matchFund(
   };
 }
 
+/** The scheme whose ISIN (growth or reinvestment) is this one, when exactly one is: an ISIN names a fund exactly. */
+export function pickByIsin(
+  isin: string | null | undefined,
+  schemes: AmfiScheme[],
+): AmfiScheme | null {
+  const want = (isin ?? '').trim().toUpperCase();
+  if (!/^INF[0-9A-Z]{9}$/.test(want)) return null;
+  const hits = schemes.filter((s) => s.isinGrowth === want || s.isinReinvest === want);
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/**
+ * The scheme with the same identifying words, plan and option as a fund's name, when exactly one has: "Edelweiss Mid Cap Growth Direct
+ * Plan" and "Edelweiss Mid Cap Fund - Direct Plan - Growth" are the same scheme. A name that does not say Direct or Regular matches
+ * both, so it is left to a person (null). The option is Growth unless the name says IDCW.
+ */
+export function pickByName(name: string, schemes: AmfiScheme[]): AmfiScheme | null {
+  const want = schemeKey(name);
+  if (want.tokens.length === 0) return null;
+  const hits = schemes.filter((s) => {
+    // AMFI gives the plan and the option in columns of their own, not always in the name
+    const k = schemeKey(
+      `${s.name} ${s.plan === 'Other' ? '' : s.plan} ${s.option === 'Other' ? '' : s.option}`,
+    );
+    return (
+      k.key === want.key &&
+      schemeKeysCompatible(want, k) &&
+      (want.option ?? 'growth') === (k.option ?? 'growth')
+    );
+  });
+  return hits.length === 1 ? hits[0]! : null;
+}
+
 /** The NAV note in the sheet is free text ("205.56.81"); read the first plausible number, or null. */
 export function parseNavHint(raw: string | null | undefined): number | null {
   const m = /(\d+(?:\.\d+)?)/.exec(raw ?? '');

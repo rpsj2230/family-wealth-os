@@ -6,6 +6,13 @@
 import { depositListState, type DepositListState } from './deposit-state';
 import { fdValueOn, type Compounding } from './fd';
 import { DEFAULT_CONFIG } from './config';
+import {
+  mergeForeignCash,
+  rowForeignItem,
+  sumForeignCash,
+  type ForeignCashItem,
+  type ForeignCashPart,
+} from './foreign-cash';
 import type { AssetRow, FdRow, ObservationRow, Portfolio } from './portfolio';
 import { latestObservations } from './portfolio';
 
@@ -222,6 +229,11 @@ export interface Totals {
   fdCurrent: number;
   cash: number;
   current: number;
+  /**
+   * The part of `cash` that is held in another currency, one entry per currency: the balance in its own currency and what it is worth
+   * in rupees. `cash` itself already counts it, at today's rupee value; this only says how much of it that is.
+   */
+  foreign: ForeignCashPart[];
 }
 
 export interface OwnerSection {
@@ -262,7 +274,22 @@ const emptyTotals = (): Totals => ({
   fdCurrent: 0,
   cash: 0,
   current: 0,
+  foreign: [],
 });
+
+/** Totals of several groups added together (the sections of a bank, the banks of a person). */
+function addUp(groups: Totals[]): Totals {
+  const t = emptyTotals();
+  for (const g of groups) {
+    t.fdInvested += g.fdInvested;
+    t.fdMaturity += g.fdMaturity;
+    t.fdCurrent += g.fdCurrent;
+    t.cash += g.cash;
+    t.current += g.current;
+  }
+  t.foreign = mergeForeignCash(...groups.map((g) => g.foreign));
+  return t;
+}
 
 /** Same code you would type in the sheet; a note in brackets such as "(NRO SIP)" is kept. */
 export function rowCode(args: {
@@ -451,12 +478,12 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         const rs = rows.filter((r) => r.ownerId === ownerId);
         const totals = emptyTotals();
         rs.forEach((r) => addTotals(totals, r));
+        totals.foreign = sumForeignCash(
+          rs.map(rowForeignItem).filter((x): x is ForeignCashItem => x !== null),
+        );
         return { ownerId, rows: rs, totals };
       });
-    const totals = emptyTotals();
-    sections.forEach((sct) => {
-      for (const k of Object.keys(totals) as (keyof Totals)[]) totals[k] += sct.totals[k];
-    });
+    const totals = addUp(sections.map((sct) => sct.totals));
     let needsYou = 0;
     let done = rows.length > 0;
     let lastUpdated: string | null = null;
@@ -541,10 +568,7 @@ export function filterBlocksByOwner(blocks: BankBlock[], ownerId: string): BankB
       const sections = b.sections
         .filter((sct) => sct.ownerId === ownerId)
         .map((sct) => ({ ...sct }));
-      const totals = emptyTotals();
-      sections.forEach((sct) => {
-        for (const k of Object.keys(totals) as (keyof Totals)[]) totals[k] += sct.totals[k];
-      });
+      const totals = addUp(sections.map((sct) => sct.totals));
       return { ...b, sections, totals, owners: [ownerId] };
     })
     .filter((b) => b.sections.length > 0);

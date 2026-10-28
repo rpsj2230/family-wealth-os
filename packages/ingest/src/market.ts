@@ -6,7 +6,7 @@
  *  - FX rates (INR per unit) are stored for each foreign currency the household uses
  * Failures of optional sources are returned as warnings; failure of the AMFI file itself is an error.
  */
-import { autoPick, matchFund, parseNavAll, type AmfiScheme } from './amfi';
+import { autoPick, matchFund, parseNavAll, pickByIsin, pickByName, type AmfiScheme } from './amfi';
 
 export interface SchemeRow {
   code: string;
@@ -36,6 +36,8 @@ export interface UnmatchedPosition {
   assetId: string;
   name: string;
   navHint: number | null;
+  /** the fund's ISIN when a statement gave it: it names the scheme exactly */
+  isin?: string | null;
 }
 
 export interface MarketStore {
@@ -45,7 +47,10 @@ export interface MarketStore {
   heldCodes(): Promise<string[]>;
   /** the index fund used as the benchmark proxy, set in the household's configuration; its prices are fetched like a held fund's */
   benchmarkCodes?(): Promise<string[]>;
+  /** how many prices came from the full-history source (mfapi): the daily AMFI rows do not count, so a failed back-fill is tried again */
   navCount(code: string): Promise<number>;
+  /** the oldest price stored for a scheme, to tell a history cut short from one that really begins there; optional */
+  navFirst?(code: string): Promise<string | null>;
   currencies(): Promise<string[]>;
   fxCount(currency: string): Promise<number>;
   upsertSchemes(rows: SchemeRow[]): Promise<void>;
@@ -70,7 +75,10 @@ export interface MarketReport {
 }
 
 export const AMFI_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt';
-const HISTORY_FROM = '2018-01-01';
+/** The whole history is stored (a fund's units are rebuilt from its start date, which may be years back). */
+const HISTORY_FROM = '2000-01-01';
+/** An earlier version stored history from here: a scheme whose oldest price is on these days may have been cut short. */
+const OLD_FLOOR = ['2018-01-01', '2018-01-10'] as const;
 const chunk = <T>(a: T[], n: number): T[][] =>
   Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
@@ -149,9 +157,14 @@ export async function refreshMarketData(
   // 1b. choose the scheme for funds that have none, only when it is clearly the right one
   if (store.unmatchedPositions && store.setAmfiCode) {
     for (const pos of await store.unmatchedPositions()) {
-      const pick = autoPick(matchFund(pos.name, all, pos.navHint));
-      if (pick) {
-        await store.setAmfiCode(pos.assetId, pick.scheme.code);
+      // the ISIN names the scheme exactly; then the name when it is clear; then the same words, plan and option of exactly one scheme
+      const code =
+        pickByIsin(pos.isin, all)?.code ??
+        autoPick(matchFund(pos.name, all, pos.navHint))?.scheme.code ??
+        pickByName(pos.name, all)?.code ??
+        null;
+      if (code) {
+        await store.setAmfiCode(pos.assetId, code);
         report.autoMatched++;
       } else report.unmatched.push(pos.name);
     }
@@ -175,9 +188,11 @@ export async function refreshMarketData(
   if (latest.length) await store.upsertNavs(latest);
   report.latestNavs = latest.length;
 
-  // 3. one-time history back-fill for newly held schemes
+  // 3. one-time history back-fill for newly held schemes (and again for one whose stored history was cut short)
   for (const code of held) {
-    if ((await store.navCount(code)) > 5) continue;
+    const first = store.navFirst ? await store.navFirst(code) : null;
+    const cutShort = first !== null && first >= OLD_FLOOR[0] && first <= OLD_FLOOR[1];
+    if ((await store.navCount(code)) > 5 && !cutShort) continue;
     try {
       const rowsH = parseHistory(await io.fetchJson(`https://api.mfapi.in/mf/${code}`), code);
       if (rowsH.length === 0) report.warnings.push(`No NAV history found for scheme ${code}.`);

@@ -29,7 +29,7 @@ export default async function DemoCash({
   searchParams: Promise<{ p?: string }>;
 }) {
   const { p } = await searchParams;
-  const { blocks: all, styles } = demoModel();
+  const { blocks: all, styles, fx } = demoModel();
   const who = p && styles[p] ? p : null;
   const blocks = cashBlocks(who ? filterBlocksByOwner(all, who) : all);
   const { savingsRate, interestTdsRate } = DEFAULT_CONFIG.estimates;
@@ -38,6 +38,7 @@ export default async function DemoCash({
     soonDays: DEFAULT_CONFIG.reminders.maturitySoonDays,
     defaultSavingsRate: savingsRate,
     tdsRate: interestTdsRate,
+    fx,
   });
   const banks = cashByBank(blocks, {}, interestTdsRate, savingsRate);
   const interestYear = banks.reduce((s, b) => s + b.interestYear, 0);

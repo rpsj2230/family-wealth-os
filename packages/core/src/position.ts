@@ -12,9 +12,13 @@
  *    (`fdEffectiveRate`, basis `bank_amount`), else at the stated rate (basis `terms`). Held from its booking date until the day it was
  *    paid out or closed, else until its maturity date: after that it is not counted (the money went somewhere else).
  *  - Mutual fund: the units held on D (every ledger line up to D, and the units held before the first line) times the price on or
- *    just before D (basis `units_nav`); without a ledger, the units on file times the price; without units, the last statement value
- *    or recorded value moved with the price (`nav_scaled`, estimated); last of all the value copied from the monthly sheet (`sheet`,
- *    estimated). A day before the fund began, it is not held.
+ *    just before D (basis `units_nav`). Without a ledger (the monthly sheet is all there is), the nearest value on file on or before D
+ *    (a unit count, a statement value, a recorded value, a value from the monthly sheet; the newest wins) is moved with the fund's
+ *    price up to D, and the SIP instalments the plan made since that value are added, each moved with the price from its own day
+ *    (`nav_scaled` or `sheet`, estimated). The day a newer value is on file the figure is that value, so the series steps once, by
+ *    exactly what the value differs from the roll-forward: that step is carried apart (`fundTrack`, "unexplained") and is neither
+ *    profit nor money put in by the plan. A day before the fund's first value, it is not held. Without any price list the value is
+ *    simply the nearest earlier one, unmoved.
  *  - Foreign balances and holdings: the native amount last recorded times the rate of that currency on D (`fx`), so a move in the
  *    exchange rate counts, and says so.
  *  - Shares, property, pension accounts, money lent, held by others, other: the last value recorded on or before D, held flat
@@ -24,6 +28,8 @@
  *
  * Pure: no I/O. The loaders (packages/data) build the input; period figures are worked out in `positionGains`.
  */
+import type { SipPlan } from './estimate';
+import { planLedger, planUnitsOn, type PlanLedger } from './fund-plan';
 import { exDate } from './explain';
 import { daysBetween, fdEffectiveRate, fdValueOn, type Compounding } from './fd';
 import { sumExact } from './money';
@@ -122,6 +128,9 @@ export interface PosFund {
   hasStatement: boolean;
   /** the first day the fund's figures rest on estimates (no statement, or units assumed from a SIP plan); null when exact */
   estimatedSince: string | null;
+  /** the SIP plan (the amount and its dated changes) and the start date and amount invested the household recorded: a fund with no ledger has its units rebuilt from them */
+  sip?: SipPlan | null;
+  plan?: { invested: number; startedOn: string | null } | null;
 }
 
 export interface PositionAsset {
@@ -144,6 +153,10 @@ export interface PositionConfig {
   savingsRate: number;
   tdsRate: number;
   navGapDays: number;
+  /** rebuild a fund's units from the instalments its SIP plan is assumed to have made (Settings; default on) */
+  includeSip?: boolean;
+  /** the share of the amount invested a fund's plan may be out by before it is adjusted to agree with it (Settings; default 0.02) */
+  planTolerance?: number;
   /** points a year: the rate the records imply is flagged beyond this; the bank-amount rate is used within this of the stated one */
   rateGap: number;
   growth: { property: number; retirement: number; other: number };
@@ -455,6 +468,269 @@ function navOn(f: PosFund, on: string, gapDays: number) {
   return n && span(n.date, on) <= gapDays ? n : null;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Funds with no ledger: units rebuilt from the plan, else the nearest value on file moved with the price
+// ------------------------------------------------------------------------------------------------
+type AnchorKind = 'units' | 'snapshot' | 'recorded' | 'sheet';
+
+/** A value on file that a fund is moved on from when its units cannot be known. A unit count has no amount of its own: it is worth units times the price. */
+export interface FundAnchor {
+  date: string;
+  kind: AnchorKind;
+  amount: number | null;
+  units: number | null;
+}
+
+/** On one day the most exact value wins: a unit count, then a statement value, then a recorded value, then the monthly sheet's. */
+const ANCHOR_RANK: Record<AnchorKind, number> = { units: 0, snapshot: 1, recorded: 2, sheet: 3 };
+
+/** A fund with no transaction ledger and a price list: its units are rebuilt from its plan, or its nearest value is moved with the price. */
+export const isLedgerless = (a: PositionAsset): boolean =>
+  a.type === 'mutual_fund' &&
+  a.currency === 'INR' &&
+  a.status !== 'gifted' &&
+  !!a.fund &&
+  a.fund.txns.length === 0 &&
+  a.fund.navs.length > 0;
+
+/** Every value on file for a fund, oldest first, one per day: statement values, recorded values, the unit count and the monthly sheet's. */
+export function fundAnchors(a: PositionAsset): FundAnchor[] {
+  const f = a.fund;
+  const by = new Map<string, FundAnchor>();
+  const put = (x: FundAnchor) => {
+    const have = by.get(x.date);
+    if (!have || ANCHOR_RANK[x.kind] <= ANCHOR_RANK[have.kind]) by.set(x.date, x);
+  };
+  for (const r of dayRecords(a.records, true))
+    put({ date: r.date, kind: 'sheet', amount: r.amount, units: null });
+  for (const r of dayRecords(a.records))
+    put({ date: r.date, kind: 'recorded', amount: r.amount, units: null });
+  for (const s of f?.snapshots ?? [])
+    put({ date: s.date, kind: 'snapshot', amount: s.value, units: null });
+  if (f?.units && f.units.units > 0)
+    put({ date: f.units.asOf, kind: 'units', amount: null, units: f.units.units });
+  return [...by.values()].sort((x, y) => x.date.localeCompare(y.date));
+}
+
+const PLANS = new WeakMap<PosFund, { key: string; plan: PlanLedger | null }>();
+
+/**
+ * The fund's purchases rebuilt from the plan the household gave (start date, amount invested, SIP amount and its changes), with the
+ * units each bought at the price of its day: null when the fund has a ledger, no price list, or nothing to build from. The
+ * recorded amount invested is taken as of the newest value recorded.
+ */
+export function planOf(a: PositionAsset, c: PositionConfig): PlanLedger | null {
+  if (!isLedgerless(a)) return null;
+  const f = a.fund!;
+  const key = [
+    c.today,
+    c.navGapDays,
+    c.includeSip,
+    c.planTolerance,
+    f.navs.length,
+    f.navs[f.navs.length - 1]!.date,
+    f.plan?.startedOn,
+    f.plan?.invested,
+    f.sip?.monthly,
+    f.sip?.changes?.length,
+    f.sip?.stopped,
+  ].join('|');
+  const have = PLANS.get(f);
+  if (have && have.key === key) return have.plan;
+  // the amount invested was recorded with the newest value of the fund (the same rule wherever the plan is rebuilt)
+  const asOf = a.records
+    .map((r) => r.date)
+    .sort()
+    .pop();
+  const plan = planLedger(
+    {
+      startedOn: f.plan?.startedOn ?? f.sip?.startedOn ?? null,
+      invested: f.plan?.invested ?? null,
+      investedAsOf: asOf ?? null,
+      sip: f.sip ?? null,
+    },
+    f.navs,
+    c.today,
+    { gapDays: c.navGapDays, tolerance: c.planTolerance ?? 0.02, includeSip: c.includeSip },
+  );
+  PLANS.set(f, { key, plan });
+  return plan;
+}
+
+/** Where a fund's value comes from: its ledger, units rebuilt from its plan, or (last resort) the value on file moved with the price. */
+export type FundValueFrom = 'ledger' | 'plan' | 'records';
+export function fundValueFrom(a: PositionAsset, c: PositionConfig): FundValueFrom {
+  if (!a.fund || a.fund.txns.length > 0) return 'ledger';
+  return planOf(a, c) ? 'plan' : 'records';
+}
+
+/** The first day a fund with no ledger is held: the start date of its plan, else its unit count. Null for any other fund. */
+export function ledgerlessStart(a: PositionAsset): string | null {
+  if (!isLedgerless(a)) return null;
+  return a.fund!.plan?.startedOn ?? a.fund!.sip?.startedOn ?? a.fund!.units?.asOf ?? null;
+}
+
+/**
+ * Units times the price on a day, with the units from the plan (every purchase up to the day). A unit count the household recorded is
+ * real: from its day on the fund holds those units plus the purchases the plan makes after it. Null when there is no price near the
+ * day, or the day is before the plan begins.
+ */
+function planHolding(
+  a: PositionAsset,
+  pl: PlanLedger,
+  on: string,
+  c: PositionConfig,
+): ValuedHolding | null {
+  const f = a.fund!;
+  const nav = navOn(f, on, c.navGapDays);
+  if (!nav) return null;
+  const counted = f.units && f.units.units > 0 && f.units.asOf <= on ? f.units : null;
+  let units: number;
+  if (counted)
+    units =
+      counted.units +
+      pl.lines
+        .filter((l) => l.date > counted.asOf && l.date <= on)
+        .reduce((x, l) => x + l.units, 0);
+  else {
+    if (on < pl.lines[0]!.date) return null;
+    units = planUnitsOn(pl, on);
+  }
+  return got(
+    a,
+    units * nav.nav,
+    'units_nav',
+    nav.date,
+    true,
+    counted
+      ? `${units.toFixed(3)} units: ${counted.units.toFixed(3)} counted on ${niceIso(counted.asOf)} plus the purchases of your SIP plan since, at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`
+      : `${units.toFixed(3)} units estimated from your SIP plan and the price of each day, at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`,
+  );
+}
+
+/** What a fund was worth on a day, built from one value on file moved with the price. */
+interface Rolled {
+  value: number;
+  anchor: FundAnchor;
+  /** the value was moved with the price (the price on both days was known) */
+  scaled: boolean;
+  nav: { date: string; nav: number } | null;
+}
+
+function rollFrom(
+  f: PosFund,
+  an: FundAnchor,
+  on: string,
+  c: PositionConfig,
+  now: { date: string; nav: number } | null,
+): Rolled | null {
+  if (an.kind === 'units')
+    return now ? { value: an.units! * now.nav, anchor: an, scaled: true, nav: now } : null;
+  const at = navOn(f, an.date, c.navGapDays);
+  if (at && now && at.nav > 0 && an.date < on)
+    return { value: (an.amount! * now.nav) / at.nav, anchor: an, scaled: true, nav: now };
+  return { value: an.amount!, anchor: an, scaled: false, nav: now };
+}
+
+/** The last resort: the newest value on or before the day that can be worked out, moved with the price. */
+function rolledValue(
+  a: PositionAsset,
+  on: string,
+  c: PositionConfig,
+  anchors: FundAnchor[] = fundAnchors(a),
+): Rolled | null {
+  const f = a.fund!;
+  const now = navOn(f, on, c.navGapDays);
+  for (let i = anchors.length - 1; i >= 0; i--) {
+    if (anchors[i]!.date > on) continue;
+    const r = rollFrom(f, anchors[i]!, on, c, now);
+    if (r) return r;
+  }
+  return null;
+}
+
+function rolledHolding(a: PositionAsset, r: Rolled, on: string): ValuedHolding {
+  const an = r.anchor;
+  const note =
+    an.kind === 'units'
+      ? `${an.units!.toFixed(3)} units counted on ${niceIso(an.date)}, at the price of ${niceIso(r.nav!.date)}`
+      : r.scaled
+        ? `last resort: the value on ${niceIso(an.date)} moved with the price to ${niceIso(r.nav!.date)}`
+        : `last resort: the value recorded on ${niceIso(an.date)}`;
+  const exact = an.date === on && (an.kind === 'snapshot' || an.kind === 'recorded');
+  return got(
+    a,
+    r.value,
+    an.kind === 'sheet' ? 'sheet' : an.kind === 'units' ? 'units_nav' : 'nav_scaled',
+    an.date,
+    !exact,
+    note,
+  );
+}
+
+/** A change of a fund's value on one day that is neither the price nor money the plan put in (signed rupees). */
+export interface FundStep {
+  date: string;
+  amount: number;
+}
+
+/**
+ * What the period figures need to know about a fund with no ledger (null for any other fund):
+ *  - from the plan: `flows` are the plan's purchases (the opening purchase and every instalment, with the date and the amount), so the
+ *    money put in is the plan's and the profit is the value less that money; `steps` are only what a recorded unit count differs
+ *    from the plan's units by on its day, and what net worth's figure for today differs from this rule's. Both are carried apart.
+ *  - with no plan (the value on file moved with the price, the last resort): the first value on file is the opening amount, and each
+ *    later value's difference from the one before it moved with the price is a step.
+ */
+export function fundTrack(
+  a: PositionAsset,
+  c: PositionConfig,
+  cur?: CurrentValue,
+): { flows: { date: string; amount: number }[]; steps: FundStep[] } | null {
+  if (!isLedgerless(a)) return null;
+  const f = a.fund!;
+  const flows: { date: string; amount: number }[] = [];
+  const steps: FundStep[] = [];
+  const pl = planOf(a, c);
+  if (pl) {
+    for (const l of pl.lines) flows.push({ date: l.date, amount: l.amount });
+    const u = f.units && f.units.units > 0 ? f.units : null;
+    if (u && u.asOf <= c.today) {
+      const n = navOn(f, u.asOf, c.navGapDays);
+      if (n && u.asOf >= pl.lines[0]!.date)
+        steps.push({ date: u.asOf, amount: (u.units - planUnitsOn(pl, u.asOf)) * n.nav });
+    }
+    if (cur?.counted) {
+      const h = planHolding(a, pl, c.today, c);
+      if (h) steps.push({ date: c.today, amount: cur.value - h.value! });
+    }
+    return { flows, steps: steps.filter((x) => Math.abs(x.amount) >= 0.005) };
+  }
+  const anchors = fundAnchors(a);
+  if (anchors.length === 0) return { flows, steps };
+  const amountAt = (an: FundAnchor): number | null => {
+    if (an.kind !== 'units') return an.amount;
+    const n = navOn(f, an.date, c.navGapDays);
+    return n ? an.units! * n.nav : null;
+  };
+  const first = anchors[0]!;
+  const opening = amountAt(first) ?? rolledValue(a, first.date, c, anchors)?.value ?? 0;
+  if (opening > 0) flows.push({ date: first.date, amount: opening });
+  for (let k = 1; k < anchors.length; k++) {
+    const an = anchors[k]!;
+    if (an.date > c.today) break;
+    const target = amountAt(an);
+    const predicted = rollFrom(f, anchors[k - 1]!, an.date, c, navOn(f, an.date, c.navGapDays));
+    if (target !== null && predicted?.scaled)
+      steps.push({ date: an.date, amount: target - predicted.value });
+  }
+  if (cur?.counted) {
+    const r = rolledValue(a, c.today, c, anchors);
+    if (r) steps.push({ date: c.today, amount: cur.value - r.value });
+  }
+  return { flows, steps: steps.filter((x) => Math.abs(x.amount) >= 0.005) };
+}
+
 const valueFund: Valuer = (a, on, c, cur) => {
   if (on >= c.today && cur)
     return cur.counted
@@ -482,6 +758,16 @@ const valueFund: Valuer = (a, on, c, cur) => {
         `${u.units.toFixed(3)} units at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`,
         rate,
       );
+  }
+  // a fund with no ledger and a price list: the nearest value on or before the day, moved with the price, plus the plan's instalments
+  if (isLedgerless(a)) {
+    // 2. units rebuilt from the plan, times the price of the day
+    const pl = planOf(a, c);
+    const p = pl ? planHolding(a, pl, on, c) : null;
+    if (p) return p;
+    // 3. last resort: the newest value on file moved with the price
+    const r = rolledValue(a, on, c);
+    return r ? rolledHolding(a, r, on) : noValueOn(a, on);
   }
   // no ledger for the day: the units on file, then a statement value, then a recorded value, then the sheet's
   if (f && f.txns.length === 0 && f.units && f.units.asOf <= on) {
@@ -529,17 +815,24 @@ const valueFund: Valuer = (a, on, c, cur) => {
   if (best) return scaled(best, 'nav_scaled');
   const sheet = lastOnOrBefore(dayRecords(a.records, true), on);
   if (sheet) return scaled(sheet, 'sheet');
+  return noValueOn(a, on);
+};
+
+/** A fund with nothing to value it from on a day: not yet held (its first record is later), or no data. */
+function noValueOn(a: PositionAsset, on: string): ValuedHolding {
+  const f = a.fund;
   const first = [
     f?.txns[0]?.date,
     ...a.records.map((r) => r.date),
     ...(f ? f.snapshots.map((s) => s.date) : []),
+    f?.units?.asOf,
   ]
     .filter((x): x is string => !!x)
     .sort()[0];
   return first && first > on
     ? none(a, 'not_yet', `first record is from ${niceIso(first)}`)
     : none(a, 'no_data', 'no units or value on file');
-};
+}
 
 /** Foreign holdings: the native amount last recorded times the rate of that day. */
 function valueForeign(
@@ -732,7 +1025,8 @@ export function dataStarts(input: PositionInput): string | null {
       a.fd?.bookedOn,
       ...a.records.filter((r) => !r.sheet).map((r) => r.date),
       a.fund?.txns[0]?.date,
-      a.fund?.flows[0]?.date,
+      // a fund moved on from its values begins with the first of them, not with the start date of its plan
+      isLedgerless(a) ? ledgerlessStart(a) : a.fund?.flows[0]?.date,
       ...(a.fund?.snapshots ?? []).map((s) => s.date),
       ...a.records.filter((r) => r.sheet).map((r) => r.date),
     ].filter((x): x is string => !!x);
@@ -848,6 +1142,9 @@ export interface HeadlineTile {
   base: number;
   putIn: number;
   takenOut: number;
+  /** change between monthly fund values that neither the price nor the SIP plan explains: left out of `amount` (see ClassPeriod) */
+  unexplained: number;
+  unexplainedFunds: number;
   estimated: boolean;
   empty: boolean;
   /** of the holdings counted then or now, how many had a value on the first day */
@@ -936,14 +1233,29 @@ function fundDays(ws: Span[]): string[] {
   return [...new Set(ws.flatMap((w) => [addDaysIso(w.from, -1), w.through]))].sort();
 }
 
-/** The funds with their value on the days measured (units times price, or the best record) and their money in and out. */
-export function fundsOf(input: PositionInput, days: string[]): FundHolding[] {
+/**
+ * The funds with their value on the days measured (units times price, or the best record moved on) and their money in and out. The
+ * one place both Home's period figures and Investments > Value by period read the funds from. A fund with no ledger brings the money
+ * its plan put in and the steps its monthly values make (`fundTrack`); any other fund, its own flows. `owner` narrows to one person.
+ */
+export function fundsOf(
+  input: PositionInput,
+  days: string[],
+  owner: string | null = null,
+): FundHolding[] {
   const c = input.config;
   return input.assets
-    .filter((a) => a.type === 'mutual_fund' && a.fund && a.status !== 'gifted')
+    .filter(
+      (a) =>
+        a.type === 'mutual_fund' &&
+        a.fund &&
+        a.status !== 'gifted' &&
+        (owner === null || a.ownerId === owner),
+    )
     .map((a) => {
       const f = a.fund!;
       const now = valueOn(a, c.today, c, input.current);
+      const track = fundTrack(a, c, input.current?.[a.assetId]);
       return {
         assetId: a.assetId,
         name: a.name,
@@ -951,7 +1263,9 @@ export function fundsOf(input: PositionInput, days: string[]): FundHolding[] {
         points: days
           .filter((d) => d < c.today)
           .map((d) => ({ date: d, value: valueOn(a, d, c, input.current).value ?? 0 })),
-        flows: f.flows,
+        flows: track ? track.flows : f.flows,
+        ...(track ? { steps: track.steps } : {}),
+        valueFrom: fundValueFrom(a, c),
         hasStatement: f.hasStatement,
         estimatedSince: f.estimatedSince,
       };
@@ -1032,6 +1346,8 @@ export function positionGains(i: PositionGainsInput): PositionGains {
     base: cell.base,
     putIn: cell.putIn,
     takenOut: cell.takenOut,
+    unexplained: cell.unexplained,
+    unexplainedFunds: cell.unexplainedFunds,
     estimated: cell.estimated,
     empty: cell.empty,
     coverage: coverageOn(position, w.from),

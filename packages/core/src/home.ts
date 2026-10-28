@@ -7,6 +7,7 @@
 import type { OverviewPart } from './bank-overview';
 import { addDays as addIsoDays, type RaiseSource } from './liquidity';
 import { fdValueOn, type Compounding } from './fd';
+import type { ForeignCash } from './foreign-cash';
 import { formatInr, formatInrCompact } from './money';
 import { isCounted, type AssetType, type ValuedAsset } from './networth';
 import type { AssetStatusLine } from './portfolio';
@@ -433,6 +434,11 @@ export interface ClassCard {
   estimated: boolean;
   /** deposits past their date waiting to be confirmed: not counted anywhere (their money is in a savings account or a new deposit), listed for the note */
   awaiting: { count: number; invested: number; current: number } | null;
+  /**
+   * Cash only: the part of `current` held in another currency, one entry per currency, biggest in rupees first. The card's main
+   * figure stays the rupee total of all cash; this says how much of it is in each currency. Empty for every other card.
+   */
+  foreign: ForeignCash[];
 }
 
 export interface ClassCardsInput {
@@ -446,6 +452,8 @@ export interface ClassCardsInput {
   /** savings and cash in banks as Cash counts them, and what they earned in the last day */
   cash: OverviewPart;
   cashToday: number;
+  /** the foreign-currency part of that cash (bankOverview().foreign); none when all cash is in rupees */
+  cashForeign?: ForeignCash[];
   /** money held by others and balances with no bank, as Accounts counts them under Other holdings */
   othersHeld: OverviewPart;
   /** the funds as Investments counts them; null when none is held */
@@ -509,6 +517,7 @@ export function classCards(i: ClassCardsInput): ClassCard[] {
     today: number,
     estimated: boolean,
     awaiting: ClassCard['awaiting'] = null,
+    foreign: ForeignCash[] = [],
   ): ClassCard => ({
     key,
     label: CLASS_LABEL[key],
@@ -523,6 +532,7 @@ export function classCards(i: ClassCardsInput): ClassCard[] {
     share: i.netWorth > 0 ? v.current / i.netWorth : 0,
     estimated,
     awaiting,
+    foreign,
   });
   return [
     make('fd', fd, fd.maturity, i.fdToday, false, i.awaiting.count > 0 ? i.awaiting : null),
@@ -533,7 +543,7 @@ export function classCards(i: ClassCardsInput): ClassCard[] {
       i.funds?.today ?? 0,
       !!i.funds && i.funds.withoutStatement > 0,
     ),
-    make('cash', cash, cash.current, i.cashToday, cash.count > 0),
+    make('cash', cash, cash.current, i.cashToday, cash.count > 0, null, i.cashForeign ?? []),
     make('others', others, others.current, 0, false),
   ];
 }

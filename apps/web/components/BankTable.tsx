@@ -3,6 +3,7 @@ import {
   DEFAULT_CONFIG,
   bankRowFigures,
   bankStyle,
+  formatForeign,
   formatInr,
   type BankBlock,
   type BankRow,
@@ -13,6 +14,7 @@ import type { CashRate } from '@/lib/rates-view';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
 import { ConfirmMatured } from './ConfirmMatured';
+import { ForeignCashInline } from './ForeignCash';
 import { NoticeHost } from './NoticeHost';
 import { PersonBadge } from './Person';
 import { EditButton } from './QuickEdit';
@@ -170,7 +172,14 @@ function Row({
         ) : r.kind === 'fd' ? (
           ''
         ) : (
-          <Money v={r.recorded === null ? null : r.recorded} />
+          // a balance in another currency is shown in that currency (the rupee value is in the Current value column)
+          <span data-testid={r.currency === 'INR' ? undefined : 'bt-native'}>
+            {r.currency !== 'INR' && r.recorded !== null ? (
+              formatForeign(r.recorded, r.currency)
+            ) : (
+              <Money v={r.recorded === null ? null : r.recorded} />
+            )}
+          </span>
         )}
       </td>
       <td className="num">
@@ -241,6 +250,7 @@ function Tot({ t }: { t: BankBlock['totals'] }) {
       <span>
         savings <b className="num">{formatInr(Math.round(t.cash))}</b>
       </span>
+      <ForeignCashInline parts={t.foreign} lead="of it" testid="bt-person-fx" />
     </span>
   );
 }
@@ -287,8 +297,9 @@ export function BankTable({
               <h2 id={`h-${b.key}`}>
                 {b.key === '__none' ? b.name : <Link href={`/bank/${b.key}`}>{b.name}</Link>}
               </h2>
-              <span className="tot">
+              <span className="tot headtot">
                 <b className="num big">{formatInr(Math.round(b.totals.current))}</b>
+                <ForeignCashInline parts={b.totals.foreign} testid="bt-bank-fx" />
               </span>
               {b.needsYou > 0 ? (
                 <span className="pill warn">

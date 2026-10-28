@@ -24,13 +24,17 @@ const must = <T>(r: { data: T | null; error: { message: string } | null }, what:
 const store: MarketStore = {
   async unmatchedPositions() {
     const rows = must(
-      await db.from('mf_positions').select('asset_id, fund_name, nav_hint').is('amfi_code', null),
+      await db
+        .from('mf_positions')
+        .select('asset_id, fund_name, nav_hint, isin')
+        .is('amfi_code', null),
       'unmatched positions',
     );
     return rows.map((r) => ({
       assetId: r.asset_id as string,
       name: r.fund_name as string,
       navHint: parseNavHint(r.nav_hint as string | null),
+      isin: (r.isin as string | null) ?? null,
     }));
   },
   async setAmfiCode(assetId, code) {
@@ -60,12 +64,24 @@ const store: MarketStore = {
     ];
   },
   async navCount(code) {
+    // only prices from the full-history source count: the daily rows of a fund whose back-fill failed must not hide that
     const r = await db
       .from('mf_navs')
       .select('nav_date', { count: 'exact', head: true })
-      .eq('amfi_code', code);
+      .eq('amfi_code', code)
+      .eq('source', 'mfapi');
     if (r.error) throw new Error(`nav count: ${r.error.message}`);
     return r.count ?? 0;
+  },
+  async navFirst(code) {
+    const r = await db
+      .from('mf_navs')
+      .select('nav_date')
+      .eq('amfi_code', code)
+      .order('nav_date', { ascending: true })
+      .limit(1);
+    if (r.error) throw new Error(`nav first: ${r.error.message}`);
+    return (r.data?.[0]?.nav_date as string | undefined) ?? null;
   },
   async currencies() {
     const rows = must(
