@@ -31,6 +31,11 @@ interface Input {
     last4: string;
     /** the files have no balances but cover the account from the day it was opened: the balances are summed from nothing */
     fromOpening?: boolean;
+    /**
+     * with fromOpening: save the lines only, and keep the balances on record. For a download the recorded balances show to miss a
+     * line (a steady gap from one month on), so the summed balances are wrong by that line from then on.
+     */
+    linesOnly?: boolean;
   };
   /** a text file (CSV, XML, a web page) as text, any other as base64 */
   files: { name: string; data?: string; text?: string }[];
@@ -89,7 +94,7 @@ async function main() {
       f.text !== undefined ? Buffer.from(f.text, 'utf8') : Buffer.from(f.data ?? '', 'base64');
     const read = await readBankStatement(new Uint8Array(bytes));
     const opened = input.account.fromOpening ? fromAccountOpening(read) : null;
-    const s = opened ?? read;
+    const s = opened && !input.account.linesOnly ? opened : read;
     const tag = `${s.from} to ${s.to}`;
     if (s.last4 && s.last4 !== input.account.last4) {
       console.log(`- ${tag}: the statement is for another account (ending ${s.last4}); skipped`);
@@ -98,7 +103,7 @@ async function main() {
     lines += s.lines.length;
     if (!write) {
       const wrong = await conflictingBalances(db, assetId, s);
-      if (opened && wrong.length)
+      if (opened && s === opened && wrong.length)
         // the gap (recorded less summed) at each recorded balance, in thousands: a step shows where a line is missing
         console.log(
           `  gap by date (thousands): ${[...wrong]
@@ -108,7 +113,7 @@ async function main() {
             )
             .join(', ')}`,
         );
-      if (opened && wrong.length) {
+      if (opened && s === opened && wrong.length) {
         // how far apart, and whether the recorded figure is the statement's on a nearby day (a reading taken on another date)
         const near = (o: { as_of: string; amount: number }) =>
           s.lines.some(
@@ -125,7 +130,7 @@ async function main() {
         );
       }
       console.log(
-        `- ${tag}: ${s.lines.length} lines, ${s.breaks} breaks${opened ? `, balances summed from the opening (closing ${Math.round(s.closing ?? 0)}), ${wrong.length} recorded balances differ` : ''}${s.warnings.length ? `; ${s.warnings.join(' ')}` : ''}`,
+        `- ${tag}: ${s.lines.length} lines, ${s.breaks} breaks${opened && s === opened ? `, balances summed from the opening (closing ${Math.round(s.closing ?? 0)}), ${wrong.length} recorded balances differ` : ''}${opened && s !== opened ? ', lines only: the recorded balances are kept' : ''}${s.warnings.length ? `; ${s.warnings.join(' ')}` : ''}`,
       );
       continue;
     }
