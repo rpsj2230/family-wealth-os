@@ -5,7 +5,7 @@
  * (Actions > Numbers check). It prints totals only: no account names, numbers or per-account balances.
  */
 import { createClient } from '@supabase/supabase-js';
-import { positionGains } from '@fwos/core';
+import { positionAsOf, positionGains } from '@fwos/core';
 import { buildDigestInput, loadPortfolioData, loadPositionInput, loadSettings } from '@fwos/data';
 
 const need = (n: string) => {
@@ -130,6 +130,53 @@ async function main() {
             .join(' | ')}`,
         );
       console.log(`Basis: ${JSON.stringify(g.periods.basis)}`);
+      // funds by day around the start of the last-30-days window, to see whether a jump is real (totals and counts only)
+      const days = [
+        '2026-09-24',
+        '2026-09-26',
+        '2026-09-27',
+        '2026-09-28',
+        '2026-09-29',
+        '2026-09-30',
+        '2026-10-01',
+        '2026-10-02',
+        '2026-10-05',
+        '2026-10-15',
+        '2026-10-28',
+      ];
+      console.log('Funds by day (value, held, no data, estimated):');
+      for (const day of days) {
+        const p = positionAsOf(position, day);
+        const f = p.holdings.filter((h) => h.cls === 'funds');
+        const held = f.filter((h) => h.state === 'held' && h.value !== null);
+        console.log(
+          `  ${day}: ₹${inr(p.byClass.funds)}  held ${held.length} of ${f.length}, no data ${f.filter((h) => h.state === 'no_data').length}, estimated ${held.filter((h) => h.estimated).length}`,
+        );
+      }
+      const a = positionAsOf(position, '2026-09-28');
+      const b = positionAsOf(position, '2026-10-01');
+      const moved = b.holdings
+        .filter((h) => h.cls === 'funds')
+        .map((h, i) => ({ i, h, was: a.holdings.find((x) => x.assetId === h.assetId) }))
+        .map(({ i, h, was }) => ({
+          i,
+          from: was?.value ?? null,
+          to: h.value,
+          fromState: was?.state,
+          toState: h.state,
+          basis: h.basis,
+          asOfFrom: was?.asOf ?? null,
+          asOfTo: h.asOf,
+        }))
+        .filter((r) => r.from !== r.to && Math.abs((r.to ?? 0) - (r.from ?? 0)) > 20000)
+        .sort(
+          (x, y) => Math.abs((y.to ?? 0) - (y.from ?? 0)) - Math.abs((x.to ?? 0) - (x.from ?? 0)),
+        );
+      console.log('Funds whose value moved more than ₹20,000 between 28 Sep and 1 Oct (no names):');
+      for (const r of moved.slice(0, 12))
+        console.log(
+          `  fund #${r.i}: ${r.from === null ? 'no data' : '₹' + inr(r.from)} (${r.fromState}, record ${r.asOfFrom ?? '-'}) -> ${r.to === null ? 'no data' : '₹' + inr(r.to)} (${r.toState}, record ${r.asOfTo ?? '-'}) basis ${r.basis ?? '-'}`,
+        );
     } catch (e) {
       console.log(`Period figures could not be worked out: ${(e as Error).message}`);
     }
