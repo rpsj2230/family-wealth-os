@@ -98,6 +98,16 @@ async function main() {
     lines += s.lines.length;
     if (!write) {
       const wrong = await conflictingBalances(db, assetId, s);
+      if (opened && wrong.length)
+        // the gap (recorded less summed) at each recorded balance, in thousands: a step shows where a line is missing
+        console.log(
+          `  gap by date (thousands): ${[...wrong]
+            .sort((a, b) => a.as_of.localeCompare(b.as_of))
+            .map(
+              (w) => `${w.as_of.slice(0, 7)} ${Math.round((Number(w.amount) - w.proved!) / 1000)}`,
+            )
+            .join(', ')}`,
+        );
       if (opened && wrong.length) {
         // how far apart, and whether the recorded figure is the statement's on a nearby day (a reading taken on another date)
         const near = (o: { as_of: string; amount: number }) =>
