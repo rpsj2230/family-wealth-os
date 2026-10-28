@@ -353,6 +353,14 @@ function capitalExplains(
       what: 'Net worth less own money put in: interest on savings and deposits, fund gains, exchange-rate moves and income, less fees and taxes, since the opening date.',
       how: `Net worth ${exInr(t.netWorth)} − own money ${exInr(t.ownMoney)} = ${exSigned(t.profit)}${t.profitPct === null ? '' : `; ÷ own money = ${exPct(t.profitPct, 1)}`}. By kind: savings interest ${exSigned(t.earnings.savings)}, deposit interest ${exSigned(t.earnings.deposits)}, funds ${exSigned(t.earnings.funds)}, exchange rates ${exSigned(t.earnings.fx)}, other ${exSigned(t.earnings.others + t.earnings.income)}.`,
       inputs: [
+        { label: 'Net worth today', value: exInr(t.netWorth), basis: 'estimated', to: i.today },
+        {
+          label: 'Own money put in',
+          value: exInr(t.ownMoney),
+          basis: 'calculated',
+          from: o.date,
+          to: i.today,
+        },
         { label: 'Interest on savings', value: exSigned(t.earnings.savings), basis: 'estimated' },
         {
           label: 'Interest on deposits',
@@ -397,6 +405,18 @@ function capitalExplains(
         : 'Nothing recorded in the period.',
       inputs: f
         ? [
+            {
+              label: 'Net worth at the start',
+              value: exInr(f.start),
+              basis: 'estimated',
+              to: f.from,
+            },
+            {
+              label: 'Net worth at the end',
+              value: exInr(f.end),
+              basis: 'estimated',
+              to: f.through,
+            },
             {
               label: 'Interest on savings',
               value: exSigned(f.earnings.savings),

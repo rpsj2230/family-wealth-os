@@ -14,7 +14,7 @@ import {
   type DepositSummary,
   type MonthGroup,
 } from '@/lib/deposits-summary';
-import { NOT_COUNTED_NOTE } from '@/lib/matured-list';
+import { maturedNote } from '@/lib/matured-list';
 import { slugify } from '@/lib/slug';
 
 const KIND: Record<string, string> = {
@@ -186,7 +186,7 @@ export function RegisterTab({
                       </div>
                       {f.listState === 'confirm' && (
                         <div className="small">
-                          <span className="muted">{NOT_COUNTED_NOTE}.</span>{' '}
+                          <span className="muted">{maturedNote(!!f.proceedsAwaiting)}.</span>{' '}
                           <ConfirmMatured assetId={f.id} name={f.bank} sample={links.sample} />
                         </div>
                       )}
@@ -292,8 +292,8 @@ export function MaturitiesTab({
           <div className="cardhead">
             <h2 id="conf">Confirm what happened ({s.confirm.length})</h2>
             <span className="small muted">
-              Not counted anywhere: the money counts in the savings account or new deposit it went
-              to.
+              Counted once in net worth until you say where the money went; a deposit whose money a
+              new deposit or a later balance already holds is not counted twice.
             </span>
           </div>
           <ul className="list">

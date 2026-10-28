@@ -9,7 +9,7 @@ const WIDE_FONT = '* { font-family: "DejaVu Sans", sans-serif !important; }';
 /** The grand total under the Accounts list, as text: what is counted. */
 const grand = (page: Page) => page.locator('[data-grand]').first().innerText();
 
-// The sample has invented deposits that matured: one 12 days ago and not confirmed (listed, with the button), one confirmed long
+// The sample has invented deposits that matured: one recently and not confirmed (listed and counted once, with the button), one confirmed long
 // ago, one the History import closed on an estimated date, one still marked running two years after its date, and the sample's own
 // paid-out and renewed ones (all five hidden).
 const RECENT = (page: Page) =>
@@ -28,7 +28,7 @@ test.describe('Accounts: matured deposits (public sample)', () => {
     );
   });
 
-  test('a deposit that matured recently is shown, muted and not counted, with the short note and the button', async ({
+  test('a deposit that matured recently and whose money is probably held elsewhere is shown, muted and not counted, with the short note and the button', async ({
     page,
   }) => {
     await page.goto('/demo/accounts');
@@ -36,7 +36,7 @@ test.describe('Accounts: matured deposits (public sample)', () => {
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('matured, not counted');
     await expect(row).toContainText(
-      'Counted in the savings account or a new deposit once you record it',
+      'Probably already in a savings account or a new deposit, so not counted here again',
     );
     await expect(row.getByRole('button', { name: /Confirm .* has matured/ })).toBeVisible();
     await expect(row.locator('.pill.bad')).toHaveText('matured');
@@ -93,7 +93,7 @@ test.describe('Accounts: matured deposits (public sample)', () => {
 });
 
 test.describe('Deposits: matured deposits (public sample)', () => {
-  test('the register leaves out confirmed and old ones, lists a recent one as not counted, and can show all', async ({
+  test('the register leaves out confirmed and old ones, lists a recent one as awaiting confirmation, and can show all', async ({
     page,
   }) => {
     await page.goto('/demo/deposits');
@@ -101,7 +101,7 @@ test.describe('Deposits: matured deposits (public sample)', () => {
       '5 older or confirmed matured deposits are hidden.',
     );
     const row = page.locator('tbody tr', { hasText: 'Matured, to confirm' }).first();
-    await expect(row).toContainText('not counted');
+    await expect(row).toContainText('awaiting confirmation');
     await page.getByRole('link', { name: 'Show matured' }).click();
     await expect(page.getByTestId('hidden-matured')).toContainText('Showing 5');
   });
@@ -109,7 +109,9 @@ test.describe('Deposits: matured deposits (public sample)', () => {
   test('the Maturities tab confirms a deposit with the button', async ({ page }) => {
     await page.goto('/demo/deposits?tab=maturities');
     const card = page.getByRole('region', { name: /Confirm what happened/ });
-    await expect(card).toContainText('Not counted anywhere');
+    await expect(card).toContainText(
+      'Counted once in net worth until you say where the money went',
+    );
     const items = card.locator('li');
     const n = await items.count();
     expect(n).toBeGreaterThan(0);

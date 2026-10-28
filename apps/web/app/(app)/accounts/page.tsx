@@ -274,9 +274,10 @@ export default async function AccountsPage({
             balance is old. The Updated column says who recorded it and when.
           </li>
           <li>
-            A deposit past its maturity date is not counted anywhere: its money is in the savings
-            account or new deposit it went to. Press Confirm matured once it has been paid out. It
-            stays on this list for the number of days set in{' '}
+            A deposit past its maturity date is counted once, at what it paid out, until you say
+            where the money went (<Link href="/reconcile">Explain movements</Link>); if a new
+            deposit or a later balance already holds it, it is not counted twice. Press Confirm
+            matured once it has been paid out. It stays on this list for the number of days set in{' '}
             <Link href="/settings#limits">Settings</Link>, then it is hidden (Show matured brings it
             back).
           </li>

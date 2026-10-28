@@ -3,6 +3,8 @@ import {
   CONFIRMED_NOTICE,
   hiddenSentence,
   maturedHref,
+  AWAITING_NOTE,
+  maturedNote,
   NOT_COUNTED_NOTE,
   showsMatured,
 } from './matured-list';
@@ -40,8 +42,11 @@ describe('matured deposits: words and addresses', () => {
     expect(CONFIRMED_NOTICE).toBe(
       'Marked as matured. It is hidden from the list; Show matured brings it back.',
     );
+    expect(maturedNote(true)).toBe(AWAITING_NOTE);
+    expect(AWAITING_NOTE).toBe('Counted once in net worth until you say where the money went');
+    expect(maturedNote(false)).toBe(NOT_COUNTED_NOTE);
     expect(NOT_COUNTED_NOTE).toBe(
-      'Counted in the savings account or a new deposit once you record it',
+      'Probably already in a savings account or a new deposit, so not counted here again',
     );
   });
 });

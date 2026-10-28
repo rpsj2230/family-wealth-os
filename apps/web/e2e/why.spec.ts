@@ -153,8 +153,8 @@ test.describe('the "?" explainer (public sample)', () => {
   }) => {
     for (const [path, id, text] of [
       ['/demo/dashboard', 'home.netWorth', /calculated/],
-      ['/demo/dashboard', 'home.profit', /÷ ₹[\d,]+ invested/],
-      ['/demo/dashboard', 'home.periods', /money at work/],
+      ['/demo/dashboard', 'home.profitSoFar', /÷ own money/],
+      ['/demo/dashboard', 'home.movement', /at the start/],
       ['/demo/dashboard', 'home.classFunds', /÷ ₹[\d,]+ net worth/],
       ['/demo/accounts', 'accounts.profit', /÷/],
       ['/demo/deposits', 'deposits.journey', /÷/],

@@ -9,7 +9,7 @@ import {
   type BankRow,
   type PersonStyle,
 } from '@fwos/core';
-import { NOT_COUNTED_NOTE } from '@/lib/matured-list';
+import { maturedNote } from '@/lib/matured-list';
 import type { CashRate } from '@/lib/rates-view';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
@@ -91,7 +91,8 @@ function Row({
   sample: boolean;
 }) {
   const fd = r.fd;
-  // matured within the window and not confirmed: shown, not counted, with the button; older or confirmed ones are dimmed
+  // matured within the window and not confirmed: shown with the button (counted once while its proceeds wait to be placed); older or
+  // confirmed ones are dimmed
   const toConfirm = fd?.listState === 'confirm';
   const note = cleanNote(r.notes);
   // what this line adds to the page total, read by the live total at the bottom (same rule as the overview)
@@ -132,7 +133,7 @@ function Row({
         {fd?.linkedTo && <div className="sub">↳ linked to {fd.linkedTo}</div>}
         {toConfirm && (
           <div className="sub notcounted">
-            {NOT_COUNTED_NOTE}
+            {maturedNote(fig.counted)}
             <ConfirmMatured assetId={r.assetId} name={r.code} sample={sample} />
           </div>
         )}
@@ -200,10 +201,12 @@ function Row({
       <td className="num cur">
         {toConfirm && fd ? (
           <div className="maturedcell">
-            <span className="muted" title={NOT_COUNTED_NOTE}>
-              <Money v={fd.maturityAmount} />
+            <span className={fig.counted ? '' : 'muted'} title={maturedNote(fig.counted)}>
+              <Money v={fig.counted ? r.current : fd.maturityAmount} />
             </span>
-            <div className="small muted">matured, not counted</div>
+            <div className="small muted">
+              {fig.counted ? 'matured, awaiting confirmation' : 'matured, not counted'}
+            </div>
           </div>
         ) : fd && (r.status !== 'active' || fd.needsConfirmation) ? (
           <span className="muted">{stateWord(r)}</span>
