@@ -111,6 +111,49 @@ describe('what each statement line was', () => {
     expect(wise[0]).toMatchObject({ cls: 'own_transfer', counterpart: 'dbs', remittanceId: 'w1' });
   });
 
+  it('reads how a bank words deposits paid back and booked, and money from Singapore', () => {
+    const cs = classifyLines(
+      [
+        line('a', '2024-01-02', 523_000, 'PRIN AND INT AUTO_REDEEM…1234'),
+        line('a', '2024-01-03', 200_000, 'IB TD RED XFER TO CASA-…5678'),
+        line('a', '2024-01-04', -300_000, 'NET TXN: FD BOOKED …9999'),
+        line('a', '2024-01-05', 700_000, '…1111/TW…2222 PRA/SAMPLE PERSON/TRANSFERWISE'),
+      ],
+      { ...ctx, singaporeAssetId: 'sg' },
+    );
+    expect(cs.map((c) => c.cls)).toEqual([
+      'fd_proceeds',
+      'fd_proceeds',
+      'fd_funding',
+      'own_transfer',
+    ]);
+    expect(cs[3]).toMatchObject({ counterpart: 'sg', fromSingapore: true });
+  });
+
+  it('a transfer naming one of the household is to or from their account, at the bank its IFSC code names', () => {
+    const people = [
+      { ownerId: 'r', names: ['Asha'] },
+      { ownerId: 'g', names: ['Vikram'] },
+    ];
+    const accounts = [
+      { assetId: 'a', ownerId: 'r', last4: null, bank: 'Sample Bank' },
+      { assetId: 'v1', ownerId: 'g', last4: null, bank: 'AU Small Finance Bank' },
+      { assetId: 'v2', ownerId: 'g', last4: null, bank: 'IDFC First Bank' },
+    ];
+    const cs = classifyLines(
+      [
+        line('a', '2024-02-01', -1_000_000, 'NET-RTGS-SAMPB…1234-VIKRAM SHARMA-AUBL…5678-TRANSFER'),
+        line('a', '2024-02-02', 400_000, 'RTGS CR-IDFB…0151-MR. ASHA SHARMA-ASHA'),
+        line('a', '2024-02-03', 25_000, 'IMPS/VIKRM SHARMA/XXX9/RRN:…1234/'),
+      ],
+      { ...ctx, accounts, people },
+    );
+    expect(cs[0]).toMatchObject({ cls: 'own_transfer', counterpart: 'v1', person: 'g' });
+    expect(cs[1]).toMatchObject({ cls: 'own_transfer', person: 'r' });
+    // a one-letter slip in the name is still the person; no bank code, so the account is not known
+    expect(cs[2]).toMatchObject({ cls: 'own_transfer', counterpart: null, person: 'g' });
+  });
+
   it('your answer decides', () => {
     const answered = lines.map((l) =>
       l.narration === 'NEFT CR-UNKNOWN' ? { ...l, answer: 'income' as const } : l,

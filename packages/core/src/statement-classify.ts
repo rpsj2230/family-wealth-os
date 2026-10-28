@@ -57,7 +57,11 @@ export interface StmtLine {
 }
 
 export interface ClassifyContext {
-  accounts: { assetId: string; ownerId: string; last4: string | null }[];
+  accounts: { assetId: string; ownerId: string; last4: string | null; bank?: string | null }[];
+  /** the household's people, by the names a bank writes them in a narration (first names; a one-letter slip is still them) */
+  people?: { ownerId: string; names: string[] }[];
+  /** the Singapore account money from abroad leaves (a Wise or DBS remittance moves money out of it) */
+  singaporeAssetId?: string | null;
   deposits: {
     assetId: string;
     ownerId: string;
@@ -92,6 +96,10 @@ export interface Classified {
   reason: string;
   /** the transfer from Singapore on file that this credit is */
   remittanceId?: string;
+  /** money from Singapore with no transfer on file yet (it can be added as one) */
+  fromSingapore?: boolean;
+  /** the person whose account is on the other side, when the narration names one of the household */
+  person?: string;
 }
 
 const daysApart = (a: string, b: string) =>
@@ -109,7 +117,76 @@ const INTEREST =
 const DEPOSIT_WORDS =
   /\b(fd|td|tdr|stdr|term\s*dep(osit)?|fixed\s*dep(osit)?|recurring\s*dep(osit)?|rd)\b/i;
 const TDS = /\btds\b|tax\s*ded|withholding|\btax\b.*\bint/i;
-const FD_CLOSE = /matur|clos|liquid|premat|proceeds|redeem|repay/i;
+const FD_CLOSE = /matur|clos|liquid|premat|proceeds|redeem|repay|\bred\b/i;
+/** a deposit paid back into the account, principal and interest together ("PRIN AND INT AUTO_REDEEM", "IB TD RED XFER TO CASA") */
+const FD_PAYBACK =
+  /auto_?redeem|prin(cipal)?\s*(and|&|\+)\s*int|\b(td|fd)\s*red\b|\b(td|fd)\s*(closure|matur)|closure\s*proceeds/i;
+/** a deposit opened from the account ("NET TXN: FD BOOKED", "NEW FD", "TD OPENING") */
+const FD_OPEN = /\bfd\s*booked|\bnew\s*fd\b|\b(td|fd)\s*opening/i;
+/** money from Singapore: a Wise payout, or a DBS remittance landing through DBS Bank India */
+const SINGAPORE = /transfer\s*wise|\bwise\s*payments?\b|\bDBSS(0|…)/i;
+/** the bank of an IFSC code's first four letters, as a bank name is written (for telling which account a transfer is with) */
+const IFSC_BANK: Record<string, string> = {
+  HDFC: 'hdfc',
+  IDFB: 'idfc',
+  ESFB: 'equitas',
+  RATN: 'rbl',
+  AUBL: 'au',
+  JSFB: 'jana',
+  INDB: 'indusind',
+  ESMF: 'esaf',
+  YESB: 'yes',
+  UTKS: 'utkarsh',
+  SCBL: 'standard chartered',
+  UJVN: 'ujjivan',
+  SURY: 'suryoday',
+  KKBK: 'kotak',
+  ICIC: 'icici',
+  SBIN: 'sbi',
+  UBIN: 'union',
+  FDRL: 'federal',
+  IBKL: 'idbi',
+  DBSS: 'dbs',
+  CNRB: 'canara',
+  PUNB: 'punjab national',
+  BARB: 'baroda',
+  SIBL: 'south indian',
+  DCBL: 'dcb',
+  BDBL: 'bandhan',
+  USFB: 'unity',
+  CSBK: 'csb',
+  KVBL: 'karur vysya',
+};
+const bankWord = (b: string) =>
+  b
+    .toLowerCase()
+    .replace(/[^a-z ]/g, ' ')
+    .replace(/\b(bank|ltd|limited|small|finance|first)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+/** one letter added, dropped or changed */
+const near1 = (a: string, b: string) => {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1 || Math.min(a.length, b.length) < 4) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+};
 const FUND_WORDS =
   /\b(bse|bsestarmf|nse\s*clearing|nsccl|iccl|indian\s*clearing|cams|camsonline|kfin|kfintech|karvy|mutual\s*fund|mf\s*(sip|purchase|redemption)|amc|zerodha|coin|groww|kuvera|paytm\s*money|et\s*money)\b/i;
 const FEES =
@@ -138,7 +215,8 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   // 2. interest and the tax on it
   const interestDays = new Set<string>();
   for (const l of sorted) {
-    if (!open(l) || l.amount <= 0 || !INTEREST.test(l.narration)) continue;
+    if (!open(l) || l.amount <= 0 || !INTEREST.test(l.narration) || FD_PAYBACK.test(l.narration))
+      continue;
     if (DEPOSIT_WORDS.test(l.narration))
       set(
         l,
@@ -180,8 +258,20 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     if (!open(l) || l.amount <= 0) continue;
     if (ctx.rentWords.length && hasWord(l.narration, ctx.rentWords))
       set(l, 'rent', 'Rent: the narration has a word you set for your tenant');
-    else if (ctx.remittanceWords.length && hasWord(l.narration, ctx.remittanceWords))
-      set(l, 'outside_in', 'Money sent from abroad: the narration has a remittance word');
+    else if (
+      SINGAPORE.test(l.narration) ||
+      (ctx.remittanceWords.length && hasWord(l.narration, ctx.remittanceWords))
+    ) {
+      if (ctx.singaporeAssetId) {
+        set(
+          l,
+          'own_transfer',
+          'Money from Singapore (a Wise or DBS remittance) not in the transfers on file',
+          ctx.singaporeAssetId,
+        );
+        out.get(l.id)!.fromSingapore = true;
+      } else set(l, 'outside_in', 'Money sent from abroad: the narration has a remittance word');
+    }
   }
 
   // 5. transfers between your own accounts: the closest line of the opposite sign and the same sum in another account
@@ -258,7 +348,11 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   // 8. deposits and funds from the wording alone
   for (const l of sorted) {
     if (!open(l)) continue;
-    if (DEPOSIT_WORDS.test(l.narration)) {
+    if (l.amount > 0 && FD_PAYBACK.test(l.narration))
+      set(l, 'fd_proceeds', 'The narration says a deposit was paid back (principal and interest)');
+    else if (l.amount < 0 && FD_OPEN.test(l.narration))
+      set(l, 'fd_funding', 'The narration says a deposit was booked');
+    else if (DEPOSIT_WORDS.test(l.narration)) {
       if (l.amount < 0) set(l, 'fd_funding', 'The narration says a deposit was booked');
       else if (FD_CLOSE.test(l.narration))
         set(l, 'fd_proceeds', 'The narration says a deposit matured or was closed');
@@ -270,6 +364,51 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
       );
     }
   }
+
+  // 8b. a transfer naming one of the household: to or from an account in their name (at the bank its IFSC code names, when on file)
+  const people = (ctx.people ?? []).map((p) => ({
+    ownerId: p.ownerId,
+    names: p.names.map((n) => n.toUpperCase()).filter((n) => n.length >= 4),
+  }));
+  const ownerOfAsset = new Map(ctx.accounts.map((a) => [a.assetId, a.ownerId]));
+  const bankOfAsset = new Map(ctx.accounts.map((a) => [a.assetId, bankWord(a.bank ?? '')]));
+  if (people.length)
+    for (const l of sorted) {
+      if (!open(l)) continue;
+      const words = l.narration
+        .toUpperCase()
+        .split(/[^A-Z]+/)
+        .filter(Boolean);
+      let who: { ownerId: string; at: number } | null = null;
+      for (const p of people) {
+        const at = words.findIndex((w) => p.names.some((n) => near1(w, n)));
+        if (at >= 0 && (!who || at < who.at)) who = { ownerId: p.ownerId, at };
+      }
+      if (!who) continue;
+      // the other side's bank: an IFSC code in the narration that is not this account's own bank
+      const own = bankOfAsset.get(l.assetId) ?? '';
+      const banks = [...l.narration.toUpperCase().matchAll(/\b([A-Z]{4})(?:0|…)/g)]
+        .map((m) => IFSC_BANK[m[1]!])
+        .filter((b): b is string => !!b && !own.startsWith(b));
+      const at = banks[0];
+      const theirs = ctx.accounts.filter(
+        (a) =>
+          a.ownerId === who!.ownerId &&
+          a.assetId !== l.assetId &&
+          (!at || bankWord(a.bank ?? '').startsWith(at)),
+      );
+      const other = at && theirs.length === 1 ? theirs[0]!.assetId : null;
+      const name =
+        (ctx.people ?? []).find((p) => p.ownerId === who!.ownerId)?.names[0] ?? 'one of you';
+      const same = who.ownerId === ownerOfAsset.get(l.assetId);
+      set(
+        l,
+        'own_transfer',
+        `${l.amount > 0 ? 'From' : 'To'} ${same ? 'another account of yours' : `an account in ${name}'s name`}${at ? ` at ${at.toUpperCase()}` : ''}`,
+        other,
+      );
+      out.get(l.id)!.person = who.ownerId;
+    }
 
   // 9. a transfer naming another of your accounts by its last four digits
   const byLast4 = new Map<string, string[]>();

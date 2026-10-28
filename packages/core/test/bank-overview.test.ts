@@ -239,7 +239,12 @@ describe('bankOverview: where it sits', () => {
   it('splits by NRE and NRO, and by person, largest first', () => {
     const t = Object.fromEntries(ov.accountTypes.map((x) => [x.key, x.amount]));
     expect(t.NRO).toBeCloseTo(blocks[1]!.sections[0]!.rows[0]!.current!, 6);
-    expect(t.unset).toBeGreaterThan(0); // the friend’s money has no account type
+    // the friend’s money is not an Indian bank account: NRE and NRO do not apply, so it is not counted as missing a type
+    expect(t.other).toBeGreaterThan(0);
+    expect(t.unset).toBeUndefined();
+    const other = ov.accountTypes.find((x) => x.key === 'other')!;
+    expect(other.items.length).toBeGreaterThan(0);
+    expect(other.items.reduce((s, i) => s + i.amount, 0)).toBeCloseTo(other.amount, 6);
     expect(ov.accountTypes.reduce((s, x) => s + x.amount, 0)).toBeCloseTo(ov.current, 6);
     expect(ov.people.map((p) => p.ownerId)).toEqual(['r', 'g']);
     expect(ov.people.reduce((s, p) => s + p.share, 0)).toBeCloseTo(1, 9);

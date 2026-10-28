@@ -165,6 +165,22 @@ export async function loadStatements(
   };
 }
 
+/** The Singapore account money sent to India leaves: the one most transfers on file come from, else the only Singapore DBS account. */
+function singaporeOf(loaded: LoadedPortfolio, remittances: StoredRemittance[]): string | null {
+  const count = new Map<string, number>();
+  for (const r of remittances)
+    if (r.fromAssetId) count.set(r.fromAssetId, (count.get(r.fromAssetId) ?? 0) + 1);
+  const top = [...count].sort((a, b) => b[1] - a[1])[0];
+  if (top) return top[0];
+  const dbs = loaded.assetRows.filter(
+    (a) =>
+      a.type === 'bank_account' &&
+      a.currency !== 'INR' &&
+      /^dbs\b/i.test(loaded.institutionName?.get(a.institution_id ?? '') ?? ''),
+  );
+  return dbs.length === 1 ? dbs[0]!.id : null;
+}
+
 /** What the rules need to know about the holdings on file: accounts, deposits and the purchases and sales in the CAS. */
 export function classifyContext(
   loaded: LoadedPortfolio,
@@ -192,7 +208,19 @@ export function classifyContext(
   return {
     accounts: loaded.assetRows
       .filter((a) => a.type === 'bank_account')
-      .map((a) => ({ assetId: a.id, ownerId: a.owner_id, last4: a.identifier_last4 ?? null })),
+      .map((a) => ({
+        assetId: a.id,
+        ownerId: a.owner_id,
+        last4: a.identifier_last4 ?? null,
+        bank: a.institution_id ? (loaded.institutionName?.get(a.institution_id) ?? null) : null,
+      })),
+    // the household's people by their first names, as banks write them in narrations
+    people: [...loaded.ownerName].map(([ownerId, name]) => ({
+      ownerId,
+      names: name.split(/\s+/).filter((n) => n.length >= 4),
+    })),
+    // the Singapore account money from abroad leaves: the one the transfers on file come from, else the only DBS account
+    singaporeAssetId: singaporeOf(loaded, remittances),
     deposits: loaded.fdRows.map((f) => ({
       assetId: f.asset_id,
       ownerId: owner.get(f.asset_id) ?? '',

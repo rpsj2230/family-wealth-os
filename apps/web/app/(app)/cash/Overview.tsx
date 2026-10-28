@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TypeLegend } from '@/app/(app)/accounts/TypeLegend';
 import {
   formatInr,
   formatInrCompact,
@@ -45,6 +46,7 @@ export function CashOverviewPanel({
   const to = (path: string) => (sample ? `/demo${path}` : path);
   const empty = o.accounts === 0;
   const people = o.people.map((p) => ({ ...p, style: styles[p.ownerId] }));
+  const typeNames = Object.fromEntries(Object.entries(styles).map(([id, st]) => [id, st.name]));
   const topShare = Math.max(0.0001, banks[0]?.share ?? 0);
   const stale = banks.reduce((s, b) => s + b.stale, 0);
   const oldest =
@@ -241,16 +243,7 @@ export function CashOverviewPanel({
                   className: `type-${t.key}`,
                 }))}
               />
-              <ul className="bv-legend plain">
-                {o.accountTypes.map((t) => (
-                  <li key={t.key}>
-                    <span className={`bv-swatch type-${t.key}`} aria-hidden="true" />
-                    <span className="bv-lname">{t.label}</span>
-                    <strong className="bv-lamt">{formatInrCompact(t.amount)}</strong>
-                    <span className="bv-lpct">{formatPct(t.share, 0)}</span>
-                  </li>
-                ))}
-              </ul>
+              <TypeLegend types={o.accountTypes} names={typeNames} sample={sample} />
             </div>
           )}
         </div>

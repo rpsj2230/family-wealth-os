@@ -274,7 +274,9 @@ function Panel({
       onSaved({
         ...now,
         code: was.code,
-        bankName: institutions.find((i) => i.id === now.institutionId)?.name ?? was.bankName,
+        bankName: now.institutionId
+          ? (institutions.find((i) => i.id === now.institutionId)?.name ?? was.bankName)
+          : '',
         ownerName: owners.find((o) => o.id === now.ownerId)?.name ?? was.ownerName,
         currency: was.currency,
         recorded: typeof bal === 'number' ? bal : was.recorded,
@@ -462,6 +464,8 @@ function Panel({
               value={now.institutionId}
               onChange={(e) => set({ institutionId: e.target.value })}
             >
+              {/* money held by a person, a broker or a scheme rather than at a bank */}
+              <option value="">Others (not at a bank)</option>
               {institutions.map((i) => (
                 <option key={i.id} value={i.id}>
                   {i.name}

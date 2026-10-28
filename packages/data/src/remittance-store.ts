@@ -27,8 +27,41 @@ export async function placeRemittances(
   db: SupabaseClient,
   householdId: string,
   classified: Classified[] = [],
-  lineAsset: Map<string, string> = new Map(),
-): Promise<{ proven: number; inferred: number; open: number }> {
+  lines: Map<
+    string,
+    { assetId: string; date: string; amount: number; narration: string }
+  > = new Map(),
+): Promise<{ proven: number; inferred: number; open: number; added: number }> {
+  // money from Singapore a statement shows that is not among the transfers on file: added as one, proven by the statement
+  let added = 0;
+  const fresh = classified
+    .filter(
+      (c) => c.fromSingapore && !c.remittanceId && lines.has(c.id) && lines.get(c.id)!.amount > 0,
+    )
+    .map((c) => {
+      const l = lines.get(c.id)!;
+      return {
+        household_id: householdId,
+        provider: /wise/i.test(l.narration) ? 'wise' : 'bank',
+        received_on: l.date,
+        amount_inr: l.amount,
+        from_asset_id: c.counterpart,
+        to_asset_id: l.assetId,
+        to_basis: 'statement',
+        to_note: 'Found in this account’s bank statement',
+        candidate_asset_ids: [l.assetId],
+        idem_key: `stmt:${c.id}`,
+      };
+    });
+  if (fresh.length) {
+    const { data, error } = await db
+      .from('remittances')
+      .upsert(fresh, { onConflict: 'household_id,idem_key', ignoreDuplicates: true })
+      .select('id');
+    if (error) throw new Error(`transfers from statements: ${error.message}`);
+    added = data?.length ?? 0;
+  }
+  const lineAsset = new Map([...lines].map(([id, l]) => [id, l.assetId]));
   const rows = await pageAll<RemitRow>((a, b) =>
     db
       .from('remittances')
@@ -38,7 +71,7 @@ export async function placeRemittances(
       .eq('household_id', householdId)
       .range(a, b),
   );
-  if (rows.length === 0) return { proven: 0, inferred: 0, open: 0 };
+  if (rows.length === 0) return { proven: 0, inferred: 0, open: 0, added };
   const update = async (
     id: string,
     to: string | null,
@@ -72,7 +105,7 @@ export async function placeRemittances(
   // 2. the rest, from what rules accounts out and the balances
   const rest = rows.filter((r) => !PROVEN.has(r.to_basis ?? ''));
   const ids = [...new Set(rows.flatMap((r) => r.candidate_asset_ids))];
-  if (rest.length === 0 || ids.length === 0) return { proven, inferred: 0, open: 0 };
+  if (rest.length === 0 || ids.length === 0) return { proven, inferred: 0, open: 0, added };
   const [assets, obs, fds, fdAssets, statements] = await Promise.all([
     db
       .from('assets')
@@ -182,7 +215,7 @@ export async function placeRemittances(
     if ((d.assetId ?? null) !== r.to_asset_id || (d.basis ?? null) !== r.to_basis)
       await update(r.id, d.assetId, d.basis, d.assetId ? d.reason.slice(0, 300) : null);
   }
-  return { proven, inferred, open };
+  return { proven, inferred, open, added };
 }
 
 /**

@@ -494,3 +494,25 @@ abbr.bv-est {
     font-size: 1.2rem;
   }
 }
+.bv-cut.type-foreign,
+.bv-swatch.type-foreign {
+  background: var(--bv-others);
+}
+.bv-cut.type-other,
+.bv-swatch.type-other {
+  background: color-mix(in srgb, var(--bv-others) 45%, var(--card));
+}
+/* the holdings behind a legend line, listed under the legend */
+.bv-items {
+  margin-top: 0.5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bv-items ol {
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.bv-items li {
+  padding: 0.15rem 0;
+}

@@ -56,7 +56,12 @@ export async function rebuildStatementMoves(
     supabase,
     householdId,
     picture.classified,
-    new Map(stored.lines.map((l) => [l.id, l.asset_id])),
+    new Map(
+      stored.lines.map((l) => [
+        l.id,
+        { assetId: l.asset_id, date: l.txn_on, amount: l.amount, narration: l.narration },
+      ]),
+    ),
   );
   await syncRemittanceMoves(supabase, householdId);
   return {

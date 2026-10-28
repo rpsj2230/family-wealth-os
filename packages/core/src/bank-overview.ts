@@ -119,7 +119,14 @@ export interface BankOverview {
   soon: { days: number; count: number; amount: number };
   topBank: { name: string; amount: number; share: number } | null;
 
-  accountTypes: { key: 'NRE' | 'NRO' | 'unset'; label: string; amount: number; share: number }[];
+  accountTypes: {
+    key: AccountTypeKey;
+    label: string;
+    amount: number;
+    share: number;
+    /** the holdings behind the line, largest first, so a missing type can be found and set */
+    items: { assetId: string; bank: string; code: string; ownerId: string; amount: number }[];
+  }[];
   people: OverviewPerson[];
 
   /** deposit insurance: null when no limit was given */
@@ -154,7 +161,15 @@ export interface OverviewOptions {
 }
 
 const WHERE_LABEL = { cash: 'Savings and cash', fd: 'Fixed deposits', others: 'Other holdings' };
-const TYPE_LABEL = { NRE: 'NRE', NRO: 'NRO', unset: 'No type set' };
+/** NRE and NRO, Indian accounts with no type set yet, and holdings the two types do not apply to */
+export type AccountTypeKey = 'NRE' | 'NRO' | 'unset' | 'foreign' | 'other';
+const TYPE_LABEL: Record<AccountTypeKey, string> = {
+  NRE: 'NRE',
+  NRO: 'NRO',
+  unset: 'No type set',
+  foreign: 'Accounts abroad (NRE/NRO does not apply)',
+  other: 'Other holdings (NRE/NRO does not apply)',
+};
 
 const emptyPart = (): OverviewPart => ({ count: 0, invested: 0, current: 0, maturity: 0 });
 const ratio = (a: number, b: number) => (b > 0 ? a / b : 0);
@@ -203,7 +218,14 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
   const byOwner = new Map<string, { current: number; invested: number }>();
   const foreignItems: ForeignCashItem[] = [];
   const foreignByOwner = new Map<string, ForeignCashItem[]>();
-  const byType = { NRE: 0, NRO: 0, unset: 0 };
+  const byType: Record<AccountTypeKey, number> = { NRE: 0, NRO: 0, unset: 0, foreign: 0, other: 0 };
+  const typeItems: Record<AccountTypeKey, BankOverview['accountTypes'][number]['items']> = {
+    NRE: [],
+    NRO: [],
+    unset: [],
+    foreign: [],
+    other: [],
+  };
   const byBank = new Map<string, { name: string; amount: number }>();
   const coverRows: Parameters<typeof dicgcPosition>[0] = [];
   const nextCandidates: { row: BankRow; bank: string }[] = [];
@@ -253,7 +275,23 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
         o.current += current;
         o.invested += invested;
         byOwner.set(r.ownerId, o);
-        byType[r.accountKind ?? 'unset'] += current;
+        const typeKey: AccountTypeKey =
+          r.currency !== 'INR'
+            ? 'foreign'
+            : r.kind === 'held' || !isBank
+              ? 'other'
+              : r.accountKind === 'NRE' || r.accountKind === 'NRO'
+                ? r.accountKind
+                : 'unset';
+        byType[typeKey] += current;
+        if (current !== 0)
+          typeItems[typeKey].push({
+            assetId: r.assetId,
+            bank: b.name,
+            code: r.code,
+            ownerId: r.ownerId,
+            amount: current,
+          });
         if (isBank) {
           const bk = byBank.get(b.key) ?? { name: b.name, amount: 0 };
           bk.amount += current;
@@ -397,12 +435,13 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
     topBank: top
       ? { name: top.name, amount: top.amount, share: ratio(top.amount, bankTotal) }
       : null,
-    accountTypes: (['NRE', 'NRO', 'unset'] as const)
+    accountTypes: (['NRE', 'NRO', 'unset', 'foreign', 'other'] as const)
       .map((key) => ({
         key,
         label: TYPE_LABEL[key],
         amount: byType[key],
         share: ratio(byType[key], current),
+        items: [...typeItems[key]].sort((x, y) => y.amount - x.amount),
       }))
       .filter((t) => t.amount > 0),
     people: [...byOwner.entries()]

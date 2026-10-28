@@ -42,6 +42,8 @@ export interface LoadedPortfolio {
   sheetObs: ObservationRow[];
   fdRows: FdRow[];
   ownerName: Map<string, string>;
+  /** each bank's name, by institution id */
+  institutionName?: Map<string, string>;
   portfolio: Portfolio;
   marketDates: { navLatest: string | null; fx: Record<string, { rate: number; date: string }> };
   /** units held (when known) and the latest price, by fund */
@@ -462,6 +464,7 @@ export async function loadPortfolioData(
     sheetObs,
     fdRows,
     ownerName,
+    institutionName: bankName,
     // the sheet's fund values go in as such: never a valuation, only the last resort and the date a plan's amount invested was recorded
     portfolio: buildPortfolio(assetRows, [...obsRows, ...sheetObs], fdRows, today, market, extras),
     hideMaturedAfterDays: config.deposits.hideMaturedAfterDays,
