@@ -10,7 +10,7 @@ const noSideways = async (page: Page) => {
 const hero = (page: Page) => page.getByRole('region', { name: 'Net worth', exact: true });
 
 test.describe('Home (public sample)', () => {
-  test('says, under the period tiles and again under the table, that fund gains are approximate while funds have no ledger', async ({
+  test('says, under the period tiles, that fund gains are approximate while funds have no ledger', async ({
     page,
   }) => {
     await page.goto('/demo/dashboard');
@@ -20,7 +20,6 @@ test.describe('Home (public sample)', () => {
       'Fund gains are approximate until you import your fund statements',
     );
     await expect(note).toContainText(/\d+ of \d+ funds? (has|have) no transaction ledger/);
-    await expect(page.getByTestId('hm-fund-note-table')).toBeVisible();
     await noSideways(page);
   });
 
@@ -36,7 +35,9 @@ test.describe('Home (public sample)', () => {
     for (const label of [
       'Today',
       'Last 30 days',
-      'This financial year',
+      'Own money put in',
+      'Profit so far',
+      'Yearly return (XIRR)',
       'Confirmed recently',
       'Older or unconfirmed',
       'Cash and deposits',
@@ -65,21 +66,23 @@ test.describe('Home (public sample)', () => {
   }) => {
     await page.goto('/demo/dashboard');
     for (const name of [
+      'Wealth movement',
       'By kind of holding',
-      'Profit earned, by period',
       'Needs you',
       'Coming up',
-      'What changed',
       'Net worth over time',
       'Where the money is',
-      'How fast can I get at it?',
-      'In banks',
-      'Fixed deposits',
-      'Mutual funds',
       'Goals',
-      'What to watch',
     ])
       await expect(page.getByRole('heading', { name, level: 2 })).toBeVisible();
+    // each figure once: the panels whose figures live on their own pages are not repeated on Home
+    for (const gone of [
+      'Profit earned, by period',
+      'In banks',
+      'How fast can I get at it?',
+      'What to watch',
+    ])
+      await expect(page.getByRole('heading', { name: gone, level: 2 })).toHaveCount(0);
     // split bars say their cuts in words
     await expect(
       page.getByRole('img', { name: /Net worth by kind of holding: Bank balances \d+%/ }),
@@ -92,7 +95,7 @@ test.describe('Home (public sample)', () => {
       page.getByRole('img', { name: /Household net worth over the last year/ }),
     ).toBeVisible();
     await expect(page.getByText('Show the figures as a table')).toBeVisible();
-    await expect(page.locator('table.hm-raise caption')).toHaveCount(1);
+    await expect(page.locator('table.hm-move-table caption')).toHaveCount(1);
     // headings never skip a level inside a card: h1, then h2 for cards, h3 for parts
     const levels = await page
       .locator('main h1, main h2, main h3')
@@ -101,29 +104,24 @@ test.describe('Home (public sample)', () => {
       expect(levels[i]! - levels[i - 1]!).toBeLessThanOrEqual(1);
   });
 
-  test('shows what was put in, what it is worth, the profit and what was earned today', async ({
+  test('shows own money put in, profit so far, the yearly return and the matured money to place', async ({
     page,
   }) => {
     await page.goto('/demo/dashboard');
-    const figures = hero(page).getByRole('group', { name: 'Money figures' });
-    for (const label of [
-      'Total invested',
-      'Current value',
-      'Maturity value',
-      'Profit so far',
-      'Earned today',
-    ])
-      await expect(figures.locator('.bv-delta-label', { hasText: label })).toBeVisible();
-    // big lakh or crore figures, the exact amount beneath, and the net worth is the current value
-    for (const id of ['hm-invested', 'hm-current', 'hm-maturity', 'hm-profit', 'hm-earned-today'])
-      await expect(figures.getByTestId(id)).toHaveText(/^₹[\d,]+(\.\d\d (Cr|L))?$/);
-    await expect(figures.getByTestId('hm-current')).toHaveText(
-      await hero(page).getByTestId('hm-total').innerText(),
-    );
-    await expect(figures.locator('.bv-exact').first()).toHaveText(/^₹\d{1,2},\d\d,\d\d,\d{3}$/);
-    // a gain says so in words as well as in colour, and today’s earning is marked as an estimate
-    await expect(figures.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
+    const figures = hero(page).getByRole('group', { name: 'Own money and profit' });
+    for (const label of ['Own money put in', 'Profit so far', 'Yearly return (XIRR)'])
+      await expect(figures.locator('.hm-cap-label', { hasText: label })).toBeVisible();
+    await expect(figures.getByTestId('hm-own-money')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
+    await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(/^[+−]₹[\d,]+$/);
+    await expect(figures.getByTestId('hm-xirr')).toHaveText(/^-?\d+\.\d%$|^–$/);
+    // money moved with nothing to say what it was is shown apart, never as profit
+    await expect(figures).toContainText('worked out from balances');
     await expect(figures.getByText('est.', { exact: true }).first()).toBeVisible();
+    // the proceeds of matured deposits are counted once, with a way to say where they went
+    await expect(figures.getByTestId('hm-proceeds')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
+    await page.locator('[data-why="home.profitSoFar"]').first().click();
+    await expect(page.getByTestId('why-panel')).toContainText('own money');
+    await page.keyboard.press('Escape');
     await noSideways(page);
   });
 
@@ -133,28 +131,17 @@ test.describe('Home (public sample)', () => {
     await page.goto('/demo/dashboard');
     const deltas = hero(page).getByLabel('How net worth changed');
     const month = deltas.locator('.bv-delta', { hasText: 'Last 30 days' });
-    const year = deltas.locator('.bv-delta', { hasText: 'This financial year' });
-    // each period begins on its own first day, not on "your first record"
+    // the period begins on its own first day, not on "your first record"
     await expect(month).toContainText('since 26 Sep 2026');
-    await expect(year).toContainText('since 1 Apr 2026');
     await expect(deltas).not.toContainText('first record');
     // how many holdings the first day rests on, and that net worth moved by a different amount
     await expect(month).toContainText(/\d+ of \d+ holdings had a value then/);
-    await expect(year).toContainText(/\d+ of \d+ holdings had a value then/);
-    await expect(year).toContainText('Net worth moved');
-    // the two periods give different earnings
-    const amount = async (l: typeof month) =>
-      (await l.locator('.bv-delta-value strong').innerText()).trim();
-    expect(await amount(month)).not.toBe(await amount(year));
+    await expect(month).toContainText('Net worth moved');
     // the "?" names the records the first day is built from
-    await page.locator('[data-why="home.fy"]').first().click();
+    await page.locator('[data-why="home.month"]').first().click();
     const panel = page.getByTestId('why-panel');
     await expect(panel).toContainText('nearest record on or before');
-    await expect(panel).toContainText(/records from \d+ \w+ 20\d\d/);
     await page.keyboard.press('Escape');
-    // invested money is deposits and funds only
-    const figures = hero(page).getByRole('group', { name: 'Money figures' });
-    await expect(figures).toContainText('savings and cash are not counted as invested');
     await noSideways(page);
   });
 
@@ -193,53 +180,50 @@ test.describe('Home (public sample)', () => {
     await noSideways(page);
   });
 
-  test('profit by period: every kind and the total, in six periods, with the money moved shown apart', async ({
+  test('wealth movement: outside money apart from what was earned, for the period chosen, adding up', async ({
     page,
   }) => {
     await page.goto('/demo/dashboard');
-    const card = page.getByRole('region', { name: 'Profit earned, by period' });
-    const table = card.getByTestId('hm-periods');
-    await expect(table.getByRole('columnheader')).toHaveText([
-      /Kind/,
-      /Last 30 days/,
-      /This month/,
-      /This quarter/,
-      /This financial year/,
-      /Last financial year/,
-      /Since the start/,
-    ]);
-    await expect(table.getByRole('rowheader')).toHaveText([
-      'Fixed deposits',
-      'Mutual funds',
-      'Cash',
-      'Others',
-      'Total',
-    ]);
-    // each cell is an arrow and a word, and money put in or paid out is told beneath, never counted as profit
-    await expect(table.locator('tbody .sr-only').first()).toHaveText(
-      /Up|Down|No change|nothing held/,
+    const card = page.getByRole('region', { name: 'Wealth movement' });
+    const nav = card.getByRole('navigation', { name: 'Period' });
+    await expect(nav.getByRole('link', { name: 'This FY' })).toHaveAttribute(
+      'aria-current',
+      'true',
     );
-    await expect(table.getByText(/put in/).first()).toBeVisible();
-    await expect(table.getByText(/paid out/).first()).toBeVisible();
-    await expect(table.getByText('est.', { exact: true }).first()).toBeVisible();
-    // a sentence says the same in words
-    await expect(card.getByTestId('hm-periods-summary')).toContainText(/last 30 days earned ₹/);
-    await card.getByText('How these are worked out').click();
-    await expect(card.getByText('an exchange rate is not interest')).toBeVisible();
+    const table = card.getByTestId('hm-move');
+    for (const label of [
+      'Net worth on 1 Apr 2026',
+      'Outside money, confirmed',
+      'Moved in or out, not yet explained',
+      'Interest on savings',
+      'Interest on deposits',
+      'Fund gains and losses',
+    ])
+      await expect(table.getByRole('rowheader', { name: label })).toBeVisible();
+    await expect(card).toContainText(/Earned [+−]₹/);
+    // another period keeps the chart's range in the address
+    await nav.getByRole('link', { name: '6 months' }).click();
+    await expect(page).toHaveURL(/period=6m/);
+    await expect(page).toHaveURL(/range=1Y/);
+    await expect(nav.getByRole('link', { name: '6 months' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    // custom months
+    await page.goto('/demo/dashboard?period=custom&from=2026-04&to=2026-09');
+    await expect(card.getByTestId('hm-move')).toContainText('Net worth on 1 Apr 2026');
+    await expect(card.getByTestId('hm-move')).toContainText(/Net worth on 30 Sept? 2026/);
+    // a period that begins before the records do begins where they do, and says so
+    await page.goto('/demo/dashboard?period=custom&from=2020-01&to=2026-09');
+    await expect(card).toContainText('The records start on');
     await noSideways(page);
   });
 
-  test('profit by period reads as one card per kind on a phone, without sideways scrolling', async ({
-    browser,
-  }) => {
+  test('wealth movement fits a phone without sideways scrolling', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await context.newPage();
     await page.goto('/demo/dashboard');
-    const rows = page.getByTestId('hm-periods').locator('tbody tr');
-    await expect(rows).toHaveCount(5);
-    // stacked: each cell carries its period as a label on the left
-    await expect(rows.first().locator('td').first()).toHaveCSS('display', 'flex');
-    const box = await page.getByTestId('hm-periods').boundingBox();
+    const box = await page.getByTestId('hm-move').boundingBox();
     expect(box!.width).toBeLessThanOrEqual(390);
     await noSideways(page);
     await context.close();
@@ -279,21 +263,6 @@ test.describe('Home (public sample)', () => {
     await expect(page.getByText('the same length before it')).toHaveCount(0);
     await page.goto('/demo/dashboard?range=nonsense');
     await expect(nav.getByRole('link', { name: '1Y' })).toHaveAttribute('aria-current', 'true');
-  });
-
-  test('the banks and deposits figures are the ones Accounts and Deposits show', async ({
-    page,
-  }) => {
-    await page.goto('/demo/dashboard');
-    const banks = await page.getByTestId('hm-banks-total').innerText();
-    const deposits = await page.getByTestId('hm-deposits-total').innerText();
-    const funds = await page.getByTestId('hm-funds-total').innerText();
-    await page.goto('/demo/accounts');
-    await expect(page.getByTestId('bv-current')).toHaveText(banks);
-    await page.goto('/demo/deposits');
-    await expect(page.getByTestId('dv-current')).toHaveText(deposits);
-    await page.goto('/demo/investments');
-    await expect(page.getByText(funds).first()).toBeVisible();
   });
 
   test('links from Home stay inside the sample', async ({ page }) => {

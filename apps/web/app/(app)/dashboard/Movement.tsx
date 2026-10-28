@@ -246,7 +246,11 @@ export function Movement({
         <p className="muted small">Nothing was recorded in this period.</p>
       ) : (
         <>
-          <table className="hm-move-table">
+          <table className="hm-move-table" data-testid="hm-move">
+            <caption className="sr-only">
+              How net worth moved from {niceDate(f.from)}: outside money, money not yet explained
+              and what was earned
+            </caption>
             <tbody>
               {rows.map((r) => (
                 <tr

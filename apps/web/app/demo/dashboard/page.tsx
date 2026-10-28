@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { parseHomeRange } from '@fwos/core';
+import { parseHomeRange, parseMovementKey } from '@fwos/core';
 import { HomeView } from '@/app/(app)/dashboard/HomeView';
 import { DemoShell } from '@/components/DemoShell';
 import { PageHead } from '@/components/PageHead';
@@ -16,10 +16,16 @@ export const metadata: Metadata = {
 export default async function DemoDashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; period?: string; from?: string; to?: string }>;
 }) {
-  const { range } = await searchParams;
-  const home = buildHome(demoHomeInput(parseHomeRange(range)));
+  const { range, period, from, to } = await searchParams;
+  const home = buildHome({
+    ...demoHomeInput(parseHomeRange(range)),
+    movement: {
+      key: parseMovementKey(period),
+      custom: { ...(from ? { from } : {}), ...(to ? { to } : {}) },
+    },
+  });
   const late = home.attention.filter((a) => a.tone === 'bad').length;
   return (
     <DemoShell>

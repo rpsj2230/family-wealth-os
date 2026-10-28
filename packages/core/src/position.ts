@@ -1479,6 +1479,16 @@ export function depositsOf(input: PositionInput): DepositTerms[] {
   });
 }
 
+/**
+ * An account's balances for the period figures: as recorded, and for one no longer held (closed) nothing from the day after its last
+ * record, as the day's value has it (`endedAfterLastRecord`): the money left the account, it is not still earning.
+ */
+function closedBalances(a: PositionAsset): { date: string; amount: number }[] {
+  const recs = dayRecords(a.records).map((r) => ({ date: r.date, amount: r.amount }));
+  if (isCountedStatus(a.status) || recs.length === 0) return recs;
+  return [...recs, { date: addDaysIso(recs[recs.length - 1]!.date, 1), amount: 0 }];
+}
+
 /** The savings accounts (INR) with the terms they earn on, their balances and their confirmed movements. */
 export function accountsOf(input: PositionInput): SavingsAccount[] {
   const c = input.config;
@@ -1491,10 +1501,7 @@ export function accountsOf(input: PositionInput): SavingsAccount[] {
         currency: a.currency,
         rate: info.used,
         tdsRate: info.tds,
-        balances:
-          a.currency === 'INR'
-            ? dayRecords(a.records).map((r) => ({ date: r.date, amount: r.amount }))
-            : [],
+        balances: a.currency === 'INR' ? closedBalances(a) : [],
         terms: savingsTermsOf(a, c),
         moves: a.moves ?? [],
       };
