@@ -57,7 +57,7 @@ export function EmailCopy({
 }
 
 /**
- * Under every message: Read again (the AI reads just this email and the number is recorded at once), the email itself with the
+ * Under every message: Read again (just this email, by its bank's format or else the AI; the number is recorded at once), the email itself with the
  * number marked, and a box to correct the number if the reading is wrong.
  */
 export function EntryTools({ entry, demo = false }: { entry: InboxEntry; demo?: boolean }) {
@@ -85,7 +85,10 @@ export function EntryTools({ entry, demo = false }: { entry: InboxEntry; demo?: 
           <button className="btn compact" disabled={reading}>
             {reading ? 'Reading…' : 'Read again'}
           </button>
-          <span className="muted small">The AI reads only this email and records the number.</span>
+          <span className="muted small">
+            Reads only this email again: by its bank’s format, or by the AI when no format fits. The
+            number is recorded at once.
+          </span>
         </form>
       )}
       {read && (

@@ -382,6 +382,16 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         path: ['inbox', 'trustedForwarders'],
         unit: 'e-mail addresses, separated by commas',
       },
+      {
+        name: 'forwardUtcOffsetHours',
+        label: 'Your Gmail shows times in',
+        hint: 'A forwarded alert carries the bank’s original time in your Gmail’s time zone. It decides which of two alerts on the same day is the later one, so the later balance is kept. Hours from UTC: Singapore 8, India 5.5.',
+        kind: 'decimal',
+        path: ['inbox', 'forwardUtcOffsetHours'],
+        unit: 'hours from UTC',
+        min: -12,
+        max: 14,
+      },
     ],
   },
   {

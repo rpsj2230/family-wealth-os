@@ -240,12 +240,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
   } catch {
     return { ok: false, message: 'The saved AI keys could not be read.' };
   }
-  if (chain.empty)
-    return {
-      ok: false,
-      message:
-        'No AI key is switched on. Add one in Settings (Bank e-mails and AI), then try again.',
-    };
+  // the bank's own format is read first and needs no AI; the AI is asked only when no format fits (and only if a key is switched on)
   let last: InboxRow | null = null;
   let accountName = '';
   let replaced: Replaced[] = [];
@@ -272,7 +267,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
     async latestObservation(assetId) {
       const { data } = await supabase
         .from('observations')
-        .select('amount, as_of, source')
+        .select('amount, as_of, source, received_at')
         .eq('asset_id', assetId)
         .is('superseded_by', null)
         .order('as_of', { ascending: false })
@@ -283,6 +278,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
             amount: Number(data[0].amount),
             asOf: data[0].as_of as string,
             source: data[0].source as string,
+            receivedAt: (data[0].received_at as string | null) ?? null,
           }
         : null;
     },
@@ -290,7 +286,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
     async record(row) {
       last = row;
     },
-    async apply({ assetId, reading, messageId, source, replaceNewer }) {
+    async apply({ assetId, reading, messageId, source, replaceNewer, replaceSameDay }) {
       const res = await recordBalance(supabase, {
         householdId,
         assetId,
@@ -302,6 +298,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
         confidence: reading.source === 'rule' ? 'verified' : 'imported_unverified',
         note: 'Read again from the bank email; correct the number in the inbox if it is wrong',
         replaceNewer: !!replaceNewer,
+        replaceSameDay: !!replaceSameDay,
       });
       if (!res.ok) throw new Error(res.message);
       const { data: a } = await supabase
@@ -370,7 +367,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
   return {
     ok: true,
     recorded: false,
-    message: `The AI found no balance in this email${row.reason && !/no balance/.test(row.reason) ? ` (${row.reason})` : ''}. If you can see one in the email below, record it in Monthly update.`,
+    message: `No balance was found in this email${row.reason && !/no balance/.test(row.reason) ? ` (${row.reason})` : ''}. If you can see one in the email below, record it in Monthly update.`,
   };
 }
 

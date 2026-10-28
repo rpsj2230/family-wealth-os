@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { senderAddress, unwrapForward } from '../src/forwarded';
+import { forwardDate, senderAddress, unwrapForward } from '../src/forwarded';
 
 describe('senderAddress', () => {
   it('reads the address from the usual From forms', () => {
@@ -17,7 +17,20 @@ describe('unwrapForward', () => {
     expect(unwrapForward('Fwd: Balance Change Alert', text)).toEqual({
       found: true,
       originalFrom: 'HDFC Bank <alerts@hdfcbank.bank.in>',
+      originalAt: '2026-10-26T10:00:00.000Z',
     });
+    // the header time is in the forwarder's Gmail time zone (Settings): 10:00 in Singapore is 02:00 UTC
+    expect(unwrapForward('Fwd: Balance Change Alert', text, 8).originalAt).toBe(
+      '2026-10-26T02:00:00.000Z',
+    );
+  });
+  it('reads the Date line of the forward header in its usual forms', () => {
+    expect(forwardDate('Wed, 28 Oct, 2026, 15:28', 8)).toBe('2026-10-28T07:28:00.000Z');
+    expect(forwardDate('Wed, 28 Oct 2026 at 15:28', 5.5)).toBe('2026-10-28T09:58:00.000Z');
+    expect(forwardDate('Wed, Oct 28, 2026 at 3:28 PM', 8)).toBe('2026-10-28T07:28:00.000Z');
+    expect(forwardDate('Wed, Oct 28, 2026 at 12:05 AM', 0)).toBe('2026-10-28T00:05:00.000Z');
+    expect(forwardDate('31 Feb 2026 10:00', 0)).toBeNull();
+    expect(forwardDate('Mon', 0)).toBeNull();
   });
   it('works when the text has no line breaks', () => {
     const text =

@@ -12,6 +12,10 @@ export interface RecordArgs {
   note: string;
   /** a value you typed or imported with a later date stops counting, so this reading becomes the current balance (it stays in the history, marked as replaced) */
   replaceNewer?: boolean;
+  /** a later alert of the same day: the earlier value of that day from an email stops counting (it stays in the history, marked as replaced) */
+  replaceSameDay?: boolean;
+  /** when the email arrived (ISO); now when not known */
+  receivedAt?: string | null;
 }
 
 export interface Replaced {
@@ -64,7 +68,7 @@ export async function recordBalance(
       currency: a.currency,
       fx_rate: fx,
       as_of: a.asOf,
-      received_at: new Date().toISOString(),
+      received_at: a.receivedAt ?? new Date().toISOString(),
       source: a.source,
       source_ref: ref,
       confidence: a.confidence,
@@ -80,6 +84,23 @@ export async function recordBalance(
       .update({ superseded_by: added.id as string })
       .eq('id', o.id as string);
   const replaced: Replaced[] = [];
+  if (a.replaceSameDay) {
+    const { data: same } = await supabase
+      .from('observations')
+      .select('id, amount, as_of, source')
+      .eq('asset_id', a.assetId)
+      .eq('as_of', a.asOf)
+      .eq('source', 'email')
+      .is('superseded_by', null)
+      .neq('id', added.id as string);
+    for (const o of same ?? []) {
+      await supabase
+        .from('observations')
+        .update({ superseded_by: added.id as string })
+        .eq('id', o.id as string);
+      replaced.push({ amount: Number(o.amount), asOf: o.as_of as string, source: 'email' });
+    }
+  }
   if (a.replaceNewer) {
     const { data: newer } = await supabase
       .from('observations')

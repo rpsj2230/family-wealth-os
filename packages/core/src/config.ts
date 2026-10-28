@@ -71,6 +71,11 @@ export interface AppConfig {
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
     trustedForwarders: string[];
+    /**
+     * the time zone your Gmail shows times in, as hours from UTC: a forwarded alert's original time is written in it ("Date: Wed, 28 Oct,
+     * 2026, 15:28"), and it orders two alerts of the same day
+     */
+    forwardUtcOffsetHours: number;
   };
   rates: {
     /** an offer not checked within this many days is shown as old (rates are read once a month, so this is longer than a month) */
@@ -317,7 +322,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     unexplainedTolerance: 500,
   },
   capital: { openingDate: '' },
-  inbox: { trustedForwarders: [] },
+  inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
   rates: {
     staleDays: 45,
     syncDay: 30,
@@ -613,6 +618,11 @@ export function configFromJson(raw: unknown): AppConfig {
           : [];
         return [...new Set(list)].slice(0, 10);
       })(),
+      // whole or half hours (India is 5.5)
+      forwardUtcOffsetHours:
+        Math.round(
+          num(obj(r.inbox).forwardUtcOffsetHours, d.inbox.forwardUtcOffsetHours, -12, 14) * 4,
+        ) / 4,
     },
     rates: {
       staleDays: Math.round(num(rat.staleDays, d.rates.staleDays, 1, 365)),

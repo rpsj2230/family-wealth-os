@@ -81,14 +81,22 @@ async function main() {
       const r = must(
         await db
           .from('observations')
-          .select('amount, as_of')
+          .select('amount, as_of, source, received_at')
           .eq('asset_id', assetId)
           .is('superseded_by', null)
           .order('as_of', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1),
         'latest observation',
       );
-      return r[0] ? { amount: Number(r[0].amount), asOf: r[0].as_of as string } : null;
+      return r[0]
+        ? {
+            amount: Number(r[0].amount),
+            asOf: r[0].as_of as string,
+            source: (r[0].source as string | null) ?? null,
+            receivedAt: (r[0].received_at as string | null) ?? null,
+          }
+        : null;
     },
     async alreadySeen(messageId) {
       const r = await db
@@ -120,7 +128,7 @@ async function main() {
         'log message',
       );
     },
-    async apply({ assetId, reading, messageId, source }) {
+    async apply({ assetId, reading, messageId, source, receivedAt, replaceSameDay }) {
       let fx: number | null = null;
       if (reading.currency !== 'INR') {
         const r = must(
@@ -139,26 +147,43 @@ async function main() {
             `No ${reading.currency} exchange rate on record yet; run the market-data job first`,
           );
       }
-      must(
-        await db.from('observations').insert({
-          household_id: hh,
-          asset_id: assetId,
-          kind: 'balance',
-          amount: reading.amount,
-          currency: reading.currency,
-          fx_rate: fx,
-          as_of: reading.asOf,
-          received_at: new Date().toISOString(),
-          source,
-          source_ref: messageId.slice(0, 200),
-          confidence: reading.source === 'rule' ? 'verified' : 'imported_unverified',
-          note:
-            reading.source === 'ai'
-              ? 'Read from a statement by an AI service'
-              : 'Read from a bank balance alert',
-        }),
+      const added = must(
+        await db
+          .from('observations')
+          .insert({
+            household_id: hh,
+            asset_id: assetId,
+            kind: 'balance',
+            amount: reading.amount,
+            currency: reading.currency,
+            fx_rate: fx,
+            as_of: reading.asOf,
+            // when the email arrived, so two alerts of one day can be told apart
+            received_at: receivedAt ?? new Date().toISOString(),
+            source,
+            source_ref: messageId.slice(0, 200),
+            confidence: reading.source === 'rule' ? 'verified' : 'imported_unverified',
+            note:
+              reading.source === 'ai'
+                ? 'Read from a statement by an AI service'
+                : 'Read from a bank balance alert',
+          })
+          .select('id'),
         'record balance',
       );
+      // a later alert of the same day: the earlier value of that day from an email stays in the history, marked as replaced
+      if (replaceSameDay && added[0])
+        must(
+          await db
+            .from('observations')
+            .update({ superseded_by: added[0].id as string })
+            .eq('asset_id', assetId)
+            .eq('as_of', reading.asOf)
+            .eq('source', 'email')
+            .is('superseded_by', null)
+            .neq('id', added[0].id as string),
+          'replace the earlier value of the day',
+        );
     },
     async casImport(m) {
       // shared with the Gmail statements scan (packages/data/src/cas.ts)
@@ -231,6 +256,7 @@ async function main() {
           subject: p.subject ?? '',
           text: p.text ?? (typeof p.html === 'string' ? stripHtml(p.html) : ''),
           receivedOn: (p.date ?? new Date()).toISOString().slice(0, 10),
+          receivedAt: (p.date ?? new Date()).toISOString(),
           attachments: p.attachments
             .filter((a) => /\.pdf$/i.test(a.filename ?? '') || a.contentType === 'application/pdf')
             .map((a) => ({
@@ -251,9 +277,8 @@ async function main() {
     await db.from('household_members').select('user_id').eq('household_id', hh),
     'members',
   );
-  const trustedForwarders = new Set<string>(
-    (await loadSettings(db, hh)).config.inbox.trustedForwarders,
-  );
+  const inboxSettings = (await loadSettings(db, hh)).config.inbox;
+  const trustedForwarders = new Set<string>(inboxSettings.trustedForwarders);
   for (const m of members) {
     const u = await db.auth.admin.getUserById(m.user_id as string);
     if (u.data.user?.email) trustedForwarders.add(u.data.user.email.toLowerCase());
@@ -274,6 +299,7 @@ async function main() {
     today,
     ai,
     trustedForwarders: [...trustedForwarders],
+    forwardUtcOffsetHours: inboxSettings.forwardUtcOffsetHours,
   });
   console.log(
     `Inbox: ${report.seen} messages (${report.skipped} already handled): applied ${report.applied}, to review ${report.needsReview}, ignored ${report.ignored}, errors ${report.errors}`,

@@ -494,3 +494,123 @@ describe('runInbox: an email you ask to be read again', () => {
     expect(r.skipped).toBe(1);
   });
 });
+
+describe('runInbox: two alerts of the same day', () => {
+  const YES_ACC: KnownAccount[] = [
+    {
+      assetId: 'yes1',
+      institution: 'Yes Bank',
+      last4: '1111',
+      currency: 'INR',
+      type: 'bank_account',
+    },
+  ];
+  const yes = (id: string, balance: string, at: string): InboxMessage => ({
+    messageId: id,
+    from: '<alerts@yes.bank.in>',
+    subject: 'RTGS Alert',
+    text: `An amount of INR 1,00,000.00 has been debited to your A/C. No. XX1111 on 28-OCT-2026. Available Balance on 28-OCT-26 is INR ${balance} and Total available balance is INR ${balance}.`,
+    receivedOn: '2026-10-28',
+    receivedAt: at,
+    attachments: [],
+  });
+  /** a fake database that keeps what was applied, so the next message sees it as the value on record */
+  const keeping = (start: {
+    amount: number;
+    asOf: string;
+    source?: string;
+    receivedAt?: string | null;
+  }) => {
+    let latest: typeof start | null = start;
+    const applied: Parameters<InboxIo['apply']>[0][] = [];
+    const rows: InboxRow[] = [];
+    const io: InboxIo = {
+      accounts: async () => YES_ACC,
+      latestObservation: async () => latest,
+      alreadySeen: async () => false,
+      record: async (r) => {
+        rows.push(r);
+      },
+      apply: async (a) => {
+        applied.push(a);
+        latest = {
+          amount: a.reading.amount,
+          asOf: a.reading.asOf,
+          source: 'email',
+          receivedAt: a.receivedAt ?? null,
+        };
+      },
+      pdfText: async () => '',
+    };
+    return { io, applied, rows };
+  };
+  const cfg = { today: '2026-10-28', ai: null };
+
+  it('keeps the later balance of the day, whatever order the emails come in', async () => {
+    const { io, applied } = keeping({ amount: 5000, asOf: '2026-10-20', source: 'email' });
+    await runInbox(
+      [
+        yes('late', '0.53', '2026-10-28T09:58:00.000Z'),
+        yes('early', '5,57,006.53', '2026-10-28T07:28:00.000Z'),
+      ],
+      io,
+      cfg,
+    );
+    expect(applied.map((a) => a.reading.amount)).toEqual([557006.53, 0.53]);
+    expect(applied[1]).toMatchObject({
+      replaceSameDay: true,
+      receivedAt: '2026-10-28T09:58:00.000Z',
+    });
+  });
+
+  it('a later alert replaces an earlier one of the same day recorded in an earlier run', async () => {
+    const { io, applied } = keeping({
+      amount: 557006.53,
+      asOf: '2026-10-28',
+      source: 'email',
+      receivedAt: '2026-10-28T07:28:00.000Z',
+    });
+    await runInbox([yes('late', '0.53', '2026-10-28T09:58:00.000Z')], io, cfg);
+    expect(applied).toHaveLength(1);
+    expect(applied[0]!.reading.amount).toBe(0.53);
+  });
+
+  it('an older alert of the same day that arrives late does not replace the later one', async () => {
+    const { io, applied, rows } = keeping({
+      amount: 0.53,
+      asOf: '2026-10-28',
+      source: 'email',
+      receivedAt: '2026-10-28T09:58:00.000Z',
+    });
+    await runInbox([yes('early', '5,57,006.53', '2026-10-28T07:28:00.000Z')], io, cfg);
+    expect(applied).toHaveLength(0);
+    expect(rows[0]).toMatchObject({ outcome: 'ignored' });
+  });
+
+  it('a value of the same day you typed or imported is never replaced by an alert', async () => {
+    const { io, applied } = keeping({ amount: 1000, asOf: '2026-10-28', source: 'manual' });
+    await runInbox([yes('late', '0.53', '2026-10-28T09:58:00.000Z')], io, cfg);
+    expect(applied).toHaveLength(0);
+  });
+
+  it('orders forwards by the original time in their header, in the Gmail time zone from Settings', async () => {
+    const { io, applied } = keeping({ amount: 5000, asOf: '2026-10-20', source: 'email' });
+    const fwd = (id: string, balance: string, time: string, forwardedAt: string): InboxMessage => ({
+      ...yes(id, balance, forwardedAt),
+      from: 'Me <me@example.com>',
+      subject: 'Fwd: RTGS Alert',
+      text: `---------- Forwarded message ---------\nFrom: <alerts@yes.bank.in>\nDate: Wed, 28 Oct, 2026, ${time}\nSubject: RTGS Alert\n\n${yes(id, balance, '').text}`,
+    });
+    // forwarded in the wrong order: the debit first, the credit an hour later
+    await runInbox(
+      [
+        fwd('debit', '0.53', '17:43', '2026-10-28T10:00:00.000Z'),
+        fwd('credit', '5,57,006.53', '15:28', '2026-10-28T11:00:00.000Z'),
+      ],
+      io,
+      { ...cfg, trustedForwarders: ['me@example.com'], forwardUtcOffsetHours: 8 },
+    );
+    expect(applied.map((a) => a.reading.amount)).toEqual([557006.53, 0.53]);
+    expect(applied[1]!.receivedAt).toBe('2026-10-28T09:43:00.000Z');
+  });
+});

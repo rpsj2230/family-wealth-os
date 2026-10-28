@@ -36,6 +36,8 @@ export interface InboxMessage {
   subject: string;
   text: string;
   receivedOn: string; // YYYY-MM-DD
+  /** when the email arrived (ISO); for a forward, the original's time is read from the forward header instead */
+  receivedAt?: string | null;
   attachments: { filename: string; content: Uint8Array }[];
   /**
    * You asked for this one to be read again: it is read even if it was seen before, the AI looks at it whether or not it mentions a
@@ -60,9 +62,13 @@ export interface InboxRow {
 export interface InboxIo {
   accounts(): Promise<KnownAccount[]>;
   /** the value now on record: its amount, its date and where it came from (email, statement, workbook, manual, ...) */
-  latestObservation(
-    assetId: string,
-  ): Promise<{ amount: number; asOf: string; source?: string | null } | null>;
+  latestObservation(assetId: string): Promise<{
+    amount: number;
+    asOf: string;
+    source?: string | null;
+    /** when the email or file behind it arrived (ISO), when known */
+    receivedAt?: string | null;
+  } | null>;
   alreadySeen(messageId: string): Promise<boolean>;
   record(row: InboxRow): Promise<void>;
   apply(args: {
@@ -72,6 +78,10 @@ export interface InboxIo {
     source: 'email' | 'statement';
     /** you asked for this reading, and a value you typed or imported has a later date: the reading replaces it and becomes the current balance */
     replaceNewer?: boolean;
+    /** when the email arrived (ISO), kept with the value so two alerts of one day can be told apart */
+    receivedAt?: string | null;
+    /** a later alert of the same day: the earlier same-day value from an email stops counting (it stays in the history, as replaced) */
+    replaceSameDay?: boolean;
   }): Promise<void>;
   /** Imports a fund statement (CAS) attached to the message; absent when this run cannot do it. */
   casImport?(
@@ -107,6 +117,8 @@ export async function runInbox(
      * recognised by the original sender written inside it. A message from any other address is judged by its own sender.
      */
     trustedForwarders?: string[];
+    /** Settings: the time zone, in hours from UTC, that a forward header's Date line is written in */
+    forwardUtcOffsetHours?: number;
   },
 ): Promise<InboxReport> {
   const report: InboxReport = {
@@ -145,7 +157,19 @@ export async function runInbox(
     }));
   };
 
-  for (const m of messages) {
+  // oldest first, so of two alerts of one day the later one is applied last and is the balance that counts
+  const own0 = (cfg.trustedForwarders ?? []).map((a) => a.toLowerCase());
+  const timeOf = (m: InboxMessage): string | null => {
+    const fw0 = own0.includes(senderAddress(m.from))
+      ? unwrapForward(m.subject, m.text, cfg.forwardUtcOffsetHours ?? 0)
+      : null;
+    return (fw0?.found ? fw0.originalAt : null) ?? m.receivedAt ?? null;
+  };
+  const ordered = messages
+    .map((m, i) => ({ m, i, at: timeOf(m) }))
+    .sort((a, b) => (a.at ?? '').localeCompare(b.at ?? '') || a.i - b.i);
+
+  for (const { m, at } of ordered) {
     report.seen++;
     try {
       if (!m.reread && (await io.alreadySeen(m.messageId))) {
@@ -153,8 +177,9 @@ export async function runInbox(
         continue;
       }
       // a forward from one of your own mailboxes: judge the bank by the original sender inside it
-      const own = (cfg.trustedForwarders ?? []).map((a) => a.toLowerCase());
-      const fw = own.includes(senderAddress(m.from)) ? unwrapForward(m.subject, m.text) : null;
+      const fw = own0.includes(senderAddress(m.from))
+        ? unwrapForward(m.subject, m.text, cfg.forwardUtcOffsetHours ?? 0)
+        : null;
       const from = fw?.found && fw.originalFrom ? fw.originalFrom : m.from;
       const domain = senderDomain(from);
       const base = {
@@ -314,7 +339,20 @@ ${m.text}`,
         const latest = await io.latestObservation(match.assetId);
         // a value from the bank that is newer is never replaced; a value you typed or imported that is newer is replaced when you asked for this reading
         const newerFromBank = !!latest && BANK_SOURCES.has(latest.source ?? '');
-        if (latest && (m.reread ? r.asOf < latest.asOf && newerFromBank : r.asOf <= latest.asOf)) {
+        // two alerts of one day: the later email is the balance at the end of it. A value of that day that came from an email is
+        // replaced by a later one; one you typed, imported or took from a statement is not.
+        const sameDayLater =
+          !!latest &&
+          r.asOf === latest.asOf &&
+          latest.source === 'email' &&
+          !!at &&
+          (!latest.receivedAt || at > latest.receivedAt);
+        if (
+          latest &&
+          (m.reread
+            ? r.asOf < latest.asOf && newerFromBank
+            : r.asOf < latest.asOf || (r.asOf === latest.asOf && !sameDayLater))
+        ) {
           await log({
             outcome: 'ignored',
             reason: `not newer than the value on record (${latest.asOf})`,
@@ -350,6 +388,10 @@ ${m.text}`,
           messageId: m.messageId,
           source,
           ...(m.reread && latest && r.asOf < latest.asOf ? { replaceNewer: true } : {}),
+          receivedAt: at,
+          ...(latest && r.asOf === latest.asOf && latest.source === 'email'
+            ? { replaceSameDay: true }
+            : {}),
         });
         await log({ outcome: 'applied', reason: null, reading: r, assetId: match.assetId });
       }
