@@ -188,6 +188,12 @@ export function classifyContext(
   remittances: StoredRemittance[] = [],
 ): ClassifyContext {
   const owner = new Map(loaded.assetRows.map((a) => [a.id, a.owner_id]));
+  const bankOf = new Map(
+    loaded.assetRows.map((a) => [
+      a.id,
+      a.institution_id ? (loaded.institutionName?.get(a.institution_id) ?? null) : null,
+    ]),
+  );
   const fundTxns: ClassifyContext['fundTxns'] = [];
   for (const [assetId, rows] of loaded.engine?.fundLines ?? new Map()) {
     const ownerId = owner.get(assetId);
@@ -224,6 +230,7 @@ export function classifyContext(
     deposits: loaded.fdRows.map((f) => ({
       assetId: f.asset_id,
       ownerId: owner.get(f.asset_id) ?? '',
+      bank: bankOf.get(f.asset_id) ?? null,
       principal: Number(f.principal),
       bookedOn: f.booked_on,
       maturityOn: f.maturity_on,

@@ -207,3 +207,32 @@ describe('the movements the lines make', () => {
     expect(Date.now() - t).toBeLessThan(3000);
   });
 });
+
+describe('deposits by amount', () => {
+  const dep = (assetId: string, ownerId: string, bank: string) => ({
+    assetId,
+    ownerId,
+    bank,
+    principal: 250_000,
+    bookedOn: '2024-05-02',
+    maturityOn: '2025-05-02',
+    endedOn: null,
+    maturityAmount: null,
+  });
+  const at = (deposits: ClassifyContext['deposits']) =>
+    classifyLines([line('a', '2024-05-02', -250_000, 'TRANSFER TO 9999')], {
+      ...ctx,
+      accounts: [{ assetId: 'a', ownerId: 'r', last4: '1111', bank: 'Sample Bank Ltd' }],
+      deposits,
+    })[0]!;
+
+  it('never takes another person’s deposit at another bank as booked from this account', () => {
+    expect(at([dep('other', 'g', 'Other Bank')]).counterpart ?? null).toBeNull();
+  });
+  it('prefers the account holder’s own deposit, and allows a child’s at the same bank', () => {
+    expect(at([dep('child', 'k', 'Sample Bank'), dep('own', 'r', 'Sample Bank')]).counterpart).toBe(
+      'own',
+    );
+    expect(at([dep('child', 'k', 'Sample Bank')]).counterpart).toBe('child');
+  });
+});

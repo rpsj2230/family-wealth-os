@@ -65,6 +65,8 @@ export interface ClassifyContext {
   deposits: {
     assetId: string;
     ownerId: string;
+    /** the bank the deposit is with, when known: a deposit is booked from, and paid back to, an account at the same bank */
+    bank?: string | null;
     principal: number;
     bookedOn: string;
     maturityOn: string;
@@ -296,11 +298,21 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
 
   // 6. deposits booked from the account, and paid back into it
   const usedFd = new Set<string>();
+  const acct = new Map(ctx.accounts.map((a) => [a.assetId, a]));
   for (const l of sorted) {
     if (!open(l)) continue;
     const amt = Math.abs(l.amount);
-    const fd = ctx.deposits.find((d) => {
+    const a = acct.get(l.assetId);
+    const here = a?.bank ? bankWord(a.bank) : '';
+    // the account holder's own deposits first; another person's only at the same bank (a child's deposit booked from a parent's account)
+    const order = [...ctx.deposits].sort(
+      (x, y) => Number(x.ownerId !== a?.ownerId) - Number(y.ownerId !== a?.ownerId),
+    );
+    const fd = order.find((d) => {
       if (usedFd.has(`${d.assetId}|${l.amount > 0 ? 'in' : 'out'}`)) return false;
+      const there = d.bank ? bankWord(d.bank) : '';
+      if (here && there && here !== there) return false;
+      if (a && d.ownerId !== a.ownerId && !(here && here === there)) return false;
       if (l.amount < 0)
         return near(d.principal, amt) && daysApart(d.bookedOn, l.date) <= ctx.pairDays;
       const end = d.endedOn ?? d.maturityOn;
