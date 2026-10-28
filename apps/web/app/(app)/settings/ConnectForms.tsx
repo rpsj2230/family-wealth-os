@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { syncBank, type BankSyncResult } from '../rates/sync/actions';
 import {
   addRateSource,
   checkRatePage,
@@ -111,10 +113,16 @@ export function RateSourceForm() {
   );
 }
 
-/** Tests one bank's rate page now (page read, AI reading) and shows each step; nothing is saved. */
+/**
+ * Tests one bank's rate page now (page read, AI reading) and shows each step; the test saves nothing. When it finds rates, Sync now
+ * reads the bank again and saves them, the same way the monthly job does, and the date beside the bank moves to today.
+ */
 export function RateCheckButton({ id, bank }: { id: string; bank: string }) {
+  const router = useRouter();
   const [res, setRes] = useState<RateCheck | null>(null);
+  const [synced, setSynced] = useState<BankSyncResult | null>(null);
   const [pending, start] = useTransition();
+  const [syncing, startSync] = useTransition();
   return (
     <div className="ratecheck">
       <button
@@ -125,6 +133,7 @@ export function RateCheckButton({ id, bank }: { id: string; bank: string }) {
         onClick={() =>
           start(async () => {
             setRes(null);
+            setSynced(null);
             setRes(await checkRatePage(id));
           })
         }
@@ -147,6 +156,33 @@ export function RateCheckButton({ id, bank }: { id: string; bank: string }) {
               ))}
             </ul>
           </details>
+        )}
+        {res?.ok && !synced && (
+          <p className="small">
+            This was a test: nothing is saved yet.{' '}
+            <button
+              type="button"
+              className="btn compact primary"
+              disabled={syncing}
+              aria-label={`Sync ${bank} now and save its rates`}
+              onClick={() =>
+                startSync(async () => {
+                  setSynced(await syncBank(bank));
+                  router.refresh();
+                })
+              }
+            >
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </p>
+        )}
+        {synced && (
+          <p
+            className={`small ${synced.status === 'synced' || synced.status === 'unchanged' ? 'ok' : 'fail'}`}
+          >
+            {synced.status === 'synced' || synced.status === 'unchanged' ? '✓ ' : '✗ '}
+            {synced.message}
+          </p>
         )}
       </div>
     </div>
