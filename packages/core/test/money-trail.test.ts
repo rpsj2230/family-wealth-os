@@ -90,4 +90,47 @@ describe('the money trail', () => {
     expect(a.crossings).toEqual([]);
     expect(t.has('SGJ')).toBe(false);
   });
+
+  describe('ownership and clubbing', () => {
+    // Asha sends Vikram 200,000; Vikram's account earns 3,000 interest on 400,000; he buys a fund with 100,000 and sells it for 120,000
+    const run = (ownershipFrom: string) =>
+      moneyTrail({
+        lines: [
+          ln('V', '2024-01-01', 200_000, 'interest'), // invented: his own money, read as interest for simplicity
+          ln('A', '2024-02-01', -200_000, 'own_transfer', 'V'),
+          ln('V', '2024-02-01', 200_000, 'own_transfer', 'A'),
+          ln('V', '2024-03-31', 3_000, 'interest'),
+          ln('V', '2024-04-02', -100_000, 'fund_buy', 'F'),
+          ln('V', '2025-04-02', 120_000, 'fund_sell', 'F'),
+        ],
+        assets: [...assets, { id: 'F', ownerId: 'vikram', kind: 'fund' }],
+        openings: new Map(),
+        ownershipFrom,
+      });
+
+    it('before the day ownership counts from, money that changes hands is the receiver’s', () => {
+      const t = run('2026-10-28');
+      const v = t.get('V')!;
+      expect(v.crossings).toHaveLength(1);
+      expect(v.clubbed).toEqual([]);
+      expect(v.parts.every((p) => p.person === 'vikram')).toBe(true);
+    });
+
+    it('from that day, the giver keeps the money and the income on it counts in her hands', () => {
+      const t = run('2024-01-01');
+      const v = t.get('V')!;
+      // half of Vikram's 400,000 was Asha's when the interest was paid
+      expect(v.clubbed).toEqual([
+        expect.objectContaining({ kind: 'interest', person: 'asha', holder: 'vikram' }),
+      ]);
+      expect(v.clubbed[0]!.amount).toBeCloseTo(1_500, 2);
+      // the fund was bought with the account's mix, so about half of its sale was made from Asha's money
+      const f = t.get('F')!;
+      expect(f.clubbed[0]).toMatchObject({ kind: 'fund_sale', person: 'asha', of: 120_000 });
+      expect(f.clubbed[0]!.amount).toBeCloseTo((120_000 * 200_000) / 403_000, 0);
+      // what the sale brought above the money that bought it is the fund's gain
+      const back = v.hops.find((h) => h.cls === 'fund_sell')!;
+      expect(back.parts.find((p) => p.kind === 'fund_gain')!.amount).toBeCloseTo(20_000, 2);
+    });
+  });
 });

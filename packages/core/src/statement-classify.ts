@@ -74,7 +74,14 @@ export interface ClassifyContext {
     maturityAmount: number | null;
   }[];
   /** the purchases and sales in your fund statements (CAS), in rupees */
-  fundTxns: { ownerId: string; date: string; amount: number; side: 'buy' | 'sell' }[];
+  fundTxns: {
+    ownerId: string;
+    /** the fund, so the money that bought it can be followed */
+    assetId?: string;
+    date: string;
+    amount: number;
+    side: 'buy' | 'sell';
+  }[];
   rentWords: string[];
   remittanceWords: string[];
   reviewAbove: number;
@@ -353,8 +360,9 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     });
     if (i === undefined) continue;
     usedFund.add(i);
-    if (l.amount < 0) set(l, 'fund_buy', 'A fund purchase of this amount is in your CAS');
-    else set(l, 'fund_sell', 'A fund sale of this amount is in your CAS');
+    const fund = ctx.fundTxns[i]!.assetId ?? null;
+    if (l.amount < 0) set(l, 'fund_buy', 'A fund purchase of this amount is in your CAS', fund);
+    else set(l, 'fund_sell', 'A fund sale of this amount is in your CAS', fund);
   }
 
   // 8. deposits and funds from the wording alone

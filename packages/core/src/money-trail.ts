@@ -14,8 +14,10 @@
  *  - Money from or to an account with no statement on file is a part of its own ("from Ragini's AU account, not traced further").
  *
  * Whose money: Singapore money is the person's whose Indian account first received it; interest, the account holder's; money already
- * in an account before its first statement, the holder's. A part keeps its person when it moves to someone else's account, which is
- * what clubbing looks at.
+ * in an account before its first statement, the holder's. Money that moved to someone else's account before the day ownership is
+ * counted from (Settings) becomes theirs when it arrives, as agreed: what each of you held then is yours. From that day, a part keeps
+ * the giver as its person wherever it goes, and the income it earns in the other person's hands (savings and deposit interest, fund
+ * sales) is listed for clubbing.
  *
  * Pure: no I/O.
  */
@@ -30,6 +32,7 @@ export type OriginKind =
   | 'rent'
   | 'untraced_account'
   | 'untraced_deposit'
+  | 'fund_gain'
   | 'unexplained';
 
 export interface MoneyOrigin {
@@ -57,8 +60,8 @@ export interface TrailLine {
 export interface TrailAsset {
   id: string;
   ownerId: string;
-  /** a deposit (its make-up is the money that booked it) or an account */
-  kind: 'account' | 'deposit';
+  /** a deposit or a fund (its make-up is the money that bought it) or an account */
+  kind: 'account' | 'deposit' | 'fund';
   principal?: number;
   /** an account abroad (the Singapore accounts): money from it is money from Singapore, whoever's name the account is in */
   abroad?: boolean;
@@ -93,6 +96,26 @@ export interface Trail {
     toPerson: string;
     assetId: string;
   }[];
+  /**
+   * Income earned in this holding on someone else's money, counted from the day ownership is: the income is the holder's in law but
+   * counts in the giver's hands for clubbing. For a fund sale, the share of the sale made from the giver's money (the gain on that
+   * share is theirs).
+   */
+  clubbed: Clubbed[];
+}
+
+export interface Clubbed {
+  date: string;
+  kind: 'interest' | 'deposit_interest' | 'fund_sale';
+  /** the income, or the share of the sale, that is the giver's */
+  amount: number;
+  /** the whole income or sale it is a share of */
+  of: number;
+  /** whose money earned it (the giver) */
+  person: string;
+  /** whose name the holding is in */
+  holder: string;
+  assetId: string;
 }
 
 type Pool = Map<string, Part>;
@@ -127,16 +150,53 @@ export function moneyTrail(args: {
   assets: TrailAsset[];
   /** each account's balance before its first statement line */
   openings: Map<string, number>;
+  /** the day ownership is counted from (yyyy-mm-dd); before it, money that changes hands becomes the receiver's. '' = not yet */
+  ownershipFrom?: string;
 }): Map<string, Trail> {
+  const from0 = args.ownershipFrom ?? '';
+  const counted = (date: string) => from0 !== '' && date >= from0;
   // the Singapore accounts are where the money starts, not holdings it passes through: DBS is joint, so it is nobody's crossing
   const owner = new Map(args.assets.filter((a) => !a.abroad).map((a) => [a.id, a.ownerId]));
-  const isDeposit = new Set(args.assets.filter((a) => a.kind === 'deposit').map((a) => a.id));
+  // deposits and funds: holdings made of the money that bought them
+  const isDeposit = new Set(args.assets.filter((a) => a.kind !== 'account').map((a) => a.id));
+  const isFund = new Set(args.assets.filter((a) => a.kind === 'fund').map((a) => a.id));
   const abroad = new Set(args.assets.filter((a) => a.abroad).map((a) => a.id));
   const withLines = new Set(args.lines.filter((l) => !abroad.has(l.assetId)).map((l) => l.assetId));
   const pools = new Map<string, Pool>();
   const trails = new Map<string, Trail>();
   const trail = (id: string) =>
-    trails.get(id) ?? trails.set(id, { assetId: id, parts: [], hops: [], crossings: [] }).get(id)!;
+    trails.get(id) ??
+    trails.set(id, { assetId: id, parts: [], hops: [], crossings: [], clubbed: [] }).get(id)!;
+  /** the income `amount` earned on a pool, by the people other than the holder whose money is in it */
+  const club = (
+    t: Trail,
+    p: Pool,
+    holder: string,
+    date: string,
+    kind: Clubbed['kind'],
+    amount: number,
+  ) => {
+    const all = total(p);
+    if (!counted(date) || all <= 0.005 || amount <= 0.005) return;
+    const by = new Map<string, number>();
+    for (const part of p.values())
+      if (part.person && part.person !== holder)
+        by.set(part.person, (by.get(part.person) ?? 0) + part.amount);
+    for (const [person, v] of by)
+      if (v > 0.005)
+        t.clubbed.push({
+          date,
+          kind,
+          amount: (amount * v) / all,
+          of: amount,
+          person,
+          holder,
+          assetId: t.assetId,
+        });
+  };
+  /** money that changed hands before ownership is counted becomes the receiver's */
+  const settle = (parts: Part[], date: string, to: string) =>
+    counted(date) ? parts : parts.map((x) => ({ ...x, person: to }));
   const pool = (id: string) => pools.get(id) ?? pools.set(id, new Map()).get(id)!;
   // money in flight between two accounts with statements: the debit's make-up waits for its credit
   const inFlight = new Map<string, Part[][]>();
@@ -159,8 +219,10 @@ export function moneyTrail(args: {
       const parts = take(p, -l.amount, holder);
       const to = l.counterpart;
       if (to && isDeposit.has(to)) {
-        // a deposit booked: it is made of this money
-        for (const part of parts) add(pool(to), part);
+        // a deposit booked, or a fund bought: it is made of this money
+        const depOwner = owner.get(to) ?? holder;
+        const booked = depOwner !== holder ? settle(parts, l.date, depOwner) : parts;
+        for (const part of booked) add(pool(to), part);
         const t = trail(to);
         t.hops.unshift({
           date: l.date,
@@ -168,9 +230,8 @@ export function moneyTrail(args: {
           from: l.assetId,
           cls: l.cls,
           narration: l.narration,
-          parts,
+          parts: booked,
         });
-        const depOwner = owner.get(to) ?? holder;
         if (depOwner !== holder)
           t.crossings.push({
             date: l.date,
@@ -193,25 +254,58 @@ export function moneyTrail(args: {
     const from = l.counterpart;
     const flying = from ? inFlight.get(flightKey(from, l.assetId, l.amount)) : undefined;
     if (flying && flying.length) parts = flying.shift()!;
-    else if (from && isDeposit.has(from) && (l.cls === 'fd_proceeds' || l.cls === 'own_transfer')) {
+    else if (from && isFund.has(from) && l.cls === 'fund_sell') {
+      // a fund sold: the money that bought it comes back in its make-up; what the sale brings above that is the fund's gain
+      const fund = pool(from);
+      const fundOwner = owner.get(from) ?? holder;
+      club(trail(from), fund, fundOwner, l.date, 'fund_sale', l.amount);
+      const principal = Math.min(total(fund), l.amount);
+      parts = principal > 0 ? take(fund, principal, fundOwner) : [];
+      if (l.amount - principal > 0.005)
+        parts.push({ kind: 'fund_gain', person: fundOwner, amount: l.amount - principal });
+    } else if (
+      from &&
+      isDeposit.has(from) &&
+      (l.cls === 'fd_proceeds' || l.cls === 'own_transfer')
+    ) {
       // a deposit paid back: its own make-up for the principal, the rest its interest
       const dep = pool(from);
+      const depOwner = owner.get(from) ?? holder;
       const principal = Math.min(total(dep), l.amount);
-      parts = principal > 0 ? take(dep, principal, owner.get(from) ?? holder) : [];
       if (l.amount - principal > 0.005)
-        parts.push({
-          kind: 'deposit_interest',
-          person: owner.get(from) ?? holder,
-          amount: l.amount - principal,
-        });
+        club(trail(from), dep, depOwner, l.date, 'deposit_interest', l.amount - principal);
+      parts = principal > 0 ? take(dep, principal, depOwner) : [];
+      if (l.amount - principal > 0.005)
+        parts.push({ kind: 'deposit_interest', person: depOwner, amount: l.amount - principal });
     } else if (!from && l.cls === 'fd_proceeds' && total(pool(`held:${l.assetId}`)) > 0.005) {
       // a deposit not on file paid back here: the money that booked deposits from this account, the rest its interest
       const held = pool(`held:${l.assetId}`);
       const principal = Math.min(total(held), l.amount);
+      if (l.amount - principal > 0.005)
+        club(trail(l.assetId), held, holder, l.date, 'deposit_interest', l.amount - principal);
       parts = take(held, principal, holder);
       if (l.amount - principal > 0.005)
         parts.push({ kind: 'deposit_interest', person: holder, amount: l.amount - principal });
-    } else parts = [originOf(l, holder, owner)];
+    } else {
+      parts = [originOf(l, holder, owner)];
+      // savings or deposit interest credited here: the share earned on someone else's money is theirs for clubbing
+      if (l.cls === 'interest' || l.cls === 'fd_interest')
+        club(
+          trail(l.assetId),
+          l.cls === 'fd_interest' && total(pool(`held:${l.assetId}`)) > 0.005
+            ? pool(`held:${l.assetId}`)
+            : p,
+          holder,
+          l.date,
+          l.cls === 'interest' ? 'interest' : 'deposit_interest',
+          l.amount,
+        );
+    }
+    // money from someone else's account (on file, or named in the narration): it changed hands here
+    const fromPerson =
+      from && owner.has(from) ? owner.get(from)! : l.cls === 'own_transfer' ? l.person : undefined;
+    const crossed = !!fromPerson && fromPerson !== holder && !(from && isDeposit.has(from));
+    if (crossed) parts = settle(parts, l.date, holder);
     for (const part of parts) add(p, part);
     const t = trail(l.assetId);
     t.hops.unshift({
@@ -222,14 +316,11 @@ export function moneyTrail(args: {
       narration: l.narration,
       parts,
     });
-    // money from someone else's account (on file, or named in the narration): it changed hands here
-    const fromPerson =
-      from && owner.has(from) ? owner.get(from)! : l.cls === 'own_transfer' ? l.person : undefined;
-    if (fromPerson && fromPerson !== holder && !(from && isDeposit.has(from)))
+    if (crossed)
       t.crossings.push({
         date: l.date,
         amount: l.amount,
-        fromPerson,
+        fromPerson: fromPerson!,
         toPerson: holder,
         assetId: l.assetId,
       });
@@ -237,14 +328,15 @@ export function moneyTrail(args: {
   for (const [id, p] of pools) {
     if (id.startsWith('held:')) continue;
     const t = trail(id);
-    // an account: what it holds now; a deposit: the money that booked it
-    const from: Part[] = isDeposit.has(id)
-      ? (() => {
-          const booked: Pool = new Map();
-          for (const h of t.hops) for (const part of h.parts) add(booked, part);
-          return [...booked.values()];
-        })()
-      : [...p.values()];
+    // an account or a fund: what it holds now; a deposit: the money that booked it
+    const from: Part[] =
+      isDeposit.has(id) && !isFund.has(id)
+        ? (() => {
+            const booked: Pool = new Map();
+            for (const h of t.hops) for (const part of h.parts) add(booked, part);
+            return [...booked.values()];
+          })()
+        : [...p.values()];
     t.parts = from.filter((x) => x.amount > 0.5).sort((a, b) => b.amount - a.amount);
   }
   return trails;
@@ -309,5 +401,6 @@ export const ORIGIN_LABEL: Record<OriginKind, string> = {
   rent: 'Rent and other earnings',
   untraced_account: 'From an account with no statement on file',
   untraced_deposit: 'From a deposit not on file',
+  fund_gain: 'Gain on a fund sold',
   unexplained: 'Not explained by the statements',
 };

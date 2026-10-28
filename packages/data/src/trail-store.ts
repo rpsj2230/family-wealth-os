@@ -15,7 +15,12 @@ import { classifyContext, loadStatements, stmtLinesOf } from './statement-store'
 export interface MoneyTrailData {
   trails: Map<string, Trail>;
   /** each holding's owner and whether it has statements (its trail is complete) or only transfers from Singapore */
-  holdings: { id: string; ownerId: string; kind: 'account' | 'deposit'; statements: boolean }[];
+  holdings: {
+    id: string;
+    ownerId: string;
+    kind: 'account' | 'deposit' | 'fund';
+    statements: boolean;
+  }[];
   remittances: { count: number; amount: number; proven: number; placed: number };
   ownershipFrom: string;
 }
@@ -71,15 +76,25 @@ export async function loadMoneyTrail(
     if (!openings.has(s.asset_id) && s.opening !== null)
       openings.set(s.asset_id, Number(s.opening));
 
+  const kindOf = {
+    bank_account: 'account',
+    fixed_deposit: 'deposit',
+    mutual_fund: 'fund',
+  } as const;
   const assets: TrailAsset[] = loaded.assetRows
-    .filter((a) => a.type === 'bank_account' || a.type === 'fixed_deposit')
+    .filter((a) => a.type in kindOf)
     .map((a) => ({
       id: a.id,
       ownerId: a.owner_id,
-      kind: a.type === 'fixed_deposit' ? ('deposit' as const) : ('account' as const),
+      kind: kindOf[a.type as keyof typeof kindOf],
       ...(a.type === 'bank_account' && a.currency !== 'INR' ? { abroad: true } : {}),
     }));
-  const trails = moneyTrail({ lines: tl, assets, openings });
+  const trails = moneyTrail({
+    lines: tl,
+    assets,
+    openings,
+    ownershipFrom: config.capital.ownershipFrom,
+  });
   const holdings = assets
     .filter((a) => !a.abroad && trails.has(a.id))
     .map(({ id, ownerId, kind }) => ({ id, ownerId, kind, statements: withLines.has(id) }));

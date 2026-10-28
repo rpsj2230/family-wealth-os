@@ -61,6 +61,7 @@ export default async function DemoTrail({
     ln(b.assetId, d(4, 5), 600_000, 'own_transfer', a.assetId, 'Transfer from the first account'),
     ln(b.assetId, d(4, 8), -500_000, 'fd_funding', dep.assetId, 'Deposit booked'),
     ln(a.assetId, d(6, 30), 4_000, 'interest', null, 'Interest'),
+    ln(b.assetId, d(6, 30), 1_500, 'interest', null, 'Interest'),
   ];
   const trails = moneyTrail({
     lines,
@@ -70,6 +71,7 @@ export default async function DemoTrail({
       { id: dep.assetId, ownerId: dep.ownerId, kind: 'deposit' },
     ],
     openings: new Map([[b.assetId, 50_000]]),
+    ownershipFrom: d(4, 1),
   });
   const bankNames: Record<string, string> = demoModel().institutionNames;
   const labels = holdingLabels(

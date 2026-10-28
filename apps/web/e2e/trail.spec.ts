@@ -12,6 +12,8 @@ test.describe('Money trail (public sample)', () => {
     await expect(one).toContainText('From Singapore (Wise or DBS)');
     await expect(page.getByTestId('tr-years')).toBeVisible();
     await expect(page.getByTestId('tr-since')).toBeVisible();
+    // the interest earned on money given by the other person counts in the giver's hands
+    await expect(page.getByTestId('tr-club')).toContainText('Savings interest');
     // every holding can be opened
     const links = page.getByTestId('tr-holdings').getByRole('link');
     await expect(links).toHaveCount(3);

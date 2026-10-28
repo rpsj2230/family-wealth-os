@@ -208,7 +208,7 @@ export function classifyContext(
           : kind === 'redeem' || kind === 'dividend_payout'
             ? 'sell'
             : null;
-      if (side) fundTxns.push({ ownerId, date: String(r.txn_on), amount, side });
+      if (side) fundTxns.push({ ownerId, assetId, date: String(r.txn_on), amount, side });
     }
   }
   return {

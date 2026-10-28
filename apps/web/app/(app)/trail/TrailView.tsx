@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  type Clubbed,
   formatInr,
   formatInrCompact,
   formatPct,
@@ -13,10 +14,21 @@ import './trail.css';
 
 export interface TrailViewData {
   trails: Map<string, Trail>;
-  holdings: { id: string; ownerId: string; kind: 'account' | 'deposit'; statements: boolean }[];
+  holdings: {
+    id: string;
+    ownerId: string;
+    kind: 'account' | 'deposit' | 'fund';
+    statements: boolean;
+  }[];
   remittances: { count: number; amount: number; proven: number; placed: number };
   ownershipFrom: string;
 }
+
+const CLUB_LABEL: Record<Clubbed['kind'], string> = {
+  interest: 'Savings interest',
+  deposit_interest: 'Deposit interest',
+  fund_sale: 'Fund sales made from their money',
+};
 
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
 const fyOf = (date: string) => {
@@ -101,6 +113,15 @@ export function TrailView({
         .filter((c) => c.date >= data.ownershipFrom)
         .sort((a, b) => b.date.localeCompare(a.date))
     : [];
+  // income earned on the other person's money, by year and by whose income it counts as
+  const clubbed = [...trails.values()].flatMap((x) => x.clubbed);
+  const clubRows = new Map<string, Record<Clubbed['kind'], number>>();
+  for (const c of clubbed) {
+    const k = `${fyOf(c.date)}|${c.person}|${c.holder}`;
+    const r = clubRows.get(k) ?? { interest: 0, deposit_interest: 0, fund_sale: 0 };
+    r[c.kind] += c.amount;
+    clubRows.set(k, r);
+  }
   const sorted = [...holdings].sort((a, b) =>
     (labels[a.id] ?? '').localeCompare(labels[b.id] ?? ''),
   );
@@ -139,9 +160,11 @@ export function TrailView({
                 ·{' '}
                 {h.kind === 'deposit'
                   ? 'deposit'
-                  : h.statements
-                    ? 'statements on file'
-                    : 'transfers only'}
+                  : h.kind === 'fund'
+                    ? 'fund'
+                    : h.statements
+                      ? 'statements on file'
+                      : 'transfers only'}
               </span>
             </li>
           ))}
@@ -152,9 +175,13 @@ export function TrailView({
         <section className="card" aria-labelledby="tr-one" data-testid="tr-one">
           <h2 id="tr-one">{labels[t.assetId] ?? 'This holding'}</h2>
           <p className="muted small">
-            {holdings.find((h) => h.id === t.assetId)?.kind === 'deposit'
-              ? 'What the money that booked it was made of.'
-              : 'What its balance is made of today.'}
+            {
+              {
+                deposit: 'What the money that booked it was made of.',
+                fund: 'What the money that bought it is made of, less what its sales took back.',
+                account: 'What its balance is made of today.',
+              }[holdings.find((h) => h.id === t.assetId)?.kind ?? 'account']
+            }
           </p>
           <Makeup parts={t.parts} labels={labels} names={names} />
           <h3 className="tr-h3">Money in, newest first</h3>
@@ -270,6 +297,65 @@ export function TrailView({
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="tr-c">
+        <h2 id="tr-c">Income to count in the giver’s hands (clubbing)</h2>
+        <p className="muted small">
+          Interest earned, and fund sales made, on money one of you gave the other since{' '}
+          {data.ownershipFrom ? niceDate(data.ownershipFrom) : 'the day set in Settings'}. The
+          income is in the receiver’s name but counts in the giver’s income for tax. For a fund sale
+          the figure is the share of the sale made from the giver’s money; the gain on that share is
+          theirs.
+        </p>
+        {!data.ownershipFrom ? (
+          <p className="small">
+            Nothing is counted until the day is set in{' '}
+            <Link href={sample ? '/demo/settings#estimates' : '/settings#estimates'}>Settings</Link>
+            .
+          </p>
+        ) : clubRows.size === 0 ? (
+          <p className="small" data-testid="tr-club">
+            No income has been earned on the other person’s money since then.
+          </p>
+        ) : (
+          <div className="tr-scroll">
+            <table className="table small" data-testid="tr-club">
+              <thead>
+                <tr>
+                  <th scope="col">Year</th>
+                  <th scope="col">Counts as whose income</th>
+                  {(Object.keys(CLUB_LABEL) as Clubbed['kind'][]).map((k) => (
+                    <th key={k} scope="col" className="num">
+                      {CLUB_LABEL[k]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...clubRows]
+                  .sort((a, b) => b[0].localeCompare(a[0]))
+                  .map(([k, r]) => {
+                    const [fy, person, holder] = k.split('|') as [string, string, string];
+                    return (
+                      <tr key={k}>
+                        <th scope="row">{fy}</th>
+                        <td>
+                          {names[person] ?? 'Someone'}{' '}
+                          <span className="muted">(in {names[holder] ?? 'someone'}’s name)</span>
+                        </td>
+                        {(Object.keys(CLUB_LABEL) as Clubbed['kind'][]).map((c) => (
+                          <td key={c} className="num">
+                            {r[c] > 0.5 ? formatInr(Math.round(r[c])) : '–'}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </>

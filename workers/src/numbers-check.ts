@@ -308,6 +308,10 @@ async function main() {
       }
     for (const [k, v] of [...where].sort((a, b) => b[1].amount - a[1].amount))
       console.log(`    ${k}: ${v.n}, ${lakh(v.amount)}`);
+    const clubbed = [...t.trails.values()].flatMap((x) => x.clubbed);
+    console.log(
+      `  Clubbing (since ${t.ownershipFrom || 'not set'}): ${clubbed.length} items, ${lakh(clubbed.reduce((s, c) => s + c.amount, 0))}`,
+    );
   }
 }
 
