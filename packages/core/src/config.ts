@@ -74,6 +74,17 @@ export interface AppConfig {
     /** two months this many months apart or less whose unexplained amounts cancel out are one transfer recorded in two months */
     reviewPairMonths: number;
   };
+  /** bank statements read line by line (statement-classify.ts) */
+  statements: {
+    /** words in a line's narration that mark rent from your tenant (their name, a standing reference): counted as earnings */
+    rentWords: string[];
+    /** words that mark money sent from abroad (a remittance from Singapore): counted as your own money coming in */
+    remittanceWords: string[];
+    /** a line no rule places is asked about when it is this many rupees or more; a smaller one counts as spending (out) or a small credit (in) */
+    reviewAbove: number;
+    /** days between a bank debit and the fund allotment the CAS shows (a SIP is debited a day or more before units are allotted) */
+    fundMatchDays: number;
+  };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
     trustedForwarders: string[];
@@ -329,6 +340,25 @@ export const DEFAULT_CONFIG: AppConfig = {
     transferPairDays: 3,
   },
   capital: { openingDate: '', reviewMinimum: 25_000, reviewPairMonths: 2 },
+  statements: {
+    rentWords: [],
+    remittanceWords: [
+      'inward remittance',
+      'inward remit',
+      'foreign inward',
+      'fira',
+      'swift',
+      'irm',
+      'wise',
+      'remitly',
+      'instarem',
+      'western union',
+      'singapore',
+      'sgd',
+    ],
+    reviewAbove: 10_000,
+    fundMatchDays: 5,
+  },
   inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
   rates: {
     staleDays: 45,
@@ -516,6 +546,17 @@ const isoDate = (v: unknown, d: string): string => {
   const t = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === v ? v : d;
 };
+/** A list of words or short phrases (lower case, trimmed, no repeats); a missing list keeps the default, an empty one stays empty. */
+const words = (v: unknown, d: string[]): string[] =>
+  Array.isArray(v)
+    ? [
+        ...new Set(
+          v
+            .map((x) => String(x).trim().toLowerCase().replace(/\s+/g, ' '))
+            .filter((x) => x.length >= 2 && x.length <= 60),
+        ),
+      ].slice(0, 60)
+    : d;
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
@@ -618,6 +659,14 @@ export function configFromJson(raw: unknown): AppConfig {
       reviewMinimum: num(obj(r.capital).reviewMinimum, d.capital.reviewMinimum, 0, 1e9),
       reviewPairMonths: Math.round(
         num(obj(r.capital).reviewPairMonths, d.capital.reviewPairMonths, 0, 12),
+      ),
+    },
+    statements: {
+      rentWords: words(obj(r.statements).rentWords, d.statements.rentWords),
+      remittanceWords: words(obj(r.statements).remittanceWords, d.statements.remittanceWords),
+      reviewAbove: num(obj(r.statements).reviewAbove, d.statements.reviewAbove, 0, 1e9),
+      fundMatchDays: Math.round(
+        num(obj(r.statements).fundMatchDays, d.statements.fundMatchDays, 0, 31),
       ),
     },
     inbox: {

@@ -1,0 +1,370 @@
+/**
+ * What each line of a bank statement was (Explain movements > Bank statements), so own money and lifetime profit can be worked out
+ * from what really happened rather than from the change in balances.
+ *
+ * The rules run in this order, and the first that fits decides:
+ *   1. your own answer for the line, when you gave one;
+ *   2. interest credited to the account, and the tax taken at source on it (the same day); a deposit's interest paid into the
+ *      account is the deposit's own earnings;
+ *   3. rent: a credit with one of the words in Settings (the tenant's name): earnings;
+ *   4. money sent from abroad: a credit with one of the remittance words in Settings: own money coming in;
+ *   5. a transfer between your own accounts: the same sum leaving one account and arriving in another within a few days;
+ *   6. a deposit booked from the account (the deposit's amount, on its booking day) or paid back into it (on its maturity or closing day);
+ *   7. a fund purchase or sale in your CAS: the same sum within a few days of the allotment;
+ *   8. the same, from the wording alone (a deposit, a fund house, a clearing house), when the other side is not on file;
+ *   9. a transfer naming another of your accounts by its last four digits;
+ *  10. bank charges;
+ *  11. anything else: below the limit in Settings a debit is spending and a credit a small amount coming in; above it, you are asked.
+ *
+ * Money moved between your own holdings changes nothing in the family's own money; money in from outside and money out are own money;
+ * interest, rent and earnings you name are profit. `statementMoves` turns the lines into the ledger's confirmed movements, one per
+ * account, month and kind, so ten years of lines stay a few hundred movements.
+ *
+ * Pure: no I/O.
+ */
+import { addDaysIso } from './harvest-lots';
+
+export type LineClass =
+  | 'interest'
+  | 'interest_tax'
+  | 'fd_interest'
+  | 'own_transfer'
+  | 'fd_funding'
+  | 'fd_proceeds'
+  | 'fund_buy'
+  | 'fund_sell'
+  | 'outside_in'
+  | 'rent'
+  | 'income'
+  | 'fee'
+  | 'tax'
+  | 'spent'
+  | 'ask_in'
+  | 'ask_out';
+
+/** What you can say a line was. */
+export type LineAnswer = 'outside' | 'own' | 'income' | 'rent' | 'out';
+
+export interface StmtLine {
+  id: string;
+  assetId: string;
+  ownerId: string;
+  date: string;
+  /** + money in, − money out */
+  amount: number;
+  narration: string;
+  answer?: LineAnswer | null;
+}
+
+export interface ClassifyContext {
+  accounts: { assetId: string; ownerId: string; last4: string | null }[];
+  deposits: {
+    assetId: string;
+    ownerId: string;
+    principal: number;
+    bookedOn: string;
+    maturityOn: string;
+    endedOn: string | null;
+    maturityAmount: number | null;
+  }[];
+  /** the purchases and sales in your fund statements (CAS), in rupees */
+  fundTxns: { ownerId: string; date: string; amount: number; side: 'buy' | 'sell' }[];
+  rentWords: string[];
+  remittanceWords: string[];
+  reviewAbove: number;
+  pairDays: number;
+  fundDays: number;
+}
+
+export interface Classified {
+  id: string;
+  cls: LineClass;
+  /** the other holding, when it is known: the paired account, the deposit */
+  counterpart: string | null;
+  reason: string;
+}
+
+const daysApart = (a: string, b: string) =>
+  Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000;
+const near = (a: number, b: number, tol = 1) => Math.abs(a - b) <= tol;
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** A whole word or phrase, any case, any spacing. */
+const hasWord = (text: string, words: string[]) =>
+  words.some((w) =>
+    new RegExp(`(^|[^a-z0-9])${escape(w).replace(/\s+/g, '\\s*')}($|[^a-z0-9])`, 'i').test(text),
+  );
+
+const INTEREST =
+  /\bint(?:erest)?\b\.?\s*(?:pd|paid|cr|credit|capitali[sz]ed|coll)?|\bint\.?pd\b|\binterest\b/i;
+const DEPOSIT_WORDS =
+  /\b(fd|td|tdr|stdr|term\s*dep(osit)?|fixed\s*dep(osit)?|recurring\s*dep(osit)?|rd)\b/i;
+const TDS = /\btds\b|tax\s*ded|withholding|\btax\b.*\bint/i;
+const FD_CLOSE = /matur|clos|liquid|premat|proceeds|redeem|repay/i;
+const FUND_WORDS =
+  /\b(bse|bsestarmf|nse\s*clearing|nsccl|iccl|indian\s*clearing|cams|camsonline|kfin|kfintech|karvy|mutual\s*fund|mf\s*(sip|purchase|redemption)|amc|zerodha|coin|groww|kuvera|paytm\s*money|et\s*money)\b/i;
+const FEES =
+  /\b(charges?|chrgs?|chg|fee|fees|gst|cgst|sgst|igst|sms\s*alert|amc|annual\s*(fee|charges?)|min(imum)?\s*bal(ance)?|non[-\s]?maint|debit\s*card|dc\s*ann|consolidated\s*chgs?)\b/i;
+const TRANSFER_WORDS = /\b(trf|transfer|self|own|imps|neft|rtgs|ft|fund\s*trf|ib\s*funds?)\b/i;
+
+export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classified[] {
+  const out = new Map<string, Classified>();
+  const set = (l: StmtLine, cls: LineClass, reason: string, counterpart: string | null = null) =>
+    out.set(l.id, { id: l.id, cls, counterpart, reason });
+  const open = (l: StmtLine) => !out.has(l.id);
+  const sorted = [...lines].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
+  );
+
+  // 1. your answers
+  const ANSWER: Record<LineAnswer, LineClass> = {
+    outside: 'outside_in',
+    own: 'own_transfer',
+    income: 'income',
+    rent: 'rent',
+    out: 'spent',
+  };
+  for (const l of sorted) if (l.answer) set(l, ANSWER[l.answer], 'Your answer');
+
+  // 2. interest and the tax on it
+  const interestDays = new Set<string>();
+  for (const l of sorted) {
+    if (!open(l) || l.amount <= 0 || !INTEREST.test(l.narration)) continue;
+    if (DEPOSIT_WORDS.test(l.narration))
+      set(
+        l,
+        'fd_interest',
+        'A deposit’s interest paid into the account: the deposit’s own earnings',
+      );
+    else {
+      set(l, 'interest', 'Interest credited by the bank');
+      interestDays.add(`${l.assetId}|${l.date}`);
+    }
+  }
+  for (const l of sorted) {
+    if (!open(l) || l.amount >= 0 || !TDS.test(l.narration)) continue;
+    if (interestDays.has(`${l.assetId}|${l.date}`) && !DEPOSIT_WORDS.test(l.narration))
+      set(l, 'interest_tax', 'Tax taken at source on the interest the same day');
+    else set(l, 'tax', 'Tax taken at source');
+  }
+
+  // 3–4. rent and money from abroad, by their wording
+  for (const l of sorted) {
+    if (!open(l) || l.amount <= 0) continue;
+    if (ctx.rentWords.length && hasWord(l.narration, ctx.rentWords))
+      set(l, 'rent', 'Rent: the narration has a word you set for your tenant');
+    else if (ctx.remittanceWords.length && hasWord(l.narration, ctx.remittanceWords))
+      set(l, 'outside_in', 'Money sent from abroad: the narration has a remittance word');
+  }
+
+  // 5. transfers between your own accounts: the closest line of the opposite sign and the same sum in another account
+  const credits = new Map<number, StmtLine[]>();
+  for (const m of sorted)
+    if (m.amount > 0) {
+      const k = Math.round(m.amount * 100);
+      credits.set(k, [...(credits.get(k) ?? []), m]);
+    }
+  for (const l of sorted) {
+    if (!open(l) || l.amount >= 0) continue;
+    let best: StmtLine | null = null;
+    for (const m of credits.get(Math.round(-l.amount * 100)) ?? []) {
+      if (!open(m) || m.assetId === l.assetId || daysApart(m.date, l.date) > ctx.pairDays) continue;
+      if (!best || daysApart(m.date, l.date) < daysApart(best.date, l.date)) best = m;
+    }
+    if (best) {
+      set(l, 'own_transfer', 'The same sum arrived in another of your accounts', best.assetId);
+      set(best, 'own_transfer', 'The same sum left another of your accounts', l.assetId);
+    }
+  }
+
+  // 6. deposits booked from the account, and paid back into it
+  const usedFd = new Set<string>();
+  for (const l of sorted) {
+    if (!open(l)) continue;
+    const amt = Math.abs(l.amount);
+    const fd = ctx.deposits.find((d) => {
+      if (usedFd.has(`${d.assetId}|${l.amount > 0 ? 'in' : 'out'}`)) return false;
+      if (l.amount < 0)
+        return near(d.principal, amt) && daysApart(d.bookedOn, l.date) <= ctx.pairDays;
+      const end = d.endedOn ?? d.maturityOn;
+      const window = Math.max(ctx.pairDays, 7);
+      if (daysApart(end, l.date) > window) return false;
+      return (
+        (d.maturityAmount !== null && near(d.maturityAmount, amt)) ||
+        (amt >= d.principal * 0.97 && amt <= d.principal * 1.6 && DEPOSIT_WORDS.test(l.narration))
+      );
+    });
+    if (!fd) continue;
+    usedFd.add(`${fd.assetId}|${l.amount > 0 ? 'in' : 'out'}`);
+    if (l.amount < 0)
+      set(l, 'fd_funding', 'A deposit of this amount was booked that day', fd.assetId);
+    else set(l, 'fd_proceeds', 'A deposit of yours matured or was closed then', fd.assetId);
+  }
+
+  // 7. fund purchases and sales in the CAS
+  const fundsBy = new Map<string, number[]>();
+  ctx.fundTxns.forEach((t, k) => {
+    const key = `${t.ownerId}|${Math.round(t.amount)}`;
+    fundsBy.set(key, [...(fundsBy.get(key) ?? []), k]);
+  });
+  const usedFund = new Set<number>();
+  for (const l of sorted) {
+    if (!open(l)) continue;
+    const amt = Math.abs(l.amount);
+    const r = Math.round(amt);
+    const candidates = [r - 1, r, r + 1].flatMap((x) => fundsBy.get(`${l.ownerId}|${x}`) ?? []);
+    const i = candidates.find((k) => {
+      const t = ctx.fundTxns[k]!;
+      if (usedFund.has(k) || !near(t.amount, amt)) return false;
+      if (l.amount < 0 && t.side === 'buy')
+        return l.date <= addDaysIso(t.date, 1) && l.date >= addDaysIso(t.date, -ctx.fundDays);
+      if (l.amount > 0 && t.side === 'sell')
+        return l.date >= addDaysIso(t.date, -1) && l.date <= addDaysIso(t.date, ctx.fundDays);
+      return false;
+    });
+    if (i === undefined) continue;
+    usedFund.add(i);
+    if (l.amount < 0) set(l, 'fund_buy', 'A fund purchase of this amount is in your CAS');
+    else set(l, 'fund_sell', 'A fund sale of this amount is in your CAS');
+  }
+
+  // 8. deposits and funds from the wording alone
+  for (const l of sorted) {
+    if (!open(l)) continue;
+    if (DEPOSIT_WORDS.test(l.narration)) {
+      if (l.amount < 0) set(l, 'fd_funding', 'The narration says a deposit was booked');
+      else if (FD_CLOSE.test(l.narration))
+        set(l, 'fd_proceeds', 'The narration says a deposit matured or was closed');
+    } else if (FUND_WORDS.test(l.narration)) {
+      set(
+        l,
+        l.amount < 0 ? 'fund_buy' : 'fund_sell',
+        'The narration names a fund house or clearing house',
+      );
+    }
+  }
+
+  // 9. a transfer naming another of your accounts by its last four digits
+  const byLast4 = new Map<string, string[]>();
+  for (const a of ctx.accounts)
+    if (a.last4) byLast4.set(a.last4, [...(byLast4.get(a.last4) ?? []), a.assetId]);
+  for (const l of sorted) {
+    if (!open(l) || !TRANSFER_WORDS.test(l.narration)) continue;
+    const digits = [...l.narration.matchAll(/…(\d{4})|x{2,}(\d{4})\b/gi)].map((m) => m[1] ?? m[2]!);
+    const other = digits.flatMap((d) => byLast4.get(d) ?? []).find((id) => id !== l.assetId);
+    if (other)
+      set(
+        l,
+        'own_transfer',
+        'The narration names another of your accounts (its last four digits)',
+        other,
+      );
+  }
+
+  // 10–11. charges, and everything else
+  for (const l of sorted) {
+    if (!open(l)) continue;
+    const amt = Math.abs(l.amount);
+    if (l.amount < 0 && FEES.test(l.narration) && amt < ctx.reviewAbove)
+      set(l, 'fee', 'Bank charges');
+    else if (amt < ctx.reviewAbove)
+      set(
+        l,
+        l.amount < 0 ? 'spent' : 'outside_in',
+        l.amount < 0
+          ? 'Spending: no rule fits, and it is below the limit for asking'
+          : 'A small amount coming in (a refund, cashback): below the limit for asking',
+      );
+    else
+      set(
+        l,
+        l.amount < 0 ? 'ask_out' : 'ask_in',
+        /\bself\b/i.test(l.narration)
+          ? 'To or from your own account: one not on file here (abroad?) counts as money out or in'
+          : 'No rule fits: say what it was',
+      );
+  }
+  return lines.map((l) => out.get(l.id)!);
+}
+
+export interface StatementMove {
+  idemKey: string;
+  movedOn: string;
+  amount: number;
+  kind: 'contribution' | 'withdrawal' | 'income' | 'fee' | 'tax';
+  fromAssetId: string | null;
+  toAssetId: string | null;
+  note: string;
+}
+
+/** The ledger kind of each class that moves money into or out of the family, or is earnings; the rest move nothing. */
+const MOVE: Partial<
+  Record<LineClass, { kind: StatementMove['kind']; into: boolean; note: string }>
+> = {
+  outside_in: { kind: 'contribution', into: true, note: 'Money from outside (bank statement)' },
+  rent: { kind: 'income', into: true, note: 'Rent (bank statement)' },
+  income: { kind: 'income', into: true, note: 'Earnings (bank statement)' },
+  spent: { kind: 'withdrawal', into: false, note: 'Spending and money taken out (bank statement)' },
+  fee: { kind: 'fee', into: false, note: 'Bank charges (bank statement)' },
+  tax: { kind: 'tax', into: false, note: 'Tax taken at source (bank statement)' },
+};
+
+/**
+ * The confirmed movements the lines make: one per account, calendar month and kind, dated on the last line it covers. Lines still
+ * waiting for an answer make none (their money stays "not yet explained"); transfers, deposits, funds and interest make none either,
+ * because they move money between your own holdings or are already the holdings' own earnings.
+ */
+export function statementMoves(lines: StmtLine[], classified: Classified[]): StatementMove[] {
+  const cls = new Map(classified.map((c) => [c.id, c.cls]));
+  const groups = new Map<
+    string,
+    { asset: string; month: string; c: LineClass; sum: number; last: string }
+  >();
+  for (const l of lines) {
+    const c = cls.get(l.id);
+    if (!c || !MOVE[c]) continue;
+    const month = l.date.slice(0, 7);
+    const k = `${l.assetId}|${month}|${c}`;
+    const g = groups.get(k) ?? { asset: l.assetId, month, c, sum: 0, last: l.date };
+    g.sum += Math.abs(l.amount);
+    if (l.date > g.last) g.last = l.date;
+    groups.set(k, g);
+  }
+  const moves: StatementMove[] = [];
+  for (const g of groups.values()) {
+    const m = MOVE[g.c]!;
+    const amount = Math.round(g.sum * 100) / 100;
+    if (amount <= 0) continue;
+    moves.push({
+      idemKey: `stmt:${g.asset}:${g.month}:${g.c}`,
+      movedOn: g.last,
+      amount,
+      kind: m.kind,
+      fromAssetId: m.into ? null : g.asset,
+      toAssetId: m.into ? g.asset : null,
+      note: m.note,
+    });
+  }
+  return moves.sort(
+    (a, b) => a.movedOn.localeCompare(b.movedOn) || a.idemKey.localeCompare(b.idemKey),
+  );
+}
+
+/** The class a person reads: a few words for each. */
+export const LINE_CLASS_LABEL: Record<LineClass, string> = {
+  interest: 'Interest',
+  interest_tax: 'Tax on interest',
+  fd_interest: 'Deposit interest paid out',
+  own_transfer: 'Between your own accounts',
+  fd_funding: 'Into a deposit',
+  fd_proceeds: 'From a deposit',
+  fund_buy: 'Into a fund',
+  fund_sell: 'From a fund',
+  outside_in: 'Money from outside',
+  rent: 'Rent',
+  income: 'Other earnings',
+  fee: 'Bank charges',
+  tax: 'Tax at source',
+  spent: 'Spending and money out',
+  ask_in: 'To answer: money in',
+  ask_out: 'To answer: money out',
+};

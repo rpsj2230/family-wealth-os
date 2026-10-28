@@ -14,6 +14,7 @@ export type FieldKind =
   | 'emails'
   | 'lines'
   | 'senders'
+  | 'words'
   | 'check'
   | 'date'
   | 'decimal';
@@ -386,6 +387,42 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'months',
         min: 0,
         max: 12,
+      },
+      {
+        name: 'stmtRentWords',
+        label: 'Bank statements: words that mark rent from your tenant',
+        hint: 'One per line: the tenant’s name as the bank writes it, or a reference the rent always carries. A credit with any of these is counted as rent, which is earnings (lifetime profit), not your own money.',
+        kind: 'words',
+        path: ['statements', 'rentWords'],
+        unit: 'one per line',
+        optional: true,
+      },
+      {
+        name: 'stmtRemittanceWords',
+        label: 'Bank statements: words that mark money sent from abroad',
+        hint: 'One per line, a whole word or phrase. A credit with any of these (an inward remittance from Singapore, for example) is counted as your own money coming in.',
+        kind: 'words',
+        path: ['statements', 'remittanceWords'],
+        unit: 'one per line',
+        optional: true,
+      },
+      {
+        name: 'stmtReviewAbove',
+        label: 'Bank statements: ask about a line no rule places when it is at least',
+        hint: 'Smaller lines are counted without asking: a debit as spending, a credit as a small amount coming in (a refund, cashback). Larger ones wait on Explain movements > Bank statements.',
+        kind: 'money',
+        path: ['statements', 'reviewAbove'],
+        unit: '₹',
+      },
+      {
+        name: 'stmtFundMatchDays',
+        label: 'Bank statements: a debit matches a fund purchase in the CAS within',
+        hint: 'A SIP or a purchase is debited a day or more before the units are allotted. A debit of the same amount within this many days of a purchase in the CAS is that purchase: money moved between your own holdings.',
+        kind: 'int',
+        path: ['statements', 'fundMatchDays'],
+        unit: 'days',
+        min: 0,
+        max: 31,
       },
       {
         name: 'includeSip',
@@ -898,6 +935,7 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
       return Array.isArray(v) ? v.join(', ') : '';
     case 'lines':
     case 'senders':
+    case 'words':
       return Array.isArray(v) ? v.join('\n') : '';
     case 'date':
     case 'decimal':
@@ -988,6 +1026,18 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
       if (rows.length === 0 || rows.length > 40)
         return { ok: false, message: `${f.label}: between 1 and 40 lines.` };
       bucket[key] = rows;
+      continue;
+    }
+    if (f.kind === 'words') {
+      const rows = (get(f.name) ?? '')
+        .split(/[\r\n]+/)
+        .map((x) => x.trim().toLowerCase().replace(/\s+/g, ' '))
+        .filter(Boolean);
+      const bad = rows.find((x) => x.length < 2 || x.length > 60);
+      if (bad)
+        return { ok: false, message: `${f.label}: “${bad}” should be 2 to 60 characters.` };
+      if (rows.length > 60) return { ok: false, message: `${f.label}: at most 60 lines.` };
+      bucket[key] = [...new Set(rows)];
       continue;
     }
     if (f.kind === 'senders') {

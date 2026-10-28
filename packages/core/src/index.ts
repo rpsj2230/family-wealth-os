@@ -100,3 +100,5 @@ export * from './history-review';
 export * from './interest-check';
 export * from './fund-views';
 export * from './reconcile';
+export * from './statement-classify';
+export * from './statement-interest';
