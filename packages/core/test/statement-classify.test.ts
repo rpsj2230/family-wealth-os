@@ -236,3 +236,27 @@ describe('deposits by amount', () => {
     expect(at([dep('child', 'k', 'Sample Bank')]).counterpart).toBe('child');
   });
 });
+
+describe('wording of deposits paid back, and a fund in another person’s name', () => {
+  const cs = classifyLines(
+    [
+      line('a', '2025-01-02', 514_000, 'PRINC AND INT AUTO REDEEM SAMPLE PERSON 1234 /1'),
+      line('a', '2025-01-03', 28_627, 'INT AUTO REDEEM SAMPLE PERSON 1234 /1'),
+      line('a', '2025-02-05', -10_000, 'ACH DR:123,ESFB,TP ACH INDIANESIGN~1 CLG'),
+    ],
+    {
+      ...ctx,
+      deposits: [],
+      fundTxns: [
+        { ownerId: 'child', assetId: 'kidfund', date: '2025-02-05', amount: 10_000, side: 'buy' },
+      ],
+    },
+  );
+  it('reads "PRINC AND INT AUTO REDEEM" as a deposit paid back, and "INT AUTO REDEEM" as its interest', () => {
+    expect(cs[0]!.cls).toBe('fd_proceeds');
+    expect(cs[1]!.cls).toBe('fd_interest');
+  });
+  it('matches a SIP to a child’s fund when the account holder has none of that amount', () => {
+    expect(cs[2]).toMatchObject({ cls: 'fund_buy', counterpart: 'kidfund' });
+  });
+});

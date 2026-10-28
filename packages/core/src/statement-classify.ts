@@ -129,7 +129,9 @@ const TDS = /\btds\b|tax\s*ded|withholding|\btax\b.*\bint/i;
 const FD_CLOSE = /matur|clos|liquid|premat|proceeds|redeem|repay|\bred\b/i;
 /** a deposit paid back into the account, principal and interest together ("PRIN AND INT AUTO_REDEEM", "IB TD RED XFER TO CASA") */
 const FD_PAYBACK =
-  /auto_?redeem|prin(cipal)?\s*(and|&|\+)\s*int|\b(td|fd)\s*red\b|\b(td|fd)\s*(closure|matur)|closure\s*proceeds/i;
+  /auto[_\s]?redeem|princ?(ipal)?\s*(and|&|\+)\s*int|\b(td|fd)\s*red\b|\b(td|fd)\s*(closure|matur)|closure\s*proceeds/i;
+/** a deposit's interest alone paid out ("INT AUTO REDEEM"), not its principal */
+const FD_INT_ONLY = /^\s*int(erest)?\.?\s+auto[_\s]?redeem/i;
 /** a deposit opened from the account ("NET TXN: FD BOOKED", "NEW FD", "TD OPENING") */
 const FD_OPEN = /\bfd\s*booked|\bnew\s*fd\b|\b(td|fd)\s*opening/i;
 /** money from Singapore: a Wise payout, or a DBS remittance landing through DBS Bank India */
@@ -224,6 +226,8 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   // 2. interest and the tax on it
   const interestDays = new Set<string>();
   for (const l of sorted) {
+    if (open(l) && l.amount > 0 && FD_INT_ONLY.test(l.narration))
+      set(l, 'fd_interest', 'A deposit’s interest paid out into the account: its own earnings');
     if (!open(l) || l.amount <= 0 || !INTEREST.test(l.narration) || FD_PAYBACK.test(l.narration))
       continue;
     if (DEPOSIT_WORDS.test(l.narration))
@@ -348,7 +352,11 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     if (!open(l)) continue;
     const amt = Math.abs(l.amount);
     const r = Math.round(amt);
-    const candidates = [r - 1, r, r + 1].flatMap((x) => fundsBy.get(`${l.ownerId}|${x}`) ?? []);
+    const near3 = (owner: string) =>
+      [r - 1, r, r + 1].flatMap((x) => fundsBy.get(`${owner}|${x}`) ?? []);
+    // the account holder's own funds first; then another person's (a SIP for a child's fund, paid from a parent's account)
+    const others = [...new Set(ctx.fundTxns.map((t) => t.ownerId))].filter((o) => o !== l.ownerId);
+    const candidates = [...near3(l.ownerId), ...others.flatMap(near3)];
     const i = candidates.find((k) => {
       const t = ctx.fundTxns[k]!;
       if (usedFund.has(k) || !near(t.amount, amt)) return false;
@@ -361,8 +369,9 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     if (i === undefined) continue;
     usedFund.add(i);
     const fund = ctx.fundTxns[i]!.assetId ?? null;
-    if (l.amount < 0) set(l, 'fund_buy', 'A fund purchase of this amount is in your CAS', fund);
-    else set(l, 'fund_sell', 'A fund sale of this amount is in your CAS', fund);
+    const whose = ctx.fundTxns[i]!.ownerId === l.ownerId ? 'your' : 'another person’s';
+    if (l.amount < 0) set(l, 'fund_buy', `A fund purchase of this amount is in ${whose} CAS`, fund);
+    else set(l, 'fund_sell', `A fund sale of this amount is in ${whose} CAS`, fund);
   }
 
   // 8. deposits and funds from the wording alone
