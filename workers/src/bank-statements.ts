@@ -197,7 +197,7 @@ async function importOne(
       if (error) throw new Error(`opening date: ${error.message}`);
     }
     console.log(
-      `- ${tag}: ${s.lines.length} lines (${saved.lines} new), ${saved.balances} month-end balances${saved.opened ? `, opened ${s.openedOn}` : ''}${s.breaks ? `, ${s.breaks} breaks` : ''}`,
+      `- ${tag}: ${s.lines.length} lines (${saved.lines} new), ${saved.balances} month-end balances${saved.opened ? `, opening day set to ${s.openedOn ?? s.from}` : ''}${s.breaks ? `, ${s.breaks} breaks` : ''}`,
     );
   }
   console.log(`Lines read: ${lines}`);
