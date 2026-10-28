@@ -1,0 +1,91 @@
+/* Investments > Match funds: the funds with no price source, each with a suggestion to approve. */
+.np-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.np-fund {
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.np-fund:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.np-head {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.np-bits,
+.np-last {
+  margin-top: 2px;
+}
+.np-ask {
+  margin-left: 0;
+}
+.np-rec {
+  color: var(--ok-fg);
+  font-weight: 600;
+}
+.np-search {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.np-searchrow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.np-searchrow input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.np-all {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--soft);
+}
+.np-all .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+.np-all p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.np-notlisted {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.np-notlisted li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+.np-notlisted li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* a radio sits beside its words (the page-wide label style stacks them) */
+.np-ask .fc-opt > label {
+  flex-direction: row;
+  align-items: flex-start;
+}

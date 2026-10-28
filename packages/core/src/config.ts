@@ -238,6 +238,9 @@ export interface AppConfig {
     valuationPeriods: number;
     /** quarters follow the financial year (April to June is Q1); off: calendar quarters (January to March is Q1) */
     financialQuarters: boolean;
+    /** Investments > Match funds: how many schemes are listed for a fund, and how many a name search returns */
+    matchChoices: number;
+    matchSearchResults: number;
   };
   /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
   sheetSync: {
@@ -395,6 +398,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     compareFunds: 4,
     valuationPeriods: 12,
     financialQuarters: true,
+    matchChoices: 3,
+    matchSearchResults: 10,
   },
   sheetSync: {
     timeZone: 'Asia/Singapore',
@@ -729,6 +734,10 @@ export function configFromJson(raw: unknown): AppConfig {
       compareFunds: Math.round(num(fun.compareFunds, d.funds.compareFunds, 2, 8)),
       valuationPeriods: Math.round(num(fun.valuationPeriods, d.funds.valuationPeriods, 2, 60)),
       financialQuarters: bool(fun.financialQuarters, d.funds.financialQuarters),
+      matchChoices: Math.round(num(fun.matchChoices, d.funds.matchChoices, 2, 6)),
+      matchSearchResults: Math.round(
+        num(fun.matchSearchResults, d.funds.matchSearchResults, 3, 30),
+      ),
     },
     sheetSync: (() => {
       const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));

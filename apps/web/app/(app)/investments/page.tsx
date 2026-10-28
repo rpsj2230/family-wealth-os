@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { parseRange, personStyles } from '@fwos/core';
-import { loadPositionInput, loadSettings } from '@fwos/data';
+import { loadPositionInput, loadSettings, unpricedFunds } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FundTransactionForm } from '@/components/FundTransactionForm';
 import { FundUpdateGrid, type FundInput } from '@/components/FundUpdateGrid';
@@ -9,10 +9,18 @@ import { loadContext } from '@/lib/data';
 import { loadInvestmentView } from '@/lib/investments';
 import { loadMatchView } from '@/lib/match-data';
 import { loadPortfolio } from '@/lib/portfolio-data';
-import { clearMatch, confirmMatch, setExitLoad } from '../funds/actions';
+import { clearMatch, setExitLoad } from '../funds/actions';
 import { addFund, addFundTxn, saveFundEdit } from './edit-actions';
 import { InvestShell, parseTab, PERSON_TABS } from './InvestShell';
 import { MatchTab } from './Parts';
+import {
+  approveCertain,
+  decideFund,
+  fetchPrices,
+  finishMatching,
+  lookAgain,
+  searchOfficialSchemes,
+} from './match-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +52,9 @@ export default async function InvestmentsPage({
   const who = PERSON_TABS.includes(tab) && sp.p && styles[sp.p] ? sp.p : null;
   const range = tab === 'performance' ? parseRange(sp.range) : 'all';
   const view = await loadInvestmentView(supabase, loaded, who, range);
-  const noPrice = view.groups.flatMap((g) => g.funds).filter((f) => !f.amfiCode).length;
+  // funds waiting for a match (the ones marked "not a listed fund" are not waiting), counted the way Home counts them
+  const noPrice = (await unpricedFunds(supabase as unknown as SupabaseClient, loaded.assetRows))
+    .waiting.length;
 
   const updateFunds: FundInput[] = view.groups.flatMap((g) =>
     g.funds.map((f) => ({
@@ -104,7 +114,17 @@ export default async function InvestmentsPage({
           <MatchTab
             rows={match.rows}
             haveList={match.haveList}
-            actions={{ confirmMatch, clearMatch, setExitLoad }}
+            canMark={match.canMark}
+            actions={{
+              decide: decideFund,
+              approveCertain,
+              fetchPrices,
+              search: searchOfficialSchemes,
+              finish: finishMatching,
+              lookAgain,
+              clearMatch,
+              setExitLoad,
+            }}
           />
         </ListingTools>
       )}

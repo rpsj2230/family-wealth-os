@@ -9,7 +9,8 @@ import { ListingTools } from '@/components/ListingTools';
 import { DEMO_PEOPLE, DEMO_TODAY, demoView } from '@/lib/demo-funds';
 import { fundsPosition } from '@/lib/fund-holdings';
 import type { MatchRow } from '@/lib/match-data';
-import { sampleSave } from '../sample-actions';
+import { demoUnmatched } from '@/lib/demo-match';
+import { sampleApproveCertain, sampleFinish, sampleSave, sampleSearch } from '../sample-actions';
 
 export const metadata: Metadata = {
   title: 'Sample investments',
@@ -21,52 +22,44 @@ const PEOPLE = DEMO_PEOPLE;
 const FUNDS = demoView(null, 'all').groups.flatMap((g) => g.funds);
 
 const MATCH: MatchRow[] = [
-  {
-    assetId: 'f4',
-    name: 'Sample Hybrid Fund',
-    ownerName: 'Beena',
-    sipMonthly: null,
-    sipStopped: false,
-    navHint: 41.2,
-    amfiCode: null,
-    lastValue: { amount: 410_000, asOf: '2026-09-28' },
-    exitLoadFraction: null,
-    exitLoadDays: null,
-    candidates: [
-      {
-        code: '118001',
-        name: 'Sample Hybrid Fund - Direct Plan - Growth',
-        plan: 'Direct',
-        amc: 'Sample AMC',
-        navGap: 0.03,
-      },
-      {
-        code: '118002',
-        name: 'Sample Hybrid Fund - Regular Plan - Growth',
-        plan: 'Regular',
-        amc: 'Sample AMC',
-        navGap: 0.12,
-      },
-    ],
-    confident: true,
-  },
+  // the funds with no price source: the sample's own ranking and wording (see lib/demo-match.ts)
+  ...demoUnmatched(),
   ...FUNDS.filter((f) => f.amfiCode).map((f): MatchRow => ({
     assetId: f.assetId,
     name: f.name,
     ownerName: PEOPLE.find((p) => p.id === f.ownerId)?.name ?? '',
     sipMonthly: f.sipMonthly,
     sipStopped: f.sipStopped,
-    navHint: null,
     amfiCode: f.amfiCode,
+    schemeName: `${f.name} - Direct Plan - Growth`,
     lastValue: { amount: f.value, asOf: '2026-10-23' },
     exitLoadFraction: f.assetId === 'f2' ? 0.01 : null,
     exitLoadDays: f.assetId === 'f2' ? 365 : null,
-    candidates: [],
-    confident: false,
+    folioLast4: f.folioLast4,
+    units: f.units,
+    invested: f.invested,
+    isin: null,
+    closed: false,
+    noPriceSource: false,
+    proposal: null,
+    certainty: null,
   })),
 ];
 
-const actions = { confirmMatch: sampleSave, clearMatch: sampleSave, setExitLoad: sampleSave };
+const actions = {
+  clearMatch: sampleSave,
+  setExitLoad: sampleSave,
+  lookAgain: sampleSave,
+  decide: sampleSave,
+  approveCertain: sampleApproveCertain,
+  fetchPrices: sampleSave,
+  search: sampleSearch,
+  finish: sampleFinish,
+};
+
+/** The sample pages have a page for these funds only; the invented unmatched ones have none. */
+const hrefOf = (id: string) =>
+  FUNDS.some((f) => f.assetId === id) ? `/demo/asset?kind=fund&id=${id}` : null;
 
 /** Public preview of the Investments page with invented funds: no private data is read. */
 export default async function DemoInvestments({
@@ -93,7 +86,8 @@ export default async function DemoInvestments({
   const range = tab === 'performance' ? parseRange(sp.range) : 'all';
   const view = demoView(who, range);
   const full = demoView(null, 'all');
-  const noPrice = view.groups.flatMap((g) => g.funds).filter((f) => !f.amfiCode).length;
+  // the sample's funds without a price source: the one in the fund list and the invented ones of the Match funds tab
+  const noPrice = MATCH.filter((r) => !r.amfiCode).length;
   const updateFunds: FundInput[] = full.groups.flatMap((g) =>
     g.funds.map((f) => ({
       assetId: f.assetId,
@@ -138,7 +132,7 @@ export default async function DemoInvestments({
         )}
         {tab === 'match' && (
           <ListingTools name="match-funds">
-            <MatchTab rows={MATCH} haveList actions={actions} />
+            <MatchTab rows={MATCH} haveList hrefOf={hrefOf} disabled={false} actions={actions} />
           </ListingTools>
         )}
       </InvestShell>

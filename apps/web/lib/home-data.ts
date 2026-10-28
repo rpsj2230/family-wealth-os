@@ -7,7 +7,7 @@ import {
   type HomeRange,
   type FundForRaise,
 } from '@fwos/core';
-import { loadPositionInput, loadSettings, pageAll } from '@fwos/data';
+import { loadPositionInput, loadSettings, pageAll, unpricedFunds } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Ctx } from './data';
 import { bankOverviewOptions } from './bank-overview-options';
@@ -210,6 +210,8 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       .map((t) => ({ id: t.id as string, title: t.title as string, dueOn: t.due_on as string })),
     openTasks: (tasks.data ?? []).length,
     inboxReview: inbox.count ?? 0,
+    fundsNoPrice: (await unpricedFunds(supabase as unknown as SupabaseClient, assetRows)).waiting
+      .length,
     position,
     monthlySpending: planned.monthlySpendingToday,
     recent,

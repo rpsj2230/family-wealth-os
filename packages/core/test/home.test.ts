@@ -417,6 +417,20 @@ describe('attentionItems', () => {
     );
     expect(items.find((x) => x.key === 'cover')!.href).toBe('/deposits?tab=cover');
   });
+  it('says how many funds have no price source and where to match them, after the inbox and before the housekeeping', () => {
+    const items = attentionItems({ ...none, inboxReview: 1, fundsNoPrice: 3, staleBalances: 2 });
+    expect(items.map((x) => x.key)).toEqual(['inbox', 'noprice', 'stale']);
+    expect(items[1]).toMatchObject({
+      tone: 'warn',
+      count: 3,
+      text: '3 funds have no price source: match them.',
+      href: '/investments?tab=match',
+    });
+    expect(attentionItems({ ...none, fundsNoPrice: 1 })[0]!.text).toBe(
+      '1 fund has no price source: match it.',
+    );
+    expect(attentionItems({ ...none, fundsNoPrice: 0 })).toEqual([]);
+  });
 });
 
 describe('Home settings', () => {

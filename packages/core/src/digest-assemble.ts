@@ -68,6 +68,8 @@ export interface DigestSources {
     tasks: { title: string; dueOn: string }[];
     policies: { insurer: string; kind: 'renewal' | 'ends'; on: string }[];
     inboxReview: number;
+    /** held funds with no price source, not marked "not a listed fund" */
+    fundsNoPrice?: number;
   };
   taxIdeas: string[];
   rateIdeas: string[];
@@ -147,6 +149,7 @@ export function assembleDigest(s: DigestSources): DigestInput {
       limit: cover.limit,
     },
     inboxReview: s.attention.inboxReview,
+    fundsNoPrice: s.attention.fundsNoPrice ?? 0,
     tasks: s.attention.tasks,
     taskDays: cfg.reminders.taskDays,
     policies: s.attention.policies,

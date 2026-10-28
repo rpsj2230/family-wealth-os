@@ -637,6 +637,8 @@ export interface AttentionInput {
   uninsured: { amount: number; banks: number; limit: number };
   /** bank e-mails waiting for a decision */
   inboxReview: number;
+  /** held funds not matched to an official scheme (no price source) and not marked "not a listed fund" */
+  fundsNoPrice?: number;
   tasks: { title: string; dueOn: string }[];
   taskDays: number;
   policies: { insurer: string; kind: 'renewal' | 'ends'; on: string }[];
@@ -736,6 +738,14 @@ export function attentionItems(i: AttentionInput): AttentionItem[] {
       count: i.inboxReview,
       text: `${plural(i.inboxReview, 'bank e-mail')} waiting for you to choose the account.`,
       href: '/inbox',
+    });
+  if ((i.fundsNoPrice ?? 0) > 0)
+    out.push({
+      key: 'noprice',
+      tone: 'warn',
+      count: i.fundsNoPrice!,
+      text: `${plural(i.fundsNoPrice!, 'fund')} ${i.fundsNoPrice === 1 ? 'has' : 'have'} no price source: match ${i.fundsNoPrice === 1 ? 'it' : 'them'}.`,
+      href: '/investments?tab=match',
     });
   if (i.staleBalances > 0)
     out.push({

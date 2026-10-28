@@ -234,6 +234,28 @@ describe('assembleDigest: what needs you, what changed, late inputs', () => {
     expect(i.needsYou!.find((n) => n.text.startsWith('Tax harvest'))!.href).toBe('/tax');
   });
 
+  it('the e-mail’s needs-you list carries the funds with no price source, as Home does', () => {
+    const withFunds = assembleDigest(
+      sources({
+        attention: {
+          overdueLoans: [],
+          tasks: [],
+          policies: [],
+          inboxReview: 0,
+          fundsNoPrice: 3,
+        },
+      }),
+    );
+    const line = withFunds.needsYou!.find((n) => /no price source/.test(n.text));
+    expect(line).toMatchObject({
+      text: '3 funds have no price source: match them.',
+      href: '/investments?tab=match',
+      tone: 'warn',
+    });
+    // nothing waiting: no line
+    expect(i.needsYou!.some((n) => /no price source/.test(n.text))).toBe(false);
+  });
+
   it('the late-input count and values-as-of are the portal’s', () => {
     expect(i.asOf).toBe('2026-10-25');
     expect(i.lateInputs).toBe(i.attention.staleOrMissing);

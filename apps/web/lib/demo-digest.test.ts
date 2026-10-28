@@ -97,6 +97,19 @@ describe('the e-mail agrees with Home', () => {
     expect(mine.length).toBeGreaterThan(homeItems.length);
   });
 
+  it('the funds with no price source are on both lists, with the same words and the page where they are matched', () => {
+    const line = '3 funds have no price source: match them.';
+    expect(home.attention.find((a) => a.key === 'noprice')).toMatchObject({
+      text: line,
+      href: '/investments?tab=match',
+      tone: 'warn',
+    });
+    expect(input.needsYou!.find((n) => n.text === line)).toMatchObject({
+      href: '/investments?tab=match',
+      tone: 'warn',
+    });
+  });
+
   it('the biggest deposits paying out are among the ones Home lists as maturing', () => {
     const ladder = input.changes!.maturities;
     expect(ladder.length).toBeGreaterThan(0);

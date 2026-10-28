@@ -111,6 +111,8 @@ export interface HomeInput {
   tasks: { id: string; title: string; dueOn: string }[];
   openTasks: number;
   inboxReview: number;
+  /** held funds with no price source, not marked "not a listed fund" */
+  fundsNoPrice: number;
   /** everything the position engine reads: every record, deposit, fund ledger and price. The period figures, the net worth on a past day and the coverage all come from it */
   position: PositionInput;
   /** monthly household spending from the retirement plan; 0 until entered */
@@ -504,6 +506,7 @@ export function buildHome(i: HomeInput): HomeModel {
     noValue: nw.excluded.filter((e) => e.reason === 'no_valuation').length,
     uninsured: { amount: cover.uninsured, banks: cover.banksOver, limit: cover.limit },
     inboxReview: i.inboxReview,
+    fundsNoPrice: i.fundsNoPrice,
     tasks: i.tasks.map((t) => ({ title: t.title, dueOn: t.dueOn })),
     taskDays: cfg.reminders.taskDays,
     policies: i.policies.flatMap((p) => [

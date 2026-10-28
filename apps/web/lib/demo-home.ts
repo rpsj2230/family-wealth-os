@@ -282,6 +282,7 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     ],
     openTasks: 4,
     inboxReview: demoInbox().filter((x) => queueOf(x) === 'review').length,
+    fundsNoPrice: 3,
     position: positionInputFrom({
       assets,
       observations,

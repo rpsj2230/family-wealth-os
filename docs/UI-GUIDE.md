@@ -51,7 +51,7 @@ Rules:
 - **Plain words, same labels.** "Your decision" (a chip, warn tone), never a red "Needs a look". Keep the four labels ("What I found", "What I suggest") so every prompt reads the same.
 - Where the prompt is a form with a default (an inbox balance, a history conflict), the default is the suggestion and says so ("(suggested)").
 
-Where it is used: fund statement preview (`FundChanges.tsx`, `fund-review.ts`: folio that could be several funds, fund not on the statement, SIP that cannot be judged, folios of someone else), bank-email inbox (`inboxProposal` in `inbox-view.ts`), history import conflicts (`conflictProposal` in `lib/history-view.ts`). Tests check the words (`fund-review.test.ts`, `suggestion.test.ts`, `inbox-view.test.ts`, `history-view.test.ts`) and the pages (`e2e/fundimport.spec.ts`).
+Where it is used: fund statement preview (`FundChanges.tsx`, `fund-review.ts`: folio that could be several funds, fund not on the statement, SIP that cannot be judged, folios of someone else), bank-email inbox (`inboxProposal` in `inbox-view.ts`), history import conflicts (`conflictProposal` in `lib/history-view.ts`), and funds with no price source (`suggestSchemes` and `schemeProposal` in `packages/ingest/src/scheme-suggest.ts` and `scheme-proposal.ts`, drawn by `components/invest/FundsWithoutPrice.tsx` on Investments > Match funds: ISIN is certain, an exact name with plan and option is very likely, a fitting name with a known plan is likely, anything else is "I cannot tell" with the best three and how they differ). Tests check the words (`fund-review.test.ts`, `suggestion.test.ts`, `inbox-view.test.ts`, `history-view.test.ts`) and the pages (`e2e/fundimport.spec.ts`).
 
 ## Where things live
 

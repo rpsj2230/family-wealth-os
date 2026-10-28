@@ -28,6 +28,7 @@ import { loadPositionInput } from './position';
 import { loadSettings } from './settings';
 import { loadRatesContext } from './rates';
 import { loadHarvestPositions } from './harvest';
+import { unpricedFunds } from './price-source';
 
 /**
  * Everything the daily summary needs for one household, from whichever Supabase client is supplied: the rows are read here and put
@@ -413,7 +414,13 @@ export async function buildDigestInput(
         : { navLatest: null, fx: {} },
     goals,
     retirement,
-    attention: { overdueLoans, tasks, policies, inboxReview: inbox.count ?? 0 },
+    attention: {
+      overdueLoans,
+      tasks,
+      policies,
+      inboxReview: inbox.count ?? 0,
+      fundsNoPrice: (await unpricedFunds(db, assetRows, opts.householdId)).waiting.length,
+    },
     taxIdeas,
     rateIdeas,
     staleRates,

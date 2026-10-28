@@ -155,6 +155,16 @@ describe('saved order of sources', () => {
     );
     expect(configFromJson({ funds: { benchmarkCode: '' } }).funds.benchmarkCode).toBe('');
   });
+
+  it('reads how many schemes are listed for a fund and how many a search returns, within limits', () => {
+    expect(DEFAULT_CONFIG.funds.matchChoices).toBe(3);
+    expect(DEFAULT_CONFIG.funds.matchSearchResults).toBe(10);
+    const f = configFromJson({ funds: { matchChoices: 5, matchSearchResults: 20 } }).funds;
+    expect([f.matchChoices, f.matchSearchResults]).toEqual([5, 20]);
+    const bad = configFromJson({ funds: { matchChoices: 1, matchSearchResults: 500 } }).funds;
+    expect(bad.matchChoices).toBe(DEFAULT_CONFIG.funds.matchChoices);
+    expect(bad.matchSearchResults).toBe(DEFAULT_CONFIG.funds.matchSearchResults);
+  });
 });
 
 describe('sheet sync settings', () => {

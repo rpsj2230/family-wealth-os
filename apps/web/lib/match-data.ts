@@ -1,14 +1,9 @@
-import { coreTokens, matchFund, type AmfiScheme } from '@fwos/ingest';
+import type { Proposal } from '@fwos/core';
+import { columnExists, loadSettings } from '@fwos/data';
+import { schemeProposal, suggestSchemes, type KnownIsin, type SchemeCertainty } from '@fwos/ingest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Ctx } from './data';
-
-export interface MatchCandidate {
-  code: string;
-  name: string;
-  plan: string;
-  amc: string;
-  /** how far today's price is from the one in the sheet's note, as a share; a weak sanity check */
-  navGap: number | null;
-}
+import { schemesForFund } from './scheme-pool';
 
 export interface MatchRow {
   assetId: string;
@@ -16,30 +11,45 @@ export interface MatchRow {
   ownerName: string;
   sipMonthly: number | null;
   sipStopped: boolean;
-  navHint: number | null;
   amfiCode: string | null;
+  /** the official name of the scheme the fund is matched to */
+  schemeName: string | null;
   lastValue: { amount: number; asOf: string } | null;
   exitLoadFraction: number | null;
   exitLoadDays: number | null;
-  /** the best guesses from the official list, for a fund not yet matched */
-  candidates: MatchCandidate[];
-  /** true when the first candidate is the only clear one */
-  confident: boolean;
+  folioLast4: string | null;
+  units: number | null;
+  invested: number | null;
+  isin: string | null;
+  /** sold: nothing to price */
+  closed: boolean;
+  /** the person said this is not a listed fund: it keeps its last recorded value, labelled "no price source" */
+  noPriceSource: boolean;
+  /** what I found / what I suggest and why / approve / other choices, for a fund with no scheme yet (null once matched) */
+  proposal: Proposal | null;
+  /** how sure the recommended scheme is; null when nothing is recommended */
+  certainty: SchemeCertainty | null;
 }
 
 export interface MatchView {
   rows: MatchRow[];
   /** whether the official scheme list has been loaded by the daily market-data job */
   haveList: boolean;
+  /** whether the database has the "not a listed fund" mark yet (the update that adds it may not have run) */
+  canMark: boolean;
 }
 
-/** Every fund with the scheme it is matched to, or suggestions from the official scheme list when it is not. */
+const ISIN_KEY = /^INF[0-9A-Z]{9}$/i;
+
+/** Every fund with the scheme it is matched to, or a suggestion from the official scheme list when it is not. */
 export async function loadMatchView(supabase: Ctx['supabase']): Promise<MatchView> {
-  const [pos, assets, owners, obs, schemes] = await Promise.all([
+  const db = supabase as unknown as SupabaseClient;
+  const canMark = await columnExists(db, 'mf_positions', 'no_price_source');
+  const [pos, assets, owners, obs, schemes, settings, links] = await Promise.all([
     supabase
       .from('mf_positions')
       .select(
-        'asset_id, fund_name, sip_monthly, sip_stopped, nav_hint, amfi_code, exit_load_pct, exit_load_days',
+        `asset_id, fund_name, sip_monthly, sip_stopped, amfi_code, exit_load_pct, exit_load_days, folio_last4, units, invested, isin, plan_type${canMark ? ', no_price_source' : ''}`,
       ),
     supabase.from('assets').select('id, owner_id, status'),
     supabase.from('owners').select('id, display_name'),
@@ -49,8 +59,12 @@ export async function loadMatchView(supabase: Ctx['supabase']): Promise<MatchVie
       .is('superseded_by', null)
       .order('as_of', { ascending: false }),
     supabase.from('amfi_schemes').select('code', { count: 'exact', head: true }),
+    loadSettings(db),
+    // ISINs read from fund statements already on file (the folio links keep a scheme's ISIN as their key); absent before that update
+    supabase.from('fund_folio_links').select('asset_id, scheme_key'),
   ]);
   const ownerOf = new Map((assets.data ?? []).map((a) => [a.id as string, a.owner_id as string]));
+  const statusOf = new Map((assets.data ?? []).map((a) => [a.id as string, a.status as string]));
   const ownerName = new Map(
     (owners.data ?? []).map((o) => [o.id as string, o.display_name as string]),
   );
@@ -59,62 +73,87 @@ export async function loadMatchView(supabase: Ctx['supabase']): Promise<MatchVie
     if (!lastValue.has(o.asset_id as string))
       lastValue.set(o.asset_id as string, { amount: Number(o.amount), asOf: o.as_of as string });
   const haveList = (schemes.count ?? 0) > 0;
-  const positions = pos.data ?? [];
+  const positions = (pos.data ?? []) as unknown as Record<string, unknown>[];
+  const cfg = settings.config.funds;
 
-  // Candidate search in the AMFI list (public data stored by the daily job)
-  const suggestions = new Map<string, Awaited<ReturnType<typeof matchFund>>>();
-  if (haveList) {
-    await Promise.all(
-      positions
-        .filter((f) => !f.amfi_code)
-        .map(async (f) => {
-          const toks = coreTokens(String(f.fund_name)).slice(0, 2);
-          let q = supabase
-            .from('amfi_schemes')
-            .select('code, name, plan, option, amc, category, isin_growth, isin_reinvest')
-            .eq('option', 'Growth');
-          for (const t of toks) q = q.ilike('name', `%${t.replace(/(cap)$/, '%$1')}%`);
-          const r = await q.limit(400);
-          const list: AmfiScheme[] = (r.data ?? []).map((s) => ({
-            code: s.code as string,
-            isinGrowth: (s.isin_growth as string | null) ?? null,
-            isinReinvest: (s.isin_reinvest as string | null) ?? null,
-            name: s.name as string,
-            plan: (s.plan as 'Direct' | 'Regular' | 'Other') ?? 'Other',
-            option: 'Growth',
-            nav: null,
-            navDate: null,
-            amc: (s.amc as string) ?? '',
-            category: (s.category as string) ?? '',
-          }));
-          const hint = f.nav_hint && Number(f.nav_hint) > 0 ? Number(f.nav_hint) : null;
-          suggestions.set(f.asset_id as string, matchFund(String(f.fund_name), list, hint));
-        }),
-    );
+  const statementIsins = new Map<string, string[]>();
+  for (const l of (links.error ? [] : (links.data ?? [])) as unknown as {
+    asset_id: string;
+    scheme_key: string;
+  }[])
+    if (ISIN_KEY.test(l.scheme_key))
+      statementIsins.set(l.asset_id, [
+        ...(statementIsins.get(l.asset_id) ?? []),
+        l.scheme_key.toUpperCase(),
+      ]);
+
+  // the official name of every scheme a fund is already matched to
+  const codes = [
+    ...new Set(positions.map((p) => p.amfi_code as string | null).filter((c): c is string => !!c)),
+  ];
+  const nameOf = new Map<string, string>();
+  if (codes.length > 0) {
+    const r = await supabase
+      .from('amfi_schemes')
+      .select('code, name, plan, option')
+      .in('code', codes);
+    for (const s of (r.data ?? []) as unknown as { code: string; name: string }[])
+      nameOf.set(s.code, s.name);
   }
-  const rows: MatchRow[] = positions.map((f) => {
-    const id = f.asset_id as string;
-    const sug = suggestions.get(id);
-    return {
-      assetId: id,
-      name: String(f.fund_name),
-      ownerName: ownerName.get(ownerOf.get(id) ?? '') ?? '',
-      sipMonthly: f.sip_monthly === null ? null : Number(f.sip_monthly),
-      sipStopped: !!f.sip_stopped,
-      navHint: f.nav_hint && Number(f.nav_hint) > 0 ? Number(f.nav_hint) : null,
-      amfiCode: (f.amfi_code as string | null) ?? null,
-      lastValue: lastValue.get(id) ?? null,
-      exitLoadFraction: f.exit_load_pct === null ? null : Number(f.exit_load_pct),
-      exitLoadDays: f.exit_load_days === null ? null : Number(f.exit_load_days),
-      candidates: (sug?.candidates ?? []).slice(0, 3).map((c) => ({
-        code: c.scheme.code,
-        name: c.scheme.name,
-        plan: c.scheme.plan,
-        amc: c.scheme.amc,
-        navGap: c.navGap,
-      })),
-      confident: sug?.confidence === 'confident',
-    };
-  });
-  return { rows, haveList };
+
+  const rows: MatchRow[] = await Promise.all(
+    positions.map(async (f): Promise<MatchRow> => {
+      const id = f.asset_id as string;
+      const code = (f.amfi_code as string | null) ?? null;
+      const marked = canMark && f.no_price_source === true;
+      const isin = (f.isin as string | null) ?? null;
+      const base: MatchRow = {
+        assetId: id,
+        name: String(f.fund_name),
+        ownerName: ownerName.get(ownerOf.get(id) ?? '') ?? '',
+        sipMonthly: f.sip_monthly === null ? null : Number(f.sip_monthly),
+        sipStopped: !!f.sip_stopped,
+        amfiCode: code,
+        schemeName: code ? (nameOf.get(code) ?? null) : null,
+        lastValue: lastValue.get(id) ?? null,
+        exitLoadFraction: f.exit_load_pct === null ? null : Number(f.exit_load_pct),
+        exitLoadDays: f.exit_load_days === null ? null : Number(f.exit_load_days),
+        folioLast4: (f.folio_last4 as string | null) ?? null,
+        units: f.units === null || f.units === undefined ? null : Number(f.units),
+        invested: f.invested === null || f.invested === undefined ? null : Number(f.invested),
+        isin,
+        closed: statusOf.get(id) === 'closed',
+        noPriceSource: marked,
+        proposal: null,
+        certainty: null,
+      };
+      // a matched fund, one the person marked as not listed, or a sold one needs no suggestion
+      if (code || marked || base.closed || !haveList) return base;
+      const known: KnownIsin[] = [
+        ...(isin && ISIN_KEY.test(isin) ? [{ isin, source: 'fund' as const }] : []),
+        ...(statementIsins.get(id) ?? [])
+          .filter((i) => i !== isin?.toUpperCase())
+          .map((i) => ({ isin: i, source: 'statement' as const })),
+      ];
+      const plan = f.plan_type as string | null;
+      const fund = {
+        assetId: id,
+        name: base.name,
+        isins: known,
+        planType: plan === 'direct' || plan === 'regular' ? plan : null,
+        folioLast4: base.folioLast4,
+      } as const;
+      const pool = await schemesForFund(supabase, {
+        name: base.name,
+        isins: known.map((k) => k.isin),
+      });
+      const s = suggestSchemes(fund, pool, { maxChoices: cfg.matchChoices });
+      return {
+        ...base,
+        proposal: schemeProposal(fund, s),
+        certainty: s.recommended?.certainty ?? null,
+      };
+    }),
+  );
+  return { rows, haveList, canMark };
 }

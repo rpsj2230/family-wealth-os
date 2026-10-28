@@ -1,6 +1,11 @@
 import Link from 'next/link';
 import { formatInr } from '@fwos/core';
 import { ActionForm, type ActionResult } from '@/components/ActionForm';
+import {
+  FundFacts,
+  FundsWithoutPrice,
+  type FundsWithoutPriceActions,
+} from '@/components/invest/FundsWithoutPrice';
 import { Meter } from '@/components/Meter';
 import { niceDate } from '@/lib/dates';
 import type { MatchRow } from '@/lib/match-data';
@@ -9,10 +14,11 @@ import './investments.css';
 
 type Act = (prev: ActionResult | null, f: FormData) => Promise<ActionResult>;
 
-export interface MatchActions {
-  confirmMatch: Act;
+export interface MatchActions extends FundsWithoutPriceActions {
   clearMatch: Act;
   setExitLoad: Act;
+  /** takes the "not a listed fund" mark off */
+  lookAgain: Act;
 }
 
 const rupee = (n: number) => formatInr(Math.round(n));
@@ -57,7 +63,6 @@ function FundCell({ r }: { r: MatchRow }) {
           : r.sipMonthly
             ? `SIP ${formatInr(r.sipMonthly)}/month`
             : 'no SIP'}
-        {r.navHint ? ` · sheet note NAV ${r.navHint}` : ''}
       </div>
     </>
   );
@@ -76,22 +81,33 @@ function LastValue({ r }: { r: MatchRow }) {
 export function MatchTab({
   rows,
   haveList,
+  canMark = true,
+  hrefOf = (id) => `/asset/${id}`,
+  disabled = false,
   actions,
 }: {
   rows: MatchRow[];
   haveList: boolean;
+  /** the page of a fund; null leaves the name as plain text (a sample fund that has no page) */
+  hrefOf?: (assetId: string) => string | null;
+  /** whether the database has the "not a listed fund" mark yet */
+  canMark?: boolean;
+  /** the public samples show everything but cannot save */
+  disabled?: boolean;
   actions: MatchActions;
 }) {
-  const ordered = orderForMatching(rows);
-  const progress = matchProgress(rows);
-  const todo = ordered.filter((r) => !r.amfiCode);
+  const ordered = orderForMatching(rows.filter((r) => !r.closed || r.amfiCode));
+  const progress = matchProgress(ordered);
+  const todo = ordered.filter((r) => !r.amfiCode && !r.noPriceSource);
+  const unlisted = ordered.filter((r) => !r.amfiCode && r.noPriceSource);
   const done = ordered.filter((r) => r.amfiCode);
   return (
     <>
       <p className="lead muted">
-        To move each fund with the market, the portal needs to know which official scheme it is.
-        Check the suggested scheme (name, Direct or Regular) and confirm it once. Until then a
-        fund&apos;s value is only what you last recorded.
+        To move each fund with the market, the portal needs to know which official scheme it is. For
+        each fund below it says what it found and which scheme it suggests, with the reason. Approve
+        the suggestion, pick another scheme or search for it. Until then a fund&apos;s value is only
+        what you last recorded.
       </p>
       {!haveList && (
         <p className="notice warn">
@@ -100,89 +116,69 @@ export function MatchTab({
           first run.
         </p>
       )}
-      {rows.length > 0 && (
+      {!canMark && (
+        <p className="notice warn">
+          &ldquo;This is not a listed fund&rdquo; can be saved once the pending database update has
+          run.
+        </p>
+      )}
+      {ordered.length > 0 && (
         <section className="card" aria-label="Matching progress">
           <Meter
             total={progress.total}
             format={(n) => `${n} fund${n === 1 ? '' : 's'}`}
             parts={[
               { label: 'Matched', value: progress.matched, colour: 'var(--primary, #4f46e5)' },
-              { label: 'To check', value: progress.pending, colour: '#d1d5db' },
+              { label: 'No price source', value: unlisted.length, colour: '#9ca3af' },
+              { label: 'To match', value: todo.length, colour: '#d1d5db' },
             ]}
           />
         </section>
       )}
 
       {todo.length > 0 && (
-        <section className="card" aria-labelledby="todo">
+        <FundsWithoutPrice
+          rows={todo}
+          actions={actions}
+          canMark={canMark}
+          hrefs={Object.fromEntries(todo.map((r) => [r.assetId, hrefOf(r.assetId)]))}
+          disabled={disabled}
+        />
+      )}
+
+      {unlisted.length > 0 && (
+        <section className="card" aria-labelledby="unlisted">
           <div className="cardhead">
-            <h2 id="todo">To check ({todo.length})</h2>
-            <span className="small muted">Funds that do not yet follow a daily price</span>
+            <h2 id="unlisted">No price source ({unlisted.length})</h2>
+            <span className="small muted">
+              Not listed funds: they keep the last value you recorded
+            </span>
           </div>
-          <table className="tbl lines responsive">
-            <thead>
-              <tr>
-                <th>Your fund</th>
-                <th className="num">Last value</th>
-                <th>Suggested scheme</th>
-                <th>Exit load</th>
-              </tr>
-            </thead>
-            <tbody>
-              {todo.map((r) => (
-                <tr key={r.assetId} className={r.sipStopped ? 'dim' : ''}>
-                  <td data-label="Your fund">
-                    <FundCell r={r} />
-                  </td>
-                  <td className="num" data-label="Last value">
-                    <LastValue r={r} />
-                  </td>
-                  <td data-label="Suggested scheme">
-                    {r.candidates.length > 0 ? (
-                      <ul className="list nobullet">
-                        {r.candidates.map((c, i) => (
-                          <li key={c.code}>
-                            <ActionForm
-                              action={actions.confirmMatch}
-                              submit={r.confident && i === 0 ? 'Confirm' : 'Use this'}
-                              className="taskrow"
-                              primary={r.confident && i === 0}
-                              busy="…"
-                            >
-                              <input type="hidden" name="asset" value={r.assetId} />
-                              <input type="hidden" name="code" value={c.code} />
-                              <span>
-                                {c.name}{' '}
-                                <span className="muted small">
-                                  ({c.plan}, {c.amc})
-                                </span>
-                                {c.navGap !== null ? (
-                                  <span className="muted small">
-                                    {' '}
-                                    · price differs {(c.navGap * 100).toFixed(0)}% from your note
-                                  </span>
-                                ) : null}
-                              </span>
-                            </ActionForm>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : haveList ? (
-                      <span className="muted">
-                        No automatic match. This fund&apos;s name may not match the official list;
-                        leave it for now. You can still update it by hand under Update funds.
-                      </span>
-                    ) : (
-                      <span className="muted">Waiting for the scheme list</span>
-                    )}
-                  </td>
-                  <td data-label="Exit load">
-                    <ExitLoadForm r={r} action={actions.setExitLoad} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="np-notlisted">
+            {unlisted.map((r) => (
+              <li key={r.assetId}>
+                <div>
+                  {hrefOf(r.assetId) ? (
+                    <Link href={hrefOf(r.assetId)!}>
+                      <strong>{r.name}</strong>
+                    </Link>
+                  ) : (
+                    <strong>{r.name}</strong>
+                  )}
+                  <FundFacts r={r} />
+                </div>
+                <ActionForm
+                  action={actions.lookAgain}
+                  submit="Look for a scheme again"
+                  className="taskrow"
+                  busy="…"
+                  disabled={disabled}
+                >
+                  <input type="hidden" name="asset" value={r.assetId} />
+                </ActionForm>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -218,9 +214,13 @@ export function MatchTab({
                       submit="Change"
                       className="taskrow"
                       busy="…"
+                      disabled={disabled}
                     >
                       <input type="hidden" name="asset" value={r.assetId} />
-                      <span>Confirmed: scheme {r.amfiCode}</span>
+                      <span>
+                        {r.schemeName ?? 'Scheme'}{' '}
+                        <span className="muted small">(AMFI code {r.amfiCode})</span>
+                      </span>
                     </ActionForm>
                   </td>
                   <td data-label="Exit load">

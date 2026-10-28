@@ -103,6 +103,7 @@ export function demoDigestSources(over: Partial<DigestSources> = {}): DigestSour
         ...(p.expiresOn ? [{ insurer: p.insurer, kind: 'ends' as const, on: p.expiresOn }] : []),
       ]),
       inboxReview: h.inboxReview,
+      fundsNoPrice: h.fundsNoPrice,
     },
     taxIdeas: ['Tax harvest for Beena: 140 days left to use the tax-free gain on equity funds.'],
     rateIdeas: [],

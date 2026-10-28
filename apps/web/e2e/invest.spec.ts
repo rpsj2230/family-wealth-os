@@ -331,10 +331,11 @@ test.describe('Investments (public sample)', () => {
 
   test('match funds: what to check first, what is matched, and confirming', async ({ page }) => {
     await page.goto('/demo/investments?tab=match');
-    await expect(page.getByRole('heading', { name: /To check/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Funds without a price/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: /Matched/ })).toBeVisible();
-    await expect(page.getByText('Sample Hybrid Fund - Direct Plan - Growth')).toBeVisible();
-    await page.getByRole('button', { name: 'Confirm' }).click();
+    const hybrid = page.getByRole('form', { name: 'Decision: Sample Hybrid Fund' });
+    await expect(hybrid).toContainText('Sample Hybrid Fund');
+    await hybrid.getByRole('button', { name: /^Approve: use Sample Hybrid Fund/ }).click();
     await expect(page.getByRole('status').filter({ hasText: 'nothing is saved' })).toBeVisible();
     await noSideways(page);
   });
