@@ -86,8 +86,7 @@ export function CashRegister({
                   <b>{formatInr(Math.round(r.current ?? 0))}</b>
                   {!inr && r.recorded ? (
                     <div className="muted small" data-testid="cr-fx">
-                      {formatForeign(r.recorded, r.currency)} at ₹
-                      {formatRate((r.current ?? 0) / r.recorded)}
+                      1 {r.currency} = ₹{formatRate((r.current ?? 0) / r.recorded)}
                     </div>
                   ) : null}
                 </td>

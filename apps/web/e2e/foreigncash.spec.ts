@@ -83,7 +83,7 @@ test.describe('Foreign cash (public sample)', () => {
     await expect(p.getByTestId('cv-fx-SGD')).toContainText('at 1 SGD = ₹56.1');
     const reg = page.locator('section.cashreg');
     await expect(reg.getByText('S$ 41,250').first()).toBeVisible();
-    await expect(reg.getByTestId('cr-fx').first()).toContainText('at ₹');
+    await expect(reg.getByTestId('cr-fx').first()).toContainText('= ₹');
     expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
 
