@@ -43,7 +43,7 @@ export function awaitingDeposits(blocks: BankBlock[]): {
 } {
   const rows = blocks
     .flatMap((b) => b.sections.flatMap((s) => s.rows))
-    .filter((r) => r.fd?.needsConfirmation && r.status === 'active');
+    .filter((r) => r.fd?.listState === 'confirm');
   return {
     count: rows.length,
     invested: rows.reduce((a, r) => a + r.fd!.principal, 0),

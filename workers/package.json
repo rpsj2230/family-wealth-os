@@ -11,7 +11,8 @@
     "inbox": "tsx src/inbox.ts",
     "selftest": "tsx src/selftest.ts",
     "rates": "tsx src/rates.ts",
-    "statements": "tsx src/statements.ts"
+    "statements": "tsx src/statements.ts",
+    "numbers-check": "tsx src/numbers-check.ts"
   },
   "dependencies": {
     "@fwos/core": "workspace:*",
