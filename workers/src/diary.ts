@@ -244,7 +244,12 @@ async function main() {
   }
   await openings(db, hh, input.openings, true);
   const rb = await rebuildSnapshots(db, hh);
-  console.log(`Net-worth history rebuilt: ${rb.written} days written.`);
+  console.log(
+    rb.ok
+      ? `Net-worth history rebuilt: ${rb.written} month ends written of ${rb.planned} planned (${rb.keptRecorded} kept as recorded on the day).`
+      : `Net-worth history could not be rebuilt: ${rb.error ?? 'unknown'}`,
+  );
+  if (!rb.ok) failed++;
   if (failed) process.exit(1);
 }
 
