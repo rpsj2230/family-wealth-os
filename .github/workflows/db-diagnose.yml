@@ -26,4 +26,11 @@ jobs:
           select proname, prosecdef as security_definer from pg_proc where proname in ('create_household','is_member','is_admin') and pronamespace = 'public'::regnamespace;
           select grantee, privilege_type from information_schema.routine_privileges where routine_name = 'create_household' and routine_schema = 'public';
           select polname, polcmd from pg_policy where polrelid = 'public.household_members'::regclass;
+          \echo '== funds by option (growth / IDCW), counts only'
+          select coalesce(s.option, case when p.fund_name ~* 'idcw|dividend' then 'IDCW (by name)' else 'unknown' end) as option, count(*)
+            from public.mf_positions p left join public.amfi_schemes s on s.code = p.amfi_code group by 1 order by 1;
+          \echo '== fund statement lines by kind, counts only'
+          select kind, count(*) from public.mf_transactions group by 1 order by 1;
+          \echo '== fund statements imported, counts only'
+          select outcome, count(*) from public.cas_imports group by 1 order by 1;
           SQL
