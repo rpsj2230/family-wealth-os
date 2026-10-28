@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fromAccountOpening,
   gridFromCsv,
   gridFromHtml,
   gridFromSpreadsheetML,
+  readBankStatement,
   readStatementGrid,
   readStatementText,
   statementAmount,
@@ -221,5 +223,26 @@ describe('a statement read from PDF text', () => {
       '03/04/2024 B 50.00 1,300.00',
     ]);
     expect(s.warnings.join(' ')).toMatch(/does not match how far the balance moved/);
+  });
+});
+
+describe('a download from the day the account was opened, with no balances', () => {
+  const csv = [
+    'Date,Payment type,Transaction description,Category,Sub-category,Amount,Currency',
+    '"30 Sep, 2024",Others,Monthly Interest Credit,Interests,Interests,310.00,INR',
+    '"14 Sep, 2024",Single Transfer,Sample Person,Self Transfer,Self,-20000.00,INR',
+    '"5 Sep, 2024",Single Transfer,Sample Person,Self Transfer,Self,100000.00,INR',
+    '"1 Sep, 2024",Single Transfer,Sample Person,Others (In),Others,50.00,INR',
+  ].join('\n');
+  it('works the balances out from nothing, oldest first', async () => {
+    const s = fromAccountOpening(await readBankStatement(new TextEncoder().encode(csv)));
+    expect(s.lines.map((l) => l.balance)).toEqual([50, 100_050, 80_050, 80_360]);
+    expect(s).toMatchObject({ opening: 0, closing: 80_360, breaks: 0, firstLineOn: '2024-09-01' });
+  });
+  it('refuses a download that does not start at the opening', async () => {
+    const late = await readBankStatement(
+      new TextEncoder().encode(csv.replace('100000.00', '1000.00')),
+    );
+    expect(() => fromAccountOpening(late)).toThrow(/below zero/);
   });
 });

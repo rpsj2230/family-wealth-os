@@ -634,3 +634,34 @@ export async function readBankStatement(
         : gridFromCsv(src),
   );
 }
+
+/**
+ * A download with no running balance that covers the account from the day it was opened (some banks' apps export only date, words
+ * and a signed amount): the balance after each line is the sum of every line before it, from nothing. Refused when that sum goes
+ * below zero, which shows the download does not start at the opening. The account's first line is the day it was opened, or soon
+ * after.
+ */
+export function fromAccountOpening(
+  s: BankStatement,
+): BankStatement & { firstLineOn: string | null } {
+  if (s.lines.some((l) => l.balance !== null))
+    throw new Error('The statement has its own balances; use them.');
+  let run = 0;
+  const lines = s.lines.map((l) => {
+    run = Math.round((run + l.credit - l.debit) * 100) / 100;
+    if (run < -0.005)
+      throw new Error(
+        `The balance would fall below zero on ${l.date}: the download does not start when the account was opened.`,
+      );
+    return { ...l, balance: run };
+  });
+  return {
+    ...s,
+    lines,
+    opening: lines.length ? 0 : null,
+    closing: lines.length ? run : null,
+    breaks: 0,
+    warnings: s.warnings.filter((w) => !/no running balance/.test(w)),
+    firstLineOn: lines[0]?.date ?? null,
+  };
+}

@@ -16,15 +16,22 @@ import {
   loadSettings,
   loadStatements,
   rebuildStatementMoves,
+  conflictingBalances,
   saveBankStatement,
   stmtLinesOf,
 } from '@fwos/data';
-import { bankOnFile, readBankStatement } from '@fwos/ingest';
+import { bankOnFile, fromAccountOpening, readBankStatement } from '@fwos/ingest';
 import { classifyLines } from '@fwos/core';
 import { connectDb, householdId, must, need } from './shared';
 
 interface Input {
-  account: { bank: string; person: string; last4: string };
+  account: {
+    bank: string;
+    person: string;
+    last4: string;
+    /** the files have no balances but cover the account from the day it was opened: the balances are summed from nothing */
+    fromOpening?: boolean;
+  };
   /** a text file (CSV, XML, a web page) as text, any other as base64 */
   files: { name: string; data?: string; text?: string }[];
 }
@@ -80,7 +87,9 @@ async function main() {
   for (const f of [...input.files].sort((a, b) => a.name.localeCompare(b.name))) {
     const bytes =
       f.text !== undefined ? Buffer.from(f.text, 'utf8') : Buffer.from(f.data ?? '', 'base64');
-    const s = await readBankStatement(new Uint8Array(bytes));
+    const read = await readBankStatement(new Uint8Array(bytes));
+    const opened = input.account.fromOpening ? fromAccountOpening(read) : null;
+    const s = opened ?? read;
     const tag = `${s.from} to ${s.to}`;
     if (s.last4 && s.last4 !== input.account.last4) {
       console.log(`- ${tag}: the statement is for another account (ending ${s.last4}); skipped`);
@@ -88,12 +97,26 @@ async function main() {
     }
     lines += s.lines.length;
     if (!write) {
+      const wrong = await conflictingBalances(db, assetId, s);
       console.log(
-        `- ${tag}: ${s.lines.length} lines, ${s.breaks} breaks${s.warnings.length ? `; ${s.warnings.join(' ')}` : ''}`,
+        `- ${tag}: ${s.lines.length} lines, ${s.breaks} breaks${opened ? `, balances summed from the opening (closing ${Math.round(s.closing ?? 0)}), ${wrong.length} recorded balances differ` : ''}${s.warnings.length ? `; ${s.warnings.join(' ')}` : ''}`,
       );
       continue;
     }
     const saved = await saveBankStatement(db, hh, assetId, s, f.name.replace(/^[0-9a-f]{8}-/, ''));
+    if (opened?.firstLineOn) {
+      // the first line of a download from the opening is the opening deposit: the account was opened that day or just before
+      const { error } = await db
+        .from('assets')
+        .update({
+          opened_on: opened.firstLineOn,
+          opened_after: null,
+          opened_note: 'The first line of the full transaction download (the opening deposit)',
+        })
+        .eq('id', assetId)
+        .eq('household_id', hh);
+      if (error) throw new Error(`opening date: ${error.message}`);
+    }
     console.log(
       `- ${tag}: ${s.lines.length} lines (${saved.lines} new), ${saved.balances} month-end balances${saved.opened ? `, opened ${s.openedOn}` : ''}${s.breaks ? `, ${s.breaks} breaks` : ''}`,
     );
