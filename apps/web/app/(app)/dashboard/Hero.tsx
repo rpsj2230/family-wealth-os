@@ -55,6 +55,30 @@ function TileDelta({ label, tile, why }: { label: string; tile: HeadlineTile; wh
 }
 
 /**
+ * One small line under the period tiles while funds with no transaction ledger exist (more than the Settings threshold): their gains
+ * rest on monthly values, prices and the SIP plan until a fund statement is imported. It links to where the statement is imported.
+ */
+export function FundNote({
+  m,
+  sample,
+  testId = 'hm-fund-note',
+}: {
+  m: HomeModel;
+  sample: boolean;
+  testId?: string;
+}) {
+  const n = m.fundNote;
+  if (!n.show) return null;
+  const href = homeLink('/import?tab=cas', sample);
+  return (
+    <p className="hm-approx small muted" data-testid={testId}>
+      {n.text}. <MaybeLink href={href}>Import a fund statement</MaybeLink>
+      {href ? '' : ' (Import > Fund statement)'}
+    </p>
+  );
+}
+
+/**
  * The top of Home: what the family is worth, how it changed today, this month and this financial year, how much of that is
  * verified, and the few figures that say what to look at next. Every figure comes from buildHome(); this only draws it.
  */
@@ -104,6 +128,8 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
           <TileDelta label="This financial year" tile={m.tiles.fy} why={ex['home.fy']} />
         </div>
       </div>
+
+      <FundNote m={m} sample={sample} />
 
       <Money m={m} ex={ex} />
 

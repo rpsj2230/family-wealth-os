@@ -238,6 +238,10 @@ export interface AppConfig {
     valuationPeriods: number;
     /** quarters follow the financial year (April to June is Q1); off: calendar quarters (January to March is Q1) */
     financialQuarters: boolean;
+    /** Home's note "fund gains are approximate until you import your fund statements" shows while more funds than this have no transaction ledger (0 = any) */
+    noLedgerNoteAbove: number;
+    /** a fund with no ledger has its units rebuilt from its SIP plan; the plan's money in may differ from the amount invested by this share before it is adjusted (0.02 = 2%) */
+    planTolerance: number;
   };
   /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
   sheetSync: {
@@ -395,6 +399,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     compareFunds: 4,
     valuationPeriods: 12,
     financialQuarters: true,
+    noLedgerNoteAbove: 0,
+    planTolerance: 0.02,
   },
   sheetSync: {
     timeZone: 'Asia/Singapore',
@@ -729,6 +735,8 @@ export function configFromJson(raw: unknown): AppConfig {
       compareFunds: Math.round(num(fun.compareFunds, d.funds.compareFunds, 2, 8)),
       valuationPeriods: Math.round(num(fun.valuationPeriods, d.funds.valuationPeriods, 2, 60)),
       financialQuarters: bool(fun.financialQuarters, d.funds.financialQuarters),
+      noLedgerNoteAbove: Math.round(num(fun.noLedgerNoteAbove, d.funds.noLedgerNoteAbove, 0, 1000)),
+      planTolerance: num(fun.planTolerance, d.funds.planTolerance, 0, 0.5),
     },
     sheetSync: (() => {
       const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));

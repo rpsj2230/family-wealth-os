@@ -2,12 +2,14 @@ import Link from 'next/link';
 import {
   GRANULARITIES,
   formatInr,
+  fundLedgerNote,
   signedRupees,
   signedShare,
   type ExplainSet,
   type Granularity,
   type ValuationHistory,
   type ValuationRow,
+  unexplainedWords,
 } from '@fwos/core';
 import { Est } from '@/components/Est';
 import { WhyHead, Why } from '@/components/Why';
@@ -113,6 +115,7 @@ export function ValueByPeriod({
   action,
   keep,
   recent,
+  noLedgerAbove,
   who,
   demo = false,
 }: {
@@ -126,10 +129,20 @@ export function ValueByPeriod({
   keep: Record<string, string>;
   /** Settings: how many periods "recent" shows */
   recent: number;
+  /** Settings: the note about approximate fund gains shows while more funds than this have no transaction ledger */
+  noLedgerAbove: number;
   who: string;
   demo?: boolean;
 }) {
   const g = h.granularity;
+  const note = fundLedgerNote(
+    { fundsHeld: h.ledger.held, fundsHeldWithoutLedger: h.ledger.withoutLedger },
+    noLedgerAbove,
+  );
+  const apart = unexplainedWords({
+    unexplainedGross: h.rows.reduce((a, r) => a + r.unexplainedGross, 0),
+    unexplainedFunds: Math.max(0, ...h.rows.map((r) => r.unexplainedFunds)),
+  });
   const noun = GRANULARITIES.find((x) => x.key === g)!;
   const plural = g === 'year' ? 'financial years' : `${noun.noun}s`;
   const range = h.range.kind === 'between' ? 'between' : h.range.kind;
@@ -294,7 +307,8 @@ export function ValueByPeriod({
             of the money at work in the period. The latest row stops at today (
             {h.today.split('-').reverse().join('/')}) and says “to date”; “no data” means no price
             or record was near the end of that period. Values are the units held times the price on
-            the last day; est. marks a value moved forward from an earlier record.
+            the last day; est. marks a value that rests on units worked out from your SIP plan and
+            the price of each day, or on an earlier record moved forward with the price.
             {h.total > rows.length ? (
               <>
                 {' '}
@@ -306,6 +320,21 @@ export function ValueByPeriod({
               </>
             ) : null}
           </p>
+          {note.show && (
+            <p className="cardnote" data-testid="vbp-fund-note">
+              {note.text}.{' '}
+              {demo ? (
+                'Import > Fund statement.'
+              ) : (
+                <Link href="/import?tab=cas">Import a fund statement</Link>
+              )}
+            </p>
+          )}
+          {apart && (
+            <p className="cardnote" data-testid="vbp-apart">
+              {apart}.
+            </p>
+          )}
         </>
       )}
     </section>

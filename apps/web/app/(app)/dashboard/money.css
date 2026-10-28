@@ -283,3 +283,15 @@
     justify-content: flex-end;
   }
 }
+
+/* the one line about funds with no transaction ledger, and what a monthly value changed that is not profit */
+.hm-approx {
+  margin: 0.5rem 0 0;
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+}
+.hm-apart {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  overflow-wrap: anywhere;
+}

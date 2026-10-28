@@ -35,6 +35,8 @@ describe('settings fields', () => {
       moneyTolerance: '1',
       valuationPeriods: '12',
       financialQuarters: true,
+      noLedgerNoteAbove: '0',
+      planTolerance: '2',
     });
     const ok = parseGroup(
       group('funds'),
@@ -44,6 +46,8 @@ describe('settings fields', () => {
         moneyTolerance: '2',
         valuationPeriods: '12',
         financialQuarters: 'on',
+        noLedgerNoteAbove: '2',
+        planTolerance: '3',
       }),
     );
     expect(ok).toEqual({
@@ -55,6 +59,8 @@ describe('settings fields', () => {
           moneyTolerance: 2,
           valuationPeriods: 12,
           financialQuarters: true,
+          noLedgerNoteAbove: 2,
+          planTolerance: 0.03,
         },
       },
     });

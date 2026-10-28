@@ -17,7 +17,10 @@
  *  - Mutual fund: its value on the last day before the period (units held then times the last price on or before it) and on its last
  *    day (today: the figure Investments shows), as `fundSeries` works them out. The profit is the change in value less net purchases
  *    in between. Sales are money taken out, so a gain already booked by selling is part of the profit of the period it was sold in. A
- *    fund with no statement is rebuilt from its plan, and marked estimated, as are units assumed from a SIP plan.
+ *    fund with no statement is rebuilt from its plan, and marked estimated, as are units assumed from a SIP plan. A fund with no
+ *    ledger at all (only monthly values) is moved from each value with its price and its planned SIP instalments (position.ts); when
+ *    the next value arrives, what it differs from that by is not money earned and not money put in by the plan: it is carried apart
+ *    (`unexplained`) and taken out of the profit of the period it falls in, so the day a monthly value is entered never reads as a gain.
  *  - Savings and cash: the interest the recorded balance earns at the account's rate after the tax taken at source, the last recorded
  *    balance carried forward until the next record. Deposits into and withdrawals from the account are not profit. Always an
  *    estimate; the bank credits interest in lumps. Foreign-currency balances earn no gain here: an exchange rate is not interest.
@@ -29,6 +32,7 @@
  */
 import { daysBetween, fdValueOn, type Compounding } from './fd';
 import { addDaysIso } from './harvest-lots';
+import { formatInr } from './money';
 import { fyBoundsOf, fyOf } from './tax';
 
 export type GainPeriodKey = 'recent' | 'month' | 'quarter' | 'fy' | 'lastFy' | 'start';
@@ -197,6 +201,14 @@ export interface ClassPeriod {
   estimated: boolean;
   /** nothing was held in the period */
   empty: boolean;
+  /**
+   * Change in value that is neither profit nor money the plan put in: for funds with only monthly values, what a new value differs
+   * from the old one moved with the price and the planned instalments (signed, net) and the same without signs (gross), and how many
+   * funds it comes from. Left out of the profit; zero for every other kind.
+   */
+  unexplained: number;
+  unexplainedGross: number;
+  unexplainedFunds: number;
 }
 
 interface Flow {
@@ -213,6 +225,7 @@ function finish(
   flows: Flow[],
   estimated: boolean,
   baseOverride?: number,
+  apart?: { net: number; gross: number; funds: number },
 ): ClassPeriod {
   const putIn = flows.filter((f) => f.amount > 0).reduce((a, f) => a + f.amount, 0);
   const takenOut = flows.filter((f) => f.amount < 0).reduce((a, f) => a - f.amount, 0);
@@ -221,7 +234,13 @@ function finish(
     0,
   );
   const base = baseOverride ?? startValue + weighted;
-  const empty = startValue === 0 && endValue === 0 && putIn === 0 && takenOut === 0 && profit === 0;
+  const empty =
+    startValue === 0 &&
+    endValue === 0 &&
+    putIn === 0 &&
+    takenOut === 0 &&
+    profit === 0 &&
+    !apart?.gross;
   return {
     profit,
     pct: base > 0 ? profit / base : null,
@@ -232,6 +251,9 @@ function finish(
     base,
     estimated: estimated && !empty,
     empty,
+    unexplained: apart?.net ?? 0,
+    unexplainedGross: apart?.gross ?? 0,
+    unexplainedFunds: apart?.funds ?? 0,
   };
 }
 
@@ -306,6 +328,13 @@ export interface FundHolding {
   flows: Flow[];
   /** transactions of a fund statement are on file; without, the flows and values come from the plan */
   hasStatement: boolean;
+  /**
+   * Days a new monthly value differed from what the last one, moved with the price and the planned instalments, predicted (signed
+   * rupees; a fund with only monthly values): not profit and not money put in. Left out of the profit of the period they fall in.
+   */
+  steps?: { date: string; amount: number }[];
+  /** where the fund's value comes from: its transaction ledger, units rebuilt from its SIP plan, or (last resort) a value on file moved with the price */
+  valueFrom?: 'ledger' | 'plan' | 'records';
   /** the first day the figures about this fund rest on estimates (no statement, or units assumed from a SIP plan); null when exact */
   estimatedSince: string | null;
 }
@@ -323,14 +352,25 @@ export function fundPeriod(funds: FundHolding[], w: Span, today: string): ClassP
   let start = 0;
   let end = 0;
   let estimated = false;
+  let apartNet = 0;
+  let apartGross = 0;
+  let apartFunds = 0;
   const flows: Flow[] = [];
   for (const f of funds) {
     const a = fundValueOnDay(f, open, today);
     const b = fundValueOnDay(f, close, today);
     const moved = f.flows.filter((m) => inside(m.date, w) && m.amount !== 0);
+    const apart = (f.steps ?? []).filter((m) => inside(m.date, w) && m.amount !== 0);
     start += a;
     end += b;
     flows.push(...moved);
+    if (apart.length > 0) {
+      const net = apart.reduce((x, y) => x + y.amount, 0);
+      const gross = apart.reduce((x, y) => x + Math.abs(y.amount), 0);
+      apartNet += net;
+      apartGross += gross;
+      if (gross >= 0.5) apartFunds++;
+    }
     if (
       f.estimatedSince !== null &&
       w.through >= f.estimatedSince &&
@@ -339,7 +379,11 @@ export function fundPeriod(funds: FundHolding[], w: Span, today: string): ClassP
       estimated = true;
   }
   const net = flows.reduce((x, y) => x + y.amount, 0);
-  return finish(w, start, end, end - start - net, flows, estimated);
+  return finish(w, start, end, end - start - net - apartNet, flows, estimated, undefined, {
+    net: apartNet,
+    gross: apartGross,
+    funds: apartFunds,
+  });
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -437,6 +481,13 @@ export interface PeriodGains {
   basis: {
     /** funds with no statement: rebuilt from the plan */
     fundsFromPlan: number;
+    /** funds worth something today, and of them how many have no transaction ledger (only monthly values or a plan): their gains are approximate */
+    fundsHeld: number;
+    fundsHeldWithoutLedger: number;
+    /** of the funds held, how many are valued from a ledger, from units rebuilt from the plan and the price of each day, or (last resort) from a value on file moved with the price */
+    fundsValuedFromLedger: number;
+    fundsValuedFromPlan: number;
+    fundsValuedFromRecords: number;
     /** funds with a statement whose ledger has instalments assumed from the SIP plan */
     fundsWithAssumed: number;
     /** foreign-currency accounts, left out of the cash figures */
@@ -468,6 +519,9 @@ export function addPeriods(a: ClassPeriod, b: ClassPeriod): ClassPeriod {
     base,
     estimated: a.estimated || b.estimated,
     empty: false,
+    unexplained: a.unexplained + b.unexplained,
+    unexplainedGross: a.unexplainedGross + b.unexplainedGross,
+    unexplainedFunds: a.unexplainedFunds + b.unexplainedFunds,
   };
 }
 
@@ -481,6 +535,9 @@ export const emptyCell = (): ClassPeriod => ({
   base: 0,
   estimated: false,
   empty: true,
+  unexplained: 0,
+  unexplainedGross: 0,
+  unexplainedFunds: 0,
 });
 
 export function periodGains(i: PeriodGainsInput): PeriodGains {
@@ -574,6 +631,9 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
         base,
         estimated: parts.some((c) => c.estimated),
         empty: parts.every((c) => c.empty),
+        unexplained: sum((c) => c.unexplained),
+        unexplainedGross: sum((c) => c.unexplainedGross),
+        unexplainedFunds: sum((c) => c.unexplainedFunds),
       };
     }),
   };
@@ -585,6 +645,14 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
     since,
     basis: {
       fundsFromPlan: i.funds.filter((f) => !f.hasStatement).length,
+      fundsHeld: i.funds.filter((f) => f.value > 0).length,
+      fundsHeldWithoutLedger: i.funds.filter((f) => f.value > 0 && !f.hasStatement).length,
+      fundsValuedFromLedger: i.funds.filter(
+        (f) => f.value > 0 && (f.valueFrom ?? 'ledger') === 'ledger',
+      ).length,
+      fundsValuedFromPlan: i.funds.filter((f) => f.value > 0 && f.valueFrom === 'plan').length,
+      fundsValuedFromRecords: i.funds.filter((f) => f.value > 0 && f.valueFrom === 'records')
+        .length,
       fundsWithAssumed: i.funds.filter((f) => f.hasStatement && f.estimatedSince !== null).length,
       foreignAccounts: i.accounts.filter((a) => a.currency !== 'INR').length,
       accountsWithoutBalance: i.accounts.filter(
@@ -594,4 +662,47 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
       depositsEndedGuessed: i.deposits.filter((d) => !d.held && !d.endedOn).length,
     },
   };
+}
+
+// ------------------------------------------------------------------------------------------------
+// The words about how far fund gains can be trusted
+// ------------------------------------------------------------------------------------------------
+export interface FundLedgerNote {
+  /** show the note: more funds than the Settings threshold have no transaction ledger */
+  show: boolean;
+  /** funds held today with no transaction ledger, and of how many held */
+  without: number;
+  of: number;
+  /** the sentence under the period tiles */
+  text: string;
+}
+
+/**
+ * "Fund gains are approximate until you import your fund statements (3 of 26 funds have no transaction ledger)". Shown while more
+ * funds than `above` (Settings, default 0 = any) have only monthly values or a plan and no transactions; after a statement is imported
+ * those funds are exact and no longer counted, and the note goes when none is left.
+ */
+export function fundLedgerNote(
+  basis: Pick<PeriodGains['basis'], 'fundsHeld' | 'fundsHeldWithoutLedger'>,
+  above: number,
+): FundLedgerNote {
+  const without = basis.fundsHeldWithoutLedger;
+  const of = basis.fundsHeld;
+  return {
+    show: without > Math.max(0, above),
+    without,
+    of,
+    text: `Fund gains are approximate until you import your fund statements (${without} of ${of} ${of === 1 ? 'fund has' : 'funds have'} no transaction ledger)`,
+  };
+}
+
+/**
+ * "2 funds without a statement: ₹1,20,000 of change between sheet values is not counted as profit"; null when nothing was set apart.
+ * The amount is the sum without signs: a rise of one fund and a fall of another do not cancel in the words.
+ */
+export function unexplainedWords(
+  c: Pick<ClassPeriod, 'unexplainedGross' | 'unexplainedFunds'>,
+): string | null {
+  if (!(c.unexplainedGross >= 0.5) || c.unexplainedFunds === 0) return null;
+  return `${c.unexplainedFunds} ${c.unexplainedFunds === 1 ? 'fund' : 'funds'} without a statement: ${formatInr(Math.round(c.unexplainedGross))} of change between sheet values is not counted as profit`;
 }

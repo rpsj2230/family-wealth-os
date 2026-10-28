@@ -646,6 +646,11 @@ describe('periodGains', () => {
     const g = periodGains(input());
     expect(g.basis).toEqual({
       fundsFromPlan: 1,
+      fundsHeld: 2,
+      fundsHeldWithoutLedger: 1,
+      fundsValuedFromLedger: 2,
+      fundsValuedFromPlan: 0,
+      fundsValuedFromRecords: 0,
       fundsWithAssumed: 0,
       foreignAccounts: 1,
       accountsWithoutBalance: 1,

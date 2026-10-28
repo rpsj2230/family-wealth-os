@@ -353,6 +353,7 @@ export function InvestShell({
           who={who}
           styles={styles}
           recent={cfg.valuationPeriods}
+          noLedgerAbove={cfg.noLedgerNoteAbove}
           financialQuarters={cfg.financialQuarters}
           base={base}
           link={(patch) => link({ tab: 'valuation', ...patch })}
@@ -755,6 +756,7 @@ function ValuationTab({
   who,
   styles,
   recent,
+  noLedgerAbove,
   financialQuarters,
   base,
   link,
@@ -765,6 +767,7 @@ function ValuationTab({
   who: string | null;
   styles: Record<string, PersonStyle>;
   recent: number;
+  noLedgerAbove: number;
   financialQuarters: boolean;
   base: string;
   link: (patch: Record<string, string | undefined>) => string;
@@ -795,6 +798,7 @@ function ValuationTab({
       action={base}
       keep={{ tab: 'valuation', g: h.granularity, ...(who ? { p: who } : {}) }}
       recent={recent}
+      noLedgerAbove={noLedgerAbove}
       who={name}
       demo={demo}
     />

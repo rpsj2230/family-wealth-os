@@ -5,7 +5,7 @@
  * (Actions > Numbers check). It prints totals only: no account names, numbers or per-account balances.
  */
 import { createClient } from '@supabase/supabase-js';
-import { positionAsOf, positionGains } from '@fwos/core';
+import { fundValueFrom, planOf, positionAsOf, positionGains, valueOn } from '@fwos/core';
 import { buildDigestInput, loadPortfolioData, loadPositionInput, loadSettings } from '@fwos/data';
 
 const need = (n: string) => {
@@ -112,7 +112,13 @@ async function main() {
     // the period tiles and the profit-by-period table, from the position engine (Home's), per kind of holding
     try {
       const cfg = (await loadSettings(db, household)).config;
-      const position = await loadPositionInput(db, l, { householdId: household, config: cfg });
+      // every price is read, so a day that is the edge of no period (15 Oct, say) is valued from prices like any other; a page asks for
+      // the edges of its periods only
+      const position = await loadPositionInput(db, l, {
+        householdId: household,
+        config: cfg,
+        allPrices: true,
+      });
       const g = positionGains({ position, recentDays: cfg.home.changeDays });
       console.log(`\nPeriod tiles (data starts ${g.dataStarts ?? '-'}):`);
       for (const t of g.tiles)
@@ -125,33 +131,61 @@ async function main() {
           `  ${r.label}: ${Object.entries(r.cells)
             .map(
               ([k, c]) =>
-                `${k} ₹${inr(c.profit)} on ₹${inr(c.base)} (start ₹${inr(c.startValue)}, in ₹${inr(c.putIn)}, out ₹${inr(c.takenOut)})`,
+                `${k} ₹${inr(c.profit)} on ₹${inr(c.base)} (start ₹${inr(c.startValue)}, in ₹${inr(c.putIn)}, out ₹${inr(c.takenOut)}${c.unexplainedFunds > 0 ? `, apart ₹${inr(c.unexplained)} from ${c.unexplainedFunds} funds` : ''})`,
             )
             .join(' | ')}`,
         );
       console.log(`Basis: ${JSON.stringify(g.periods.basis)}`);
-      // funds by day around the start of the last-30-days window, to see whether a jump is real (totals and counts only)
-      const days = [
-        '2026-09-24',
-        '2026-09-26',
-        '2026-09-27',
-        '2026-09-28',
-        '2026-09-29',
-        '2026-09-30',
-        '2026-10-01',
-        '2026-10-02',
-        '2026-10-05',
-        '2026-10-15',
-        '2026-10-28',
-      ];
-      console.log('Funds by day (value, held, no data, estimated):');
+      // where each fund's value comes from, and how well the plan-built units agree with the monthly sheet (counts and totals only)
+      const funds = position.assets.filter((x) => x.type === 'mutual_fund' && x.fund);
+      const from = (k: string) =>
+        funds.filter((x) => fundValueFrom(x, position.config) === k).length;
+      const noCode = l.assetRows.filter((x) => x.type === 'mutual_fund' && !x.amfi_code).length;
+      const noPrice = funds.filter((x) => x.fund!.navs.length === 0).length;
+      console.log(
+        `Funds: ${funds.length}; value from the ledger ${from('ledger')}, from the plan and each day’s price ${from('plan')}, last resort (a value on file moved with the price, or flat with no price) ${from('records')}; with no scheme matched ${noCode}; with no prices read ${noPrice}`,
+      );
+      let sheetTotal = 0;
+      let engineTotal = 0;
+      let adjusted = 0;
+      let skipped = 0;
+      for (const x of funds) {
+        if (fundValueFrom(x, position.config) !== 'plan') continue;
+        const pl = planOf(x, position.config)!;
+        if (pl.adjusted !== 'none') adjusted++;
+        skipped += pl.skipped;
+        const sheet = x.records.filter((r) => r.sheet).slice(-1)[0];
+        if (!sheet) continue;
+        sheetTotal += sheet.amount;
+        engineTotal += valueOn(x, sheet.date, position.config).value ?? 0;
+      }
+      console.log(
+        `Plan-built funds: ${adjusted} had their plan adjusted to the amount invested, ${skipped} instalments had no price; on the day of each fund's newest sheet value the sheet adds up to ₹${inr(sheetTotal)} and the plan with prices to ₹${inr(engineTotal)} (difference ₹${inr(sheetTotal - engineTotal)})`,
+      );
+      // funds by day around the start of the last-30-days window, to see that the series moves with prices and plans and steps only where a
+      // new monthly value is on file (totals and counts only)
+      const first = '2026-09-24';
+      const days: string[] = [];
+      const walk = new Date(`${first}T00:00:00Z`);
+      while (walk.toISOString().slice(0, 10) <= date) {
+        days.push(walk.toISOString().slice(0, 10));
+        walk.setUTCDate(walk.getUTCDate() + 1);
+      }
+      const rolledFunds = position.assets.filter(
+        (x) => x.type === 'mutual_fund' && x.fund && x.fund.txns.length === 0,
+      ).length;
+      console.log(
+        `Funds by day (value, held, no data, estimated; ${rolledFunds} funds have no ledger and are moved on from their monthly values):`,
+      );
+      let before = 0;
       for (const day of days) {
         const p = positionAsOf(position, day);
         const f = p.holdings.filter((h) => h.cls === 'funds');
         const held = f.filter((h) => h.state === 'held' && h.value !== null);
         console.log(
-          `  ${day}: ₹${inr(p.byClass.funds)}  held ${held.length} of ${f.length}, no data ${f.filter((h) => h.state === 'no_data').length}, estimated ${held.filter((h) => h.estimated).length}`,
+          `  ${day}: ₹${inr(p.byClass.funds)} (${before ? (p.byClass.funds >= before ? '+' : '-') + inr(Math.abs(p.byClass.funds - before)) : 'start'})  held ${held.length} of ${f.length}, no data ${f.filter((h) => h.state === 'no_data').length}, estimated ${held.filter((h) => h.estimated).length}`,
         );
+        before = p.byClass.funds;
       }
       const a = positionAsOf(position, '2026-09-28');
       const b = positionAsOf(position, '2026-10-01');

@@ -103,6 +103,7 @@ export function buildValuationExplain(
       'The first two change columns are the plain change in value. The last two take out the money you added or withdrew, so a month with a big purchase never reads as a good month.',
       'The gain is worked out by the same function as the profit on Home and the Performance tab, so the same period gives the same rupees everywhere.',
       'A period before the first record is cut where the records begin; one with no price or record near its end says “no data” instead of zero.',
+      'Funds are worth the units held on a day times the price of that day. With a fund statement the units are the statement’s. A fund with no transactions has its units worked out from your plan: the start date, the amount invested and every SIP amount and change with its date, each instalment buying its amount divided by the price of its day (the next priced day when it fell on a holiday). That is labelled estimated from your SIP plan and the price of each day. Your monthly sheet value is used only as a last resort, for a fund with no start date or no price. Between two monthly sheet values the fund moves with its price; money added by the SIP plan and any difference between the sheet and the prices is not counted as profit.',
     ],
   });
   return { 'valuation.chart': chart, 'valuation.table': table };

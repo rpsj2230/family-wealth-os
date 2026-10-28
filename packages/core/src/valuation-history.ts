@@ -18,8 +18,14 @@
  */
 import { addDaysIso } from './harvest-lots';
 import { formatInr } from './money';
-import { fundPeriod, spanBetween, type ClassPeriod, type FundHolding } from './period-gains';
-import { isHeld, valueOn, type PositionAsset, type PositionInput } from './position';
+import { fundPeriod, spanBetween, type ClassPeriod } from './period-gains';
+import {
+  fundsOf,
+  ledgerlessStart,
+  valueOn,
+  type PositionAsset,
+  type PositionInput,
+} from './position';
 
 export type Granularity = 'week' | 'month' | 'quarter' | 'year';
 
@@ -211,6 +217,10 @@ export interface ValuationRow {
   base: number;
   /** how many funds had a value at the end */
   funds: number;
+  /** change between monthly fund values that neither the price nor the SIP plan explains, left out of `gain` (funds with no ledger); and how many funds it comes from */
+  unexplained: number;
+  unexplainedGross: number;
+  unexplainedFunds: number;
 }
 
 export interface ValuationHistory {
@@ -221,6 +231,8 @@ export interface ValuationHistory {
   today: string;
   granularity: Granularity;
   range: ValuationRange;
+  /** the funds held today, and how many have no transaction ledger (only a plan or monthly values): their gains are approximate */
+  ledger: { held: number; withoutLedger: number };
 }
 
 const fundsOfInput = (input: PositionInput, owner: string | null): PositionAsset[] =>
@@ -233,7 +245,7 @@ function firstFundDate(assets: PositionAsset[]): string | null {
   const days = assets.flatMap((a) =>
     [
       a.fund?.txns[0]?.date,
-      a.fund?.flows[0]?.date,
+      ledgerlessStart(a) ?? a.fund?.flows[0]?.date,
       ...(a.fund?.snapshots ?? []).slice(0, 1).map((s) => s.date),
       ...a.records.slice(0, 1).map((r) => r.date),
     ].filter((x): x is string => !!x),
@@ -256,6 +268,14 @@ export function valuationHistory(args: {
   const today = c.today;
   const assets = fundsOfInput(position, args.owner);
   const first = firstFundDate(assets);
+  const held = assets.filter((a) => {
+    const v = valueOn(a, today, c, position.current);
+    return v.state === 'held' && (v.value ?? 0) > 0;
+  });
+  const ledger = {
+    held: held.length,
+    withoutLedger: held.filter((a) => !a.fund?.hasStatement).length,
+  };
   const empty: ValuationHistory = {
     rows: [],
     total: 0,
@@ -263,6 +283,7 @@ export function valuationHistory(args: {
     today,
     granularity,
     range,
+    ledger,
   };
   if (!first) return empty;
   const all = periodsFor(granularity, first, today, args.financialQuarters);
@@ -270,22 +291,8 @@ export function valuationHistory(args: {
 
   // the funds with their value on every day measured: the day before each period starts and its last day
   const days = [...new Set(chosen.flatMap((p) => [addDaysIso(p.from, -1), p.through]))].sort();
-  const holdings: FundHolding[] = assets
-    .filter((a) => a.fund)
-    .map((a) => {
-      const now = valueOn(a, today, c, position.current);
-      return {
-        assetId: a.assetId,
-        name: a.name,
-        value: isHeld(now) ? now.value! : 0,
-        points: days
-          .filter((d) => d < today)
-          .map((d) => ({ date: d, value: valueOn(a, d, c, position.current).value ?? 0 })),
-        flows: a.fund!.flows,
-        hasStatement: a.fund!.hasStatement,
-        estimatedSince: a.fund!.estimatedSince,
-      };
-    });
+  // the same function Home's period figures read the funds from
+  const holdings = fundsOf(position, days, args.owner);
 
   const at = (d: string) => {
     let value = 0;
@@ -322,9 +329,12 @@ export function valuationHistory(args: {
       gainPct: hasEnd ? cell.pct : null,
       base: cell.base,
       funds: end.funds,
+      unexplained: cell.unexplained,
+      unexplainedGross: cell.unexplainedGross,
+      unexplainedFunds: cell.unexplainedFunds,
     };
   });
-  return { rows, total: all.length, firstDate: first, today, granularity, range };
+  return { rows, total: all.length, firstDate: first, today, granularity, range, ledger };
 }
 
 // ------------------------------------------------------------------------------------------------

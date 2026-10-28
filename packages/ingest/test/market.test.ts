@@ -55,12 +55,13 @@ const io = (o: { text?: string; json?: (u: string) => unknown } = {}): MarketIo 
 });
 
 describe('parsers', () => {
-  it('parses mfapi history, converting dates and dropping rows before 2018 or with bad NAVs', () => {
+  it('parses mfapi history, converting dates and dropping rows before 2000 or with bad NAVs', () => {
     const rows = parseHistory(
       {
         data: [
           { date: '23-10-2026', nav: '190.5' },
-          { date: '01-12-2017', nav: '50' },
+          { date: '01-12-1999', nav: '50' },
+          { date: '01-12-2017', nav: '51' },
           { date: '22-10-2026', nav: '0' },
           { date: 'x', nav: '1' },
         ],
@@ -69,6 +70,7 @@ describe('parsers', () => {
     );
     expect(rows).toEqual([
       { amfi_code: '118778', nav_date: '2026-10-23', nav: 190.5, source: 'mfapi' },
+      { amfi_code: '118778', nav_date: '2017-12-01', nav: 51, source: 'mfapi' },
     ]);
     expect(parseHistory(null, 'x')).toEqual([]);
   });
@@ -132,6 +134,25 @@ describe('refreshMarketData', () => {
     const done = fakeStore({ held: ['100001'], navCounts: { '100001': 500 } });
     const r2 = await refreshMarketData(done.store, io({ json: () => hist }), '2026-10-26');
     expect(r2.historyRows).toBe(0);
+  });
+
+  it('fetches the history again for a scheme whose stored history was cut short at the old 2018 floor', async () => {
+    const hist = {
+      data: [
+        { date: '22-10-2026', nav: '10.1' },
+        { date: '02-01-2018', nav: '8.0' },
+        { date: '03-05-2012', nav: '5.0' },
+      ],
+    };
+    const cut = fakeStore({ held: ['100001'], navCounts: { '100001': 500 } });
+    cut.store.navFirst = async () => '2018-01-02';
+    const r = await refreshMarketData(cut.store, io({ json: () => hist }), '2026-10-26');
+    expect(r.historyRows).toBe(3);
+    const whole = fakeStore({ held: ['100001'], navCounts: { '100001': 500 } });
+    whole.store.navFirst = async () => '2012-05-03';
+    expect(
+      (await refreshMarketData(whole.store, io({ json: () => hist }), '2026-10-26')).historyRows,
+    ).toBe(0);
   });
 
   it('warns, rather than failing, when an optional source is down or a scheme has no NAV', async () => {
