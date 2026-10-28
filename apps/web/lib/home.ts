@@ -10,6 +10,7 @@ import {
   depositsByBank,
   fixedDepositBlocks,
   foldByKind,
+  fundLedgerNote,
   freshnessSummary,
   growthSplit,
   investedMoney,
@@ -36,6 +37,7 @@ import {
   type ClassCard,
   type DepositInterest,
   type FreshnessSummary,
+  type FundLedgerNote,
   type GrowthSplit,
   type HomeRange,
   type MaturityYear,
@@ -183,6 +185,8 @@ export interface HomeModel {
   classes: ClassCard[];
   /** profit earned in the last N days, this month, quarter and financial year, last financial year and since the start */
   periods: PeriodGains;
+  /** the line under the period tiles about funds with no transaction ledger: their gains are approximate until a statement is imported */
+  fundNote: FundLedgerNote;
   /** the assumptions behind the cash figures, from Settings: the rate for an account with none of its own, and the tax at source */
   assumptions: { savingsRate: number; tdsRate: number };
   counted: number;
@@ -684,6 +688,7 @@ export function buildHome(i: HomeInput): HomeModel {
     },
     classes: classList,
     periods,
+    fundNote: fundLedgerNote(periods.basis, cfg.funds.noLedgerNoteAbove),
     assumptions: {
       savingsRate: cfg.estimates.savingsRate,
       tdsRate: cfg.estimates.interestTdsRate,

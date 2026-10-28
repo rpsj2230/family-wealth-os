@@ -2,6 +2,7 @@ export * from './xirr';
 export * from './fd';
 export * from './freshness';
 export * from './estimate';
+export * from './fund-plan';
 export * from './money';
 export * from './networth';
 export * from './dicgc';

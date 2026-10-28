@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coreTokens, matchFund, parseNavAll } from '../src/amfi';
+import { coreTokens, matchFund, parseNavAll, pickByIsin, pickByName } from '../src/amfi';
 
 const SAMPLE = `Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
  
@@ -97,5 +97,23 @@ describe('matchFund', () => {
     const m = matchFund('Axis Bluechip Growth Direct Plan', s, 71.59);
     expect(m.candidates[0]!.navGap).toBeCloseTo(Math.abs(65.93 - 71.59) / 71.59, 6);
     expect(matchFund('Axis Bluechip Growth Direct Plan', s).candidates[0]!.navGap).toBeNull();
+  });
+});
+
+describe('matching a fund to its scheme without asking', () => {
+  const s = parseNavAll(SAMPLE);
+  it('an ISIN names the scheme exactly, whatever the name says', () => {
+    expect(pickByIsin('INF846K01DP8', s)?.code).toBe('120465');
+    expect(pickByIsin('inf204k01hy3', s)?.code).toBe('113177');
+    expect(pickByIsin('INF000000000', s)).toBeNull();
+    expect(pickByIsin('not an isin', s)).toBeNull();
+    expect(pickByIsin(null, s)).toBeNull();
+  });
+  it('the same words, plan and option of exactly one scheme match; a name with no plan matches two and is left alone', () => {
+    expect(pickByName('Axis Large Cap Fund - Direct Plan - Growth', s)?.code).toBe('120465');
+    expect(pickByName('AXIS LARGE CAP FUND DIR GR', s)?.code).toBe('120465');
+    expect(pickByName('Axis Large Cap Fund', s)).toBeNull();
+    expect(pickByName('Nippon India Small Cap Fund Direct IDCW', s)?.code).toBe('999001');
+    expect(pickByName('Some Other Fund Direct Growth', s)).toBeNull();
   });
 });

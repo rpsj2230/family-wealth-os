@@ -10,6 +10,20 @@ const noSideways = async (page: Page) => {
 const hero = (page: Page) => page.getByRole('region', { name: 'Net worth', exact: true });
 
 test.describe('Home (public sample)', () => {
+  test('says, under the period tiles and again under the table, that fund gains are approximate while funds have no ledger', async ({
+    page,
+  }) => {
+    await page.goto('/demo/dashboard');
+    const note = page.getByTestId('hm-fund-note');
+    await expect(note).toBeVisible();
+    await expect(note).toContainText(
+      'Fund gains are approximate until you import your fund statements',
+    );
+    await expect(note).toContainText(/\d+ of \d+ funds? (has|have) no transaction ledger/);
+    await expect(page.getByTestId('hm-fund-note-table')).toBeVisible();
+    await noSideways(page);
+  });
+
   test('answers the first questions: worth, what changed, how verified, what needs you', async ({
     page,
   }) => {

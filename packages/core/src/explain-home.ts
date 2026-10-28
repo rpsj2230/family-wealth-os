@@ -227,7 +227,7 @@ function tileExplain(
     title,
     exact: exSigned(t.amount),
     what,
-    how: `${rows.map(kindHow).join('; ')}. Together ${exSigned(t.amount)}${t.pct === null ? '' : `; as a share of the money at work: ${ratioHow({ label: 'earned', amount: t.amount }, { label: 'at work', amount: t.base }, 2)}`}. Each holding is valued on ${exDate(t.from)} from the nearest record on or before that day, moved forward to it at its rate, its fund price or the exchange rate, and the same on the last day; a deposit made from savings, a payout, a fund bought or sold and a balance that jumped are money moving, not earnings.`,
+    how: `${rows.map(kindHow).join('; ')}. Together ${exSigned(t.amount)}${t.pct === null ? '' : `; as a share of the money at work: ${ratioHow({ label: 'earned', amount: t.amount }, { label: 'at work', amount: t.base }, 2)}`}. Each holding is valued on ${exDate(t.from)} from the nearest record on or before that day, moved forward to it at its rate or the exchange rate (a fund: the units held times the price of the day, the units from its statement or, with none, from your SIP plan), and the same on the last day; a deposit made from savings, a payout, a fund bought or sold and a balance that jumped are money moving, not earnings.`,
     inputs: [
       {
         label: 'First day built from',
@@ -555,6 +555,7 @@ function periods(i: HomeExplainInput): Explain {
     notes: [
       `${w('recent').label} is a Settings value. This month, quarter and financial year start on the 1st, on 1 Apr, 1 Jul, 1 Oct, 1 Jan, and on 1 April.`,
       'The change in net worth at the top also includes money added or taken out, so the two differ by design.',
+      `Funds are worth the units held on a day times the price of that day. With a fund statement the units are the statement’s. A fund with no transactions has its units worked out from your plan: the start date, the amount invested and every SIP amount and change with its date, each instalment buying its amount divided by the price of its day (the next priced day when it fell on a holiday). That is labelled estimated from your SIP plan and the price of each day. Your monthly sheet value is used only as a last resort, for a fund with no start date or no price. Between two monthly sheet values the fund moves with its price; money added by the SIP plan and any difference between the sheet and the prices is not counted as profit. Of the ${exPlural(p.basis.fundsHeld, 'fund')} held, ${p.basis.fundsValuedFromLedger} are valued from a statement ledger, ${p.basis.fundsValuedFromPlan} from your plan and the price of each day and ${p.basis.fundsValuedFromRecords} from a value on file (the last resort).`,
     ],
     fix: { label: 'Open Settings', href: i.links.settings },
   });

@@ -17,6 +17,7 @@ import {
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LoadedPortfolio } from './index';
+import { loadNavHistory } from './nav-history';
 import { pageAll } from './paging';
 
 type Row = Record<string, unknown>;
@@ -97,71 +98,6 @@ export async function loadPositionInput(
     (fx[c] ??= []).push({ date: r.rate_date as string, rate: Number(r.inr_per_unit) });
   }
 
-  // the prices: all of them, or those around the days the figures look at
-  const codeOf = new Map(funds.map((f) => [f.id, f.amfi_code ?? null]));
-  const codes = [...new Set([...codeOf.values()].filter((c): c is string => !!c))];
-  let navs: Row[] = [];
-  if (codes.length > 0) {
-    if (opts.allPrices) {
-      navs = await pageAll<Row>((from, to) =>
-        db
-          .from('mf_navs')
-          .select('amfi_code, nav_date, nav')
-          .in('amfi_code', codes)
-          .order('nav_date')
-          .range(from, to),
-      );
-    } else {
-      const bare = positionInputFrom({
-        assets: loaded.assetRows,
-        observations: [...loaded.obsRows, ...loaded.sheetObs],
-        fds: loaded.fdRows,
-        config: cfg,
-        today,
-      });
-      const first = [
-        dataStarts(bare),
-        ...lines.map((l) => l.txn_on as string),
-        ...snaps.map((s) => s.as_of as string),
-      ]
-        .filter((x): x is string => !!x)
-        .sort()[0];
-      const days = (opts.days ?? gainDays(today, cfg.home.changeDays, first ?? null)).filter(
-        (d) => d < today,
-      );
-      const gap = cfg.funds.navGapDays;
-      // each day reads the prices from `gap` days before it up to it, and today's latest price is read by the portfolio already
-      const ranges = days.map((d) => `and(nav_date.gte.${addDays(d, -gap)},nav_date.lte.${d})`);
-      for (let i = 0; i < ranges.length; i += 12) {
-        const part = ranges.slice(i, i + 12).join(',');
-        navs.push(
-          ...(await pageAll<Row>((from, to) =>
-            db
-              .from('mf_navs')
-              .select('amfi_code, nav_date, nav')
-              .in('amfi_code', codes)
-              .or(part)
-              .order('nav_date')
-              .range(from, to),
-          )),
-        );
-      }
-    }
-  }
-  const navBy = new Map<string, { date: string; nav: number }[]>();
-  const seen = new Set<string>();
-  for (const n of navs) {
-    const key = `${n.amfi_code}|${n.nav_date}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const code = n.amfi_code as string;
-    (navBy.get(code) ?? navBy.set(code, []).get(code)!).push({
-      date: n.nav_date as string,
-      nav: Number(n.nav),
-    });
-  }
-  for (const list of navBy.values()) list.sort((a, b) => a.date.localeCompare(b.date));
-
   const posOf = new Map(
     ((positions.data ?? []) as unknown as Row[]).map((p) => [p.asset_id as string, p]),
   );
@@ -179,11 +115,12 @@ export async function loadPositionInput(
     });
   }
 
+  // each fund as the engine reads it, still without prices (they come next, once it is known which days they are needed for)
   const posFunds: Record<string, PosFund> = {};
   for (const f of funds) {
     const p = posOf.get(f.id);
     const units =
-      f.units !== null && f.units !== undefined && f.units_as_of
+      f.units !== null && f.units !== undefined && f.units_as_of && f.units_source !== 'plan'
         ? { units: f.units, asOf: f.units_as_of }
         : null;
     posFunds[f.id] = posFundFrom({
@@ -197,7 +134,7 @@ export async function loadPositionInput(
         source: (l.source as string | null) ?? null,
         description: (l.description as string | null) ?? null,
       })),
-      navs: navBy.get(f.amfi_code ?? '') ?? [],
+      navs: [],
       units,
       snapshots: snapBy.get(f.id) ?? [],
       plan: p
@@ -208,19 +145,111 @@ export async function loadPositionInput(
             sipStopped: !!p.sip_stopped,
           }
         : null,
+      sip: f.sip ?? null,
       today,
       unitTolerance: cfg.funds.unitTolerance,
     });
   }
+  const build = (): PositionInput =>
+    positionInputFrom({
+      assets: loaded.assetRows,
+      observations: [...loaded.obsRows, ...loaded.sheetObs],
+      fds: loaded.fdRows,
+      funds: posFunds,
+      config: cfg,
+      today,
+      fx,
+      portfolio: loaded.portfolio,
+    });
 
-  return positionInputFrom({
-    assets: loaded.assetRows,
-    observations: [...loaded.obsRows, ...loaded.sheetObs],
-    fds: loaded.fdRows,
-    funds: posFunds,
-    config: cfg,
-    today,
-    fx,
-    portfolio: loaded.portfolio,
-  });
+  // the prices. A fund with no ledger is moved on from every value on file with its price and its plan's instalments, so it needs the
+  // prices of every day from its first value on; the rest are valued on the days the period figures look at (or on all days when
+  // reading them all). The days come from the same input the figures are worked out from, so a period that begins where the data does
+  // has its prices.
+  const codeOf = new Map(funds.map((f) => [f.id, f.amfi_code ?? null]));
+  const codes = [...new Set([...codeOf.values()].filter((c): c is string => !!c))];
+  const gap = cfg.funds.navGapDays;
+  const rolledFrom = new Map<string, string>();
+  for (const f of funds) {
+    const code = codeOf.get(f.id);
+    if (!code || (linesBy.get(f.id) ?? []).length > 0) continue;
+    const first = [
+      ...[...loaded.obsRows, ...loaded.sheetObs]
+        .filter((o) => o.asset_id === f.id && !o.superseded_by)
+        .map((o) => o.as_of),
+      ...(snapBy.get(f.id) ?? []).map((s) => s.date),
+      ...(f.units_as_of && f.units_source !== 'plan' ? [f.units_as_of] : []),
+      ...(posOf.get(f.id)?.started_on ? [posOf.get(f.id)!.started_on as string] : []),
+    ].sort()[0];
+    if (first) {
+      const cur = rolledFrom.get(code);
+      if (!cur || first < cur) rolledFrom.set(code, first);
+    }
+  }
+  const navs: Row[] = [];
+  if (codes.length > 0) {
+    if (opts.allPrices) {
+      navs.push(
+        ...(await pageAll<Row>((from, to) =>
+          db
+            .from('mf_navs')
+            .select('amfi_code, nav_date, nav')
+            .in('amfi_code', codes)
+            .order('nav_date')
+            .range(from, to),
+        )),
+      );
+    } else {
+      // funds with units rebuilt from a plan, or moved on from their values: every price from a little before the fund's start (kept in
+      // memory once read, see nav-history.ts)
+      if (rolledFrom.size > 0) {
+        const hist = await loadNavHistory(
+          db,
+          [...rolledFrom].map(([code, first]) => ({ code, from: addDays(first, -gap) })),
+        );
+        for (const [code, rows] of hist)
+          for (const r of rows) navs.push({ amfi_code: code, nav_date: r.date, nav: r.nav });
+      }
+      // the others: the prices around the days the period figures look at
+      const rest = codes.filter((c) => !rolledFrom.has(c));
+      if (rest.length > 0) {
+        const start = dataStarts(build());
+        const days = (opts.days ?? gainDays(today, cfg.home.changeDays, start)).filter(
+          (d) => d < today,
+        );
+        // each day reads the prices from `gap` days before it up to it, and today's latest price is read by the portfolio already
+        const ranges = days.map((d) => `and(nav_date.gte.${addDays(d, -gap)},nav_date.lte.${d})`);
+        for (let i = 0; i < ranges.length; i += 12) {
+          const part = ranges.slice(i, i + 12).join(',');
+          navs.push(
+            ...(await pageAll<Row>((from, to) =>
+              db
+                .from('mf_navs')
+                .select('amfi_code, nav_date, nav')
+                .in('amfi_code', rest)
+                .or(part)
+                .order('nav_date')
+                .range(from, to),
+            )),
+          );
+        }
+      }
+    }
+  }
+  const navBy = new Map<string, { date: string; nav: number }[]>();
+  const seen = new Set<string>();
+  for (const n of navs) {
+    const key = `${n.amfi_code}|${n.nav_date}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const code = n.amfi_code as string;
+    (navBy.get(code) ?? navBy.set(code, []).get(code)!).push({
+      date: n.nav_date as string,
+      nav: Number(n.nav),
+    });
+  }
+  for (const list of navBy.values()) list.sort((a, b) => a.date.localeCompare(b.date));
+  for (const f of funds) posFunds[f.id]!.navs = navBy.get(f.amfi_code ?? '') ?? [];
+
+  return build();
 }
