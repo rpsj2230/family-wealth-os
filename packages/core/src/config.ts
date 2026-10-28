@@ -69,6 +69,10 @@ export interface AppConfig {
   capital: {
     /** the day the family's own money is measured from (ISO date); empty: the first day with records for the holdings on file */
     openingDate: string;
+    /** Explain movements > Earlier months: a month whose unexplained money is below this many rupees is not listed */
+    reviewMinimum: number;
+    /** two months this many months apart or less whose unexplained amounts cancel out are one transfer recorded in two months */
+    reviewPairMonths: number;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -324,7 +328,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     unexplainedTolerance: 500,
     transferPairDays: 3,
   },
-  capital: { openingDate: '' },
+  capital: { openingDate: '', reviewMinimum: 25_000, reviewPairMonths: 2 },
   inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
   rates: {
     staleDays: 45,
@@ -611,6 +615,10 @@ export function configFromJson(raw: unknown): AppConfig {
         const v = obj(r.capital).openingDate;
         return v === '' || v === null || v === undefined ? '' : isoDate(v, d.capital.openingDate);
       })(),
+      reviewMinimum: num(obj(r.capital).reviewMinimum, d.capital.reviewMinimum, 0, 1e9),
+      reviewPairMonths: Math.round(
+        num(obj(r.capital).reviewPairMonths, d.capital.reviewPairMonths, 0, 12),
+      ),
     },
     inbox: {
       trustedForwarders: (() => {

@@ -12,6 +12,7 @@ const SAMPLE_PAGES = [
   'goals',
   'inbox',
   'investments',
+  'reconcile',
   'monthly',
   'new-money',
   'others',

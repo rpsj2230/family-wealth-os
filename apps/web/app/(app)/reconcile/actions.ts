@@ -207,3 +207,75 @@ export async function recordFunding(f: FormData): Promise<void> {
   if (source.startsWith('proceeds:')) await markMatured(source.slice(9));
   done(r === 'duplicate' ? 'Already recorded.' : 'Recorded where the money came from.');
 }
+
+const MONTH = /^\d{4}-\d{2}$/;
+
+/**
+ * What the unexplained money of an earlier month was (Explain movements > Earlier months): money from outside, money taken out, or
+ * earnings the app did not estimate (interest, a bonus, a refund). One confirmed movement, dated inside the month, on the holding you
+ * chose; the month's remaining amount is worked out again from it. Saving the same answer twice changes nothing.
+ */
+export async function recordHistory(f: FormData): Promise<void> {
+  const month = String(f.get('month') ?? '');
+  const answer = String(f.get('answer') ?? '');
+  const asset = String(f.get('asset') ?? '');
+  const on = String(f.get('on') ?? '');
+  const amount = money(f.get('amount'));
+  if (
+    !MONTH.test(month) ||
+    !ISO.test(on) ||
+    on.slice(0, 7) !== month ||
+    !UUID.test(asset) ||
+    amount === null ||
+    !['outside', 'out', 'income'].includes(answer)
+  )
+    historyDone('Choose what it was, the holding, a date in that month and the amount.');
+  const move: Move =
+    answer === 'out'
+      ? {
+          moved_on: on,
+          amount,
+          from_asset_id: asset,
+          to_asset_id: null,
+          kind: 'withdrawal',
+          idem_key: `hist:${month}:out:${Math.round(amount)}`,
+        }
+      : {
+          moved_on: on,
+          amount,
+          from_asset_id: null,
+          to_asset_id: asset,
+          kind: answer === 'income' ? 'income' : 'contribution',
+          idem_key: `hist:${month}:${answer}:${Math.round(amount)}`,
+        };
+  const r = await write([move]);
+  if (r !== 'ok' && r !== 'duplicate') historyDone(r);
+  historyDone(
+    r === 'duplicate'
+      ? 'Already recorded.'
+      : answer === 'income'
+        ? 'Recorded as earnings: lifetime profit now includes it.'
+        : 'Recorded. Own money now uses your answer and its date.',
+  );
+}
+
+/** Takes back an answer given for an earlier month: the month's money is "not yet explained" again. */
+export async function undoHistory(f: FormData): Promise<void> {
+  const key = String(f.get('key') ?? '');
+  if (!/^hist:\d{4}-\d{2}:(outside|out|income):\d+$/.test(key))
+    historyDone('That answer was not found.');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) historyDone('Create your household first.');
+  const { error } = await supabase
+    .from('money_moves')
+    .delete()
+    .eq('household_id', householdId!)
+    .eq('idem_key', key);
+  historyDone(error ? `That could not be undone: ${error.message}` : 'Answer taken back.');
+}
+
+function historyDone(message: string): never {
+  revalidatePath('/reconcile');
+  revalidatePath('/');
+  redirect(`/reconcile?tab=history&msg=${encodeURIComponent(message)}`);
+}

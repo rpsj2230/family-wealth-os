@@ -126,6 +126,8 @@ describe('settings fields', () => {
         unexplainedTolerance: '₹ 1,000',
         transferPairDays: '3',
         openingDate: '',
+        reviewMinimum: '25,000',
+        reviewPairMonths: '2',
         includeSip: 'on',
       }),
     );
@@ -152,7 +154,7 @@ describe('settings fields', () => {
           transferPairDays: 3,
           includeSip: true,
         },
-        capital: { openingDate: '' },
+        capital: { openingDate: '', reviewMinimum: 25000, reviewPairMonths: 2 },
       },
     });
   });
