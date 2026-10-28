@@ -12,7 +12,6 @@ const acct = (
   last4: '1111',
   kind: 'NRE',
   openedOn: '2020-01-01',
-  balance: 10_000,
   ...extra,
 });
 const base = {

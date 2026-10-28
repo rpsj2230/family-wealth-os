@@ -21,8 +21,6 @@ export interface NeedAccount {
   last4: string | null;
   kind: string | null;
   openedOn: string | null;
-  /** the latest balance on record */
-  balance: number;
 }
 
 export interface NeedStatement {

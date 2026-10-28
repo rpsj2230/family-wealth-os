@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData, type LoadedPortfolio } from './index';
 import { savingsMovesOf } from './ledger';
 import { loadSettings } from './settings';
+import { loadNeeds, syncNeededTasks } from './needed-store';
 import { placeRemittances, syncRemittanceMoves } from './remittance-store';
 import { loadStatements, statementPicture, syncStatementMoves } from './statement-store';
 
@@ -45,7 +46,12 @@ export function positionFor(
 export async function rebuildStatementMoves(
   supabase: SupabaseClient,
   householdId: string,
-): Promise<{ added: number; removed: number; toAnswer: number }> {
+): Promise<{
+  added: number;
+  removed: number;
+  toAnswer: number;
+  needed: { added: number; closed: number; open: number };
+}> {
   const loaded = await loadPortfolioData(supabase, { householdId });
   const { config } = await loadSettings(supabase, householdId);
   const stored = await loadStatements(supabase, householdId);
@@ -64,8 +70,16 @@ export async function rebuildStatementMoves(
     ),
   );
   await syncRemittanceMoves(supabase, householdId);
-  return {
-    ...r,
-    toAnswer: picture.classified.filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out').length,
-  };
+  const toAnswer = picture.classified.filter(
+    (c) => c.cls === 'ask_in' || c.cls === 'ask_out',
+  ).length;
+  // what is still needed from you follows what the statements now show
+  const needs = await loadNeeds(supabase, householdId, {
+    loaded,
+    config,
+    stored,
+    toAnswer,
+  });
+  const tasks = await syncNeededTasks(supabase, householdId, needs);
+  return { ...r, toAnswer, needed: tasks };
 }
