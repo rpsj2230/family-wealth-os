@@ -49,6 +49,8 @@ export interface FdLine {
   endedOn?: string | null;
   /** show: listed as usual; confirm: matured within the window, waiting for "Confirm matured"; hidden: confirmed, or older than the window */
   listState?: DepositListState;
+  /** matured, and its proceeds still counted once in net worth until you say where they went (the central engine's rule) */
+  proceedsAwaiting?: boolean;
 }
 
 export interface DepositsView {
@@ -91,6 +93,8 @@ export function buildDeposits(
     const v =
       val.get(a.id)?.estimate?.estimatedAmount ?? heldValueOf(f, today.toISOString().slice(0, 10));
     lines.push({
+      proceedsAwaiting:
+        val.get(a.id)?.estimate?.method === 'fd_proceeds' && val.get(a.id)?.status === 'active',
       id: a.id,
       bank: a.institutionId ? (banks.get(a.institutionId) ?? 'Unknown bank') : 'Unknown bank',
       bankId: a.institutionId ?? null,

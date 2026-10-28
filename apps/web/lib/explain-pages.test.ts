@@ -63,10 +63,9 @@ describe('Home explainers (sample household)', () => {
   });
 
   it('profit and the change over a period state their denominators', () => {
-    expect(ex['home.profit'].how).toMatch(/÷ ₹[\d,]+ invested/);
+    expect(ex['home.profitSoFar'].how).toMatch(/own money/);
     expect(ex['home.month'].how).toMatch(/money at work|Not worked out/);
     expect(ex['home.classFunds'].how).toMatch(/÷ ₹[\d,]+ net worth/);
-    expect(ex['home.periods'].how).toContain('money at work');
   });
 
   it('a link to a page the sample lacks is left out', () => {

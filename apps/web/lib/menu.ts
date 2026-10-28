@@ -94,6 +94,12 @@ export const MENU: MenuGroup[] = [
     title: 'Decide and plan',
     items: [
       {
+        href: '/reconcile',
+        label: 'Explain movements',
+        hint: 'Where matured money went, what a balance change was, where a new deposit came from.',
+        icon: Scale,
+      },
+      {
         href: '/raise',
         label: 'I need money',
         hint: 'Where an amount can come from, by when, and what it costs.',

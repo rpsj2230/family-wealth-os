@@ -1,6 +1,5 @@
-import Link from 'next/link';
 import { formatInrCompact, type ExplainSet } from '@fwos/core';
-import type { HomeModel, RiskRow } from '@/lib/home';
+import type { HomeModel } from '@/lib/home';
 import { CardHead, MaybeLink, homeLink } from './parts';
 
 const STATUS: Record<string, { word: string; cls: string }> = {
@@ -72,50 +71,6 @@ export function Goals({
           })}
         </ul>
       )}
-    </section>
-  );
-}
-
-const VERDICT = {
-  ok: { word: 'OK', mark: '✓' },
-  watch: { word: 'Watch', mark: '!' },
-  info: { word: 'For info', mark: 'i' },
-} as const;
-
-function RiskLine({ r, sample }: { r: RiskRow; sample: boolean }) {
-  const v = VERDICT[r.verdict];
-  const href = r.href ? homeLink(r.href, sample) : null;
-  return (
-    <li className={`hm-risk ${r.verdict}`}>
-      <span className={`hm-tag ${r.verdict === 'watch' ? 'warn' : r.verdict}`}>
-        <span aria-hidden="true">{v.mark} </span>
-        {v.word}
-      </span>
-      <strong className="hm-risk-label">{r.label}</strong>
-      <span className="hm-risk-value">{href ? <Link href={href}>{r.value}</Link> : r.value}</span>
-      <span className="muted small">{r.note}</span>
-    </li>
-  );
-}
-
-/** What could hurt: deposit insurance, one bank holding too much, one kind of holding dominating, money lent that is late. */
-export function Risks({
-  m,
-  sample,
-  ex,
-}: {
-  m: HomeModel;
-  sample: boolean;
-  ex: ExplainSet<'home'>;
-}) {
-  return (
-    <section className="card hm-card hm-wide" aria-labelledby="hm-risks">
-      <CardHead title="What to watch" id="hm-risks" why={ex['home.risks']} />
-      <ul className="hm-risks">
-        {m.risks.map((r) => (
-          <RiskLine key={r.key} r={r} sample={sample} />
-        ))}
-      </ul>
     </section>
   );
 }

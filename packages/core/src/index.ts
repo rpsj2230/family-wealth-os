@@ -95,3 +95,6 @@ export * from './deposit-contract';
 export * from './savings-accrual';
 export * from './valuation';
 export * from './savings-rates';
+export * from './capital';
+export * from './fund-views';
+export * from './reconcile';

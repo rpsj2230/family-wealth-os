@@ -83,8 +83,8 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
       {c.awaiting && (
         <p className="hm-class-note small muted">
           Not counted: {plural(c.awaiting.count, 'deposit')} ({formatInrCompact(c.awaiting.current)}
-          ) past their date. Confirm them on Accounts; the money counts in the savings account or
-          new deposit it went to.
+          ) past their date whose money is probably already in another account or a new deposit.
+          Confirm where it went on Explain movements.
         </p>
       )}
     </li>
@@ -139,9 +139,9 @@ export function Classes({
           <li>
             <strong>Fixed deposits.</strong> Invested is the amount of each deposit. Current is what
             it has grown to today on its own terms (rate, dates and how interest is added); maturity
-            is what it pays on its date. A deposit past its date that is still listed as running is
-            counted here at its maturity amount, as in net worth, though Deposits leaves it out
-            until you confirm it.
+            is what it pays on its date. A deposit that has matured stops earning; its proceeds are
+            counted once, here and in net worth, until you say where they went, unless a new deposit
+            or a later balance already holds them (then they are not counted twice).
           </li>
           <li>
             <strong>Mutual funds.</strong> Invested is the money still in the funds: the cost of the

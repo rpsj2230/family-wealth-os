@@ -200,8 +200,18 @@ export function RegisterTab({
                     <td className="num" data-label="Value today">
                       {f.status === 'active' && !needsConfirmation(f) ? (
                         rupee(f.accruedToday)
+                      ) : f.proceedsAwaiting ? (
+                        <span title="Matured: counted once in net worth until you say where the money went">
+                          {rupee(f.accruedToday)}
+                          <div className="small" style={{ color: 'var(--warn-fg)' }}>
+                            awaiting confirmation
+                          </div>
+                        </span>
                       ) : (
-                        <span className="muted" title="Not counted: the deposit is past its date">
+                        <span
+                          className="muted"
+                          title="Not counted: the money is probably already in another account or a new deposit"
+                        >
                           {rupee(f.accruedToday)}
                           <div className="small">not counted</div>
                         </span>

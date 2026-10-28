@@ -1,0 +1,489 @@
+/**
+ * The capital and earnings ledger of the family: how much of today's net worth is the family's own money put in, how much is profit,
+ * and what the money earned as a yearly rate. One function (`capitalLedger`) for Home, the e-mail, Reports and the history pages.
+ *
+ * For the family as a whole, money moved between its own holdings cancels out: a deposit funded from savings, maturity proceeds paid
+ * into an account, a renewal, interest reinvested, a fund bought from savings all leave net worth unchanged. So over any stretch of
+ * time:
+ *
+ *   change in net worth = earnings + money that came in from outside or went out of the family
+ *
+ * where earnings are worked out by the central engine from each holding's own rule (interest on savings and deposits, fund and share
+ * gains, exchange-rate moves, growth assumed in Settings) plus confirmed income, less confirmed fees and taxes. The rest of the change
+ * is outside money: what you confirmed (a salary transfer, a gift, money taken out: money_moves of kind contribution / withdrawal),
+ * and, where nothing was confirmed, an amount worked out from the balances, labelled "not yet explained" and never counted as profit.
+ *
+ *   net worth = opening position + confirmed outside money + not yet explained + profit
+ *
+ *  - Own money put in = opening position + confirmed outside money + not yet explained (the last shown apart: it is assumed to be your
+ *    own money until you classify it). Renewals, transfers and reinvested interest never change it.
+ *  - Profit so far = net worth − own money put in = the sum of the earnings.
+ *  - Profit % = profit ÷ own money put in; not shown when own money is zero or negative (no meaningful base).
+ *  - Annual return (XIRR, money-weighted) on −opening at the opening date, −each sum of outside money on its date (a not-yet-explained
+ *    amount in the middle of its month), +net worth today. Not shown when it cannot be solved.
+ *  - Time-weighted return: each month's earnings over the money at work in it (the value at its start plus half the money moved),
+ *    chained.
+ * Months are calendar months from the opening date (Settings > capital, else the first day with records), the last ending today.
+ *
+ * Pure: no I/O.
+ */
+import {
+  accountsOf,
+  coverageOn,
+  dataStarts,
+  depositsOf,
+  fundsOf,
+  recordedPeriod,
+  classOfType,
+  type PositionInput,
+} from './position';
+import { liquidityOf } from './networth';
+import { addDaysIso } from './harvest-lots';
+import {
+  depositPeriod,
+  fundPeriod,
+  savingsPeriod,
+  spanBetween,
+  valueDays,
+  type Span,
+} from './period-gains';
+import { xirr } from './xirr';
+
+/** A confirmed movement as the ledger reads it: outside money in (+) or out (−), income (+), a fee or tax (−), or a correction. */
+export interface LedgerMove {
+  date: string;
+  amount: number;
+  kind: 'external' | 'income' | 'cost' | 'correction';
+}
+
+/** Turns a stored movement into what the family ledger counts; movements between the family's own holdings count for nothing. */
+export function ledgerMoveOf(m: {
+  movedOn: string;
+  amount: number;
+  kind: string;
+  fromAssetId: string | null;
+  toAssetId: string | null;
+  status: string;
+}): LedgerMove | null {
+  if (m.status !== 'confirmed') return null;
+  const into = m.fromAssetId === null;
+  const outOf = m.toAssetId === null;
+  if (!into && !outOf) return null; // a transfer between the family's own holdings
+  const sign = into ? 1 : -1;
+  switch (m.kind) {
+    case 'contribution':
+    case 'withdrawal':
+    case 'transfer':
+      return { date: m.movedOn, amount: sign * m.amount, kind: 'external' };
+    case 'income':
+      return { date: m.movedOn, amount: sign * m.amount, kind: 'income' };
+    case 'fee':
+    case 'tax':
+      return { date: m.movedOn, amount: -m.amount, kind: 'cost' };
+    case 'adjustment':
+      return { date: m.movedOn, amount: sign * m.amount, kind: 'correction' };
+    default:
+      // proceeds, funding, interest paid out: they move money within the family, or out of it when they leave it
+      return { date: m.movedOn, amount: sign * m.amount, kind: 'external' };
+  }
+}
+
+export interface SpanFigures extends Span {
+  /** the family's holdings at the start of the stretch and at its end (what the engine counts) */
+  start: number;
+  end: number;
+  earnings: {
+    deposits: number;
+    funds: number;
+    savings: number;
+    fx: number;
+    others: number;
+    /** confirmed income less confirmed fees and taxes */
+    income: number;
+    total: number;
+  };
+  /** all money that moved in or out of the family in the stretch: end − start − earnings */
+  moved: number;
+  /** of it, what you confirmed as outside money, as a correction, and what is not yet explained */
+  confirmedExternal: number;
+  corrections: number;
+  unexplained: number;
+  /** some of the figures rest on estimates */
+  estimated: boolean;
+}
+
+/** The family's figures for one stretch of time: values at both ends, earnings by kind, and the money that moved. */
+export function spanFigures(
+  position: PositionInput,
+  w: Span,
+  moves: LedgerMove[],
+  funds = fundsOf(position, [valueDays(w).open, valueDays(w).close]),
+): SpanFigures {
+  const c = position.config;
+  const today = c.today;
+  const dep = depositPeriod(depositsOf(position), w, today);
+  const fun = fundPeriod(funds, w, today);
+  const sav = savingsPeriod(accountsOf(position), w);
+  const foreign = recordedPeriod(
+    position.assets.filter(
+      (a) => a.currency !== 'INR' && a.type === 'bank_account' && a.status !== 'gifted',
+    ),
+    c,
+    w,
+    position.current,
+  );
+  const rest = recordedPeriod(
+    position.assets.filter(
+      (a) =>
+        classOfType(a.type) === 'others' && liquidityOf(a.type) !== null && a.status !== 'gifted',
+    ),
+    c,
+    w,
+    position.current,
+  );
+  const inside = (d: string) => d >= w.from && d <= w.through;
+  const sum = (k: LedgerMove['kind']) =>
+    moves.filter((m) => m.kind === k && inside(m.date)).reduce((a, m) => a + m.amount, 0);
+  const income = sum('income') + sum('cost');
+  const start =
+    dep.startValue + fun.startValue + sav.startValue + foreign.startValue + rest.startValue;
+  const end = dep.endValue + fun.endValue + sav.endValue + foreign.endValue + rest.endValue;
+  const engine = dep.profit + fun.profit + sav.profit + foreign.profit + rest.profit;
+  const total = engine + income;
+  const moved = end - start - total;
+  const confirmedExternal = sum('external');
+  const corrections = sum('correction');
+  return {
+    ...w,
+    start,
+    end,
+    earnings: {
+      deposits: dep.profit,
+      funds: fun.profit,
+      savings: sav.profit,
+      fx: foreign.profit,
+      others: rest.profit,
+      income,
+      total,
+    },
+    moved,
+    confirmedExternal,
+    corrections,
+    unexplained: moved - confirmedExternal - corrections,
+    estimated:
+      dep.estimated || fun.estimated || sav.estimated || foreign.estimated || rest.estimated,
+  };
+}
+
+export interface CapitalLedger {
+  opening: { date: string; value: number; coverage: { withValue: number; of: number } } | null;
+  /** calendar months from the opening date, the last one ending today */
+  months: SpanFigures[];
+  totals: {
+    netWorth: number;
+    opening: number;
+    confirmedExternal: number;
+    unexplained: number;
+    corrections: number;
+    /** opening + confirmed outside money + not yet explained */
+    ownMoney: number;
+    profit: number;
+    earnings: SpanFigures['earnings'];
+    /** profit ÷ own money; null when own money is not above zero */
+    profitPct: number | null;
+    xirr: { rate: number | null; status: string; message: string };
+    /** chained monthly returns; `annualised` only when the ledger covers a year or more */
+    twr: { total: number | null; annualised: number | null };
+  };
+  /** what limits the figures, in words */
+  limitations: string[];
+}
+
+/** First days of the calendar months after `from` up to today, as stretch boundaries. */
+function monthBounds(from: string, today: string): string[] {
+  const out = [from];
+  let y = Number(from.slice(0, 4));
+  let m = Number(from.slice(5, 7));
+  for (let guard = 0; guard < 1200; guard++) {
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+    const d = `${y}-${String(m).padStart(2, '0')}-01`;
+    if (d >= today) break;
+    out.push(d);
+  }
+  return out;
+}
+
+const mid = (from: string, to: string) => {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  return new Date(a + Math.floor((b - a) / 2 / 86_400_000) * 86_400_000);
+};
+
+export function capitalLedger(args: {
+  position: PositionInput;
+  moves: LedgerMove[];
+  /** Settings > capital: the day to measure from; empty or absent = the first day with records */
+  openingDate?: string | null;
+}): CapitalLedger {
+  const { position } = args;
+  const today = position.config.today;
+  const start = args.openingDate || dataStarts(position);
+  const empty = {
+    netWorth: 0,
+    opening: 0,
+    confirmedExternal: 0,
+    unexplained: 0,
+    corrections: 0,
+    ownMoney: 0,
+    profit: 0,
+    earnings: { deposits: 0, funds: 0, savings: 0, fx: 0, others: 0, income: 0, total: 0 },
+    profitPct: null,
+    xirr: { rate: null, status: 'insufficient_flows', message: 'Nothing on file yet.' },
+    twr: { total: null, annualised: null },
+  };
+  // the opening position is what was held at the end of the opening day (a balance is that of the end of its day, a deposit booked
+  // that day is held): the first stretch starts the day after it
+  const first0 = start ? addDaysIso(start, 1) : null;
+  if (!start || !first0 || first0 >= today)
+    return {
+      opening: null,
+      months: [],
+      totals: empty,
+      limitations: ['Nothing is on file to measure from yet.'],
+    };
+
+  const bounds = monthBounds(first0, today);
+  const spans = bounds.map((b, k) =>
+    k + 1 < bounds.length ? spanBetween(b, bounds[k + 1]!) : spanBetween(b, today, today),
+  );
+  const days = [...new Set(spans.flatMap((w) => [valueDays(w).open, valueDays(w).close]))].sort();
+  const funds = fundsOf(position, days);
+  const months = spans.map((w) => spanFigures(position, w, args.moves, funds));
+
+  const first = months[0]!;
+  const last = months[months.length - 1]!;
+  const add = (f: (m: SpanFigures) => number) => months.reduce((a, m) => a + f(m), 0);
+  const earnings: SpanFigures['earnings'] = {
+    deposits: add((m) => m.earnings.deposits),
+    funds: add((m) => m.earnings.funds),
+    savings: add((m) => m.earnings.savings),
+    fx: add((m) => m.earnings.fx),
+    others: add((m) => m.earnings.others),
+    income: add((m) => m.earnings.income),
+    total: add((m) => m.earnings.total),
+  };
+  const confirmedExternal = add((m) => m.confirmedExternal);
+  const unexplained = add((m) => m.unexplained);
+  const corrections = add((m) => m.corrections);
+  const opening = first.start;
+  const ownMoney = opening + confirmedExternal + unexplained;
+  const profit = earnings.total;
+
+  // money-weighted: the opening position and each sum of outside money on its date, against net worth today
+  const flows = [
+    { date: new Date(`${first0}T00:00:00Z`), amount: -opening },
+    ...args.moves
+      .filter((m) => m.kind === 'external' && m.date >= first0 && m.date <= today)
+      .map((m) => ({ date: new Date(`${m.date}T00:00:00Z`), amount: -m.amount })),
+    ...months
+      .filter((m) => Math.abs(m.unexplained) >= 1)
+      .map((m) => ({ date: mid(m.from, m.to), amount: -m.unexplained })),
+    { date: new Date(`${today}T00:00:00Z`), amount: last.end },
+  ].filter((f) => f.amount !== 0);
+  const x = xirr(flows);
+
+  // time-weighted: each month's earnings over the money at work in it, chained
+  // a month that starts with nothing at work has no return of its own (what it earned rests on money that came in during it, at times
+  // not known): the chain starts with the first month that opens with a value
+  let chain = 1;
+  let any = false;
+  for (const m of months) {
+    const base = m.start + 0.5 * m.moved;
+    if (!(m.start > 0) || !(base > 0)) continue;
+    chain *= 1 + m.earnings.total / base;
+    any = true;
+  }
+  const chained = any;
+  const years =
+    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000 / 365;
+  const twrTotal = chained ? chain - 1 : null;
+
+  const limitations: string[] = [];
+  const coverage = coverageOn(position, start);
+  if (coverage.withValue < coverage.of)
+    limitations.push(
+      `${coverage.withValue} of ${coverage.of} holdings had a value on the opening date (${start}); the others count as money moved in from the day they were first recorded.`,
+    );
+  if (ownMoney > 0 && Math.abs(unexplained) > 0.2 * ownMoney)
+    limitations.push(
+      'Most of the money moved in or out is worked out from balances, not confirmed: confirm outside money (salary, gifts, money taken out) to make own money and the return exact.',
+    );
+  if (months.some((m) => m.estimated))
+    limitations.push(
+      'Some figures rest on estimates (interest at the rate on file, prices, a fund plan).',
+    );
+  if (x.status !== 'ok')
+    limitations.push(`The annual return could not be worked out: ${x.message}`);
+
+  return {
+    opening: { date: start, value: opening, coverage },
+    months,
+    totals: {
+      netWorth: last.end,
+      opening,
+      confirmedExternal,
+      unexplained,
+      corrections,
+      ownMoney,
+      profit,
+      earnings,
+      profitPct: ownMoney > 0 ? profit / ownMoney : null,
+      xirr: {
+        rate: x.status === 'ok' || x.status === 'ok_multiple_roots' ? x.rate : null,
+        status: x.status,
+        message: x.message,
+      },
+      twr: {
+        total: twrTotal,
+        annualised: twrTotal !== null && years >= 1 ? Math.pow(1 + twrTotal, 1 / years) - 1 : null,
+      },
+    },
+    limitations,
+  };
+}
+
+/** A stretch of the ledger as one span (any period: a month, a quarter, a year, a custom range), from its months. */
+export function ledgerBetween(l: CapitalLedger, from: string, to: string): SpanFigures | null {
+  const inside = l.months.filter((m) => m.from >= from && m.to <= to);
+  if (inside.length === 0) return null;
+  const add = (f: (m: SpanFigures) => number) => inside.reduce((a, m) => a + f(m), 0);
+  const a = inside[0]!;
+  const b = inside[inside.length - 1]!;
+  return {
+    from: a.from,
+    to: b.to,
+    through: b.through,
+    days: add((m) => m.days),
+    start: a.start,
+    end: b.end,
+    earnings: {
+      deposits: add((m) => m.earnings.deposits),
+      funds: add((m) => m.earnings.funds),
+      savings: add((m) => m.earnings.savings),
+      fx: add((m) => m.earnings.fx),
+      others: add((m) => m.earnings.others),
+      income: add((m) => m.earnings.income),
+      total: add((m) => m.earnings.total),
+    },
+    moved: add((m) => m.moved),
+    confirmedExternal: add((m) => m.confirmedExternal),
+    corrections: add((m) => m.corrections),
+    unexplained: add((m) => m.unexplained),
+    estimated: inside.some((m) => m.estimated),
+  };
+}
+
+// ------------------------------------------------------------------------------------------------
+// Wealth movement over a chosen period (Home): how net worth moved, outside money apart from performance
+// ------------------------------------------------------------------------------------------------
+export type MovementKey = 'month' | '3m' | '6m' | 'fy' | '12m' | 'all' | 'custom';
+
+export const MOVEMENT_PERIODS: { key: Exclude<MovementKey, 'custom'>; label: string }[] = [
+  { key: 'month', label: 'This month' },
+  { key: '3m', label: '3 months' },
+  { key: '6m', label: '6 months' },
+  { key: 'fy', label: 'This FY' },
+  { key: '12m', label: '12 months' },
+  { key: 'all', label: 'Since start' },
+];
+
+export const parseMovementKey = (v: string | undefined): MovementKey =>
+  (MOVEMENT_PERIODS.find((p) => p.key === v)?.key ??
+    (v === 'custom' ? 'custom' : 'fy')) as MovementKey;
+
+export interface WealthMovement {
+  key: MovementKey;
+  label: string;
+  /** the first day of the period and the day it ends (today, or the end of the last month asked for) */
+  from: string;
+  to: string;
+  figures: SpanFigures | null;
+  /** the period's time-weighted return (months chained); null when there was no money at work */
+  twr: number | null;
+  /** the period begins before the ledger does: it starts where the ledger starts */
+  clamped: boolean;
+}
+
+const firstOfMonthsBack = (today: string, back: number) => {
+  let y = Number(today.slice(0, 4));
+  let m = Number(today.slice(5, 7)) - back;
+  while (m < 1) {
+    m += 12;
+    y--;
+  }
+  return `${y}-${String(m).padStart(2, '0')}-01`;
+};
+
+/**
+ * The movement of net worth over a period made of whole calendar months (the last one to today): this month, the last 3, 6 or 12 months,
+ * this financial year (from 1 April), since the start, or custom months (`from` and `to` as YYYY-MM).
+ */
+export function wealthMovement(
+  l: CapitalLedger,
+  key: MovementKey,
+  today: string,
+  custom?: { from?: string; to?: string },
+): WealthMovement {
+  const fyStart = `${Number(today.slice(5, 7)) >= 4 ? today.slice(0, 4) : Number(today.slice(0, 4)) - 1}-04-01`;
+  let from: string;
+  let to = today;
+  let label = MOVEMENT_PERIODS.find((p) => p.key === key)?.label ?? 'Custom';
+  switch (key) {
+    case 'month':
+      from = firstOfMonthsBack(today, 0);
+      break;
+    case '3m':
+      from = firstOfMonthsBack(today, 2);
+      break;
+    case '6m':
+      from = firstOfMonthsBack(today, 5);
+      break;
+    case '12m':
+      from = firstOfMonthsBack(today, 11);
+      break;
+    case 'fy':
+      from = fyStart;
+      break;
+    case 'all':
+      from = l.months[0]?.from ?? today;
+      break;
+    default: {
+      const ok = (v?: string) => (v && /^\d{4}-\d{2}$/.test(v) ? v : null);
+      const a = ok(custom?.from) ?? today.slice(0, 7);
+      const b = ok(custom?.to) ?? today.slice(0, 7);
+      const [lo, hi] = a <= b ? [a, b] : [b, a];
+      from = `${lo}-01`;
+      const next = firstOfMonthsBack(`${hi}-01`, -1);
+      to = next > today ? today : next;
+      label = `${lo} to ${hi}`;
+    }
+  }
+  const first = l.months[0]?.from ?? null;
+  const clamped = first !== null && from < first;
+  const start = clamped ? first! : from;
+  const figures = ledgerBetween(l, start, to);
+  let chain = 1;
+  let any = false;
+  for (const m of l.months.filter((x) => x.from >= start && x.to <= to)) {
+    const base = m.start + 0.5 * m.moved;
+    if (m.start > 0 && base > 0) {
+      chain *= 1 + m.earnings.total / base;
+      any = true;
+    }
+  }
+  return { key, label, from: start, to, figures, twr: any ? chain - 1 : null, clamped };
+}

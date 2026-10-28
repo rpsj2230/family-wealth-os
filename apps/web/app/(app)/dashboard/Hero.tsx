@@ -15,7 +15,7 @@ import { UpdatedCell } from '@/components/BankTable';
 import { Why, WhyHead } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 import { niceDate } from '@/lib/dates';
-import { Money } from './Money';
+import { Capital } from './Movement';
 import { MaybeLink, homeLink } from './parts';
 
 const monthsText = (months: number) =>
@@ -125,13 +125,12 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
             tile={m.tiles.recent}
             why={ex['home.month']}
           />
-          <TileDelta label="This financial year" tile={m.tiles.fy} why={ex['home.fy']} />
         </div>
       </div>
 
       <FundNote m={m} sample={sample} />
 
-      <Money m={m} ex={ex} />
+      <Capital m={m} sample={sample} ex={ex} />
 
       <div className="hm-trust">
         <div>

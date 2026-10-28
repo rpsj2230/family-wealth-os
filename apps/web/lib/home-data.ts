@@ -5,9 +5,18 @@ import {
   receivableStatus,
   settingsFromJson,
   type HomeRange,
+  type MovementKey,
   type FundForRaise,
 } from '@fwos/core';
-import { loadPositionInput, loadSettings, pageAll, unpricedFunds } from '@fwos/data';
+import {
+  capitalDays,
+  capitalStart,
+  ledgerMovesOf,
+  loadPositionInput,
+  loadSettings,
+  pageAll,
+  unpricedFunds,
+} from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Ctx } from './data';
 import { bankOverviewOptions } from './bank-overview-options';
@@ -26,7 +35,11 @@ const RECENT = 6;
  * Reads everything Home needs for the signed-in household and builds the page model. Row Level Security limits every read to the
  * household. Returns null while nothing has been recorded yet. The portfolio is loaded once and shared by the fund, goal and bank views.
  */
-export async function loadHome(supabase: Supabase, range: HomeRange): Promise<HomeModel | null> {
+export async function loadHome(
+  supabase: Supabase,
+  range: HomeRange,
+  movement?: { key: MovementKey; custom?: { from?: string; to?: string } },
+): Promise<HomeModel | null> {
   const loaded = await loadPortfolio(supabase);
   const { today, assetRows, obsRows, fdRows, ownerName, portfolio, marketDates } = loaded;
   if (assetRows.length === 0) return null;
@@ -174,11 +187,19 @@ export async function loadHome(supabase: Supabase, range: HomeRange): Promise<Ho
       source: o.source,
     }));
   const planned = settingsFromJson(plan.data?.settings);
+  // the prices around the days the period figures look at and around every month boundary of the capital ledger, read once
   const position = await loadPositionInput(supabase as unknown as SupabaseClient, loaded, {
     config: settings.config,
+    days: capitalDays(
+      capitalStart(loaded, settings.config),
+      todayIso,
+      settings.config.home.changeDays,
+    ),
   });
 
   const input: HomeInput = {
+    moves: ledgerMovesOf(loaded.engine.moves),
+    ...(movement ? { movement } : {}),
     today: todayIso,
     range,
     styles,

@@ -1,4 +1,16 @@
 import {
+  capitalLedger,
+  fundViews,
+  kindOfBasis,
+  mixOf,
+  isHeld,
+  wealthMovement,
+  type CapitalLedger,
+  type FigureKind,
+  type FundViews,
+  type LedgerMove,
+  type MovementKey,
+  type WealthMovement,
   OTHER_HOLDINGS_KEY,
   allocLabel,
   allocationOf,
@@ -121,6 +133,32 @@ export interface HomeInput {
   monthlySpending: number;
   recent: HomeRecent[];
   newestRecorded: string | null;
+  /** confirmed money movements as the family ledger reads them (capital.ts) */
+  moves?: LedgerMove[];
+  /** the period of the wealth movement panel, from the address */
+  movement?: { key: MovementKey; custom?: { from?: string; to?: string } };
+}
+
+/** The family's own money and its profit (capital.ts), the movement over the chosen period, and the fund views. */
+export interface HomeCapital {
+  totals: CapitalLedger['totals'];
+  opening: CapitalLedger['opening'];
+  limitations: string[];
+  movement: WealthMovement;
+  funds: Pick<
+    FundViews,
+    | 'confirmed'
+    | 'estimated'
+    | 'projected'
+    | 'staleCount'
+    | 'oldestNav'
+    | 'unconfirmedFunds'
+    | 'upcoming'
+  >;
+  /** deposits that matured whose proceeds are counted until you say where they went, and how much */
+  proceeds: { count: number; amount: number };
+  /** of net worth, how much each kind of figure makes up (figure.ts) */
+  mix: Partial<Record<FigureKind, number>>;
 }
 
 export interface BankLine {
@@ -182,6 +220,8 @@ export interface HomeModel {
   today: string;
   styles: Record<string, PersonStyle>;
   total: number;
+  /** own money put in, profit so far, the annual return and the movement of the chosen period */
+  capital: HomeCapital;
   money: HomeMoney;
   /** deposits, funds, cash and the rest: together they are net worth */
   classes: ClassCard[];
@@ -350,7 +390,9 @@ export function buildHome(i: HomeInput): HomeModel {
   const funds = i.inv && i.inv.household.funds > 0 ? i.inv : null;
   const fundRows: FundRow[] = funds ? funds.groups.flatMap((g) => g.funds) : [];
   // --- the four kinds of holding, and what each earned in each period
-  const awaitingRows = rows.filter((r) => r.fd?.listState === 'confirm');
+  // deposits past their date to confirm whose proceeds are NOT counted (probably already in another account, or assumed so); the
+  // proceeds still awaiting confirmation are counted once in the deposits figure itself
+  const awaitingRows = rows.filter((r) => r.fd?.listState === 'confirm' && !r.inNetWorth);
   const awaiting = {
     count: awaitingRows.length,
     invested: awaitingRows.reduce((a, r) => a + r.fd!.principal, 0),
@@ -678,7 +720,48 @@ export function buildHome(i: HomeInput): HomeModel {
       href: '/others',
     });
 
+  // --- the family ledger: own money, profit, return, and the chosen period's movement
+  const ledger = capitalLedger({
+    position: i.position,
+    moves: i.moves ?? [],
+    openingDate: cfg.capital.openingDate || null,
+  });
+  const views = fundViews(i.position, {
+    navStaleDays: cfg.funds.navStaleDays,
+    upcomingDays: cfg.home.upcomingDays,
+  });
+  const proceedsRows = i.portfolio.valued.filter(
+    (v) => v.estimate?.method === 'fd_proceeds' && isCounted(v),
+  );
+  const mixParts = positionAsOf(i.position, today)
+    .holdings.filter(isHeld)
+    .map((h) => ({
+      kind: h.deposit?.proceeds ? ('estimate' as const) : kindOfBasis(h.basis, !h.estimated),
+      value: h.value ?? 0,
+    }));
+  const capital: HomeCapital = {
+    totals: ledger.totals,
+    opening: ledger.opening,
+    limitations: ledger.limitations,
+    movement: wealthMovement(ledger, i.movement?.key ?? 'fy', today, i.movement?.custom),
+    funds: {
+      confirmed: views.confirmed,
+      estimated: views.estimated,
+      projected: views.projected,
+      staleCount: views.staleCount,
+      oldestNav: views.oldestNav,
+      unconfirmedFunds: views.unconfirmedFunds,
+      upcoming: views.upcoming.slice(0, 6),
+    },
+    proceeds: {
+      count: proceedsRows.length,
+      amount: proceedsRows.reduce((a, v) => a + (v.estimate?.estimatedAmount ?? 0), 0),
+    },
+    mix: mixOf(mixParts).by,
+  };
+
   return {
+    capital,
     today,
     styles: i.styles,
     total: nw.total,

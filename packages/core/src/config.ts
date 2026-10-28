@@ -209,6 +209,8 @@ export interface AppConfig {
     moneyTolerance: number;
     /** an annual figure (CAGR, XIRR over time) is shown only after money has been invested this many months */
     annualiseAfterMonths: number;
+    /** a fund's NAV older than this many days is flagged as stale (NAVs are published on business days) */
+    navStaleDays: number;
     /** how many of the largest funds make up "concentration" */
     concentrationTop: number;
     /** months shown in the SIP calendar */
@@ -393,6 +395,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     unitTolerance: 0.001,
     moneyTolerance: 1,
     annualiseAfterMonths: 12,
+    navStaleDays: 4,
     concentrationTop: 3,
     calendarMonths: 24,
     contributionMonths: 24,
@@ -734,6 +737,7 @@ export function configFromJson(raw: unknown): AppConfig {
       historyFrom: isoDate(fun.historyFrom, d.funds.historyFrom),
       unitTolerance: num(fun.unitTolerance, d.funds.unitTolerance, 0, 1),
       moneyTolerance: num(fun.moneyTolerance, d.funds.moneyTolerance, 0, 1000),
+      navStaleDays: Math.round(num(fun.navStaleDays, d.funds.navStaleDays, 1, 60)),
       annualiseAfterMonths: Math.round(
         num(fun.annualiseAfterMonths, d.funds.annualiseAfterMonths, 1, 120),
       ),

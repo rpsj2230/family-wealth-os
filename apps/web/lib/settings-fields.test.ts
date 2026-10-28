@@ -31,6 +31,7 @@ describe('settings fields', () => {
     const v = groupValues(group('funds'), DEFAULT_CONFIG);
     expect(v).toEqual({
       historyFrom: '2021-01-01',
+      navStaleDays: '4',
       unitTolerance: '0.001',
       moneyTolerance: '1',
       valuationPeriods: '12',
@@ -42,6 +43,7 @@ describe('settings fields', () => {
       group('funds'),
       form({
         historyFrom: '2019-04-01',
+        navStaleDays: '5',
         unitTolerance: '0.002',
         moneyTolerance: '2',
         valuationPeriods: '12',
@@ -55,6 +57,7 @@ describe('settings fields', () => {
       raw: {
         funds: {
           historyFrom: '2019-04-01',
+          navStaleDays: 5,
           unitTolerance: 0.002,
           moneyTolerance: 2,
           valuationPeriods: 12,

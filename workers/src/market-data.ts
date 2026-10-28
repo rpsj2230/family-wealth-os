@@ -4,7 +4,7 @@
  * Runs in GitHub Actions with the project URL and the service-role key (a GitHub secret; it never reaches the browser).
  */
 import { createClient } from '@supabase/supabase-js';
-import { syncSipEstimates } from '@fwos/data';
+import { runDailyValuation, syncSipEstimates } from '@fwos/data';
 import { configFromJson, DEFAULT_CONFIG } from '@fwos/core';
 import { parseNavHint, refreshMarketData, type MarketIo, type MarketStore } from '@fwos/ingest';
 
@@ -140,4 +140,15 @@ try {
   );
 } catch (e) {
   console.log(`::warning::SIP estimates could not be updated: ${(e as Error).message}`);
+}
+
+// the day's valuation: every household valued by the central engine with the new prices, and the day's net worth stored, so the
+// history grows every day whether or not anyone opens the app (totals only in the log)
+try {
+  const v = await runDailyValuation(db, { today: new Date(`${today}T00:00:00Z`) });
+  console.log(`Daily valuation: ${v.saved} of ${v.households} households saved`);
+  for (const f of v.failed)
+    console.log(`::warning::valuation of household ${f.household} failed: ${f.message}`);
+} catch (e) {
+  console.log(`::warning::daily valuation could not run: ${(e as Error).message}`);
 }

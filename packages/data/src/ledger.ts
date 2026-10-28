@@ -7,7 +7,11 @@
  * to the holdings' own rows, never to an error page.
  */
 import {
+  addDaysIso,
+  gainDays,
+  ledgerMoveOf,
   savingsSchedule,
+  type LedgerMove,
   rateOfferFromRow,
   type AssetRow,
   type AppConfig,
@@ -17,6 +21,7 @@ import {
   type SlabMethod,
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { LoadedPortfolio } from './index';
 import { pageAll } from './paging';
 
 export interface MoneyMove {
@@ -192,3 +197,50 @@ export async function loadSavingsSchedules(
   }
   return out;
 }
+
+/** The first day the household's figures can be measured from: Settings > capital, else the earliest dated record on file. */
+export function capitalStart(
+  loaded: Pick<LoadedPortfolio, 'obsRows' | 'sheetObs' | 'fdRows' | 'engine'>,
+  config: AppConfig,
+): string | null {
+  if (config.capital.openingDate) return config.capital.openingDate;
+  const dates = [
+    ...loaded.obsRows.filter((o) => !o.superseded_by).map((o) => o.as_of),
+    ...loaded.fdRows.map((f) => f.booked_on),
+    ...[...(loaded.engine?.fundLines.values() ?? [])].flatMap((l) =>
+      l.map((x) => x.txn_on as string),
+    ),
+  ].filter((d): d is string => !!d);
+  return dates.sort()[0] ?? null;
+}
+
+/**
+ * The days the position engine must price funds on for the capital ledger (the day before each calendar month starts and its last day,
+ * from the opening date to today) together with the days of the period figures, so one read of prices serves both.
+ */
+export function capitalDays(start: string | null, today: string, recentDays: number): string[] {
+  const days = new Set<string>(gainDays(today, recentDays, start));
+  if (start) {
+    let y = Number(start.slice(0, 4));
+    let m = Number(start.slice(5, 7));
+    days.add(start);
+    for (let guard = 0; guard < 1200; guard++) {
+      const first = `${y}-${String(m).padStart(2, '0')}-01`;
+      if (first > today) break;
+      if (first >= start) {
+        days.add(first);
+        days.add(addDaysIso(first, -1));
+      }
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
+      }
+    }
+  }
+  return [...days].filter((d) => d < today).sort();
+}
+
+/** The family ledger's reading of the stored movements (transfers between own holdings drop out). */
+export const ledgerMovesOf = (moves: MoneyMove[]): LedgerMove[] =>
+  moves.map((m) => ledgerMoveOf(m)).filter((m): m is LedgerMove => m !== null);

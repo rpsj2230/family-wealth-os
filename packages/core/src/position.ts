@@ -250,6 +250,23 @@ export interface ValuedHolding {
   savings?: SavingsDetail;
   /** a fund moved on from a value on file: the SIP instalments assumed since it (money put in by the plan, not confirmed) */
   sipAssumed?: { invested: number; count: number };
+  /** a fund: what statements confirm and what is projected from the SIP plan, and the price used */
+  fundSplit?: FundSplit;
+}
+
+/**
+ * A fund's value split by what backs it (acceptance tests 5 and 8): units a statement or a unit count confirms, and units the SIP plan
+ * is projected to have bought since (not money invested until a statement shows them). `confirmedValue` is null when no unit is
+ * confirmed (a fund rebuilt from its plan, or moved on from a value on file).
+ */
+export interface FundSplit {
+  confirmedUnits: number | null;
+  projectedUnits: number;
+  confirmedValue: number | null;
+  projectedValue: number;
+  projectedInvested: number;
+  projectedCount: number;
+  nav: { date: string; nav: number } | null;
 }
 
 export interface DepositDetail {
@@ -591,18 +608,32 @@ const valueDeposit: Valuer = (a, on, c, cur) => {
   );
 };
 
-/** Units held on a day from the ledger lines (oldest first), and whether any assumed line is among them. */
-function unitsOn(f: PosFund, on: string): { units: number; estimated: boolean; lines: number } {
+/** Units held on a day from the ledger lines (oldest first): confirmed by a statement, and assumed from the SIP plan. */
+function unitsOn(
+  f: PosFund,
+  on: string,
+): {
+  units: number;
+  estimated: boolean;
+  lines: number;
+  projected: { units: number; amount: number; count: number };
+} {
   let units = 0;
   let estimated = false;
   let lines = 0;
+  const projected = { units: 0, amount: 0, count: 0 };
   for (const t of f.txns) {
     if (t.date > on) break;
     units += t.units;
     lines++;
-    if (t.estimated) estimated = true;
+    if (t.estimated) {
+      estimated = true;
+      projected.units += t.units;
+      projected.amount += t.amount;
+      projected.count++;
+    }
   }
-  return { units, estimated, lines };
+  return { units, estimated, lines, projected };
 }
 
 /** The price on or just before a day, if there is one inside the gap Settings allows. */
@@ -739,16 +770,38 @@ function planHolding(
     if (on < pl.lines[0]!.date) return null;
     units = planUnitsOn(pl, on);
   }
-  return got(
-    a,
-    units * nav.nav,
-    'units_nav',
-    nav.date,
-    true,
-    counted
-      ? `${units.toFixed(3)} units: ${counted.units.toFixed(3)} counted on ${niceIso(counted.asOf)} plus the purchases of your SIP plan since, at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`
-      : `${units.toFixed(3)} units estimated from your SIP plan and the price of each day, at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`,
-  );
+  const since = counted ? pl.lines.filter((l) => l.date > counted.asOf && l.date <= on) : [];
+  return {
+    ...got(
+      a,
+      units * nav.nav,
+      'units_nav',
+      nav.date,
+      true,
+      counted
+        ? `${units.toFixed(3)} units: ${counted.units.toFixed(3)} counted on ${niceIso(counted.asOf)} plus the purchases of your SIP plan since, at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`
+        : `${units.toFixed(3)} units estimated from your SIP plan and the price of each day, at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`,
+    ),
+    fundSplit: counted
+      ? {
+          confirmedUnits: counted.units,
+          projectedUnits: units - counted.units,
+          confirmedValue: counted.units * nav.nav,
+          projectedValue: (units - counted.units) * nav.nav,
+          projectedInvested: since.reduce((x, l) => x + l.amount, 0),
+          projectedCount: since.length,
+          nav,
+        }
+      : {
+          confirmedUnits: null,
+          projectedUnits: 0,
+          confirmedValue: null,
+          projectedValue: 0,
+          projectedInvested: 0,
+          projectedCount: 0,
+          nav,
+        },
+  };
 }
 
 /** What a fund was worth on a day, built from one value on file moved with the price. */
@@ -858,7 +911,18 @@ function rolledHolding(a: PositionAsset, r: Rolled, on: string): ValuedHolding {
           ? 'recorded'
           : 'nav_scaled';
   const h = got(a, r.value, basis, an.date, !exact, note + sip);
-  return r.sip ? { ...h, sipAssumed: { invested: r.sip.invested, count: r.sip.count } } : h;
+  const split: FundSplit = {
+    confirmedUnits: an.kind === 'units' ? an.units : null,
+    projectedUnits: 0,
+    confirmedValue: an.kind === 'units' && r.nav ? an.units! * r.nav.nav : null,
+    projectedValue: r.sip ? r.sip.worth : 0,
+    projectedInvested: r.sip ? r.sip.invested : 0,
+    projectedCount: r.sip ? r.sip.count : 0,
+    nav: r.nav,
+  };
+  return r.sip
+    ? { ...h, sipAssumed: { invested: r.sip.invested, count: r.sip.count }, fundSplit: split }
+    : { ...h, fundSplit: split };
 }
 
 /** A change of a fund's value on one day that is neither the price nor money the plan put in (signed rupees). */
@@ -944,17 +1008,34 @@ const valueFund: Valuer = (a, on, c, cur) => {
         ? none(a, 'ended', 'every unit sold')
         : none(a, 'not_yet', 'no units held yet');
     }
-    const nav = navOn(f, on, c.navGapDays);
-    if (nav)
-      return got(
-        a,
-        u.units * nav.nav,
-        'units_nav',
-        nav.date,
-        u.estimated || (f.estimatedSince !== null && on >= f.estimatedSince),
-        `${u.units.toFixed(3)} units at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}`,
-        rate,
-      );
+    // today, an older price is still the latest official one: used, and flagged as stale by the views (never a value invented)
+    const nav = navOn(f, on, c.navGapDays) ?? (on >= c.today ? lastOnOrBefore(f.navs, on) : null);
+    if (nav) {
+      const confirmedUnits = f.hasStatement ? u.units - u.projected.units : null;
+      return {
+        ...got(
+          a,
+          u.units * nav.nav,
+          'units_nav',
+          nav.date,
+          u.estimated || (f.estimatedSince !== null && on >= f.estimatedSince),
+          `${u.units.toFixed(3)} units at ${nav.nav.toFixed(4)} on ${niceIso(nav.date)}` +
+            (u.projected.count > 0
+              ? ` (${u.projected.units.toFixed(3)} of them projected from ${u.projected.count} SIP instalment${u.projected.count === 1 ? '' : 's'} not yet on a statement)`
+              : ''),
+          rate,
+        ),
+        fundSplit: {
+          confirmedUnits,
+          projectedUnits: u.projected.units,
+          confirmedValue: confirmedUnits === null ? null : confirmedUnits * nav.nav,
+          projectedValue: u.projected.units * nav.nav,
+          projectedInvested: u.projected.amount,
+          projectedCount: u.projected.count,
+          nav,
+        },
+      };
+    }
   }
   // a fund with no ledger and a price list: the nearest value on or before the day, moved with the price, plus the plan's instalments
   if (isLedgerless(a)) {

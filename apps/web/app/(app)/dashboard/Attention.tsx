@@ -1,9 +1,7 @@
-import type { ExplainSet, PersonStyle } from '@fwos/core';
 import { formatInrCompact } from '@fwos/core';
-import { PersonBadge } from '@/components/Person';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
-import { CardHead, MaybeLink, Signed, homeLink } from './parts';
+import { CardHead, MaybeLink, homeLink } from './parts';
 
 /** How many lines of each list Home shows; the rest are one click away on the page named in the link. */
 const NEEDS_SHOWN = 6;
@@ -100,68 +98,6 @@ export function ComingUp({ m, sample }: { m: HomeModel; sample: boolean }) {
             );
           })}
         </ol>
-      )}
-    </section>
-  );
-}
-
-/** What moved since the comparison day: the total, then the biggest moves by kind of holding and by person. */
-export function Changed({
-  m,
-  styles,
-  ex,
-}: {
-  m: HomeModel;
-  styles: Record<string, PersonStyle>;
-  ex: ExplainSet<'home'>;
-}) {
-  const w = m.whatChanged;
-  return (
-    <section className="card hm-card" aria-labelledby="hm-changed">
-      <CardHead title="What changed" id="hm-changed" why={ex['home.changed']} />
-      {!w ? (
-        <p className="muted small">
-          Shows once a few days of net worth are saved, so there is something to compare with.
-        </p>
-      ) : (
-        <>
-          <p className="hm-line">
-            <Signed label="Net worth" amount={w.change} pct={w.pct} />
-            <span className="muted small">
-              {' '}
-              {w.partial ? 'data starts' : 'since'} {niceDate(w.since)}; money added or taken out is
-              part of it
-            </span>
-          </p>
-          <h3 className="bv-h">By kind of holding</h3>
-          <ul className="hm-movers">
-            {w.kinds.map((k) => (
-              <li key={k.key}>
-                <span className="hm-mname">{k.label}</span>
-                <Signed label="" amount={k.change} />
-              </li>
-            ))}
-          </ul>
-          {w.people.length > 1 && (
-            <>
-              <h3 className="bv-h">By person</h3>
-              <ul className="hm-movers">
-                {w.people.map((p) => (
-                  <li key={p.key}>
-                    <span className="hm-mname">
-                      <PersonBadge p={styles[p.key]} name size={18} />
-                    </span>
-                    <Signed label="" amount={p.change} />
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          <p className="muted small">
-            A move includes money you added or took out, a deposit that matured, and the interest
-            and price moves on top.
-          </p>
-        </>
       )}
     </section>
   );

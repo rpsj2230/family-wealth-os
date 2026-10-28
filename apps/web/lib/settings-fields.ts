@@ -778,6 +778,16 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         path: ['funds', 'historyFrom'],
       },
       {
+        name: 'navStaleDays',
+        label: 'A fund price is stale after',
+        hint: 'A fund whose latest official NAV is older than this is flagged “price of <date>, stale” wherever its value is shown. NAVs are published on business days, so 4 covers a long weekend.',
+        kind: 'int',
+        path: ['funds', 'navStaleDays'],
+        unit: 'days',
+        min: 1,
+        max: 60,
+      },
+      {
         name: 'unitTolerance',
         label: 'Units a history may be out by',
         hint: 'A fund whose transactions lead to a unit count further away than this from the recorded count is flagged “Doesn’t match”. Statements round units to three decimals.',

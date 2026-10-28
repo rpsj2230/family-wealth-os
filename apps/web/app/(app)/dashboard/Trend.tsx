@@ -21,14 +21,22 @@ const RANGE_WORDS: Record<HomeRange, string> = {
   ALL: 'all the history',
 };
 
+/** The wealth movement period in the address, kept when the chart's range changes. */
+const keepPeriod = (m: HomeModel) => {
+  const mv = m.capital.movement;
+  return mv.key === 'custom'
+    ? `&period=custom&from=${mv.from.slice(0, 7)}&to=${(mv.to === m.today ? m.today : (mv.figures?.through ?? mv.to)).slice(0, 7)}`
+    : `&period=${mv.key}`;
+};
+
 /** The time-range switch: links, so each range has an address, the back button works and the server draws it. */
-function RangeLinks({ base, current }: { base: string; current: HomeRange }) {
+function RangeLinks({ base, current, keep }: { base: string; current: HomeRange; keep: string }) {
   return (
     <nav className="rangeswitch hm-range" aria-label="Time range">
       {HOME_RANGES.map((r) => (
         <Link
           key={r.key}
-          href={`${base}?range=${r.key}`}
+          href={`${base}?range=${r.key}${keep}`}
           scroll={false}
           className={`fchip ${current === r.key ? 'on' : ''}`}
           aria-current={current === r.key ? 'true' : undefined}
@@ -72,7 +80,7 @@ export function Trend({ m, base, ex }: { m: HomeModel; base: string; ex: Explain
   return (
     <section className="card hm-card hm-span2" aria-labelledby="hm-trend">
       <CardHead title="Net worth over time" id="hm-trend" why={ex['home.trend']} />
-      <RangeLinks base={base} current={t.range} />
+      <RangeLinks base={base} current={t.range} keep={keepPeriod(m)} />
       {v.change ? (
         <p className="hm-line">
           <Signed label="Change" amount={v.change.amount} pct={v.change.pct} />{' '}

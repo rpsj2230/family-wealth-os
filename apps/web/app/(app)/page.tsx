@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { parseHomeRange } from '@fwos/core';
+import { parseHomeRange, parseMovementKey } from '@fwos/core';
 import { redirect } from 'next/navigation';
 import { PageHead } from '@/components/PageHead';
 import { SetupChecklist } from '@/components/SetupChecklist';
@@ -17,9 +17,15 @@ export const dynamic = 'force-dynamic';
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ problem?: string; range?: string }>;
+  searchParams: Promise<{
+    problem?: string;
+    range?: string;
+    period?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
-  const { problem, range } = await searchParams;
+  const { problem, range, period, from, to } = await searchParams;
   if ((await loadAccess()).role === 'emergency_viewer') redirect('/emergency');
   const { supabase, householdId, role } = await loadContext();
 
@@ -49,7 +55,10 @@ export default async function Dashboard({
   }
 
   const [home, setup] = await Promise.all([
-    loadHome(supabase, parseHomeRange(range)),
+    loadHome(supabase, parseHomeRange(range), {
+      key: parseMovementKey(period),
+      custom: { ...(from ? { from } : {}), ...(to ? { to } : {}) },
+    }),
     loadSetupStatus(supabase),
   ]);
 

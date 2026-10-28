@@ -619,3 +619,99 @@ a.hm-need-text::after {
     grid-template-columns: 3rem minmax(0, 1fr) auto;
   }
 }
+
+/* ---- own money and profit, under the net worth ---- */
+.hm-capital {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.hm-cap {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  min-width: 0;
+}
+.hm-cap.warn {
+  border-color: var(--warn-fg);
+  background: var(--warn-bg);
+}
+.hm-cap-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.hm-cap-value {
+  font-size: 1.15rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.hm-cap-value.gain {
+  color: var(--bv-gain);
+}
+.hm-cap-value.fail {
+  color: var(--bv-loss);
+}
+.hm-cap-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* ---- wealth movement over a period ---- */
+.hm-move .hm-range {
+  flex-wrap: wrap;
+}
+.hm-custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.4rem 0 0.6rem;
+}
+.hm-custom input[type='month'] {
+  max-width: 9.5rem;
+}
+.hm-move-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.hm-move-table th {
+  text-align: left;
+  font-weight: 450;
+  padding: 0.28rem 0.5rem 0.28rem 0;
+  overflow-wrap: anywhere;
+}
+.hm-move-table td {
+  text-align: right;
+  white-space: nowrap;
+  padding: 0.28rem 0;
+}
+.hm-move-table tr + tr {
+  border-top: 1px solid var(--border);
+}
+.hm-move-table tr.total th,
+.hm-move-table tr.total td {
+  font-weight: 650;
+}
+.hm-move-table tr.warn th,
+.hm-move-table tr.warn td {
+  color: var(--warn-fg);
+}
+.hm-move-table tr.muted {
+  color: var(--muted);
+}
+.hm-move-table td.gain {
+  color: var(--bv-gain);
+}
+.hm-move-table td.fail {
+  color: var(--bv-loss);
+}
+.hm-move-sum {
+  margin: 0.5rem 0 0.25rem;
+}

@@ -11,6 +11,12 @@ export function homeExplain(m: HomeModel, link: LinkOf): ExplainSet<'home'> {
     today: m.today,
     total: m.total,
     money: m.money,
+    capital: {
+      totals: m.capital.totals,
+      opening: m.capital.opening,
+      limitations: m.capital.limitations,
+      movement: m.capital.movement,
+    },
     classes: m.classes,
     periods: m.periods,
     assumptions: m.assumptions,

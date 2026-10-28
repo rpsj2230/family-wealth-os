@@ -1,0 +1,61 @@
+.rc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.rc-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border);
+}
+@media (min-width: 760px) {
+  .rc-item {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  }
+}
+.rc-what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rc-amount {
+  font-size: 1.15rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.rc-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+  min-width: 0;
+}
+.rc-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  gap: 0.15rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.rc-form select,
+.rc-form input[type='date'],
+.rc-form input[name='amount'] {
+  max-width: 100%;
+}
+.rc-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.rc-form .rc-choice {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
