@@ -240,6 +240,7 @@ export async function loadHome(
         moves: loaded.engine.moves,
         tolerance: settings.config.estimates.unexplainedTolerance,
         sinceDays: Math.max(settings.config.deposits.hideMaturedAfterDays, 120),
+        pairDays: settings.config.estimates.transferPairDays,
       });
       return {
         balances: q.balances.length,

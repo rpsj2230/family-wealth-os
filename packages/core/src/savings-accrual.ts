@@ -203,7 +203,16 @@ export function savingsInterestBetween(
 // Reconciliation of a new actual balance
 // ------------------------------------------------------------------------------------------------
 export interface ReconcileSuggestion {
-  kind: 'fd_proceeds' | 'fd_payout' | 'outside_money_in' | 'money_out' | 'interest_credit';
+  kind:
+    | 'fd_proceeds'
+    | 'fd_payout'
+    | 'outside_money_in'
+    | 'money_out'
+    | 'interest_credit'
+    /** the same sum went the other way in another of the family's accounts within a few days */
+    | 'transfer'
+    /** the sum left the account to open a new deposit booked within a few days */
+    | 'fd_funding';
   amount: number;
   /** the holding it probably came from or went to, when there is one */
   assetId?: string;

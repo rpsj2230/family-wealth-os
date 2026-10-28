@@ -352,6 +352,16 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
       },
       {
+        name: 'transferPairDays',
+        label: 'A fall in one account and a rise in another are one transfer when within',
+        hint: 'On Explain movements, when one of your accounts fell and another rose by the same sum within this many days, they are offered as one transfer between your own accounts, already chosen. Answering one clears both.',
+        kind: 'int',
+        path: ['estimates', 'transferPairDays'],
+        unit: 'days',
+        min: 0,
+        max: 31,
+      },
+      {
         name: 'openingDate',
         label: 'Measure your own money and profit from',
         hint: 'Own money put in (lifetime), lifetime profit and the yearly return start from net worth on this day (the opening position). Leave empty to start from the first day the holdings on file have a value.',

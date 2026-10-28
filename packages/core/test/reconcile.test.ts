@@ -129,3 +129,105 @@ describe('reconcileQueue (acceptance tests 4 and 16)', () => {
     expect(done.funding).toHaveLength(0);
   });
 });
+
+describe('reconcileQueue: transfers between the family’s own accounts are paired', () => {
+  const position = (assets: PositionAsset[]) => ({ assets, config: cfg });
+  // RTGS from one bank to another on 28 Oct: one account falls, the other rises by the same sum
+  const rbl = base({
+    assetId: 'rbl',
+    type: 'bank_account',
+    name: 'RBL savings',
+    institutionId: 'rblbank',
+    records: [rec('2026-10-01', 556_750.05), rec('2026-10-28', 0.05)],
+  });
+  const yes = base({
+    assetId: 'yes',
+    type: 'bank_account',
+    name: 'YES savings',
+    institutionId: 'yesbank',
+    records: [rec('2026-10-01', 256.53), rec('2026-10-28', 557_006.53)],
+  });
+  const queue = (moves: Parameters<typeof reconcileQueue>[0]['moves'] = []) =>
+    reconcileQueue({
+      position: position([rbl, yes]),
+      moves,
+      tolerance: 500,
+      sinceDays: 120,
+      pairDays: 3,
+    });
+
+  it('offers the fall and the rise as one transfer, already chosen, on both sides', () => {
+    const q = queue();
+    const up = q.balances.find((b) => b.assetId === 'yes')!;
+    const down = q.balances.find((b) => b.assetId === 'rbl')!;
+    expect(up.pair).toMatchObject({ assetId: 'rbl' });
+    expect(down.pair).toMatchObject({ assetId: 'yes' });
+    expect(up.suggestions[0]).toMatchObject({ kind: 'transfer', assetId: 'rbl' });
+    expect(down.suggestions[0]).toMatchObject({ kind: 'transfer', assetId: 'yes' });
+  });
+
+  it('answering one side clears both', () => {
+    const q = queue([
+      {
+        movedOn: '2026-10-28',
+        amount: 556_750,
+        kind: 'transfer',
+        fromAssetId: 'rbl',
+        toAssetId: 'yes',
+        status: 'confirmed',
+        idemKey: 'recon:yes:2026-10-28',
+      },
+    ]);
+    expect(q.balances).toHaveLength(0);
+  });
+
+  it('does not pair sums that differ, or changes too far apart', () => {
+    const far = base({
+      ...yes,
+      assetId: 'far',
+      records: [rec('2026-09-01', 256.53), rec('2026-09-20', 557_006.53)],
+    });
+    const odd = base({
+      ...yes,
+      assetId: 'odd',
+      records: [rec('2026-10-01', 256.53), rec('2026-10-28', 300_000)],
+    });
+    const q = reconcileQueue({
+      position: position([rbl, far, odd]),
+      moves: [],
+      tolerance: 500,
+      sinceDays: 120,
+      pairDays: 3,
+    });
+    expect(q.balances.every((b) => !b.pair)).toBe(true);
+  });
+
+  it('a fall that matches a new deposit booked within the window is offered as its funding', () => {
+    const fdNew = base({
+      assetId: 'fd-new',
+      type: 'fixed_deposit',
+      name: 'New deposit',
+      institutionId: 'rblbank',
+      fd: {
+        principal: 556_750,
+        rate: 0.07,
+        bookedOn: '2026-10-27',
+        maturityOn: '2027-10-27',
+        compounding: 'quarterly',
+        bankMaturityAmount: null,
+        endedOn: null,
+      },
+    });
+    const q = reconcileQueue({
+      position: position([rbl, fdNew]),
+      moves: [],
+      tolerance: 500,
+      sinceDays: 120,
+      pairDays: 3,
+    });
+    const fall = q.balances.find((b) => b.assetId === 'rbl')!;
+    expect(fall.suggestions[0]).toMatchObject({ kind: 'fd_funding', assetId: 'fd-new' });
+    expect(q.funding[0]!.suggestion).toMatchObject({ assetId: 'rbl' });
+    expect(q.funding[0]!.suggestion!.why).toContain('the same sum left RBL savings');
+  });
+});

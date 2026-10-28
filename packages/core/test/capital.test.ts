@@ -158,6 +158,24 @@ describe('capitalLedger: outside money (acceptance tests 9 and 12)', () => {
     expect(l.limitations.join(' ')).toMatch(/worked out from balances/);
   });
 
+  it('a correction (the earlier balance was wrong) is own money, never profit, so net worth is still own money plus profit', () => {
+    const records = [rec('2025-04-01', 100_000), rec('2025-09-01', 600_000)];
+    const before = capitalLedger({
+      position: input([sav([], records)]),
+      moves: [],
+      openingDate: '2025-04-01',
+    });
+    const l = capitalLedger({
+      position: input([sav([], records)]),
+      moves: [{ date: '2025-09-01', amount: 500_000, kind: 'correction' }],
+      openingDate: '2025-04-01',
+    });
+    expect(l.totals.corrections).toBe(500_000);
+    expect(l.totals.netWorth).toBeCloseTo(l.totals.ownMoney + l.totals.profit, 6);
+    expect(l.totals.profit).toBeCloseTo(before.totals.profit, 6);
+    expect(l.totals.ownMoney).toBeCloseTo(before.totals.ownMoney, 0);
+  });
+
   it('does not show a per cent with no own money to measure it against', () => {
     const l = capitalLedger({ position: input([]), moves: [] });
     expect(l.opening).toBeNull();

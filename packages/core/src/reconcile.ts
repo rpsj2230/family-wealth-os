@@ -35,6 +35,8 @@ export interface BalanceItem {
   assetId: string;
   name: string;
   ownerId: string;
+  /** another of the family's accounts that moved the other way by the same sum within a few days: probably one transfer */
+  pair?: { assetId: string; name: string; date: string; difference: number } | null;
   from: { date: string; amount: number };
   to: { date: string; amount: number };
   expected: number;
@@ -77,6 +79,8 @@ export function reconcileQueue(args: {
   tolerance: number;
   /** how far back to look for balances that do not match and deposits with no source, in days */
   sinceDays: number;
+  /** Settings: two changes this many days apart or less, of the same sum in opposite directions, are offered as one transfer */
+  pairDays?: number;
 }): ReconcileQueue {
   const { position, moves } = args;
   const c = position.config;
@@ -85,6 +89,12 @@ export function reconcileQueue(args: {
   const byId = new Map(position.assets.map((a) => [a.assetId, a]));
   const confirmed = moves.filter((m) => m.status === 'confirmed');
   const answered = new Set(moves.filter((m) => m.idemKey).map((m) => m.idemKey!));
+  const pairDays = args.pairDays ?? 3;
+  const apart = (a: string, b: string) =>
+    Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
+  /** the same sum, give or take the tolerance or half a per cent (interest of a day or two) */
+  const same = (x: number, y: number) =>
+    Math.abs(Math.abs(x) - Math.abs(y)) <= Math.max(args.tolerance, 0.005 * Math.abs(x));
 
   // 1. maturity proceeds nobody placed
   const proceeds: ProceedsItem[] = [];
@@ -188,6 +198,14 @@ export function reconcileQueue(args: {
         candidates: awaitingAmounts.filter((x) => byId.get(x.assetId)?.ownerId === a.ownerId),
       });
       if (r.explained) continue;
+      // answered from the other side: a transfer or a deposit's funding you confirmed for the account it pairs with
+      const settled = confirmed.some(
+        (m) =>
+          (m.fromAssetId === a.assetId || m.toAssetId === a.assetId) &&
+          same(m.amount, r.difference) &&
+          apart(m.movedOn, cur.date) <= pairDays,
+      );
+      if (settled) continue;
       balances.push({
         assetId: a.assetId,
         name: a.name,
@@ -259,6 +277,73 @@ export function reconcileQueue(args: {
             why: 'a savings account of the same person at the same bank',
           }
         : null,
+    });
+  }
+  // transfers between the family's own accounts: one balance rose and another fell by the same sum within a few days. The closest pair
+  // (by sum, then by date) is offered as one transfer, already chosen; answering either side clears both.
+  const taken = new Set<string>();
+  const ups = balances.filter((b) => b.difference > 0);
+  const downs = balances.filter((b) => b.difference < 0);
+  const candidates = ups
+    .flatMap((u) =>
+      downs
+        .filter(
+          (d) =>
+            d.assetId !== u.assetId &&
+            same(u.difference, d.difference) &&
+            apart(u.to.date, d.to.date) <= pairDays,
+        )
+        .map((d) => ({
+          u,
+          d,
+          gap: Math.abs(u.difference + d.difference),
+          days: apart(u.to.date, d.to.date),
+        })),
+    )
+    .sort((x, y) => x.gap - y.gap || x.days - y.days);
+  for (const { u, d } of candidates) {
+    if (taken.has(u.key) || taken.has(d.key)) continue;
+    taken.add(u.key);
+    taken.add(d.key);
+    u.pair = { assetId: d.assetId, name: d.name, date: d.to.date, difference: d.difference };
+    d.pair = { assetId: u.assetId, name: u.name, date: u.to.date, difference: u.difference };
+    u.suggestions.unshift({
+      kind: 'transfer',
+      amount: u.difference,
+      assetId: d.assetId,
+      assetName: d.name,
+      label: `A transfer from ${d.name} (the same sum left it by ${d.to.date})`,
+    });
+    d.suggestions.unshift({
+      kind: 'transfer',
+      amount: d.difference,
+      assetId: u.assetId,
+      assetName: u.name,
+      label: `A transfer to ${u.name} (the same sum arrived there by ${u.to.date})`,
+    });
+  }
+  // a fall in a balance that matches a new deposit booked within a few days: the deposit's funding, offered on both sides
+  for (const f of funding) {
+    const from = downs.find(
+      (d) =>
+        !taken.has(d.key) &&
+        d.ownerId === f.ownerId &&
+        same(d.difference, f.principal) &&
+        apart(d.to.date, f.bookedOn) <= pairDays,
+    );
+    if (!from) continue;
+    taken.add(from.key);
+    f.suggestion = {
+      assetId: from.assetId,
+      name: from.name,
+      why: `the same sum left ${from.name} by ${from.to.date}`,
+    };
+    from.suggestions.unshift({
+      kind: 'fd_funding',
+      amount: from.difference,
+      assetId: f.assetId,
+      assetName: f.name,
+      label: `Opened the deposit ${f.name} (booked ${f.bookedOn})`,
     });
   }
   return {

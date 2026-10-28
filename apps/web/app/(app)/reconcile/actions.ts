@@ -128,6 +128,26 @@ export async function explainBalance(f: FormData): Promise<void> {
       kind: 'fd_proceeds',
       idem_key: key,
     };
+  else if (answer.startsWith('pair:') && UUID.test(answer.slice(5)) && answer.slice(5) !== account)
+    // the matching change in another of your accounts: one transfer, which clears both lines
+    move = {
+      moved_on: on,
+      amount,
+      from_asset_id: into ? answer.slice(5) : account,
+      to_asset_id: into ? account : answer.slice(5),
+      kind: 'transfer',
+      idem_key: key,
+    };
+  else if (answer.startsWith('funding:') && UUID.test(answer.slice(8)) && !into)
+    // the money opened a new deposit: it moved between your own holdings, and the deposit's source is recorded too
+    move = {
+      moved_on: on,
+      amount,
+      from_asset_id: account,
+      to_asset_id: answer.slice(8),
+      kind: 'fd_funding',
+      idem_key: key,
+    };
   else if (answer === 'transfer' && UUID.test(other) && other !== account)
     move = {
       moved_on: on,

@@ -44,6 +44,7 @@ export default async function Reconcile({
     moves: loaded.engine.moves,
     tolerance: config.estimates.unexplainedTolerance,
     sinceDays: Math.max(config.deposits.hideMaturedAfterDays, 120),
+    pairDays: config.estimates.transferPairDays,
   });
   const owner = (id: string) => loaded.ownerName.get(id) ?? '';
   const accounts = loaded.assetRows.filter(
@@ -176,7 +177,15 @@ export default async function Reconcile({
                         <input
                           type="radio"
                           name="answer"
-                          value={s.kind === 'fd_proceeds' ? `proceeds:${s.assetId}` : 'outside'}
+                          value={
+                            s.kind === 'fd_proceeds'
+                              ? `proceeds:${s.assetId}`
+                              : s.kind === 'transfer'
+                                ? `pair:${s.assetId}`
+                                : s.kind === 'fd_funding'
+                                  ? `funding:${s.assetId}`
+                                  : 'outside'
+                          }
                           defaultChecked={k === 0}
                         />
                         {s.label}
@@ -185,7 +194,7 @@ export default async function Reconcile({
                     <label className="rc-choice">
                       <input type="radio" name="answer" value="transfer" />A transfer{' '}
                       {b.difference > 0 ? 'from' : 'to'} another of our accounts:
-                      <select name="other" defaultValue="">
+                      <select name="other" defaultValue={b.pair?.assetId ?? ''}>
                         <option value="">choose…</option>
                         {accounts
                           .filter((a) => a.id !== b.assetId)

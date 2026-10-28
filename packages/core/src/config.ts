@@ -62,6 +62,8 @@ export interface AppConfig {
     savingsCreditMonths: number;
     /** a new balance within this many rupees of the estimate is explained; a larger difference is "not yet explained" until you classify it */
     unexplainedTolerance: number;
+    /** two balance changes of the same sum in opposite directions this many days apart or less are offered as one transfer */
+    transferPairDays: number;
   };
   /** the family's own money and its profit (capital.ts) */
   capital: {
@@ -320,6 +322,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     savingsSlabIncremental: false,
     savingsCreditMonths: 3,
     unexplainedTolerance: 500,
+    transferPairDays: 3,
   },
   capital: { openingDate: '' },
   inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
@@ -601,6 +604,7 @@ export function configFromJson(raw: unknown): AppConfig {
         ? Number(est.savingsCreditMonths)
         : d.estimates.savingsCreditMonths,
       unexplainedTolerance: num(est.unexplainedTolerance, d.estimates.unexplainedTolerance, 0, 1e7),
+      transferPairDays: Math.round(num(est.transferPairDays, d.estimates.transferPairDays, 0, 31)),
     },
     capital: {
       openingDate: (() => {

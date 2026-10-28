@@ -15,8 +15,9 @@
  *
  *   net worth = opening position + confirmed outside money + not yet explained + profit
  *
- *  - Own money put in = opening position + confirmed outside money + not yet explained (the last shown apart: it is assumed to be your
- *    own money until you classify it). Renewals, transfers and reinvested interest never change it.
+ *  - Own money put in = opening position + confirmed outside money + not yet explained + corrections (the not-yet-explained part is
+ *    shown apart: it is assumed to be your own money until you classify it; a correction says an earlier balance was wrong, so the money
+ *    was there all along). Renewals, transfers and reinvested interest never change it.
  *  - Profit so far = net worth − own money put in = the sum of the earnings.
  *  - Profit % = profit ÷ own money put in; not shown when own money is zero or negative (no meaningful base).
  *  - Annual return (XIRR, money-weighted) on −opening at the opening date, −each sum of outside money on its date (a not-yet-explained
@@ -185,7 +186,7 @@ export interface CapitalLedger {
     confirmedExternal: number;
     unexplained: number;
     corrections: number;
-    /** opening + confirmed outside money + not yet explained */
+    /** opening + confirmed outside money + not yet explained + corrections */
     ownMoney: number;
     profit: number;
     earnings: SpanFigures['earnings'];
@@ -310,14 +311,18 @@ export function capitalLedger(args: {
   const unexplained = add((m) => m.unexplained);
   const corrections = add((m) => m.corrections);
   const opening = first.start;
-  const ownMoney = opening + confirmedExternal + unexplained;
+  // a correction (an earlier balance was wrong) is money that was there all along: own money, never profit
+  const ownMoney = opening + confirmedExternal + unexplained + corrections;
   const profit = earnings.total;
 
   // money-weighted: the opening position and each sum of outside money on its date, against net worth today
   const flows = [
     { date: new Date(`${first0}T00:00:00Z`), amount: -opening },
     ...args.moves
-      .filter((m) => m.kind === 'external' && m.date >= first0 && m.date <= today)
+      .filter(
+        (m) =>
+          (m.kind === 'external' || m.kind === 'correction') && m.date >= first0 && m.date <= today,
+      )
       .map((m) => ({ date: new Date(`${m.date}T00:00:00Z`), amount: -m.amount })),
     ...months
       .filter((m) => Math.abs(m.unexplained) >= 1)
