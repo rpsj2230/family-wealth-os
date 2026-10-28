@@ -108,7 +108,7 @@ async function main() {
         `Today: ₹${inr(w.today.amount)} (${pct(w.today.pct)})  of which banks ₹${inr(w.today.banks)}, funds ₹${inr(w.today.funds)}`,
       );
       console.log(
-        `Invested money (deposit principal + fund cost): ₹${inr(w.overall.invested)}   Profit so far: ₹${inr(w.overall.profit)} (${pct(w.overall.profitPct)})${w.overall.estimated ? '  [partly estimated]' : ''}`,
+        `Cost of current holdings (deposit principal + fund cost): ₹${inr(w.overall.invested)}   Gain on current holdings: ₹${inr(w.overall.profit)} (${pct(w.overall.profitPct)})${w.overall.estimated ? '  [partly estimated]' : ''}`,
       );
       for (const c of w.classes)
         console.log(`  ${c.label}: ₹${inr(c.current)} (${pct(c.share)} of net worth)`);
@@ -193,7 +193,7 @@ async function main() {
         `  outside money confirmed ₹${inr(t.confirmedExternal)}, moved and not yet explained ₹${inr(t.unexplained)}, corrections ₹${inr(t.corrections)} => own money ₹${inr(t.ownMoney)}`,
       );
       console.log(
-        `  profit so far ₹${inr(t.profit)} (${pct(t.profitPct)} of own money): savings ₹${inr(t.earnings.savings)}, deposits ₹${inr(t.earnings.deposits)}, funds ₹${inr(t.earnings.funds)}, fx ₹${inr(t.earnings.fx)}, others ₹${inr(t.earnings.others)}, income ₹${inr(t.earnings.income)}`,
+        `  lifetime profit ₹${inr(t.profit)} (${pct(t.profitPct)} of own money): savings ₹${inr(t.earnings.savings)}, deposits ₹${inr(t.earnings.deposits)}, funds ₹${inr(t.earnings.funds)}, fx ₹${inr(t.earnings.fx)}, others ₹${inr(t.earnings.others)}, income ₹${inr(t.earnings.income)}`,
       );
       console.log(
         `  XIRR ${pct(t.xirr.rate)} (${t.xirr.status}); time-weighted ${pct(t.twr.total)} total, ${pct(t.twr.annualised)} a year`,

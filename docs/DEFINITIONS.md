@@ -117,7 +117,7 @@ Savings and current accounts in rupees and in other currencies (converted at the
 - Kind: Estimate
 - Applies to: The valuation date.
 
-### Own money put in
+### Own money put in (lifetime)
 
 The opening position plus all money that came in from outside the family’s accounts (salary, gifts received, sale of something not tracked) less all money taken out of them. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.
 
@@ -138,16 +138,16 @@ Net worth on the first date with a value for the holdings on record, taken as th
 - Kind: Past performance
 - Applies to: The opening date shown.
 
-### Profit so far
+### Lifetime profit
 
 Net worth less own money put in: interest, fund and share gains, exchange-rate moves and income, after fees and taxes. Changes not yet explained are shown apart and not counted.
 
 - Kind: Past performance
 - Applies to: The valuation date, since the opening date.
 
-### Profit so far (%)
+### Lifetime profit (%)
 
-Profit so far as a per cent of own money put in.
+Lifetime profit as a per cent of own money put in.
 
 - Kind: Past performance
 - Applies to: The valuation date, since the opening date.
@@ -175,6 +175,21 @@ For funds: the purchase cost of the units still held, matched first-in first-out
 
 - Kind: Actual
 - Applies to: The date of the last statement.
+
+### Cost of current holdings
+
+What the holdings you have today cost: each running deposit’s amount, the last balance of each savings account, and the first-in first-out cost of the fund units still held. A deposit renewed with its interest counts at its new, larger amount, so reinvested interest is inside it. Not the same as own money put in (lifetime).
+
+- Kind: Actual
+- Applies to: Today.
+
+### Gain on current holdings
+
+Value today of the holdings you have now, less what they cost. Interest already rolled into a renewed deposit is part of its cost, so it is not in this gain; the lifetime profit counts it once.
+
+- Kind: Estimate
+- Applies to: Today.
+- Per cent of: Cost of current holdings.
 
 ### Realised gain
 

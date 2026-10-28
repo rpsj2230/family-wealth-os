@@ -172,12 +172,17 @@ export function BankOverviewPanel({
               ? 'Nothing is recorded yet.'
               : `${plural(o.accounts, 'account')} and ${plural(o.deposits, 'deposit')}${o.banks > 0 ? ` in ${o.banks} ${bankWord}` : ''}`}
           </p>
+          <p className="bv-view small muted" data-testid="bv-view-current">
+            <strong>Current holdings:</strong> what today’s deposits and balances cost and are
+            worth. Lifetime profit, with reinvested interest counted once, is on{' '}
+            <Link href={sample ? '/demo/dashboard' : '/'}>Home</Link>.
+          </p>
           <div className="bv-deltas">
             <Delta
-              label="Profit so far"
+              label="Gain on current holdings"
               amount={o.profit}
               pct={o.profitPct}
-              note="on the amount invested"
+              note="on what the deposits and balances cost"
               why={ex['accounts.profit']}
             />
             <Delta
@@ -211,7 +216,7 @@ export function BankOverviewPanel({
               </div>
               <dl className="bv-ends">
                 <div>
-                  <dt>Invested</dt>
+                  <dt>Cost of current holdings</dt>
                   <dd>{formatInrCompact(o.invested)}</dd>
                 </div>
                 <div className="mid">

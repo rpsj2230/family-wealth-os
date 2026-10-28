@@ -304,8 +304,8 @@ function capitalExplains(
     });
   if (!c || !t || !o)
     return {
-      'home.ownMoney': none('home.ownMoney', 'Own money put in'),
-      'home.profitSoFar': none('home.profitSoFar', 'Profit so far'),
+      'home.ownMoney': none('home.ownMoney', 'Own money put in (lifetime)'),
+      'home.profitSoFar': none('home.profitSoFar', 'Lifetime profit'),
       'home.xirr': none('home.xirr', 'Yearly return (XIRR)'),
       'home.movement': none('home.movement', 'Wealth movement'),
     };
@@ -316,7 +316,7 @@ function capitalExplains(
   return {
     'home.ownMoney': explain({
       id: 'home.ownMoney',
-      title: 'Own money put in',
+      title: 'Own money put in (lifetime)',
       exact: exInr(t.ownMoney),
       what: 'The family’s own money in what it holds: the opening position plus money that came in from outside its accounts, less money taken out. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.',
       how: `Opening position ${exInr(t.opening)} on ${exDate(o.date)} + outside money you confirmed ${exSigned(t.confirmedExternal)} + money moved in or out with nothing to say what it was ${exSigned(t.unexplained)} = ${exInr(t.ownMoney)}.`,
@@ -348,7 +348,7 @@ function capitalExplains(
     }),
     'home.profitSoFar': explain({
       id: 'home.profitSoFar',
-      title: 'Profit so far',
+      title: 'Lifetime profit',
       exact: exSigned(t.profit),
       what: 'Net worth less own money put in: interest on savings and deposits, fund gains, exchange-rate moves and income, less fees and taxes, since the opening date.',
       how: `Net worth ${exInr(t.netWorth)} − own money ${exInr(t.ownMoney)} = ${exSigned(t.profit)}${t.profitPct === null ? '' : `; ÷ own money = ${exPct(t.profitPct, 1)}`}. By kind: savings interest ${exSigned(t.earnings.savings)}, deposit interest ${exSigned(t.earnings.deposits)}, funds ${exSigned(t.earnings.funds)}, exchange rates ${exSigned(t.earnings.fx)}, other ${exSigned(t.earnings.others + t.earnings.income)}.`,

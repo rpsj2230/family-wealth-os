@@ -627,6 +627,11 @@ a.hm-need-text::after {
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
+/* the one line that says these are lifetime figures: across the whole row */
+.hm-capital .hm-view {
+  grid-column: 1 / -1;
+  margin: 0;
+}
 .hm-cap {
   border: 1px solid var(--border);
   border-radius: 0.5rem;

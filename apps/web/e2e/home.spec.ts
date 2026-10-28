@@ -35,8 +35,8 @@ test.describe('Home (public sample)', () => {
     for (const label of [
       'Today',
       'Last 30 days',
-      'Own money put in',
-      'Profit so far',
+      'Own money put in (lifetime)',
+      'Lifetime profit',
       'Yearly return (XIRR)',
       'Confirmed recently',
       'Older or unconfirmed',
@@ -109,7 +109,7 @@ test.describe('Home (public sample)', () => {
   }) => {
     await page.goto('/demo/dashboard');
     const figures = hero(page).getByRole('group', { name: 'Own money and profit' });
-    for (const label of ['Own money put in', 'Profit so far', 'Yearly return (XIRR)'])
+    for (const label of ['Own money put in (lifetime)', 'Lifetime profit', 'Yearly return (XIRR)'])
       await expect(figures.locator('.hm-cap-label', { hasText: label })).toBeVisible();
     await expect(figures.getByTestId('hm-own-money')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(/^[+−]₹[\d,]+$/);
@@ -165,7 +165,11 @@ test.describe('Home (public sample)', () => {
     for (const [key, href] of Object.entries(hrefs)) {
       const card = section.getByTestId(`hm-class-${key}`);
       await expect(card.getByRole('link').first()).toHaveAttribute('href', href);
-      for (const label of ['Invested', 'Earned so far', 'Profit so far'])
+      for (const label of [
+        'Cost of current holdings',
+        'Earned since first record',
+        'Gain on current holdings',
+      ])
         await expect(card.getByText(label, { exact: true })).toBeVisible();
       await expect(card.getByText(/% of net worth/)).toBeVisible();
     }

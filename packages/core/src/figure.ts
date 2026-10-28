@@ -123,6 +123,8 @@ export type MetricKey =
   | 'xirr'
   | 'twr'
   | 'costBasis'
+  | 'currentCost'
+  | 'currentGain'
   | 'realisedGain'
   | 'unrealisedGain'
   | 'interestEarned'
@@ -261,7 +263,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
   },
   externalCapital: {
     key: 'externalCapital',
-    label: 'Own money put in',
+    label: 'Own money put in (lifetime)',
     kind: 'history',
     definition:
       'The opening position plus all money that came in from outside the family’s accounts (salary, gifts received, sale of something not tracked) less all money taken out of them. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.',
@@ -285,7 +287,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
   },
   cumulativeGain: {
     key: 'cumulativeGain',
-    label: 'Profit so far',
+    label: 'Lifetime profit',
     kind: 'history',
     definition:
       'Net worth less own money put in: interest, fund and share gains, exchange-rate moves and income, after fees and taxes. Changes not yet explained are shown apart and not counted.',
@@ -293,9 +295,9 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
   },
   cumulativeGainPct: {
     key: 'cumulativeGainPct',
-    label: 'Profit so far (%)',
+    label: 'Lifetime profit (%)',
     kind: 'history',
-    definition: 'Profit so far as a per cent of own money put in.',
+    definition: 'Lifetime profit as a per cent of own money put in.',
     effectiveDate: 'The valuation date, since the opening date.',
     denominator:
       'Own money put in (opening position plus net outside money). Not shown when that is zero or negative.',
@@ -325,6 +327,23 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     definition:
       'For funds: the purchase cost of the units still held, matched first-in first-out against sales (the method Indian capital-gains tax uses). Projected instalments are not in it.',
     effectiveDate: 'The date of the last statement.',
+  },
+  currentCost: {
+    key: 'currentCost',
+    label: 'Cost of current holdings',
+    kind: 'actual',
+    definition:
+      'What the holdings you have today cost: each running deposit’s amount, the last balance of each savings account, and the first-in first-out cost of the fund units still held. A deposit renewed with its interest counts at its new, larger amount, so reinvested interest is inside it. Not the same as own money put in (lifetime).',
+    effectiveDate: 'Today.',
+  },
+  currentGain: {
+    key: 'currentGain',
+    label: 'Gain on current holdings',
+    kind: 'estimate',
+    definition:
+      'Value today of the holdings you have now, less what they cost. Interest already rolled into a renewed deposit is part of its cost, so it is not in this gain; the lifetime profit counts it once.',
+    effectiveDate: 'Today.',
+    denominator: 'Cost of current holdings.',
   },
   realisedGain: {
     key: 'realisedGain',

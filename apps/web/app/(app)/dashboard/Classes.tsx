@@ -52,11 +52,11 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
       {c.key === 'cash' && <ForeignCashLines items={c.foreign} testid="hm-class-cash-fx" />}
       <dl className="hm-class-facts">
         <div>
-          <dt>Invested</dt>
+          <dt>Cost of current holdings</dt>
           <dd>{formatInrCompact(c.invested)}</dd>
         </div>
         <div>
-          <dt>Earned so far</dt>
+          <dt>Earned since first record</dt>
           <dd>
             {c.earned === null ? '–' : formatInrCompact(c.earned)}
             {c.earned !== null && c.key === 'cash' && <Est />}
@@ -65,13 +65,13 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
       </dl>
       <p className="hm-class-pl">
         <Signed
-          label="Profit so far"
+          label="Gain on current holdings"
           amount={c.profit}
           pct={c.profitPct}
           estimate={c.estimated && Math.round(c.profit) !== 0}
         />
         {c.profitPct !== null && (
-          <span className="small muted"> on the {formatInrCompact(c.invested)} invested</span>
+          <span className="small muted"> on the {formatInrCompact(c.invested)} they cost</span>
         )}
       </p>
       <p className="hm-class-share small muted">
@@ -145,7 +145,10 @@ export function Classes({
     <section className="card hm-classes" aria-labelledby="hm-classes">
       <header className="hm-head">
         <h2 id="hm-classes">By kind of holding</h2>
-        <span className="muted small">small cards, the detail is on each page</span>
+        <span className="muted small">
+          current holdings: what today’s holdings cost and are worth (lifetime figures are at the
+          top)
+        </span>
       </header>
       <ul className="hm-class-grid">
         {m.classes.map((c) => (
@@ -204,10 +207,13 @@ export function Classes({
             over time, not as profit here.
           </li>
           <li>
-            <strong>Earned so far</strong> is everything the kind has earned since it was first
-            held, including interest from deposits already paid out and gains from units already
-            sold, so it can be more than the profit on what is still held. The profit shown with
-            each card is on what is held now.
+            <strong>Earned since first record</strong> is everything the kind has earned since it
+            was first held, including interest from deposits already paid out and gains from units
+            already sold, so it can be more than the gain on what is still held.{' '}
+            <strong>Cost of current holdings</strong> is what today’s holdings cost: a deposit
+            renewed with its interest counts at its new, larger amount, so{' '}
+            <strong>Gain on current holdings</strong> leaves out interest already rolled into a
+            deposit. The lifetime profit at the top counts it once, as profit.
           </li>
         </ul>
       </details>

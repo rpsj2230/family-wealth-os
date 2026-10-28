@@ -354,7 +354,7 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       {
         name: 'openingDate',
         label: 'Measure your own money and profit from',
-        hint: 'Own money put in, profit so far and the yearly return start from net worth on this day (the opening position). Leave empty to start from the first day the holdings on file have a value.',
+        hint: 'Own money put in (lifetime), lifetime profit and the yearly return start from net worth on this day (the opening position). Leave empty to start from the first day the holdings on file have a value.',
         kind: 'date',
         path: ['capital', 'openingDate'],
         optional: true,

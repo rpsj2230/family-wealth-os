@@ -66,12 +66,17 @@ export function DepositOverviewPanel({
               ? 'No deposit is running.'
               : `${plural(o.deposits, 'deposit')} in ${plural(banks.length, 'bank')}${o.fdRate !== null ? ` · ${formatPct(o.fdRate, 2)} a year on average` : ''}`}
           </p>
+          <p className="bv-view small muted" data-testid="bv-view-current">
+            <strong>Current holdings:</strong> what today’s deposits cost and are worth. Lifetime
+            profit, with reinvested interest counted once, is on{' '}
+            <Link href={sample ? '/demo/dashboard' : '/'}>Home</Link>.
+          </p>
           <div className="bv-deltas">
             <Delta
-              label="Profit so far"
+              label="Gain on current holdings"
               amount={o.profit}
               pct={o.profitPct}
-              note="interest earned on the amount invested"
+              note="interest earned on what the deposits cost"
               why={ex['deposits.profit']}
             />
             <Delta
@@ -105,7 +110,7 @@ export function DepositOverviewPanel({
               </div>
               <dl className="bv-ends">
                 <div>
-                  <dt>Invested</dt>
+                  <dt>Cost of current holdings</dt>
                   <dd>{formatInrCompact(o.invested)}</dd>
                 </div>
                 <div className="mid">
@@ -186,7 +191,7 @@ export function DepositOverviewPanel({
 
       <dl className="bv-grid" aria-label="More figures">
         <Stat
-          label="Invested"
+          label="Cost of current holdings"
           value={formatInrCompact(o.invested)}
           sub={`${plural(o.deposits, 'running deposit')} · principal only`}
           why={ex['deposits.invested']}

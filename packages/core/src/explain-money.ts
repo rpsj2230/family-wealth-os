@@ -243,7 +243,7 @@ export function bankFigure(
     }
     case 'profit':
     case 'sinceLast': {
-      const title = kind === 'profit' ? 'Profit so far' : 'Since the last balances';
+      const title = kind === 'profit' ? 'Gain on current holdings' : 'Since the last balances';
       const base = o.invested;
       return explain({
         id,
@@ -437,7 +437,7 @@ export function bankFigure(
     case 'invested':
       return explain({
         id,
-        title: 'Invested',
+        title: 'Cost of current holdings',
         exact: exInr(o.invested),
         what: 'The amount put in: the principal of each running deposit.',
         how: `Principal of ${exPlural(o.deposits, 'running deposit')} added = ${exInr(o.invested)}. Interest is not in it.`,

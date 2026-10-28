@@ -32,9 +32,13 @@ export function Capital({
   const opening = c.opening;
   return (
     <div className="hm-capital" role="group" aria-label="Own money and profit">
+      <p className="hm-view small muted" data-testid="hm-view-lifetime">
+        <strong>Lifetime:</strong> all the money you brought in and everything earned on it since
+        the records began; interest that was reinvested is counted once, as profit.
+      </p>
       <div className="hm-cap">
         <div className="hm-cap-label">
-          Own money put in <Why explain={ex['home.ownMoney']} />
+          Own money put in (lifetime) <Why explain={ex['home.ownMoney']} />
         </div>
         <div className="hm-cap-value" data-testid="hm-own-money">
           {opening ? formatInrCompact(t.ownMoney) : '–'}
@@ -47,7 +51,7 @@ export function Capital({
       </div>
       <div className="hm-cap">
         <div className="hm-cap-label">
-          Profit so far <Est /> <Why explain={ex['home.profitSoFar']} />
+          Lifetime profit <Est /> <Why explain={ex['home.profitSoFar']} />
         </div>
         <div
           className={`hm-cap-value ${tone(opening ? t.profit : null)}`}
