@@ -42,9 +42,10 @@ interface Input {
 }
 
 async function main() {
-  const input = JSON.parse(
-    gunzipSync(Buffer.from(need('STMT_B64'), 'base64')).toString('utf8'),
-  ) as Input;
+  const raw = JSON.parse(gunzipSync(Buffer.from(need('STMT_B64'), 'base64')).toString('utf8')) as
+    Input | { accounts: Input[] };
+  // one account, or several in one run (the movements are rebuilt once, after all of them)
+  const inputs = 'accounts' in raw ? raw.accounts : [raw];
   const write = process.env.MODE === 'apply';
   const db = connectDb();
   const hh = await householdId(db);
@@ -57,37 +58,65 @@ async function main() {
       .eq('household_id', hh)
       .eq('type', 'bank_account'),
   ]);
-  const owner = must(owners, 'owners').find(
-    (o) => String(o.display_name).toLowerCase() === input.account.person.toLowerCase(),
-  )?.id;
+  const ownerRows = must(owners, 'owners');
   const instRows = must(insts, 'institutions') as { id: string; name: string }[];
-  const bank = bankOnFile(
-    input.account.bank,
-    instRows.map((i) => i.name),
-  );
-  const inst = instRows.find((i) => i.name === bank);
-  const cands = (must(assets, 'assets') as Record<string, unknown>[]).filter(
-    (a) => a.owner_id === owner && a.institution_id === inst?.id && a.currency === 'INR',
-  );
-  const byDigits = cands.filter((a) => a.identifier_last4 === input.account.last4);
-  const nre = cands.filter((a) => a.account_kind === 'NRE');
-  const acct =
-    byDigits.length === 1
-      ? byDigits[0]
+  const assetRows = must(assets, 'assets') as Record<string, unknown>[];
+  // every account is found before anything is written
+  const resolved = inputs.map((input) => {
+    const owner = ownerRows.find(
+      (o) => String(o.display_name).toLowerCase() === input.account.person.toLowerCase(),
+    )?.id;
+    const bank = bankOnFile(
+      input.account.bank,
+      instRows.map((i) => i.name),
+    );
+    const inst = instRows.find((i) => i.name === bank);
+    const cands = assetRows.filter(
+      (a) => a.owner_id === owner && a.institution_id === inst?.id && a.currency === 'INR',
+    );
+    const byDigits = cands.filter((a) => a.identifier_last4 === input.account.last4);
+    const nre = cands.filter((a) => a.account_kind === 'NRE');
+    const acct = input.account.last4
+      ? byDigits.length === 1
+        ? byDigits[0]
+        : undefined
       : nre.length === 1
         ? nre[0]
         : cands.length === 1
           ? cands[0]
           : undefined;
-  if (!acct)
-    throw new Error(
-      `The account at ${bank ?? input.account.bank} was not found (${cands.length} candidates).`,
-    );
-  const assetId = acct.id as string;
-  console.log(
-    `Account: ${bank} (${input.account.person.slice(0, 2)}.), ${input.files.length} files, mode ${write ? 'apply' : 'plan'}`,
+    if (!acct)
+      throw new Error(
+        `The account at ${bank ?? input.account.bank} (${input.account.person.slice(0, 2)}., …${input.account.last4}) was not found (${cands.length} at that bank: ${cands.map((c) => `…${String(c.identifier_last4 ?? '?')} ${String(c.account_kind ?? '')}`).join(', ')}).`,
+      );
+    return { input, bank, assetId: acct.id as string };
+  });
+  for (const r of resolved) await importOne(db, hh, write, r.input, r.bank, r.assetId);
+  if (!write) {
+    console.log('Plan only: nothing was written. Run again with mode "apply" to write it.');
+    return;
+  }
+  await afterImport(
+    db,
+    hh,
+    resolved.map((r) => ({
+      assetId: r.assetId,
+      label: `${r.bank} (${r.input.account.person.slice(0, 2)}., …${r.input.account.last4})`,
+    })),
   );
+}
 
+async function importOne(
+  db: ReturnType<typeof connectDb>,
+  hh: string,
+  write: boolean,
+  input: Input,
+  bank: string | null,
+  assetId: string,
+) {
+  console.log(
+    `Account: ${bank} (${input.account.person.slice(0, 2)}., …${input.account.last4}), ${input.files.length} files, mode ${write ? 'apply' : 'plan'}`,
+  );
   let lines = 0;
   for (const f of [...input.files].sort((a, b) => a.name.localeCompare(b.name))) {
     const bytes =
@@ -153,11 +182,13 @@ async function main() {
     );
   }
   console.log(`Lines read: ${lines}`);
-  if (!write) {
-    console.log('Plan only: nothing was written. Run again with mode "apply" to write it.');
-    return;
-  }
+}
 
+async function afterImport(
+  db: ReturnType<typeof connectDb>,
+  hh: string,
+  done: { assetId: string; label: string }[],
+) {
   const rb = await rebuildStatementMoves(db, hh);
   console.log(
     `Movements from statements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}`,
@@ -166,27 +197,30 @@ async function main() {
   const loaded = await loadPortfolioData(db, { householdId: hh });
   const { config } = await loadSettings(db, hh);
   const stored = await loadStatements(db, hh);
-  const mine = stmtLinesOf(
-    stored.lines.filter((l) => l.asset_id === assetId),
-    loaded,
-  );
   const all = classifyLines(
     stmtLinesOf(stored.lines, loaded),
     classifyContext(loaded, config, stored.remittances),
   );
-  const by = new Map<string, { n: number; sum: number }>();
-  const ids = new Set(mine.map((l) => l.id));
-  const amount = new Map(mine.map((l) => [l.id, l.amount]));
-  for (const c of all) {
-    if (!ids.has(c.id)) continue;
-    const k = LINE_CLASS_LABEL[c.cls];
-    const g = by.get(k) ?? { n: 0, sum: 0 };
-    g.n++;
-    g.sum += amount.get(c.id) ?? 0;
-    by.set(k, g);
+  for (const { assetId, label } of done) {
+    const mine = stmtLinesOf(
+      stored.lines.filter((l) => l.asset_id === assetId),
+      loaded,
+    );
+    const by = new Map<string, { n: number; sum: number }>();
+    const ids = new Set(mine.map((l) => l.id));
+    const amount = new Map(mine.map((l) => [l.id, l.amount]));
+    for (const c of all) {
+      if (!ids.has(c.id)) continue;
+      const k = LINE_CLASS_LABEL[c.cls];
+      const g = by.get(k) ?? { n: 0, sum: 0 };
+      g.n++;
+      g.sum += amount.get(c.id) ?? 0;
+      by.set(k, g);
+    }
+    console.log(`  ${label}:`);
+    for (const [k, g] of [...by].sort((a, b) => Math.abs(b[1].sum) - Math.abs(a[1].sum)))
+      console.log(`    ${k}: ${g.n} lines, ₹${(g.sum / 100000).toFixed(2)} L`);
   }
-  for (const [k, g] of [...by].sort((a, b) => Math.abs(b[1].sum) - Math.abs(a[1].sum)))
-    console.log(`    ${k}: ${g.n} lines, ₹${(g.sum / 100000).toFixed(2)} L`);
   const placed = must(
     await db.from('remittances').select('to_basis').eq('household_id', hh),
     'transfers',
