@@ -6,6 +6,7 @@ import { runInbox, type InboxIo, type InboxRow, type KnownAccount } from '@fwos/
 import { aiChainFor } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
+import { saveAccountDetails } from '../accounts/edit/actions';
 import { parseAmount, recordBalance, type Replaced } from './record';
 
 /** "It replaced your imported ₹X dated 26 Oct." */
@@ -32,6 +33,29 @@ const refresh = () => {
   revalidatePath('/');
 };
 
+/**
+ * After you chose the account for an alert: when the account has no last four digits on file and the alert named them, they are saved on
+ * it, so the next alert from that account is matched by itself. Never overwrites digits already on file, and never gives two accounts at
+ * the same bank the same digits. Returns the digits saved, or null.
+ */
+async function learnLast4(
+  supabase: SupabaseClient,
+  assetId: string,
+  a: { identifier_last4?: unknown; institution_id?: unknown },
+  last4: string | null,
+): Promise<string | null> {
+  if (a.identifier_last4 || !last4 || !/^\d{4}$/.test(last4)) return null;
+  const { data: same } = await supabase
+    .from('assets')
+    .select('id')
+    .eq('institution_id', a.institution_id as string)
+    .eq('identifier_last4', last4)
+    .limit(1);
+  if ((same ?? []).length > 0) return null;
+  const res = await saveAccountDetails([{ id: assetId, last4 }]);
+  return res.ok ? last4 : null;
+}
+
 /** Apply a reading the reader could not apply alone, after you chose (or confirmed) the account. */
 export async function applyReading(
   _p: InboxResult | null,
@@ -53,6 +77,7 @@ export async function applyReading(
     currency: string;
     asOf: string;
     source: 'rule' | 'ai';
+    last4?: string | null;
   } | null;
   if (!msg) return { ok: false, message: 'That message could not be found.' };
   if (msg.resolved_at) return { ok: false, message: 'This message was already handled.' };
@@ -63,7 +88,7 @@ export async function applyReading(
     };
   const { data: a } = await supabase
     .from('assets')
-    .select('currency, nickname')
+    .select('currency, nickname, identifier_last4, institution_id')
     .eq('id', asset)
     .maybeSingle();
   if (!a) return { ok: false, message: 'Choose the account first.' };
@@ -104,11 +129,12 @@ export async function applyReading(
     .from('inbox_messages')
     .update({ resolved_at: new Date().toISOString() })
     .eq('id', id);
+  const learned = await learnLast4(supabase, asset, a, r.last4 ?? null);
   refresh();
   const shown = r.currency === 'INR' ? formatInr(amount) : `${r.currency} ${amount}`;
   return {
     ok: true,
-    message: `Recorded ${shown} as of ${longDate(r.asOf)} on ${a.nickname as string}.${replacedNote(saved.replaced)}`,
+    message: `Recorded ${shown} as of ${longDate(r.asOf)} on ${a.nickname as string}.${replacedNote(saved.replaced)}${learned ? ` Its last four digits (${learned}) are now saved on the account, so the next alert from it is recorded by itself.` : ''}`,
     amount,
     asOf: r.asOf,
     recorded: true,
