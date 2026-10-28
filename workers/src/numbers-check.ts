@@ -22,6 +22,7 @@ import {
   ledgerMovesOf,
   loadPortfolioData,
   loadPositionInput,
+  loadMoneyTrail,
   loadSettings,
 } from '@fwos/data';
 
@@ -40,6 +41,8 @@ const inr = (n: number) => Math.round(n).toLocaleString('en-IN');
 const pct = (n: number | null | undefined) =>
   n === null || n === undefined ? '-' : `${(n * 100).toFixed(2)}%`;
 const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore' }).format(new Date());
+
+const lakh = (n: number) => `₹${(n / 100000).toFixed(2)} L`;
 
 async function main() {
   const hh = await db.from('households').select('id, name');
@@ -262,6 +265,33 @@ async function main() {
     }
     console.log(
       `\nSnapshots: ${[...bySrc].map(([k, v]) => `${k} x${v.n} (${v.first} to ${v.last})`).join(' | ') || 'none'}`,
+    );
+  }
+
+  // the money trail, worked out exactly as the page does: totals only
+  {
+    const t = await loadMoneyTrail(db, String((hh.data ?? [])[0]?.id ?? ''));
+    const byKind = new Map<string, number>();
+    let held = 0;
+    for (const h of t.holdings) {
+      if (h.kind !== 'account') continue;
+      for (const p of t.trails.get(h.id)?.parts ?? []) {
+        byKind.set(p.kind, (byKind.get(p.kind) ?? 0) + p.amount);
+        held += p.amount;
+      }
+    }
+    const crossings = [...t.trails.values()].flatMap((x) => x.crossings);
+    console.log(
+      `\nMoney trail: ${t.holdings.length} holdings traced (${t.holdings.filter((h) => h.statements).length} with statements); transfers from Singapore ${t.remittances.count} (${t.remittances.proven} proven).`,
+    );
+    console.log(
+      `  Accounts with a trail hold ${lakh(held)}: ${[...byKind]
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k} ${Math.round((v / (held || 1)) * 100)}%`)
+        .join(', ')}`,
+    );
+    console.log(
+      `  Money moved between people: ${crossings.length} movements, ${lakh(crossings.reduce((s, c) => s + c.amount, 0))}`,
     );
   }
 }
