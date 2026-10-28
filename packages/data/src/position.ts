@@ -173,7 +173,7 @@ export async function loadPositionInput(
       config: cfg,
       today,
       fx,
-      portfolio: loaded.portfolio,
+      // today's figure is the engine's own (the portfolio is built by it from the same input): no override
       ...(reuse?.extras.moves ? { moves: reuse.extras.moves } : {}),
       ...(reuse?.extras.rates ? { rates: reuse.extras.rates } : {}),
       ...(reuse?.extras.placements ? { placements: reuse.extras.placements } : {}),

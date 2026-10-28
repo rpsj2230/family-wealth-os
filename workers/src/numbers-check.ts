@@ -9,7 +9,9 @@ import {
   capitalLedger,
   fundValueFrom,
   fundViews,
+  isHeld,
   planOf,
+  positionAsOf,
   positionGains,
   reconcileQueue,
   valueOn,
@@ -203,6 +205,19 @@ async function main() {
         `CHECK the ledger's net worth today equals the portfolio's: ${Math.abs(t.netWorth - nw.total) < 1 ? 'yes' : `NO (differs by ₹${inr(t.netWorth - nw.total)})`}`,
       );
       for (const lim of ledger.limitations) console.log(`  limitation: ${lim}`);
+      // where any difference between the engine's day and the portfolio sits, by kind (totals only)
+      const day = positionAsOf(position, date);
+      const byType = new Map<string, number>();
+      for (const v of l.portfolio.valued) {
+        const h = day.holdings.find((x) => x.assetId === v.assetId);
+        const counted = !nw.excluded.some((e) => e.assetId === v.assetId);
+        const a = counted ? (v.estimate?.estimatedAmount ?? 0) : 0;
+        const b = h && isHeld(h) ? (h.value ?? 0) : 0;
+        if (Math.abs(a - b) >= 1) byType.set(v.type, (byType.get(v.type) ?? 0) + (b - a));
+      }
+      console.log(
+        `Engine day vs portfolio: ₹${inr(day.total)} vs ₹${inr(nw.total)}; by kind: ${[...byType].map(([k, v]) => `${k} ₹${inr(v)}`).join(', ') || 'no difference'}`,
+      );
       const fy = wealthMovement(ledger, 'fy', date);
       if (fy.figures)
         console.log(

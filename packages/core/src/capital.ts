@@ -223,6 +223,36 @@ const mid = (from: string, to: string) => {
   return new Date(a + Math.floor((b - a) / 2 / 86_400_000) * 86_400_000);
 };
 
+/**
+ * The day the family's figures are measured from when Settings names none: the first day on which every kind of holding on file has a
+ * value (the later of the first savings balance, the first fund record and the first deposit booking), so the opening position is
+ * the family's money then and not one early deposit. Holdings first recorded later count as money moved in from that day (shown apart).
+ */
+export function openingDateOf(position: PositionInput): string | null {
+  const firsts: string[] = [];
+  const first = (dates: (string | undefined | null)[]) =>
+    dates.filter((d): d is string => !!d).sort()[0] ?? null;
+  const live = position.assets.filter((a) => a.status !== 'gifted');
+  const cash = first(
+    live
+      .filter((a) => a.type === 'bank_account' && a.currency === 'INR')
+      .flatMap((a) => a.records.filter((r) => !r.sheet).map((r) => r.date)),
+  );
+  const funds = first(
+    live
+      .filter((a) => a.type === 'mutual_fund' && a.fund)
+      .flatMap((a) => [
+        a.fund!.txns[0]?.date,
+        a.fund!.flows[0]?.date,
+        ...a.records.map((r) => r.date),
+        ...a.fund!.snapshots.map((x) => x.date),
+      ]),
+  );
+  const fds = first(live.filter((a) => a.fd).map((a) => a.fd!.bookedOn));
+  for (const d of [cash, funds, fds]) if (d) firsts.push(d);
+  return firsts.sort().pop() ?? dataStarts(position);
+}
+
 export function capitalLedger(args: {
   position: PositionInput;
   moves: LedgerMove[];
@@ -231,7 +261,7 @@ export function capitalLedger(args: {
 }): CapitalLedger {
   const { position } = args;
   const today = position.config.today;
-  const start = args.openingDate || dataStarts(position);
+  const start = args.openingDate || openingDateOf(position);
   const empty = {
     netWorth: 0,
     opening: 0,
@@ -299,11 +329,17 @@ export function capitalLedger(args: {
   // time-weighted: each month's earnings over the money at work in it, chained
   // a month that starts with nothing at work has no return of its own (what it earned rests on money that came in during it, at times
   // not known): the chain starts with the first month that opens with a value
+  // a month whose money moved in or out exceeds what was held at its start is left out too (the timing of the flow inside the month
+  // decides the return and is not known); how many were left out is said
   let chain = 1;
   let any = false;
+  let skipped = 0;
   for (const m of months) {
     const base = m.start + 0.5 * m.moved;
-    if (!(m.start > 0) || !(base > 0)) continue;
+    if (!(m.start > 0) || !(base > 0) || Math.abs(m.moved) > m.start) {
+      if (Math.abs(m.earnings.total) >= 1) skipped++;
+      continue;
+    }
     chain *= 1 + m.earnings.total / base;
     any = true;
   }
@@ -480,7 +516,7 @@ export function wealthMovement(
   let any = false;
   for (const m of l.months.filter((x) => x.from >= start && x.to <= to)) {
     const base = m.start + 0.5 * m.moved;
-    if (m.start > 0 && base > 0) {
+    if (m.start > 0 && base > 0 && Math.abs(m.moved) <= m.start) {
       chain *= 1 + m.earnings.total / base;
       any = true;
     }
