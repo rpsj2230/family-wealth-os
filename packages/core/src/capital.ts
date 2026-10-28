@@ -364,6 +364,10 @@ export function capitalLedger(args: {
     );
   if (x.status !== 'ok')
     limitations.push(`The annual return could not be worked out: ${x.message}`);
+  if (skipped > 0)
+    limitations.push(
+      `The time-weighted return leaves out ${skipped} month${skipped === 1 ? '' : 's'} in which more money moved in or out than was held at its start.`,
+    );
 
   return {
     opening: { date: start, value: opening, coverage },
