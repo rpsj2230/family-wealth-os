@@ -135,5 +135,27 @@ export async function saveBankStatement(
       .eq('household_id', householdId);
     opened = !error;
   }
+  // an account cannot have opened after its first statement line: the recorded day moves back to it
+  if (!s.openedOn && s.from) {
+    const { data: a } = await db
+      .from('assets')
+      .select('opened_on')
+      .eq('id', assetId)
+      .eq('household_id', householdId)
+      .maybeSingle();
+    const on = (a as { opened_on: string | null } | null)?.opened_on ?? null;
+    if (on && on > s.from) {
+      const { error } = await db
+        .from('assets')
+        .update({
+          opened_on: s.from,
+          opened_after: null,
+          opened_note: 'Its bank statement has lines from this day, before the day on record',
+        })
+        .eq('id', assetId)
+        .eq('household_id', householdId);
+      opened = !error;
+    }
+  }
   return { statementId, lines: added, balances, opened };
 }
