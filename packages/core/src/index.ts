@@ -90,3 +90,8 @@ export * from './digest-wealth';
 export * from './digest-email';
 export * from './digest-assemble';
 export * from './cash-rates';
+export * from './figure';
+export * from './deposit-contract';
+export * from './savings-accrual';
+export * from './valuation';
+export * from './savings-rates';

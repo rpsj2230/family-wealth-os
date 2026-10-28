@@ -18,14 +18,18 @@ export interface BankShare {
   next: { date: string; amount: number } | null;
 }
 
-/** A running deposit: past its date and unconfirmed ones are not part of the totals. */
+/** A running deposit: it still earns and has a maturity ahead of it. */
 const running = (r: BankRow) =>
   r.kind === 'fd' && !!r.fd && r.status === 'active' && !r.fd.needsConfirmation;
+
+/** A deposit in the totals by the central engine's rule: running, or its proceeds awaiting confirmation (counted once). */
+const counted = (r: BankRow) =>
+  r.kind === 'fd' && !!r.fd && (r.inNetWorth !== undefined ? r.inNetWorth : running(r));
 
 export function depositsByBank(blocks: BankBlock[], today: string): BankShare[] {
   const rows = blocks.map((b) => ({
     b,
-    fds: b.sections.flatMap((s) => s.rows).filter(running),
+    fds: b.sections.flatMap((s) => s.rows).filter(counted),
   }));
   const total = rows.reduce((a, r) => a + r.fds.reduce((x, f) => x + (f.current ?? 0), 0), 0);
   return rows

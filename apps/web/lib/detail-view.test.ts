@@ -92,7 +92,9 @@ describe('buildAssetView: deposit', () => {
     expect(v.title).toBe('FD');
     expect(f('Rate')!.value).toBe('7%');
     expect(f('Maturity date')!.note).toBe('365 days left');
-    expect(f('Accrued today')!.value).toMatch(/^₹10,/);
+    expect(f('Value today (estimate)')!.value).toMatch(/^₹10,/);
+    expect(f('Value today (estimate)')!.note).toMatch(/interest accrued/);
+    expect(f('Interest paid')!.value).toBe('Cumulative (paid at maturity)');
     expect(f('Linked savings account')).toMatchObject({
       value: 'Cash-NRE-0266',
       href: '/asset/s1',

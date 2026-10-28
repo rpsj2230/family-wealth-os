@@ -3,7 +3,8 @@
  * These are ESTIMATES from the deposit terms (quarterly compounding). Use the bank's interest certificate (Form 16A),
  * Form 26AS and the Annual Information Statement for the figures you actually file.
  */
-import { fdValueOn, type Compounding } from './fd';
+import { interestOfStored } from './deposit-contract';
+import type { Compounding } from './fd';
 import { fyOf } from './tax';
 
 export function fyBounds(fy: string): { start: string; end: string } {
@@ -25,6 +26,12 @@ export interface FdForFiling {
   bookedOn: string;
   maturityOn: string;
   compounding: Compounding;
+  /** cumulative (default) or paid out monthly / quarterly / half-yearly / yearly */
+  payout?: string | null;
+  /** the bank's maturity amount (this holder's share of it for a joint deposit) */
+  bankMaturityAmount?: number | null;
+  /** the day it was paid out or closed, when known: no interest accrues after it */
+  endedOn?: string | null;
 }
 
 export interface InterestLine {
@@ -47,19 +54,22 @@ export function fdInterestForFy(fd: FdForFiling, fy: string): InterestLine | nul
   const from = fd.bookedOn > start ? fd.bookedOn : start;
   const to = fd.maturityOn < end ? fd.maturityOn : end;
   if (from > to) return null;
-  const at = (d: string) =>
-    fdValueOn({
-      principal: fd.principal,
-      annualRate: fd.rate,
-      bookedOn: utc(fd.bookedOn),
-      asOf: utc(d),
-      maturityOn: utc(fd.maturityOn),
-      compounding: fd.compounding,
-    });
-  // A year's interest runs through 31 March, so the closing value is taken on 1 April; a deposit that matures earlier closes on its maturity date.
-  const closing =
-    to === end ? new Date(utc(end).getTime() + 86_400_000).toISOString().slice(0, 10) : to;
-  const interest = at(closing) - at(from);
+  // the shared contract (deposit-contract.ts): the rate the bank's maturity amount implies, interest paid out counted as earned, and
+  // nothing after the day it was paid out or closed
+  const stored = {
+    principal: fd.principal,
+    rate: fd.rate,
+    booked_on: fd.bookedOn,
+    maturity_on: fd.maturityOn,
+    compounding: fd.compounding,
+    payout: fd.payout ?? null,
+    bank_maturity_amount: fd.bankMaturityAmount ?? null,
+    ended_on: fd.endedOn ?? null,
+  };
+  // A year's interest runs through 31 March, so the closing value is taken on 1 April; a deposit that matures earlier closes on its
+  // maturity date (its last day earns, so the closing day is the day after it).
+  const closing = new Date(utc(to).getTime() + 86_400_000).toISOString().slice(0, 10);
+  const interest = interestOfStored(stored, from, closing);
   return {
     fdId: fd.id,
     ownerId: fd.ownerId,

@@ -6,7 +6,11 @@ import {
   DEFAULT_CONFIG,
   describeAudit,
   fdInterestForFy,
-  fdValueOn,
+  contractOfStored,
+  depositOn,
+  heldValueOf,
+  maturityAmountOf,
+  PAYOUTS,
   fyBounds,
   formatInr,
   openingFlow,
@@ -70,6 +74,8 @@ export interface AssetViewInput {
     bank_maturity_amount: number | null;
     fd_ref_last4: string | null;
     fd_ref?: string | null;
+    /** cumulative, or interest paid out monthly / quarterly / half-yearly / yearly */
+    payout?: string | null;
     /** the day a deposit that is no longer held left, and whether the monthly tabs (not the bank) gave it */
     ended_on?: string | null;
     ended_estimated?: boolean;
@@ -452,24 +458,11 @@ export function buildAssetView(i: AssetViewInput): AssetView {
 
   if (i.fd) {
     const fd = i.fd;
-    const accrued = fdValueOn({
-      principal: fd.principal,
-      annualRate: fd.rate,
-      bookedOn: utc(fd.booked_on),
-      asOf: utc(i.today),
-      maturityOn: utc(fd.maturity_on),
-      compounding: fd.compounding,
-    });
-    const atMaturity =
-      fd.bank_maturity_amount ??
-      fdValueOn({
-        principal: fd.principal,
-        annualRate: fd.rate,
-        bookedOn: utc(fd.booked_on),
-        asOf: utc(fd.maturity_on),
-        maturityOn: utc(fd.maturity_on),
-        compounding: fd.compounding,
-      });
+    // the shared contract (deposit-contract.ts): the rate that reaches the bank's maturity amount, interest paid out kept apart
+    const contract = contractOfStored(fd);
+    const now = depositOn(contract, i.today);
+    const atMaturity = maturityAmountOf(fd);
+    const payout = fd.payout ?? 'cumulative';
     const left = daysBetween(i.today, fd.maturity_on);
     facts.push(
       {
@@ -483,19 +476,36 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         value: fd.maturity_on,
         note: left >= 0 ? `${left} day${left === 1 ? '' : 's'} left` : `${-left} days ago`,
       },
-      { label: 'Invested', value: inr(fd.principal) },
+      { label: 'Invested (principal)', value: inr(fd.principal) },
+      {
+        label: 'Interest paid',
+        value: PAYOUTS.find((p) => p.key === payout)?.label ?? payout,
+        note:
+          Math.abs(contract.rate - fd.rate) > 1e-6
+            ? `grows at ${pct(contract.rate)}, the rate that reaches the bank’s maturity amount`
+            : 'at the rate on the deposit',
+      },
       {
         label: 'At maturity',
         value: inr(atMaturity),
         note: fd.bank_maturity_amount
-          ? 'as stated by the bank'
-          : 'worked out from the rate and dates',
+          ? 'as stated by the bank (a future amount, not part of today’s value)'
+          : 'worked out from the rate and dates (a future amount, not part of today’s value)',
       },
-      {
-        label: 'Accrued today',
-        value: inr(accrued),
-        note: `${inr(accrued - fd.principal)} of interest so far`,
-      },
+      now.state === 'running'
+        ? {
+            label: 'Value today (estimate)',
+            value: inr(now.held),
+            note: `${inr(now.accrued)} interest accrued and held in the deposit${now.paidOut > 0 ? `; ${inr(now.paidOut)} already paid out` : ''}`,
+          }
+        : {
+            label: now.state === 'not_yet' ? 'Not started yet' : 'Matured',
+            value: now.proceeds !== null ? inr(now.proceeds) : '—',
+            note:
+              now.state === 'not_yet'
+                ? `booked for ${fd.booked_on}`
+                : `${inr(now.earned)} interest earned in all; it stopped earning on ${now.lastDay}. Its proceeds are counted once until you say where they went, never reinvested automatically.`,
+          },
     );
     if (fd.ended_on)
       facts.push({
@@ -529,14 +539,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         money: true,
         points: monthPoints(fd.booked_on, end).map((d) => ({
           date: d,
-          value: fdValueOn({
-            principal: fd.principal,
-            annualRate: fd.rate,
-            bookedOn: utc(fd.booked_on),
-            asOf: utc(d),
-            maturityOn: utc(fd.maturity_on),
-            compounding: fd.compounding,
-          }),
+          value: depositOn(contract, d).held || (depositOn(contract, d).proceeds ?? 0),
         })),
       });
     const total = Math.max(1, daysBetween(fd.booked_on, fd.maturity_on));
@@ -552,23 +555,24 @@ export function buildAssetView(i: AssetViewInput): AssetView {
           ? `Day ${done} of ${total}: ${left} day${left === 1 ? '' : 's'} to go`
           : `Matured ${-left} day${left === -1 ? '' : 's'} ago`,
     };
-    const yieldYr = Math.pow(atMaturity / fd.principal, 365.25 / total) - 1;
+    const yieldYr = Math.pow((fd.principal + now.termInterest) / fd.principal, 365.25 / total) - 1;
+    const worth = now.state === 'running' ? now.held : (now.proceeds ?? 0);
     kpis.push(
       {
-        label: 'Worth today',
-        value: inr(accrued),
-        note: `${inr(accrued - fd.principal)} earned so far`,
+        label: now.state === 'running' ? 'Worth today' : 'Proceeds',
+        value: inr(worth),
+        note: `${inr(now.earned)} interest earned so far${now.paidOut > 0 ? ` (${inr(now.paidOut)} paid out)` : ''}`,
         tone: 'gain',
       },
       {
         label: 'Interest still to come',
-        value: inr(Math.max(0, atMaturity - accrued)),
+        value: inr(Math.max(0, now.termInterest - now.earned)),
         note: `until ${fd.maturity_on}`,
       },
       {
-        label: 'Total interest at maturity',
-        value: inr(atMaturity - fd.principal),
-        note: `${pct(fd.rate)} a year on ${inr(fd.principal)}`,
+        label: 'Total interest over the term',
+        value: inr(now.termInterest),
+        note: `${pct(contract.rate)} a year on ${inr(fd.principal)}`,
       },
       { label: 'Effective yield', value: pct(yieldYr), note: 'a year, including compounding' },
     );
@@ -853,14 +857,7 @@ export function bankHistory(i: BankHistoryInput): { date: string; value: number 
       }
       for (const dep of i.deposits) {
         if (!dep.counted || d < dep.booked_on || d > dep.maturity_on) continue;
-        total += fdValueOn({
-          principal: dep.principal,
-          annualRate: dep.rate,
-          bookedOn: utc(dep.booked_on),
-          asOf: utc(d),
-          maturityOn: utc(dep.maturity_on),
-          compounding: dep.compounding,
-        });
+        total += heldValueOf(dep, d);
       }
       return { date: d, value: total };
     })

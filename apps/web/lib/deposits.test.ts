@@ -112,8 +112,10 @@ describe('buildDeposits', () => {
     expect(view.cover.assumptions.join(' ')).toMatch(/no second name/i);
   });
 
-  it('leaves a deposit that is still marked active but past its date out of the cover, and keeps one maturing today', () => {
+  it('follows the engine for a deposit past its date: placed proceeds are out of the cover, awaiting ones in; one maturing today is in', () => {
     const late = fd('late', 'yes', 'g', 'NRE', 400_000, 0.07, '2025-01-01', '2026-10-25');
+    // the engine values a deposit whose proceeds were placed (or probably placed) as matured, not counted
+    late.valued = { ...late.valued, status: 'matured_unconfirmed' };
     const todayFd = fd('today', 'yes', 'g', 'NRE', 300_000, 0.07, '2025-10-26', '2026-10-26');
     const set = [late, todayFd];
     const v = buildDeposits(
@@ -131,6 +133,18 @@ describe('buildDeposits', () => {
     // both are listed, the late one flagged to confirm
     expect(v.fds.find((f) => f.id === 'late')!.listState).toBe('confirm');
     expect(v.fds.find((f) => f.id === 'today')!.listState).toBe('show');
+    // proceeds still awaiting confirmation are money at the bank: in the cover, once
+    const awaiting = fd('late', 'yes', 'g', 'NRE', 400_000, 0.07, '2025-01-01', '2026-10-25');
+    const w = buildDeposits(
+      [awaiting.asset],
+      [awaiting.valued],
+      [awaiting.row],
+      banks,
+      owners,
+      today,
+      500_000,
+    );
+    expect(w.cover.rows.flatMap((r) => r.depositIds)).toContain('late');
   });
 
   it('builds a maturity calendar of active FDs by month, excluding matured-unconfirmed ones', () => {

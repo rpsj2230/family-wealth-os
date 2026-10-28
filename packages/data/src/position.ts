@@ -17,6 +17,7 @@ import {
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LoadedPortfolio } from './index';
+import { liveLinesFilter } from './columns';
 import { loadNavHistory } from './nav-history';
 import { pageAll } from './paging';
 
@@ -57,6 +58,9 @@ export async function loadPositionInput(
   const fundIds = new Set(funds.map((f) => f.id));
   const foreign = [...new Set(loaded.assetRows.map((a) => a.currency).filter((c) => c !== 'INR'))];
 
+  // the ledger lines and statement values today's figures were built from (loadPortfolioData), so the history uses exactly the same ones
+  const reuse = loaded.engine;
+  const live = funds.length && !reuse ? await liveLinesFilter(db) : 'id.not.is.null';
   const [positions, lines, snaps, fxRows] = await Promise.all([
     funds.length
       ? sel(
@@ -64,22 +68,32 @@ export async function loadPositionInput(
           'asset_id, invested, started_on, sip_monthly, sip_stopped, units, units_as_of',
         )
       : Promise.resolve({ data: [] as Row[] }),
-    funds.length
-      ? pageAll<Row>((from, to) =>
-          sel(
-            'mf_transactions',
-            'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source',
+    reuse
+      ? Promise.resolve([...reuse.fundLines.values()].flat())
+      : funds.length
+        ? pageAll<Row>((from, to) =>
+            sel(
+              'mf_transactions',
+              'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source',
+            )
+              // a line a fund statement replaced is kept for the record only
+              .or(live)
+              .order('txn_on')
+              .order('id')
+              .range(from, to),
           )
-            .order('txn_on')
-            .order('id')
-            .range(from, to),
+        : Promise.resolve([] as Row[]),
+    reuse
+      ? Promise.resolve(
+          [...reuse.fundSnaps.entries()].flatMap(([id, list]) =>
+            list.map((x) => ({ asset_id: id, as_of: x.date, value: x.value }) as Row),
+          ),
         )
-      : Promise.resolve([] as Row[]),
-    funds.length
-      ? pageAll<Row>((from, to) =>
-          sel('mf_snapshots', 'asset_id, as_of, value').order('as_of').range(from, to),
-        )
-      : Promise.resolve([] as Row[]),
+      : funds.length
+        ? pageAll<Row>((from, to) =>
+            sel('mf_snapshots', 'asset_id, as_of, value').order('as_of').range(from, to),
+          )
+        : Promise.resolve([] as Row[]),
     foreign.length
       ? pageAll<Row>((from, to) =>
           db
@@ -160,6 +174,9 @@ export async function loadPositionInput(
       today,
       fx,
       portfolio: loaded.portfolio,
+      ...(reuse?.extras.moves ? { moves: reuse.extras.moves } : {}),
+      ...(reuse?.extras.rates ? { rates: reuse.extras.rates } : {}),
+      ...(reuse?.extras.placements ? { placements: reuse.extras.placements } : {}),
     });
 
   // the prices. A fund with no ledger is moved on from every value on file with its price and its plan's instalments, so it needs the

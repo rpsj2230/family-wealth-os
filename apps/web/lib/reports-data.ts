@@ -1,5 +1,5 @@
 import {
-  fdValueOn,
+  maturityAmountOf,
   personStyles,
   type FdRow,
   type PersonStyle,
@@ -28,14 +28,16 @@ export function reportFds(lines: FdLine[], fdRows: FdRow[], ownerId: string | nu
     .map((l) => {
       const f = by.get(l.id);
       const compounding = f?.compounding ?? 'quarterly';
-      const computed = fdValueOn({
-        principal: l.principal,
-        annualRate: l.rate,
-        bookedOn: new Date(`${l.bookedOn}T00:00:00Z`),
-        asOf: new Date(`${l.maturityOn}T00:00:00Z`),
-        maturityOn: new Date(`${l.maturityOn}T00:00:00Z`),
-        compounding,
-      });
+      // the shared contract (deposit-contract.ts): the bank's own maturity amount when recorded, else the deposit's terms
+      const computed = f
+        ? maturityAmountOf(f)
+        : maturityAmountOf({
+            principal: l.principal,
+            rate: l.rate,
+            booked_on: l.bookedOn,
+            maturity_on: l.maturityOn,
+            compounding,
+          });
       return {
         id: l.id,
         bank: l.bank,
@@ -45,7 +47,7 @@ export function reportFds(lines: FdLine[], fdRows: FdRow[], ownerId: string | nu
         rate: l.rate,
         bookedOn: l.bookedOn,
         maturityOn: l.maturityOn,
-        maturityAmount: Math.round((l.bankMaturity ?? computed) * 100) / 100,
+        maturityAmount: Math.round(computed * 100) / 100,
         compounding,
       } satisfies ReportFd;
     });

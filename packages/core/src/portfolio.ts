@@ -3,24 +3,10 @@
  * Pure: no I/O. The web app fetches rows and calls buildPortfolio().
  */
 import { DEFAULT_CONFIG } from './config';
-import { fdEffectiveRate } from './fd';
-import {
-  carryForward,
-  estimateFd,
-  estimateForeign,
-  estimateFundUnitsWithSip,
-  estimateFundWithSip,
-  estimateSavings,
-  type CurrentValueEstimate,
-} from './estimate';
-import { effectiveDepositStatus } from './deposit-state';
-import { classifyFreshness, type Confidence, type Freshness } from './freshness';
-import {
-  aggregateNetWorth,
-  type AssetType,
-  type NetWorthResult,
-  type ValuedAsset,
-} from './networth';
+import type { CurrentValueEstimate } from './estimate';
+import type { Confidence, Freshness } from './freshness';
+import type { AssetType, NetWorthResult, ValuedAsset } from './networth';
+import { portfolioFromPosition, valuationInput, type ValuationExtras } from './valuation';
 
 export interface AssetRow {
   id: string;
@@ -92,6 +78,10 @@ export interface FdRow {
   /** the end date, or the booking date, was read from the monthly tabs rather than from the bank */
   ended_estimated?: boolean;
   start_estimated?: boolean;
+  /** cumulative, or interest paid out monthly / quarterly / half-yearly / yearly */
+  payout?: string | null;
+  /** the deposit this one was renewed from */
+  renewed_from?: string | null;
 }
 
 export interface PortfolioDefaults {
@@ -132,8 +122,6 @@ export interface Portfolio {
   netWorth: NetWorthResult;
 }
 
-const dt = (s: string) => new Date(`${s}T00:00:00Z`);
-
 /** Latest usable observation per asset: newest as_of, then newest created_at; superseded rows are ignored. */
 export function latestObservations(rows: ObservationRow[]): Map<string, ObservationRow> {
   const best = new Map<string, ObservationRow>();
@@ -146,164 +134,19 @@ export function latestObservations(rows: ObservationRow[]): Map<string, Observat
   return best;
 }
 
+/**
+ * Today's portfolio: every holding valued by the central engine (valuation.ts over position.ts), the same rule that values any past
+ * day. `extras` carries what a loader read beyond the rows (fund ledgers, savings movements and rate history, confirmed placements of
+ * maturity proceeds); without it each holding is valued from its rows alone.
+ */
 export function buildPortfolio(
   assets: AssetRow[],
   observations: ObservationRow[],
   fds: FdRow[],
   today: Date,
   defaults: PortfolioDefaults = DEFAULT_ASSUMPTIONS,
+  extras: ValuationExtras = {},
 ): Portfolio {
-  const latest = latestObservations(observations);
-  const fdByAsset = new Map(fds.map((f) => [f.asset_id, f]));
-  const todayIso = today.toISOString().slice(0, 10);
-  const valued: ValuedAsset[] = [];
-  const lines: Record<string, AssetStatusLine> = {};
-
-  for (const a of assets) {
-    const obs = latest.get(a.id) ?? null;
-    let estimate: CurrentValueEstimate | null = null;
-    let usedAssumption = false;
-    let marketDate: string | null = null;
-    let freshness: AssetStatusLine['freshness'] = 'missing';
-    let ageDays: number | null = null;
-    let status = a.status;
-
-    const fd = a.type === 'fixed_deposit' ? fdByAsset.get(a.id) : undefined;
-    if (fd) {
-      // An FD is valued from its contract, so it is never "stale"; only a matured-but-unconfirmed FD needs attention.
-      const eff = fdEffectiveRate({
-        principal: fd.principal,
-        annualRate: fd.rate,
-        bookedOn: dt(fd.booked_on),
-        maturityOn: dt(fd.maturity_on),
-        compounding: fd.compounding,
-        bankMaturityAmount: fd.bank_maturity_amount,
-        maxGap: defaults.fdRateGap ?? DEFAULT_CONFIG.estimates.observedRateGap,
-      });
-      estimate = estimateFd({
-        principal: fd.principal,
-        annualRate: eff.rate,
-        bookedOn: dt(fd.booked_on),
-        today,
-        maturityOn: dt(fd.maturity_on),
-        compounding: fd.compounding,
-      });
-      // One rule for every total: once the date has passed the money has left the deposit (it went into a savings account or another
-      // deposit, which are counted on their own), so a deposit still marked active is valued as matured and not confirmed. A deposit
-      // maturing today still counts until tomorrow.
-      status = effectiveDepositStatus(a.status, fd.maturity_on, todayIso);
-      freshness = status === 'matured_unconfirmed' ? 'older_than_expected' : 'calculated';
-    } else if (obs) {
-      const asOf = dt(obs.as_of);
-      const f = classifyFreshness({
-        asOf,
-        today,
-        expectedDays:
-          a.expected_freshness_days ??
-          defaults.freshnessDays ??
-          DEFAULT_CONFIG.estimates.freshnessDays,
-        confidence: obs.confidence,
-      });
-      freshness = f.status;
-      ageDays = f.ageDays;
-      if (a.type === 'bank_account' && a.currency === 'INR') {
-        usedAssumption = (a.interest_rate ?? null) === null && (a.listed_rate ?? null) === null;
-        estimate = estimateSavings({
-          balance: obs.amount,
-          balanceAsOf: asOf,
-          today,
-          annualRate: a.interest_rate ?? a.listed_rate ?? defaults.savingsRate,
-          tdsRate: a.tds_rate ?? defaults.tdsRate,
-        });
-      } else if (a.currency !== 'INR') {
-        const anchor = obs.fx_rate;
-        if (anchor && anchor > 0) {
-          const today_ = defaults.fxToday?.[a.currency] ?? anchor;
-          if (defaults.fxToday?.[a.currency]) marketDate = 'live';
-          estimate = estimateForeign({
-            nativeAmount: obs.amount,
-            anchorRate: anchor,
-            anchorAsOf: asOf,
-            rateToday: today_,
-            today,
-          });
-        }
-      } else if (a.type === 'mutual_fund' && a.amfi_code && defaults.navs?.[a.amfi_code]?.length) {
-        // No unit counts yet: scale the last recorded value by the NAV change since that date.
-        const series = defaults.navs[a.amfi_code]!;
-        const last = series[series.length - 1]!;
-        const atAnchor = [...series].reverse().find((n) => n.date <= obs.as_of) ?? null;
-        const near =
-          atAnchor && (dt(obs.as_of).getTime() - dt(atAnchor.date).getTime()) / 86_400_000 <= 7;
-        const unitsFresh =
-          typeof a.units === 'number' &&
-          a.units > 0 &&
-          typeof a.units_as_of === 'string' &&
-          a.units_as_of >= obs.as_of;
-        estimate = unitsFresh
-          ? estimateFundUnitsWithSip({
-              units: a.units as number,
-              unitsAsOf: dt(a.units_as_of as string),
-              anchorAmount: obs.amount,
-              anchorAsOf: asOf,
-              navToday: last.nav,
-              navOn: (d) => [...series].reverse().find((n) => n.date <= d)?.nav ?? null,
-              sip: defaults.includeSip === false ? null : (a.sip ?? null),
-              today,
-            })
-          : estimateFundWithSip({
-              anchorAmount: obs.amount,
-              anchorAsOf: asOf,
-              navAtAnchor: near ? atAnchor!.nav : null,
-              navToday: last.nav,
-              navOn: (d) => [...series].reverse().find((n) => n.date <= d)?.nav ?? null,
-              sip: defaults.includeSip === false ? null : (a.sip ?? null),
-              today,
-            });
-        if (estimate.basis !== 'carried_forward') marketDate = last.date;
-      } else {
-        estimate = carryForward({ amount: obs.amount, asOf, today });
-      }
-    } else if (
-      a.type === 'mutual_fund' &&
-      a.units_source === 'plan' &&
-      typeof a.units === 'number' &&
-      a.units > 0 &&
-      a.amfi_code &&
-      defaults.navs?.[a.amfi_code]?.length
-    ) {
-      // No value was ever recorded, but the units are rebuilt from the plan: units times the latest price
-      const last = defaults.navs[a.amfi_code]!.slice(-1)[0]!;
-      estimate = estimateFundUnitsWithSip({
-        units: a.units,
-        unitsAsOf: dt(a.units_as_of ?? todayIso),
-        anchorAmount: a.units * last.nav,
-        anchorAsOf: dt(a.units_as_of ?? todayIso),
-        navToday: last.nav,
-        navOn: () => last.nav,
-        sip: null,
-        today,
-      });
-      marketDate = last.date;
-      freshness = 'calculated';
-    }
-    valued.push({
-      assetId: a.id,
-      ownerId: a.owner_id,
-      type: a.type,
-      status,
-      name: a.nickname,
-      estimate,
-    });
-    lines[a.id] = {
-      assetId: a.id,
-      freshness,
-      ageDays,
-      asOf: fd ? fd.booked_on : (obs?.as_of ?? null),
-      basis: estimate?.basis ?? null,
-      usedAssumption,
-      marketDate,
-    };
-  }
-  return { valued, lines, netWorth: aggregateNetWorth(valued) };
+  const input = valuationInput(assets, observations, fds, today, defaults, extras);
+  return portfolioFromPosition(input, assets, today, defaults);
 }

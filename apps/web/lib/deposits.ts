@@ -4,8 +4,7 @@ import {
   depositListState,
   dicgcPosition,
   daysBetween,
-  effectiveDepositStatus,
-  fdValueOn,
+  heldValueOf,
   maturityVariance,
   partnerMissing,
   type CoverRow,
@@ -90,15 +89,7 @@ export function buildDeposits(
     const maturityOn = new Date(f.maturity_on + 'T00:00:00Z');
     const bookedOn = new Date(f.booked_on + 'T00:00:00Z');
     const v =
-      val.get(a.id)?.estimate?.estimatedAmount ??
-      fdValueOn({
-        principal: f.principal,
-        annualRate: f.rate,
-        bookedOn,
-        asOf: today,
-        maturityOn,
-        compounding: f.compounding,
-      });
+      val.get(a.id)?.estimate?.estimatedAmount ?? heldValueOf(f, today.toISOString().slice(0, 10));
     lines.push({
       id: a.id,
       bank: a.institutionId ? (banks.get(a.institutionId) ?? 'Unknown bank') : 'Unknown bank',
@@ -143,10 +134,10 @@ export function buildDeposits(
     .filter(
       (a) =>
         (a.type === 'fixed_deposit' || a.type === 'bank_account') &&
-        // a deposit whose date has passed is not counted: its money is in a savings account or a new deposit, which are
-        (a.type === 'fixed_deposit' && fdBy.has(a.id)
-          ? effectiveDepositStatus(a.status, fdBy.get(a.id)!.maturity_on, todayIso) === 'active'
-          : a.status === 'active') &&
+        // counted by the central engine's rule: a running deposit, or the proceeds of a matured one still awaiting confirmation (once);
+        // proceeds already placed are in the savings account or the new deposit they went to, which are counted on their own
+        (val.get(a.id)?.status ?? a.status) === 'active' &&
+        !!val.get(a.id)?.estimate &&
         a.institutionId &&
         !outside.has(a.institutionId),
     )

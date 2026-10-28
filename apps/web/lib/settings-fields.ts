@@ -31,6 +31,8 @@ export interface FieldSpec {
   /** allowed range of the typed number (in the units the person types) */
   min?: number;
   max?: number;
+  /** may be left empty (a date: "worked out for you") */
+  optional?: boolean;
 }
 
 export type RuleGroup =
@@ -323,6 +325,39 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         kind: 'pct',
         path: ['estimates', 'interestTdsRate'],
         unit: '%',
+      },
+      {
+        name: 'savingsSlabIncremental',
+        label: 'Savings slab rates apply to each part of the balance',
+        hint: 'On: with 3% up to ₹5 L and 3.5% above it, a ₹10 L balance earns 3% on the first ₹5 L and 3.5% on the rest (incremental). Off: the whole balance earns the rate of the slab it falls in. A bank set on its own page overrides this.',
+        kind: 'check',
+        path: ['estimates', 'savingsSlabIncremental'],
+      },
+      {
+        name: 'savingsCreditMonths',
+        label: 'Savings interest is credited every',
+        hint: '1, 3, 6 or 12 months. Indian banks credit savings interest every quarter (3). Until it is credited it is shown as accrued, and once credited it earns interest too.',
+        kind: 'int',
+        path: ['estimates', 'savingsCreditMonths'],
+        unit: 'months',
+        min: 1,
+        max: 12,
+      },
+      {
+        name: 'unexplainedTolerance',
+        label: 'A new balance is explained when within',
+        hint: 'When a new actual balance differs from the estimate by more than this, the difference is shown as “not yet explained” (never as profit or as money you put in) until you say what it was.',
+        kind: 'money',
+        path: ['estimates', 'unexplainedTolerance'],
+        unit: '₹',
+      },
+      {
+        name: 'openingDate',
+        label: 'Measure your own money and profit from',
+        hint: 'Own money put in, profit so far and the yearly return start from net worth on this day (the opening position). Leave empty to start from the first day the holdings on file have a value.',
+        kind: 'date',
+        path: ['capital', 'openingDate'],
+        optional: true,
       },
       {
         name: 'includeSip',
@@ -951,6 +986,10 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
       continue;
     }
     if (f.kind === 'date') {
+      if (f.optional && text === '') {
+        bucket[key] = '';
+        continue;
+      }
       if (!isIsoDate(text))
         return { ok: false, message: `${f.label}: a date written like 2021-01-01.` };
       bucket[key] = text;

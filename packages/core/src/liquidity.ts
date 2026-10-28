@@ -8,6 +8,7 @@
  * Honest limits, shown with each plan: costs are estimates from what is recorded (a fund's invested amount and first
  * purchase, a deposit's terms), bank and fund-house rules differ, and the app never moves money.
  */
+import { maturityAmountOf } from './deposit-contract';
 import { rowCode, type AccountKind } from './accounts-view';
 import { DEFAULT_CONFIG, effectiveRules, type AppConfig } from './config';
 import { fdValueOn } from './fd';
@@ -185,16 +186,7 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
       if (fd.maturity_on < today || v.status === 'matured' || v.status === 'matured_unconfirmed')
         continue;
       const matured = fd.maturity_on <= today;
-      const atMaturity =
-        fd.bank_maturity_amount ??
-        fdValueOn({
-          principal: fd.principal,
-          annualRate: fd.rate,
-          bookedOn: utc(fd.booked_on),
-          asOf: utc(fd.maturity_on),
-          maturityOn: utc(fd.maturity_on),
-          compounding: fd.compounding,
-        });
+      const atMaturity = maturityAmountOf(fd);
       if (!countedStatus) continue;
       if (matured) {
         out.push({

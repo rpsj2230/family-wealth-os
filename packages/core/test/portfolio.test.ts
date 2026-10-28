@@ -120,19 +120,28 @@ describe('buildPortfolio', () => {
     expect(p.netWorth.total).toBeLessThan(634_399);
   });
 
-  it('keeps matured-unconfirmed FDs out of net worth but visible', () => {
-    const p = buildPortfolio(
+  it('counts a matured-unconfirmed FD’s proceeds once within the window, and leaves out older ones (assumed placed) but visible', () => {
+    const recent = buildPortfolio(
       [asset({ id: 'fd1', type: 'fixed_deposit', status: 'matured_unconfirmed' })],
       [],
       [{ ...fd, booked_on: '2025-05-12', maturity_on: '2026-09-23' }],
       today,
     );
-    expect(p.netWorth.total).toBe(0);
-    expect(p.netWorth.excluded[0]).toMatchObject({ reason: 'status_not_counted' });
-    expect(p.lines.fd1!.freshness).toBe('older_than_expected');
+    expect(recent.netWorth.total).toBeGreaterThan(500_000);
+    expect(recent.valued[0]!.estimate!.method).toBe('fd_proceeds');
+    expect(recent.lines.fd1!.freshness).toBe('older_than_expected');
+    const old = buildPortfolio(
+      [asset({ id: 'fd1', type: 'fixed_deposit', status: 'matured_unconfirmed' })],
+      [],
+      [{ ...fd, booked_on: '2025-05-12', maturity_on: '2026-06-23' }],
+      today,
+    );
+    expect(old.netWorth.total).toBe(0);
+    expect(old.netWorth.excluded[0]).toMatchObject({ reason: 'status_not_counted' });
+    expect(old.lines.fd1!.freshness).toBe('older_than_expected');
   });
 
-  it('leaves out an FD that is still marked active but is past its maturity date, and counts one maturing today', () => {
+  it('counts the proceeds of an FD past its maturity date once, as awaiting confirmation, and counts one maturing today', () => {
     const rows = [
       asset({ id: 'late', type: 'fixed_deposit' }),
       asset({ id: 'today', type: 'fixed_deposit' }),
@@ -151,17 +160,49 @@ describe('buildPortfolio', () => {
       [terms('late', '2026-10-25'), terms('today', '2026-10-26'), terms('ahead', '2026-10-27')],
       today,
     );
-    expect(p.valued.find((v) => v.assetId === 'late')!.status).toBe('matured_unconfirmed');
+    // nothing shows where the money went: its proceeds are counted once, never reinvested, and flagged to confirm
+    expect(p.valued.find((v) => v.assetId === 'late')!.status).toBe('active');
+    expect(p.valued.find((v) => v.assetId === 'late')!.estimate!.method).toBe('fd_proceeds');
     expect(p.valued.find((v) => v.assetId === 'today')!.status).toBe('active');
-    expect(p.netWorth.excluded).toEqual([
-      expect.objectContaining({ assetId: 'late', reason: 'status_not_counted' }),
-    ]);
-    expect(p.netWorth.excluded[0]!.amount).toBeGreaterThan(500_000);
-    expect(p.netWorth.counted).toBe(2);
+    expect(p.netWorth.excluded).toEqual([]);
+    expect(p.netWorth.counted).toBe(3);
     expect(p.lines.late!.freshness).toBe('older_than_expected');
     expect(p.lines.today!.freshness).toBe('calculated');
     // the stored status is not changed: only the valuation treats it as matured
     expect(rows[0]!.status).toBe('active');
+  });
+
+  it('leaves out matured proceeds that a renewal at the same bank already holds (never counted twice)', () => {
+    const rows = [
+      asset({ id: 'old', type: 'fixed_deposit', institution_id: 'b1' }),
+      asset({ id: 'new', type: 'fixed_deposit', institution_id: 'b1' }),
+    ];
+    const old: FdRow = {
+      ...fd,
+      asset_id: 'old',
+      booked_on: '2025-10-20',
+      maturity_on: '2026-10-20',
+      bank_maturity_amount: null,
+    };
+    const p0 = buildPortfolio(rows.slice(0, 1), [], [old], today);
+    const proceeds = p0.valued[0]!.estimate!.estimatedAmount;
+    const renewed: FdRow = {
+      ...fd,
+      asset_id: 'new',
+      principal: Math.round(proceeds),
+      booked_on: '2026-10-21',
+      maturity_on: '2027-10-21',
+      bank_maturity_amount: null,
+    };
+    const p = buildPortfolio(rows, [], [old, renewed], today);
+    expect(p.valued.find((v) => v.assetId === 'old')!.status).toBe('matured_unconfirmed');
+    expect(p.netWorth.excluded).toEqual([
+      expect.objectContaining({ assetId: 'old', reason: 'status_not_counted' }),
+    ]);
+    expect(p.netWorth.total).toBeCloseTo(
+      p.valued.find((v) => v.assetId === 'new')!.estimate!.estimatedAmount,
+      1,
+    );
   });
 
   it('shows S$ balances at the anchor rate until a live rate is supplied, then separates FX movement', () => {

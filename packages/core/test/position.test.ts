@@ -24,9 +24,24 @@ import {
   type PositionAsset,
   type PositionConfig,
   type PositionInput,
+  savingsOn,
 } from '../src';
 
 const TODAY = '2026-10-27';
+/** a savings balance moved on at a rate, credited quarterly (savings-accrual.ts) */
+const accrue = (amount: number, date: string, rate: number, on: string, tds = 0) =>
+  savingsOn(
+    { date, amount },
+    [],
+    {
+      schedule: [
+        { from: '0000-01-01', slabs: [{ upTo: null, rate }], method: 'whole', source: 'account' },
+      ],
+      tds,
+      credit: 'quarterly',
+    },
+    on,
+  );
 const cfg = (over: Partial<PositionConfig> = {}): PositionConfig => ({
   today: TODAY,
   savingsRate: 0.03,
@@ -426,8 +441,9 @@ describe('period gains are gains, not changes of balance', () => {
     const interestFd = fdOn(d.fd!, TODAY) - 500_000;
     // savings: interest at 3% on each record's own stretch; the 500,000 drop is not a loss
     const interestSav =
-      (1_000_000 * 0.03 * span('2026-09-27', '2026-10-11')) / 365 +
-      (500_000 * 0.03 * span('2026-10-11', TODAY)) / 365;
+      accrue(1_000_000, '2026-09-01', 0.03, '2026-10-11').interest -
+      accrue(1_000_000, '2026-09-01', 0.03, '2026-09-27').interest +
+      accrue(500_000, '2026-10-11', 0.03, TODAY).interest;
     expect(t.amount).toBeCloseTo(interestFd + interestSav, 4);
     expect(t.putIn).toBe(500_000);
     expect(t.empty).toBe(false);
@@ -587,13 +603,14 @@ describe('a period starts from the nearest earlier record, rolled forward (the u
     expect(t.from).toBe('2026-09-28');
     expect(t.clamped).toBe(false);
     expect(sinceWords(t)).toBe('since 28 Sep 2026');
-    // 1,000,000 recorded on 22 Aug, 37 days to 28 Sep, 67 days to 28 Oct, at 6%
-    const start = 1_000_000 + (1_000_000 * 0.06 * 37) / 365;
-    const end = 1_000_000 + (1_000_000 * 0.06 * 67) / 365;
+    // 1,000,000 recorded on 22 Aug, 37 days to 28 Sep, 67 days to 28 Oct, at 6%, interest credited on 30 Sep
+    const start = accrue(1_000_000, '2026-08-22', 0.06, '2026-09-28').value;
+    const end = accrue(1_000_000, '2026-08-22', 0.06, '2026-10-28').value;
+    expect(start).toBeCloseTo(1_000_000 + (1_000_000 * 0.06 * 37) / 365, 6);
     expect(t.netWorth.start).toBeCloseTo(start, 1);
     expect(t.netWorth.end).toBeCloseTo(end, 1);
-    // the earning of the period is 30 days of interest on the recorded balance
-    expect(t.amount).toBeCloseTo((1_000_000 * 0.06 * 30) / 365, 4);
+    // the earning of the period is 30 days of interest on the balance (with the 30 Sep credit earning after it)
+    expect(t.amount).toBeCloseTo(end - start, 4);
     // and it says which record the first day rests on
     expect(t.startFrom).toEqual({
       oldest: '2026-08-22',
@@ -621,8 +638,10 @@ describe('a period starts from the nearest earlier record, rolled forward (the u
     // the savings account recorded in August was not there on 1 April: nothing is invented for it
     expect(fy.startFrom.oldest).toBe('2026-03-22');
     expect(fy.coverage).toEqual({ withValue: 2, of: 3 });
-    const interestOld = (500_000 * 0.04 * span('2026-04-01', '2026-10-28')) / 365;
-    const interestSav = (1_000_000 * 0.06 * span('2026-08-22', '2026-10-28')) / 365;
+    const interestOld =
+      accrue(500_000, '2026-03-22', 0.04, '2026-10-28').interest -
+      accrue(500_000, '2026-03-22', 0.04, '2026-04-01').interest;
+    const interestSav = accrue(1_000_000, '2026-08-22', 0.06, '2026-10-28').interest;
     const interestFd = fdOn(fd.fd!, '2026-10-28') - fdOn(fd.fd!, '2026-04-01');
     expect(fy.amount).toBeCloseTo(interestOld + interestSav + interestFd, 3);
   });

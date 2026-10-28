@@ -40,11 +40,14 @@ function stub(tables: Record<string, Row[]>) {
           return q;
         },
         order: () => q,
+        limit: () => q,
         range: (a: number, b: number) => ((range = [a, b]), q),
         or: (spec: string) => {
           const parts = [
             ...spec.matchAll(/and\(nav_date\.gte\.([\d-]+),nav_date\.lte\.([\d-]+)\)/g),
           ];
+          // the filter that leaves out replaced fund lines: no line in the stub is replaced
+          if (parts.length === 0) return q;
           req.ranges = parts.length;
           filters.push((r) =>
             parts.some((m) => (r.nav_date as string) >= m[1]! && (r.nav_date as string) <= m[2]!),

@@ -3,8 +3,9 @@
  * deposits side by side, every line tagged with whose it is, how current it is and where the figure came from.
  * Pure functions; the pages only draw what this returns.
  */
+import { maturityAmountOf } from './deposit-contract';
 import { depositListState, type DepositListState } from './deposit-state';
-import { fdValueOn, type Compounding } from './fd';
+import { type Compounding } from './fd';
 import { DEFAULT_CONFIG } from './config';
 import {
   mergeForeignCash,
@@ -184,6 +185,11 @@ export interface BankRow {
   currency: string;
   notes: string | null;
   status: string;
+  /**
+   * counted in net worth today, by the central engine's one rule (valuation.ts): a running deposit, the proceeds of a matured one that
+   * still await confirmation, a savings balance; not a deposit whose proceeds were placed, a closed account or one with no value
+   */
+  inNetWorth?: boolean;
   /** today's value in INR: for a deposit calculated from its terms (the full amount at maturity), for savings the estimate */
   current: number | null;
   /** savings: last recorded balance and where it came from */
@@ -203,6 +209,10 @@ export interface BankRow {
     maturityAmount: number;
     /** how interest is added to the deposit: needed to work out what it earns in a day */
     compounding: Compounding;
+    /** cumulative, or interest paid out monthly / quarterly / half-yearly / yearly */
+    payout?: string | null;
+    /** the bank's own maturity amount, when recorded */
+    bankMaturityAmount?: number | null;
     maturityAmountFromBank: boolean;
     refLast4: string | null;
     /** the full deposit number, when it has been entered */
@@ -214,6 +224,8 @@ export interface BankRow {
      * Counted by the same rule as net worth (deposit-state.ts).
      */
     needsConfirmation: boolean;
+    /** matured or closed, and its proceeds still counted in net worth until you say where they went (never reinvested automatically) */
+    proceedsAwaiting?: boolean;
     /** the day a deposit that is no longer held left, when the History import worked it out */
     endedOn: string | null;
     /** the end date was read from the monthly tabs, not from the bank */
@@ -320,7 +332,7 @@ function addTotals(t: Totals, r: BankRow) {
   const v = r.current ?? 0;
   const counted = r.status === 'active';
   if (r.kind === 'fd' && r.fd) {
-    if (counted && !r.fd.needsConfirmation) {
+    if (r.inNetWorth ?? (counted && !r.fd.needsConfirmation)) {
       t.fdInvested += r.fd.principal;
       t.fdMaturity += r.fd.maturityAmount;
       t.fdCurrent += v;
@@ -336,6 +348,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
   const latest = latestObservations(i.observations);
   const fdBy = new Map(i.fds.map((f) => [f.asset_id, f]));
   const valued = new Map(i.portfolio.valued.map((v) => [v.assetId, v]));
+  const excludedIds = new Set(i.portfolio.netWorth.excluded.map((e) => e.assetId));
   const todayIso = i.today.toISOString().slice(0, 10);
   const hideAfter = i.hideMaturedAfterDays ?? DEFAULT_CONFIG.deposits.hideMaturedAfterDays;
   const monthStart = `${i.today.toISOString().slice(0, 7)}-01`;
@@ -377,6 +390,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       currency: a.currency,
       notes: a.notes ?? null,
       status: a.status,
+      inNetWorth: !excludedIds.has(a.id) && !!v?.estimate,
       current: est,
       recorded: obs ? obs.amount : null,
       asOf: obs?.as_of ?? null,
@@ -396,16 +410,7 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       fd: null,
     };
     if (a.type === 'fixed_deposit' && fd) {
-      const maturityAmount =
-        fd.bank_maturity_amount ??
-        fdValueOn({
-          principal: fd.principal,
-          annualRate: fd.rate,
-          bookedOn: new Date(`${fd.booked_on}T00:00:00Z`),
-          asOf: new Date(`${fd.maturity_on}T00:00:00Z`),
-          maturityOn: new Date(`${fd.maturity_on}T00:00:00Z`),
-          compounding: fd.compounding,
-        });
+      const maturityAmount = maturityAmountOf(fd);
       const daysLeft = daysBetween(i.today, new Date(`${fd.maturity_on}T00:00:00Z`));
       row.fd = {
         principal: fd.principal,
@@ -415,12 +420,15 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
         daysLeft,
         maturityAmount,
         compounding: fd.compounding,
+        payout: fd.payout ?? 'cumulative',
+        bankMaturityAmount: fd.bank_maturity_amount ?? null,
         maturityAmountFromBank: fd.bank_maturity_amount !== null,
         refLast4: fd.fd_ref_last4 ?? null,
         ref: fd.fd_ref ?? null,
         linkedTo: null,
         needsConfirmation:
           a.status === 'matured_unconfirmed' || (a.status === 'active' && daysLeft < 0),
+        proceedsAwaiting: v?.estimate?.method === 'fd_proceeds' && !excludedIds.has(a.id),
         endedOn: fd.ended_on ?? null,
         endedEstimated: !!fd.ended_estimated,
         listState: depositListState({

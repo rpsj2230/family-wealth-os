@@ -28,10 +28,27 @@
  *
  * Pure: no I/O. The loaders (packages/data) build the input; period figures are worked out in `positionGains`.
  */
-import type { SipPlan } from './estimate';
+import { plannedInstalments, type SipPlan } from './estimate';
 import { planLedger, planUnitsOn, type PlanLedger } from './fund-plan';
 import { exDate } from './explain';
-import { daysBetween, fdEffectiveRate, fdValueOn, type Compounding } from './fd';
+import { daysBetween, fdEffectiveRate, type Compounding } from './fd';
+import {
+  contractOutOn,
+  depositOn,
+  isPayout,
+  proceedsCountedOn,
+  type DepositContract,
+  type Payout,
+  type ProceedsPlan,
+} from './deposit-contract';
+import {
+  savingsOn,
+  type CreditEvery,
+  type RateStep,
+  type SavingsTerms,
+  type SavingsTxn,
+  type SlabMethod,
+} from './savings-accrual';
 import { sumExact } from './money';
 import { liquidityOf, type AssetType, type Liquidity } from './networth';
 import {
@@ -112,6 +129,12 @@ export interface PosDeposit {
   bankMaturityAmount: number | null;
   /** the day it left (paid out or closed), when known */
   endedOn: string | null;
+  /** cumulative (default) or interest paid out every month, quarter, half year or year */
+  payout?: Payout | null;
+  /** the deposit this one was renewed from */
+  renewedFrom?: string | null;
+  /** where its maturity proceeds stand (deposit-contract.ts proceedsPlan); without it, proceeds are not counted after maturity */
+  proceeds?: ProceedsPlan | null;
 }
 
 export interface PosFund {
@@ -131,6 +154,8 @@ export interface PosFund {
   /** the SIP plan (the amount and its dated changes) and the start date and amount invested the household recorded: a fund with no ledger has its units rebuilt from them */
   sip?: SipPlan | null;
   plan?: { invested: number; startedOn: string | null } | null;
+  /** never rebuild the units from the plan (nothing but the fund's values and its SIP is known): the value on file is moved on */
+  noPlan?: boolean;
 }
 
 export interface PositionAsset {
@@ -146,6 +171,14 @@ export interface PositionAsset {
   records: PosRecord[];
   fd: PosDeposit | null;
   fund: PosFund | null;
+  /** the bank, the account's last four digits, and (a deposit) the account it is linked to: used to find where maturity proceeds went */
+  institutionId?: string | null;
+  last4?: string | null;
+  linkedLast4?: string | null;
+  /** a savings account's confirmed money in (+) and out (-), oldest first: part of its estimate after each baseline */
+  moves?: SavingsTxn[];
+  /** a savings account's rates by effective date, with balance slabs; without it, its one rate (own, listed or assumed) applies */
+  rates?: RateStep[] | null;
 }
 
 export interface PositionConfig {
@@ -162,6 +195,11 @@ export interface PositionConfig {
   growth: { property: number; retirement: number; other: number };
   /** INR per unit of each foreign currency, by day, oldest first */
   fx: Record<string, { date: string; rate: number }[]>;
+  /** Settings: proceeds of a deposit that matured longer ago than this with no evidence of where they went are assumed placed */
+  hideMaturedAfterDays?: number;
+  /** Settings: how often banks credit savings interest (default quarterly) and how a balance slab applies (default whole balance) */
+  savingsCredit?: CreditEvery;
+  slabMethod?: SlabMethod;
 }
 
 /** What the household's own books say a holding is worth today (net worth), for the holdings whose today needs more than a date. */
@@ -206,6 +244,31 @@ export interface ValuedHolding {
   asOf: string | null;
   note: string;
   rate: RateInfo | null;
+  /** a deposit: its contract figures on the day, and whether the value is its maturity proceeds awaiting confirmation */
+  deposit?: DepositDetail;
+  /** a savings account: the baseline the estimate starts from and what was added to it */
+  savings?: SavingsDetail;
+  /** a fund moved on from a value on file: the SIP instalments assumed since it (money put in by the plan, not confirmed) */
+  sipAssumed?: { invested: number; count: number };
+}
+
+export interface DepositDetail {
+  principal: number;
+  accrued: number;
+  paidOut: number;
+  maturityValue: number;
+  payout: Payout;
+  /** the value is the proceeds of a matured or closed deposit, not yet placed (see ProceedsPlan) */
+  proceeds: boolean;
+  proceedsStatus: ProceedsPlan['status'] | null;
+}
+
+export interface SavingsDetail {
+  baseline: { date: string; amount: number };
+  interest: number;
+  credited: number;
+  accrued: number;
+  moved: number;
 }
 
 const none = (
@@ -361,6 +424,24 @@ function endedAfterLastRecord(a: PositionAsset, on: string): ValuedHolding | nul
     : null;
 }
 
+/** The terms a savings account is estimated on: its rates by effective date (or its one rate), the tax at source, the credit cycle. */
+export function savingsTermsOf(a: PositionAsset, c: PositionConfig): SavingsTerms {
+  const info = savingsRateOf(a, c);
+  const schedule: RateStep[] =
+    a.rates && a.rates.length > 0
+      ? a.rates
+      : [
+          {
+            from: '0000-01-01',
+            slabs: [{ upTo: null, rate: info.used }],
+            method: c.slabMethod ?? 'whole',
+            source:
+              info.source === 'account' || info.source === 'rates_list' ? info.source : 'assumed',
+          },
+        ];
+  return { schedule, tds: info.tds, credit: c.savingsCredit ?? 'quarterly' };
+}
+
 const valueSavings: Valuer = (a, on, c, cur) => {
   if (on >= c.today && cur) {
     // today is whatever net worth has (a deposit-style account never needs more than the formula below, but one source keeps them equal)
@@ -374,32 +455,50 @@ const valueSavings: Valuer = (a, on, c, cur) => {
   const rec = lastOnOrBefore(recs, on);
   if (!rec) return none(a, 'no_data', 'no balance recorded on or before this day');
   const info = savingsRateOf(a, c);
-  const days = Math.max(0, span(rec.date, on));
-  const value = rec.amount + (rec.amount * info.used * (1 - info.tds) * days) / 365;
+  const terms = savingsTermsOf(a, c);
+  const s = savingsOn({ date: rec.date, amount: rec.amount }, a.moves ?? [], terms, on);
   const rate: RateInfo = {
-    used: info.used,
+    used: s.rate || info.used,
     source: info.source,
     observed: info.observed,
     differs: info.differs,
   };
-  return days === 0
-    ? got(a, rec.amount, 'recorded', rec.date, false, `recorded on ${niceIso(rec.date)}`, rate)
-    : got(
-        a,
-        value,
-        'rate',
-        rec.date,
-        true,
-        `estimated from the balance recorded on ${niceIso(rec.date)}, at ${(info.used * 100).toFixed(2)}% a year`,
-        rate,
-      );
+  const detail: SavingsDetail = {
+    baseline: { date: rec.date, amount: rec.amount },
+    interest: s.interest,
+    credited: s.credited,
+    accrued: s.accrued,
+    moved: s.moved,
+  };
+  if (s.days === 0 && s.moved === 0)
+    return {
+      ...got(a, rec.amount, 'recorded', rec.date, false, `recorded on ${niceIso(rec.date)}`, rate),
+      savings: detail,
+    };
+  const moved =
+    s.moved !== 0
+      ? `, ${s.moved > 0 ? 'plus' : 'less'} ₹${Math.abs(Math.round(s.moved)).toLocaleString('en-IN')} confirmed since`
+      : '';
+  return {
+    ...got(
+      a,
+      s.value,
+      'rate',
+      rec.date,
+      true,
+      `estimated from the balance recorded on ${niceIso(rec.date)}${moved}, with interest at ${(rate.used * 100).toFixed(2)}% a year`,
+      rate,
+    ),
+    savings: detail,
+  };
 };
 
 /** When a deposit left: the day it was paid out or closed, else its maturity date. */
 export const depositEnd = (d: PosDeposit): string => d.endedOn ?? d.maturityOn;
 
-/** The rate a deposit is accrued at, and where it comes from. */
+/** The rate a deposit is accrued at, and where it comes from. A payout deposit pays the rate on it: the bank's amount is no guide. */
 export function depositRateOf(d: PosDeposit, c: Pick<PositionConfig, 'rateGap'>) {
+  if (isPayout(d.payout)) return { rate: Math.max(0, d.rate), from: 'stated' as const };
   return fdEffectiveRate({
     principal: d.principal,
     annualRate: d.rate,
@@ -411,6 +510,19 @@ export function depositRateOf(d: PosDeposit, c: Pick<PositionConfig, 'rateGap'>)
   });
 }
 
+/** A deposit's contract, at the rate it grows at. */
+export function contractOf(d: PosDeposit, c: Pick<PositionConfig, 'rateGap'>): DepositContract {
+  return {
+    principal: d.principal,
+    rate: depositRateOf(d, c).rate,
+    bookedOn: d.bookedOn,
+    maturityOn: d.maturityOn,
+    compounding: d.compounding,
+    payout: d.payout ?? 'cumulative',
+    endedOn: d.endedOn,
+  };
+}
+
 const valueDeposit: Valuer = (a, on, c, cur) => {
   const d = a.fd;
   if (on >= c.today && cur)
@@ -420,31 +532,62 @@ const valueDeposit: Valuer = (a, on, c, cur) => {
   if (!d || !(d.principal > 0)) return none(a, 'no_data', 'no deposit terms on file');
   if (a.status === 'gifted') return none(a, 'ended', 'gifted');
   if (on < d.bookedOn) return none(a, 'not_yet', `booked on ${niceIso(d.bookedOn)}`);
-  const end = depositEnd(d);
   // a deposit that "left" before it was booked is bad data: it never counted
-  if (end <= d.bookedOn) return none(a, 'ended', 'ended on or before its booking date');
-  // a deposit that matures today still counts until tomorrow (net worth's rule); one paid out or closed has left on that day
-  if (d.endedOn ? on >= d.endedOn : on > d.maturityOn)
-    return none(a, 'ended', `${d.endedOn ? 'paid out or closed' : 'matured'} on ${niceIso(end)}`);
+  if (d.endedOn && d.endedOn <= d.bookedOn)
+    return none(a, 'ended', 'ended on or before its booking date');
   const eff = depositRateOf(d, c);
-  const value = fdValueOn({
+  const con = contractOf(d, c);
+  const day = depositOn(con, on);
+  const basis: ValueBasis = eff.from === 'bank_amount' ? 'bank_amount' : 'terms';
+  const rate: RateInfo = { used: eff.rate, source: eff.from, observed: null, differs: false };
+  const detail = (proceeds: boolean): DepositDetail => ({
     principal: d.principal,
-    annualRate: eff.rate,
-    bookedOn: utc(d.bookedOn),
-    asOf: utc(on),
-    maturityOn: utc(d.maturityOn),
-    compounding: d.compounding,
+    accrued: day.accrued,
+    paidOut: day.paidOut,
+    maturityValue: day.maturityValue,
+    payout: d.payout ?? 'cumulative',
+    proceeds,
+    proceedsStatus: d.proceeds?.status ?? null,
   });
-  return got(
+  if (day.state === 'running') {
+    const paid =
+      day.paidOut > 0
+        ? `; ₹${Math.round(day.paidOut).toLocaleString('en-IN')} interest paid out so far`
+        : '';
+    return {
+      ...got(
+        a,
+        day.held,
+        basis,
+        d.bookedOn,
+        false,
+        (eff.from === 'bank_amount'
+          ? `at ${(eff.rate * 100).toFixed(2)}% (from the bank’s maturity amount)`
+          : `at ${(eff.rate * 100).toFixed(2)}% (the rate on the deposit)`) + paid,
+        rate,
+      ),
+      deposit: detail(false),
+    };
+  }
+  // matured or closed: its proceeds count until they are placed (never reinvested automatically), once
+  const outOn = contractOutOn(con);
+  if (d.proceeds && day.proceeds !== null && proceedsCountedOn(d.proceeds, outOn, on))
+    return {
+      ...got(
+        a,
+        day.proceeds,
+        basis,
+        d.bookedOn,
+        true,
+        `${day.state === 'closed' ? 'closed' : 'matured'} on ${niceIso(day.state === 'closed' ? outOn : d.maturityOn)}: proceeds ${d.proceeds.status === 'awaiting' ? 'awaiting confirmation' : 'not yet placed'}`,
+        rate,
+      ),
+      deposit: detail(true),
+    };
+  return none(
     a,
-    value,
-    eff.from === 'bank_amount' ? 'bank_amount' : 'terms',
-    d.bookedOn,
-    false,
-    eff.from === 'bank_amount'
-      ? `at ${(eff.rate * 100).toFixed(2)}% (from the bank’s maturity amount)`
-      : `at ${(eff.rate * 100).toFixed(2)}% (the rate on the deposit)`,
-    { used: eff.rate, source: eff.from, observed: null, differs: false },
+    'ended',
+    `${day.state === 'closed' ? 'paid out or closed' : 'matured'} on ${niceIso(day.state === 'closed' ? outOn : d.maturityOn)}`,
   );
 };
 
@@ -520,7 +663,7 @@ const PLANS = new WeakMap<PosFund, { key: string; plan: PlanLedger | null }>();
  * recorded amount invested is taken as of the newest value recorded.
  */
 export function planOf(a: PositionAsset, c: PositionConfig): PlanLedger | null {
-  if (!isLedgerless(a)) return null;
+  if (!isLedgerless(a) || a.fund!.noPlan) return null;
   const f = a.fund!;
   const key = [
     c.today,
@@ -615,9 +758,25 @@ interface Rolled {
   /** the value was moved with the price (the price on both days was known) */
   scaled: boolean;
   nav: { date: string; nav: number } | null;
+  /** SIP instalments assumed since the value on file */
+  sip?: { invested: number; worth: number; count: number } | null;
 }
 
 function rollFrom(
+  f: PosFund,
+  an: FundAnchor,
+  on: string,
+  c: PositionConfig,
+  now: { date: string; nav: number } | null,
+): Rolled | null {
+  const base = rollBase(f, an, on, c, now);
+  if (!base) return null;
+  // the SIP instalments due after the value on file, each bought at the price of its day and moved with the price to the day
+  const sip = base.scaled && now ? sipSince(f, an.date, on, c, now.nav) : null;
+  return sip ? { ...base, value: base.value + sip.worth, sip } : base;
+}
+
+function rollBase(
   f: PosFund,
   an: FundAnchor,
   on: string,
@@ -630,6 +789,32 @@ function rollFrom(
   if (at && now && at.nav > 0 && an.date < on)
     return { value: (an.amount! * now.nav) / at.nav, anchor: an, scaled: true, nav: now };
   return { value: an.amount!, anchor: an, scaled: false, nav: now };
+}
+
+/** The SIP instalments a fund with no ledger made after a value on file and up to a day, and what they are worth at a price. */
+export function sipSince(
+  f: PosFund,
+  after: string,
+  until: string,
+  c: Pick<PositionConfig, 'includeSip' | 'navGapDays'>,
+  navNow: number,
+): {
+  invested: number;
+  worth: number;
+  count: number;
+  lines: { date: string; amount: number }[];
+} | null {
+  if (c.includeSip === false || !f.sip) return null;
+  const lines = plannedInstalments(f.sip, utc(after), utc(until));
+  if (lines.length === 0) return null;
+  let invested = 0;
+  let worth = 0;
+  for (const l of lines) {
+    const n = lastOnOrBefore(f.navs, l.date);
+    invested += l.amount;
+    worth += n && n.nav > 0 ? (l.amount * navNow) / n.nav : l.amount;
+  }
+  return { invested, worth, count: lines.length, lines };
 }
 
 /** The last resort: the newest value on or before the day that can be worked out, moved with the price. */
@@ -657,15 +842,23 @@ function rolledHolding(a: PositionAsset, r: Rolled, on: string): ValuedHolding {
       : r.scaled
         ? `last resort: the value on ${niceIso(an.date)} moved with the price to ${niceIso(r.nav!.date)}`
         : `last resort: the value recorded on ${niceIso(an.date)}`;
-  const exact = an.date === on && (an.kind === 'snapshot' || an.kind === 'recorded');
-  return got(
-    a,
-    r.value,
-    an.kind === 'sheet' ? 'sheet' : an.kind === 'units' ? 'units_nav' : 'nav_scaled',
-    an.date,
-    !exact,
-    note,
-  );
+  const exact = an.date === on && (an.kind === 'snapshot' || an.kind === 'recorded') && !r.sip;
+  const sip = r.sip
+    ? `, plus ${r.sip.count} SIP instalment${r.sip.count === 1 ? '' : 's'} (₹${Math.round(r.sip.invested).toLocaleString('en-IN')}) assumed since`
+    : '';
+  // a value that could not be moved (no price near its day) is the value on file, carried forward as it is
+  const basis: ValueBasis =
+    an.kind === 'sheet'
+      ? 'sheet'
+      : an.kind === 'units'
+        ? r.sip
+          ? 'nav_scaled'
+          : 'units_nav'
+        : !r.scaled && !r.sip
+          ? 'recorded'
+          : 'nav_scaled';
+  const h = got(a, r.value, basis, an.date, !exact, note + sip);
+  return r.sip ? { ...h, sipAssumed: { invested: r.sip.invested, count: r.sip.count } } : h;
 }
 
 /** A change of a fund's value on one day that is neither the price nor money the plan put in (signed rupees). */
@@ -716,6 +909,10 @@ export function fundTrack(
   const first = anchors[0]!;
   const opening = amountAt(first) ?? rolledValue(a, first.date, c, anchors)?.value ?? 0;
   if (opening > 0) flows.push({ date: first.date, amount: opening });
+  // the SIP instalments assumed after the first value are money the plan put in
+  const lastNav = f.navs[f.navs.length - 1];
+  const sip = lastNav ? sipSince(f, first.date, c.today, c, lastNav.nav) : null;
+  for (const l of sip?.lines ?? []) flows.push({ date: l.date, amount: l.amount });
   for (let k = 1; k < anchors.length; k++) {
     const an = anchors[k]!;
     if (an.date > c.today) break;
@@ -797,7 +994,7 @@ const valueFund: Valuer = (a, on, c, cur) => {
     return got(
       a,
       r.amount,
-      basis === 'sheet' ? 'sheet' : 'nav_scaled',
+      basis === 'sheet' ? 'sheet' : 'recorded',
       r.date,
       r.date !== on || basis === 'sheet',
       `the value recorded on ${niceIso(r.date)}`,
@@ -1173,13 +1370,16 @@ export interface PositionGains {
   dataStarts: string | null;
 }
 
-/** The deposit terms the period figures read: the rate it grows at, and whether it is still held today. */
+/** The deposit terms the period figures read: the rate it grows at, how it pays interest, and how long its proceeds are counted. */
 export function depositsOf(input: PositionInput): DepositTerms[] {
   const c = input.config;
   return input.assets.flatMap((a) => {
     const d = a.fd;
     if (!d || a.status === 'gifted') return [];
     const eff = depositRateOf(d, c);
+    const con = contractOf(d, c);
+    const out = contractOutOn(con);
+    const placedOn = d.proceeds ? d.proceeds.placedOn : out;
     return [
       {
         assetId: a.assetId,
@@ -1188,19 +1388,17 @@ export function depositsOf(input: PositionInput): DepositTerms[] {
         bookedOn: d.bookedOn,
         maturityOn: d.maturityOn,
         compounding: d.compounding,
-        // held today as net worth has it (a deposit past its date that still waits to be confirmed is in net worth until it is), else when today is before the day it left
-        held: input.current?.[a.assetId]
-          ? input.current[a.assetId]!.counted
-          : d.endedOn
-            ? c.today < d.endedOn
-            : c.today <= d.maturityOn,
+        payout: d.payout ?? 'cumulative',
+        // held today: running, or its proceeds still counted (awaiting confirmation)
+        held: c.today < out || placedOn === null || c.today < placedOn,
         endedOn: d.endedOn,
+        placedOn,
       },
     ];
   });
 }
 
-/** The savings accounts (INR) with the rate they earn and their balances. */
+/** The savings accounts (INR) with the terms they earn on, their balances and their confirmed movements. */
 export function accountsOf(input: PositionInput): SavingsAccount[] {
   const c = input.config;
   return input.assets
@@ -1216,6 +1414,8 @@ export function accountsOf(input: PositionInput): SavingsAccount[] {
           a.currency === 'INR'
             ? dayRecords(a.records).map((r) => ({ date: r.date, amount: r.amount }))
             : [],
+        terms: savingsTermsOf(a, c),
+        moves: a.moves ?? [],
       };
     });
 }

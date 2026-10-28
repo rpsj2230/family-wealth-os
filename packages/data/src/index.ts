@@ -5,19 +5,31 @@
  */
 import {
   buildPortfolio,
+  creditEvery,
   lastNavMove,
   addDaysIso,
   planLedger,
+  posFundFrom,
   rateOfferFromRow,
   savingsRateFor,
   type AssetRow,
   type FdRow,
   type ObservationRow,
+  type PosFund,
   type Portfolio,
   type PortfolioDefaults,
+  type ValuationExtras,
 } from '@fwos/core';
 import { HIST_FUND_REF } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { liveLinesFilter } from './columns';
+import {
+  loadMoneyMoves,
+  loadSavingsSchedules,
+  placementsOf,
+  savingsMovesOf,
+  type MoneyMove,
+} from './ledger';
 import { loadNavHistory } from './nav-history';
 import { pageAll } from './paging';
 import { loadSettings } from './settings';
@@ -41,6 +53,16 @@ export interface LoadedPortfolio {
   fundDay: Record<string, { pct: number; from: string; to: string }>;
   /** Settings: a deposit matured longer ago than this many days is hidden from the lists */
   hideMaturedAfterDays: number;
+  /**
+   * What the central engine was given beyond the rows (fund ledgers and statement values, savings movements and rates by date, where
+   * maturity proceeds went), so the history (loadPositionInput) is built from exactly the same input as today's figures.
+   */
+  engine: {
+    extras: ValuationExtras;
+    fundLines: Map<string, Record<string, unknown>[]>;
+    fundSnaps: Map<string, { date: string; value: number }[]>;
+    moves: MoneyMove[];
+  };
 }
 
 export const todayDate = () => new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
@@ -87,7 +109,7 @@ export async function loadPortfolioData(
       ),
       sel(
         'fixed_deposits',
-        'asset_id, principal, rate, booked_on, maturity_on, compounding, bank_maturity_amount, fd_ref_last4, fd_ref, ended_on, ended_estimated, start_estimated',
+        'asset_id, principal, rate, booked_on, maturity_on, compounding, payout, renewed_from, bank_maturity_amount, fd_ref_last4, fd_ref, ended_on, ended_estimated, start_estimated',
       ),
       sel(
         'mf_positions',
@@ -194,6 +216,7 @@ export async function loadPortfolioData(
   // fund-plan.ts) shared with the position engine, so today's value here and the value on any past day agree. A counted unit count or
   // a statement replaces them. Prices are public and read once (nav-history.ts); without them the fund is valued from its last record.
   const planUnits = new Map<string, number>();
+  const planNavs = new Map<string, { date: string; nav: number }[]>();
   try {
     const startedOf = new Map(
       ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [p.asset_id, p]),
@@ -214,6 +237,7 @@ export async function loadPortfolioData(
         supabase,
         wants.map((w) => ({ code: w.a.amfi_code!, from: w.from })),
       );
+      for (const [code, rows] of hist) planNavs.set(code, rows);
       for (const { a, p } of wants) {
         const dates = [...obsRows, ...sheetObs]
           .filter((o) => o.asset_id === a.id && !o.superseded_by)
@@ -332,6 +356,105 @@ export async function loadPortfolioData(
   } catch {
     // market data is optional
   }
+  // the funds as the engine reads them: every ledger line a statement has not replaced, the statement values, the plan, and the prices
+  // read above (the plan's full history where the units are rebuilt from it, else from a little before the last value)
+  const fundIds = assetRows.filter((a) => a.type === 'mutual_fund').map((a) => a.id);
+  const fundLines = new Map<string, Record<string, unknown>[]>();
+  const fundSnaps = new Map<string, { date: string; value: number }[]>();
+  const funds: Record<string, PosFund> = {};
+  const [moves, rates] = await Promise.all([
+    loadMoneyMoves(supabase, opts.householdId),
+    loadSavingsSchedules(supabase, assetRows, config, opts.householdId).catch(() => ({})),
+  ]);
+  if (fundIds.length > 0) {
+    const live = await liveLinesFilter(supabase);
+    const [lines, snaps] = await Promise.all([
+      pageAll<Record<string, unknown>>((from, to) =>
+        sel(
+          'mf_transactions',
+          'id, asset_id, txn_on, kind, units, amount, nav, balance_units, description, source',
+        )
+          .or(live)
+          .order('txn_on')
+          .order('id')
+          .range(from, to),
+      ).catch(() => [] as Record<string, unknown>[]),
+      pageAll<Record<string, unknown>>((from, to) =>
+        sel('mf_snapshots', 'asset_id, as_of, value').order('as_of').range(from, to),
+      ).catch(() => [] as Record<string, unknown>[]),
+    ]);
+    for (const l of lines) {
+      const id = l.asset_id as string;
+      (fundLines.get(id) ?? fundLines.set(id, []).get(id)!).push(l);
+    }
+    for (const x of snaps) {
+      const id = x.asset_id as string;
+      (fundSnaps.get(id) ?? fundSnaps.set(id, []).get(id)!).push({
+        date: x.as_of as string,
+        value: Number(x.value),
+      });
+    }
+    const posOf = new Map(
+      ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [p.asset_id, p]),
+    );
+    for (const a of assetRows) {
+      if (a.type !== 'mutual_fund') continue;
+      const p = posOf.get(a.id);
+      const navs = mergeNavs(
+        planNavs.get(a.amfi_code ?? '') ?? [],
+        (a.amfi_code && market.navs?.[a.amfi_code]) || [],
+      );
+      funds[a.id] = posFundFrom({
+        lines: (fundLines.get(a.id) ?? []).map((l) => ({
+          date: l.txn_on as string,
+          kind: (l.kind as string | null) ?? null,
+          units: Number(l.units),
+          amount: Number(l.amount),
+          nav: l.nav === null ? null : Number(l.nav),
+          balance: l.balance_units === null ? null : Number(l.balance_units),
+          source: (l.source as string | null) ?? null,
+          description: (l.description as string | null) ?? null,
+        })),
+        navs,
+        units:
+          a.units !== null && a.units !== undefined && a.units_as_of && a.units_source !== 'plan'
+            ? { units: a.units, asOf: a.units_as_of }
+            : null,
+        snapshots: fundSnaps.get(a.id) ?? [],
+        plan: p
+          ? {
+              invested: Number(p.invested ?? 0),
+              startedOn: p.started_on ?? null,
+              sipMonthly: p.sip_monthly === null ? null : Number(p.sip_monthly),
+              sipStopped: !!p.sip_stopped,
+            }
+          : null,
+        sip: a.sip ?? null,
+        today: todayIso0,
+        unitTolerance: config.funds.unitTolerance,
+      });
+    }
+  }
+  const accountIds = new Set(assetRows.filter((a) => a.type === 'bank_account').map((a) => a.id));
+  const depositIds = new Set(assetRows.filter((a) => a.type === 'fixed_deposit').map((a) => a.id));
+  const extras: ValuationExtras = {
+    funds,
+    moves: savingsMovesOf(moves, accountIds),
+    rates,
+    placements: placementsOf(moves, depositIds),
+    config: {
+      navGapDays: config.funds.navGapDays,
+      planTolerance: config.funds.planTolerance,
+      growth: {
+        property: config.estimates.assumedGrowthProperty,
+        retirement: config.estimates.assumedGrowthRetirement,
+        other: config.estimates.assumedGrowthOther,
+      },
+      hideMaturedAfterDays: config.deposits.hideMaturedAfterDays,
+      savingsCredit: creditEvery(config.estimates.savingsCreditMonths),
+      slabMethod: config.estimates.savingsSlabIncremental ? 'incremental' : 'whole',
+    },
+  };
   return {
     today,
     assetRows,
@@ -339,12 +462,27 @@ export async function loadPortfolioData(
     sheetObs,
     fdRows,
     ownerName,
-    portfolio: buildPortfolio(assetRows, obsRows, fdRows, today, market),
+    // the sheet's fund values go in as such: never a valuation, only the last resort and the date a plan's amount invested was recorded
+    portfolio: buildPortfolio(assetRows, [...obsRows, ...sheetObs], fdRows, today, market, extras),
     hideMaturedAfterDays: config.deposits.hideMaturedAfterDays,
     marketDates,
     fundDay,
     fundInfo,
+    engine: { extras, fundLines, fundSnaps, moves },
   };
+}
+
+/** Two price lists of one fund as one, oldest first, one price a day. */
+function mergeNavs(
+  a: { date: string; nav: number }[],
+  b: { date: string; nav: number }[],
+): { date: string; nav: number }[] {
+  const by = new Map<string, number>();
+  for (const n of a) by.set(n.date, n.nav);
+  for (const n of b) by.set(n.date, n.nav);
+  return [...by.entries()]
+    .sort(([x], [y]) => x.localeCompare(y))
+    .map(([date, nav]) => ({ date, nav }));
 }
 export * from './digest-input';
 export * from './nav-history';
@@ -353,6 +491,7 @@ export * from './columns';
 export * from './price-source';
 export * from './sip-estimates';
 export * from './rate-sync';
+export * from './ledger';
 
 export * from './settings';
 export * from './rates';

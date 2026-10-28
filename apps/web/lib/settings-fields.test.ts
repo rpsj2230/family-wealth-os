@@ -119,6 +119,9 @@ describe('settings fields', () => {
         reconcileTolerance: '1',
         savingsRate: '3.5',
         tdsRate: '0',
+        savingsCreditMonths: '3',
+        unexplainedTolerance: '₹ 1,000',
+        openingDate: '',
         includeSip: 'on',
       }),
     );
@@ -139,8 +142,12 @@ describe('settings fields', () => {
           reconcileTolerance: 0.01,
           savingsRate: 0.035,
           interestTdsRate: 0,
+          savingsSlabIncremental: false,
+          savingsCreditMonths: 3,
+          unexplainedTolerance: 1000,
           includeSip: true,
         },
+        capital: { openingDate: '' },
       },
     });
   });

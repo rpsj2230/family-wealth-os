@@ -5,8 +5,9 @@
  * checked against the same figure on its own page. No I/O.
  */
 import type { OverviewPart } from './bank-overview';
+import { interestOfStored } from './deposit-contract';
 import { addDays as addIsoDays, type RaiseSource } from './liquidity';
-import { fdValueOn, type Compounding } from './fd';
+import { type Compounding } from './fd';
 import type { ForeignCash } from './foreign-cash';
 import { formatInr, formatInrCompact } from './money';
 import { isCounted, type AssetType, type ValuedAsset } from './networth';
@@ -357,6 +358,9 @@ export interface DepositForInterest {
   bookedOn: string;
   maturityOn: string;
   compounding: Compounding;
+  payout?: string | null;
+  bankMaturityAmount?: number | null;
+  endedOn?: string | null;
 }
 export interface DepositInterest {
   fy: string;
@@ -370,15 +374,22 @@ export interface DepositInterest {
   deposits: number;
 }
 
+/** Interest earned up to the start of a day on the deposit's contract (deposit-contract.ts), paid out or not. */
 const accrued = (d: DepositForInterest, on: string) =>
-  fdValueOn({
-    principal: d.principal,
-    annualRate: d.rate,
-    bookedOn: new Date(`${d.bookedOn}T00:00:00Z`),
-    asOf: new Date(`${on}T00:00:00Z`),
-    maturityOn: new Date(`${d.maturityOn}T00:00:00Z`),
-    compounding: d.compounding,
-  });
+  interestOfStored(
+    {
+      principal: d.principal,
+      rate: d.rate,
+      booked_on: d.bookedOn,
+      maturity_on: d.maturityOn,
+      compounding: d.compounding,
+      payout: d.payout ?? null,
+      bank_maturity_amount: d.bankMaturityAmount ?? null,
+      ended_on: d.endedOn ?? null,
+    },
+    d.bookedOn,
+    on,
+  );
 
 /**
  * Interest the running deposits have added this financial year, and what they add over the next `aheadDays` if held to maturity

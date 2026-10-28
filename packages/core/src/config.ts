@@ -56,6 +56,17 @@ export interface AppConfig {
     assumedGrowthOther: number;
     /** the history rebuilt by the app agrees with the workbook's Summary totals when within this share of the total (0.01 = 1%) */
     reconcileTolerance: number;
+    /** a bank's savings slabs apply to each part of the balance (incremental) rather than the whole balance at one slab's rate, unless the bank says otherwise */
+    savingsSlabIncremental: boolean;
+    /** savings interest is credited every this many months (3 = quarterly, as Indian banks do); until then it is accrued */
+    savingsCreditMonths: number;
+    /** a new balance within this many rupees of the estimate is explained; a larger difference is "not yet explained" until you classify it */
+    unexplainedTolerance: number;
+  };
+  /** the family's own money and its profit (capital.ts) */
+  capital: {
+    /** the day the family's own money is measured from (ISO date); empty: the first day with records for the holdings on file */
+    openingDate: string;
   };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
@@ -299,7 +310,11 @@ export const DEFAULT_CONFIG: AppConfig = {
     assumedGrowthRetirement: 0,
     assumedGrowthOther: 0,
     reconcileTolerance: 0.01,
+    savingsSlabIncremental: false,
+    savingsCreditMonths: 3,
+    unexplainedTolerance: 500,
   },
+  capital: { openingDate: '' },
   inbox: { trustedForwarders: [] },
   rates: {
     staleDays: 45,
@@ -573,6 +588,17 @@ export function configFromJson(raw: unknown): AppConfig {
       ),
       assumedGrowthOther: num(est.assumedGrowthOther, d.estimates.assumedGrowthOther, -0.2, 0.5),
       reconcileTolerance: num(est.reconcileTolerance, d.estimates.reconcileTolerance, 0, 1),
+      savingsSlabIncremental: bool(est.savingsSlabIncremental, d.estimates.savingsSlabIncremental),
+      savingsCreditMonths: [1, 3, 6, 12].includes(Number(est.savingsCreditMonths))
+        ? Number(est.savingsCreditMonths)
+        : d.estimates.savingsCreditMonths,
+      unexplainedTolerance: num(est.unexplainedTolerance, d.estimates.unexplainedTolerance, 0, 1e7),
+    },
+    capital: {
+      openingDate: (() => {
+        const v = obj(r.capital).openingDate;
+        return v === '' || v === null || v === undefined ? '' : isoDate(v, d.capital.openingDate);
+      })(),
     },
     inbox: {
       trustedForwarders: (() => {

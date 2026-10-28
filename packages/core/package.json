@@ -7,7 +7,8 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:definitions": "node --experimental-strip-types --no-warnings -e \"import('./src/figure.ts').then((m) => require('node:fs').writeFileSync('../../docs/DEFINITIONS.md', m.metricsMarkdown()))\""
   },
   "dependencies": {
     "decimal.js": "^10.6.0"

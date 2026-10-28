@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateSavings } from '../src/estimate';
+import { savingsOn } from '../src/savings-accrual';
 import { fdValueOn } from '../src/fd';
 import { bucketOf } from '../src/period-pl';
 import { periodAnchor } from '../src/return-profile';
@@ -23,6 +23,20 @@ import {
   type SavingsAccount,
 } from '../src/period-gains';
 
+/** a balance moved on at a rate after tax, credited quarterly */
+const grown = (amount: number, date: string, on: string, rate = 0.04, tds = 0.1) =>
+  savingsOn(
+    { date, amount },
+    [],
+    {
+      schedule: [
+        { from: '0000-01-01', slabs: [{ upTo: null, rate }], method: 'whole', source: 'account' },
+      ],
+      tds,
+      credit: 'quarterly',
+    },
+    on,
+  );
 const TODAY = '2026-10-26';
 const win = (
   key: PeriodWindow['key'],
@@ -462,7 +476,13 @@ describe('savings and cash', () => {
 
   it('earn the balance at the rate after tax at source, day by day', () => {
     const p = savingsPeriod([acct()], win('recent'));
-    expect(p.profit).toBeCloseTo((100_000 * 0.04 * 0.9 * 30) / 365, 8);
+    const w = win('recent');
+    expect(p.profit).toBeCloseTo(
+      grown(100_000, '2026-08-01', w.to).value - grown(100_000, '2026-08-01', w.from).value,
+      8,
+    );
+    // about 30 days at the rate after tax (the 30 Sep credit earns a little more)
+    expect(p.profit).toBeCloseTo((100_000 * 0.04 * 0.9 * 30) / 365, -1);
     expect(p.estimated).toBe(true);
     expect(p.putIn).toBe(0);
     expect(p.pct).toBeCloseTo(p.profit / 100_000, 10);
@@ -470,14 +490,7 @@ describe('savings and cash', () => {
 
   it('end the period at the same value the portfolio gives for today', () => {
     const p = savingsPeriod([acct()], win('recent'));
-    const est = estimateSavings({
-      balance: 100_000,
-      balanceAsOf: d('2026-08-01'),
-      today: d(TODAY),
-      annualRate: 0.04,
-      tdsRate: 0.1,
-    });
-    expect(p.endValue).toBeCloseTo(est.estimatedAmount, 8);
+    expect(p.endValue).toBeCloseTo(grown(100_000, '2026-08-01', TODAY).value, 8);
   });
 
   it('carry the last recorded balance forward, and start again from a new record', () => {
@@ -488,9 +501,14 @@ describe('savings and cash', () => {
       ],
     });
     const p = savingsPeriod([a], win('recent'));
-    const net = 0.04 * 0.9;
-    // 15 days on 1 lakh (26 Sep to 11 Oct), then 15 days on 4 lakh
-    expect(p.profit).toBeCloseTo((100_000 * net * 15 + 400_000 * net * 15) / 365, 8);
+    const w = win('recent');
+    // 15 days on 1 lakh (26 Sep to 11 Oct, with the 30 Sep credit), then 15 days on 4 lakh
+    expect(p.profit).toBeCloseTo(
+      grown(100_000, '2026-08-01', '2026-10-11').interest -
+        grown(100_000, '2026-08-01', w.from).interest +
+        grown(400_000, '2026-10-11', w.to).interest,
+      8,
+    );
     // the 3 lakh paid in is not profit: the average balance is the money at work
     expect(p.base).toBeCloseTo((100_000 * 15 + 400_000 * 15) / 30, 6);
   });
@@ -533,7 +551,7 @@ describe('savings and cash', () => {
     expect(p.profit).toBe(0);
     expect(p.empty).toBe(true);
     const both = savingsPeriod([acct(), usd], win('recent'));
-    expect(both.profit).toBeCloseTo((100_000 * 0.04 * 0.9 * 30) / 365, 8);
+    expect(both.profit).toBeCloseTo(savingsPeriod([acct()], win('recent')).profit, 8);
   });
 
   it('adds up: consecutive periods give the period as a whole', () => {

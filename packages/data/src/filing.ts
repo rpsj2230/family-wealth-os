@@ -20,7 +20,10 @@ export async function loadFdsForFiling(
   };
   const [assets, fds, inst, owners] = await Promise.all([
     sel('assets', 'id, owner_id, institution_id, nickname, account_kind, type, is_joint'),
-    sel('fixed_deposits', 'asset_id, principal, rate, booked_on, maturity_on, compounding'),
+    sel(
+      'fixed_deposits',
+      'asset_id, principal, rate, booked_on, maturity_on, compounding, payout, bank_maturity_amount, ended_on',
+    ),
     sel('institutions', 'id, name'),
     sel('owners', 'id, display_name, plan_role'),
   ]);
@@ -59,6 +62,12 @@ export async function loadFdsForFiling(
         bookedOn: f.booked_on as string,
         maturityOn: f.maturity_on as string,
         compounding: f.compounding as FdForFiling['compounding'],
+        payout: (f.payout as string | null) ?? null,
+        bankMaturityAmount:
+          f.bank_maturity_amount === null || f.bank_maturity_amount === undefined
+            ? null
+            : Number(f.bank_maturity_amount) / share,
+        endedOn: (f.ended_on as string | null) ?? null,
       });
   }
   return {

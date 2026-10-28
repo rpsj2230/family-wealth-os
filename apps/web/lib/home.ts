@@ -532,6 +532,9 @@ export function buildHome(i: HomeInput): HomeModel {
         bookedOn: r.fd!.bookedOn,
         maturityOn: r.fd!.maturityOn,
         compounding: r.fd!.compounding,
+        payout: r.fd!.payout ?? null,
+        bankMaturityAmount: r.fd!.bankMaturityAmount ?? null,
+        endedOn: r.fd!.endedOn,
       })),
     today,
   );

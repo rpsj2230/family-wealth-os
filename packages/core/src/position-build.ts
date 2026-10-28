@@ -17,8 +17,22 @@ import {
   type PositionInput,
 } from './position';
 import type { Portfolio } from './portfolio';
+import { DEFAULT_CONFIG } from './config';
+import {
+  contractOutOn,
+  depositOn,
+  findProceedsEvidence,
+  proceedsPlan,
+  type Payout,
+} from './deposit-contract';
+import { contractOf } from './position';
+import type { CreditEvery, RateStep, SavingsTxn } from './savings-accrual';
 
 export type PositionObservation = ObservationRow & { source_ref?: string | null };
+
+/** Interest credited every 1, 3, 6 or 12 months. */
+export const creditEvery = (months: number): CreditEvery =>
+  months === 1 ? 'monthly' : months === 6 ? 'half_yearly' : months === 12 ? 'yearly' : 'quarterly';
 
 /** The settings and market prices the engine reads. `fx` is the history of INR per unit by currency, oldest first. */
 export function positionConfig(
@@ -34,6 +48,9 @@ export function positionConfig(
     includeSip: cfg.estimates.includeSip,
     planTolerance: cfg.funds.planTolerance,
     rateGap: cfg.estimates.observedRateGap,
+    hideMaturedAfterDays: cfg.deposits.hideMaturedAfterDays,
+    savingsCredit: creditEvery(cfg.estimates.savingsCreditMonths),
+    slabMethod: cfg.estimates.savingsSlabIncremental ? 'incremental' : 'whole',
     growth: {
       property: cfg.estimates.assumedGrowthProperty,
       retirement: cfg.estimates.assumedGrowthRetirement,
@@ -77,6 +94,10 @@ export function positionAssetsFrom(args: {
   observations: PositionObservation[];
   fds: FdRow[];
   funds?: Record<string, PosFund>;
+  /** confirmed money in (+) and out (-) of each savings account */
+  moves?: Record<string, SavingsTxn[]>;
+  /** each savings account's rates by effective date */
+  rates?: Record<string, RateStep[]>;
 }): PositionAsset[] {
   const recs = recordsOf(args.observations);
   const fd = new Map(args.fds.map((f) => [f.asset_id, f]));
@@ -104,9 +125,16 @@ export function positionAssetsFrom(args: {
             compounding: f.compounding,
             bankMaturityAmount: f.bank_maturity_amount,
             endedOn: f.ended_on ?? null,
+            payout: (f.payout ?? 'cumulative') as Payout,
+            renewedFrom: f.renewed_from ?? null,
           }
         : null,
       fund: args.funds?.[a.id] ?? null,
+      institutionId: a.institution_id ?? null,
+      last4: a.identifier_last4 ?? null,
+      linkedLast4: a.linked_last4 ?? null,
+      ...(args.moves?.[a.id] ? { moves: args.moves[a.id] } : {}),
+      ...(args.rates?.[a.id] ? { rates: args.rates[a.id] } : {}),
     };
   });
 }
@@ -120,12 +148,83 @@ export function positionInputFrom(args: {
   today: string;
   fx?: PositionConfig['fx'];
   portfolio?: Portfolio;
+  /** confirmed placements of each deposit's maturity proceeds */
+  placements?: Record<string, { on: string; amount: number }[]>;
+  moves?: Record<string, SavingsTxn[]>;
+  rates?: Record<string, RateStep[]>;
 }): PositionInput {
+  const config = positionConfig(args.config, args.today, args.fx);
   return {
-    assets: positionAssetsFrom(args),
-    config: positionConfig(args.config, args.today, args.fx),
+    assets: attachProceeds(positionAssetsFrom(args), config, args.placements),
+    config,
     ...(args.portfolio ? { current: currentValues(args.portfolio) } : {}),
   };
+}
+
+/**
+ * Where each deposit's maturity proceeds stand (deposit-contract.ts): for a deposit that has stopped earning by today, the amount it
+ * paid, the evidence of where it went among the other holdings, and the placements you confirmed.
+ */
+export function attachProceeds(
+  assets: PositionAsset[],
+  c: PositionConfig,
+  placements: Record<string, { on: string; amount: number }[]> = {},
+): PositionAsset[] {
+  const deposits = assets
+    .filter((a) => a.fd && a.status !== 'gifted')
+    .map((a) => ({
+      assetId: a.assetId,
+      ownerId: a.ownerId,
+      institutionId: a.institutionId ?? null,
+      name: a.name,
+      bookedOn: a.fd!.bookedOn,
+      principal: a.fd!.principal,
+      renewedFrom: a.fd!.renewedFrom ?? null,
+    }));
+  const accounts = assets
+    .filter((a) => a.type === 'bank_account' && a.status !== 'gifted')
+    .map((a) => ({
+      assetId: a.assetId,
+      ownerId: a.ownerId,
+      institutionId: a.institutionId ?? null,
+      last4: a.last4 ?? null,
+      name: a.name,
+      currency: a.currency,
+      balanceDates: a.records.filter((r) => !r.sheet).map((r) => r.date),
+    }));
+  return assets.map((a) => {
+    const d = a.fd;
+    if (!d || a.status === 'gifted' || !(d.principal > 0)) return a;
+    const con = contractOf(d, c);
+    const outOn = contractOutOn(con);
+    if (outOn > c.today) return a;
+    const amount = depositOn(con, outOn).proceeds ?? 0;
+    if (!(amount > 0)) return a;
+    const evidence = findProceedsEvidence({
+      deposit: {
+        assetId: a.assetId,
+        ownerId: a.ownerId,
+        institutionId: a.institutionId ?? null,
+        linkedLast4: a.linkedLast4 ?? null,
+        principal: d.principal,
+      },
+      outOn,
+      amount,
+      deposits,
+      accounts,
+    });
+    const plan = proceedsPlan({
+      status: a.status,
+      outOn,
+      amount,
+      today: c.today,
+      hideAfterDays: c.hideMaturedAfterDays ?? DEFAULT_CONFIG.deposits.hideMaturedAfterDays,
+      confirmed: placements[a.assetId] ?? [],
+      evidence,
+      endedOn: d.endedOn,
+    });
+    return { ...a, fd: { ...d, proceeds: plan } };
+  });
 }
 
 /** One stored line of a fund's ledger. */

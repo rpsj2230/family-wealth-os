@@ -139,10 +139,11 @@ describe('the same period gives the same figure on every page', () => {
   });
 
   it('interest earned so far on the Deposits overview is the shared figure since the deposits began', () => {
-    const running = deposits.filter((d) => d.held && d.maturityOn >= today);
-    const so = depositPeriod(running, spanBetween('2000-01-01', today, today), today);
+    // the deposits counted today: running ones, and the proceeds of matured ones still awaiting confirmation
+    const counted = deposits.filter((d) => d.held);
+    const so = depositPeriod(counted, spanBetween('2000-01-01', today, today), today);
     expect(so.profit).toBeCloseTo(h.deposits.overview.profit, 4);
-    // and the card is the same figure: deposits past their date are in neither
+    // and the card is the same figure: deposits whose proceeds were placed are in neither
     expect(card('fd').profit).toBeCloseTo(h.deposits.overview.profit, 4);
   });
 

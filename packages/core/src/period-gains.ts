@@ -30,7 +30,14 @@
  * each sum taken out for the days it was gone. With no money moved that is exactly the value at the start. "Since the start" has no
  * value to start from, so a deposit or fund is measured against all the money put in. Pure; no I/O.
  */
-import { daysBetween, fdValueOn, type Compounding } from './fd';
+import { daysBetween, type Compounding } from './fd';
+import { depositOn, payoutSchedule, type Payout } from './deposit-contract';
+import {
+  savingsInterestBetween,
+  savingsOn,
+  type SavingsTerms,
+  type SavingsTxn,
+} from './savings-accrual';
 import { addDaysIso } from './harvest-lots';
 import { formatInr } from './money';
 import { fyBoundsOf, fyOf } from './tax';
@@ -271,25 +278,49 @@ export interface DepositTerms {
   bookedOn: string;
   maturityOn: string;
   compounding: Compounding;
-  /** still held today: a running deposit, counted in net worth (including one past its date that waits to be confirmed) */
+  /** cumulative (default) or paid out every month, quarter, half year or year */
+  payout?: Payout | null;
+  /** still held today: running, or its maturity proceeds still counted (awaiting confirmation) */
   held: boolean;
   /** the day it left (paid out or closed), when known; the maturity date is assumed otherwise */
   endedOn?: string | null;
+  /**
+   * The day its maturity proceeds stopped being counted (they were placed in an account or a new deposit, or assumed so); null while
+   * they are still counted. Left out: the proceeds leave the class the day the deposit stops earning.
+   */
+  placedOn?: string | null;
 }
 
-/** The day a deposit that is no longer held left the class, never later than today; null for a deposit still held. */
-const leftOn = (d: DepositTerms, today: string): string | null =>
-  d.held ? null : [d.endedOn ?? d.maturityOn, today].sort()[0]!;
+const contractOfTerms = (d: DepositTerms) => ({
+  principal: d.principal,
+  rate: Math.max(0, d.rate),
+  bookedOn: d.bookedOn,
+  maturityOn: d.maturityOn,
+  compounding: d.compounding,
+  payout: d.payout ?? 'cumulative',
+  endedOn: d.endedOn ?? null,
+});
 
-const depositValueOn = (d: DepositTerms, on: string) =>
-  fdValueOn({
-    principal: d.principal,
-    annualRate: Math.max(0, d.rate),
-    bookedOn: utc(d.bookedOn),
-    asOf: utc(on),
-    maturityOn: utc(d.maturityOn),
-    compounding: d.compounding,
-  });
+/**
+ * The day the deposit's money left the class: the day its proceeds were placed (a plan from deposit-contract.ts), else (no plan) the day
+ * it was paid out or closed or its maturity date, never later than today; null while it is still counted (running, or proceeds
+ * awaiting confirmation). It is still in the class at the start of that day: the sum leaving on it is money taken out that day.
+ */
+function leftOn(d: DepositTerms, today: string): string | null {
+  if (d.placedOn !== undefined) {
+    if (d.placedOn === null) return null;
+    return d.placedOn > today ? null : d.placedOn;
+  }
+  if (d.held) return null;
+  return [d.endedOn ?? d.maturityOn, today].sort()[0]!;
+}
+
+/** What the deposit holds at the start of a day while it is in the class: its value on its terms, then its proceeds (flat). */
+function depositValueAt(d: DepositTerms, on: string): number {
+  const day = depositOn(contractOfTerms(d), on);
+  if (day.state === 'not_yet') return 0;
+  return day.state === 'running' ? day.held : (day.proceeds ?? 0);
+}
 
 export function depositPeriod(deposits: DepositTerms[], w: Span, today: string): ClassPeriod {
   let start = 0;
@@ -300,15 +331,25 @@ export function depositPeriod(deposits: DepositTerms[], w: Span, today: string):
     const left = leftOn(d, today);
     // a deposit that "left" before it was booked is bad data: it never counted
     if (left !== null && left <= d.bookedOn) continue;
-    // held at the start of the period: booked before its first day and not yet paid out on it
+    if (d.endedOn && d.endedOn <= d.bookedOn) continue;
+    // held at the start of the period: booked before its first day and not gone before it
     if (d.bookedOn < w.from && (left === null || left >= w.from))
-      start += depositValueOn(d, w.from);
-    // held at its end: booked by its last day and not paid out by it
+      start += depositValueAt(d, w.from);
+    // held at its end: booked by its last day and not gone by it
     if (d.bookedOn <= w.through && (left === null || left > w.through))
-      end += depositValueOn(d, w.to);
+      end += depositValueAt(d, w.to);
     if (inside(d.bookedOn, w)) flows.push({ date: d.bookedOn, amount: d.principal });
+    // interest paid out to an account has left the deposit: earned, and money taken out of the class
+    for (const p of payoutSchedule(contractOfTerms(d)))
+      if (
+        p.date < d.maturityOn &&
+        inside(p.date, w) &&
+        (!d.endedOn || p.date < d.endedOn) &&
+        (left === null || p.date <= left)
+      )
+        flows.push({ date: p.date, amount: -p.amount });
     if (left !== null && inside(left, w))
-      flows.push({ date: left, amount: -depositValueOn(d, left) });
+      flows.push({ date: left, amount: -depositValueAt(d, left) });
   }
   const net = flows.reduce((a, f) => a + f.amount, 0);
   return finish(w, start, end, end - start - net, flows, false);
@@ -396,31 +437,54 @@ export interface SavingsAccount {
   rate: number;
   /** tax taken at source on the interest (decimal) */
   tdsRate: number;
-  /** recorded balances; the last one on or before a day is the balance on that day */
+  /** recorded balances; the last one on or before a day is the baseline of that day */
   balances: { date: string; amount: number }[];
+  /** the rates by effective date, slabs, tax and credit cycle (savings-accrual.ts); without them `rate` and `tdsRate`, credited quarterly */
+  terms?: SavingsTerms;
+  /** confirmed money in (+) and out (-) */
+  moves?: SavingsTxn[];
 }
+
+const termsOfAccount = (a: SavingsAccount): SavingsTerms =>
+  a.terms ?? {
+    schedule: [
+      {
+        from: '0000-01-01',
+        slabs: [{ upTo: null, rate: Math.max(0, a.rate) }],
+        method: 'whole',
+        source: 'account',
+      },
+    ],
+    tds: a.tdsRate,
+    credit: 'quarterly',
+  };
 
 /** Balance and interest earned since the record it rests on, and the days it is carried for, in the period. */
 function accountPeriod(a: SavingsAccount, w: Span) {
   const rec = new Map<string, number>();
   for (const b of a.balances) rec.set(b.date, b.amount);
-  const recs = [...rec.entries()].sort(([x], [y]) => x.localeCompare(y));
-  const net = Math.max(0, a.rate) * (1 - a.tdsRate);
+  const recs = [...rec.entries()]
+    .sort(([x], [y]) => x.localeCompare(y))
+    .map(([date, amount]) => ({ date, amount }));
+  const terms = termsOfAccount(a);
+  const moves = a.moves ?? [];
   const at = (on: string) => {
-    const hit = [...recs].reverse().find(([d]) => d <= on);
-    return hit ? hit[1] + (hit[1] * net * span(hit[0], on)) / 365 : 0;
+    const hit = [...recs].reverse().find((r) => r.date <= on);
+    return hit ? savingsOn(hit, moves, terms, on).value : 0;
   };
   let interest = 0;
   let balanceDays = 0;
-  recs.forEach(([d, amount], k) => {
-    const lo = d > w.from ? d : w.from;
-    const nextDate = recs[k + 1]?.[0];
+  recs.forEach((r, k) => {
+    const lo = r.date > w.from ? r.date : w.from;
+    const nextDate = recs[k + 1]?.date;
     const hi = nextDate !== undefined && nextDate < w.to ? nextDate : w.to;
     const days = Math.max(0, span(lo, hi));
-    interest += (Math.max(0, amount) * net * days) / 365;
-    balanceDays += Math.max(0, amount) * days;
+    if (days === 0) return;
+    interest += savingsInterestBetween(r, moves, terms, lo, hi);
+    balanceDays += Math.max(0, r.amount) * days;
   });
-  return { start: at(w.from), end: at(w.to), interest, balanceDays };
+  const flows = moves.filter((m) => inside(m.date, w) && recs.length > 0 && m.date > recs[0]!.date);
+  return { start: at(w.from), end: at(w.to), interest, balanceDays, flows };
 }
 
 export function savingsPeriod(accounts: SavingsAccount[], w: Span): ClassPeriod {
@@ -428,6 +492,7 @@ export function savingsPeriod(accounts: SavingsAccount[], w: Span): ClassPeriod 
   let end = 0;
   let profit = 0;
   let balanceDays = 0;
+  const flows: Flow[] = [];
   for (const a of accounts) {
     // an exchange rate is not interest: a foreign balance earns nothing here
     if (a.currency !== 'INR') continue;
@@ -436,10 +501,11 @@ export function savingsPeriod(accounts: SavingsAccount[], w: Span): ClassPeriod 
     end += p.end;
     profit += p.interest;
     balanceDays += p.balanceDays;
+    flows.push(...p.flows);
   }
-  // deposits and withdrawals are not tracked, so the money at work is the average balance carried over the period
+  // the money at work is the average balance carried over the period
   const base = w.days > 0 ? balanceDays / w.days : start;
-  return finish(w, start, end, profit, [], true, base);
+  return finish(w, start, end, profit, flows, true, base);
 }
 
 // ------------------------------------------------------------------------------------------------

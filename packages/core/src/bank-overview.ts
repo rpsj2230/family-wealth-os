@@ -161,6 +161,8 @@ const ratio = (a: number, b: number) => (b > 0 ? a / b : 0);
 
 /** Whether a row is in the totals: the same rule as the block totals. */
 function counted(r: BankRow): boolean {
+  // the central engine's rule when the row carries it (proceeds awaiting confirmation are counted once), else the older status rule
+  if (r.inNetWorth !== undefined && r.kind === 'fd') return r.inNetWorth;
   if (r.kind === 'fd' && r.fd) return r.status === 'active' && !r.fd.needsConfirmation;
   return r.status !== 'closed' && r.status !== 'stopped';
 }

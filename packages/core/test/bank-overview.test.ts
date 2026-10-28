@@ -86,7 +86,10 @@ const fds: FdRow[] = [
   }),
   fd('y-fd', { principal: 300_000, booked_on: '2025-10-20', maturity_on: '2026-10-20' }),
 ];
-const portfolio = buildPortfolio(assets, observations, fds, today);
+// y-fd's proceeds were placed the day after it matured (confirmed), so it is out of every total
+const portfolio = buildPortfolio(assets, observations, fds, today, undefined, {
+  placements: { 'y-fd': [{ on: '2026-10-21', amount: 400_000 }] },
+});
 const blocks = buildBankBlocks({
   assets,
   observations,
@@ -142,6 +145,31 @@ describe('bankOverview: the three totals', () => {
   });
 });
 
+describe('bankOverview: maturity proceeds awaiting confirmation', () => {
+  it('counts the proceeds of a matured deposit once, in the deposits total, until you say where they went', () => {
+    const p = buildPortfolio(assets, observations, fds, today);
+    const b = buildBankBlocks({
+      assets,
+      observations,
+      fds,
+      portfolio: p,
+      institutionNames: { eq: 'Equitas', yb: 'Yes Bank' },
+      today,
+    });
+    const o = bankOverview(b, base);
+    const row = b
+      .flatMap((x) => x.sections.flatMap((s) => s.rows))
+      .find((r) => r.assetId === 'y-fd')!;
+    expect(row.inNetWorth).toBe(true);
+    expect(row.fd!.proceedsAwaiting).toBe(true);
+    expect(row.fd!.listState).toBe('confirm');
+    expect(o.current).toBeCloseTo(ov.current + row.current!, 4);
+    expect(o.current).toBeCloseTo(p.netWorth.total, 0);
+    // it earns nothing after its date
+    expect(o.today.fd).toBeCloseTo(ov.today.fd, 9);
+  });
+});
+
 describe('bankOverview: today’s change', () => {
   it('a deposit earns its value today minus its value yesterday, a savings account one day at its rate', () => {
     const rows = blocks.flatMap((b) => b.sections.flatMap((s) => s.rows));
@@ -164,7 +192,9 @@ describe('bankOverview: today’s change', () => {
     // INR savings only: the Singapore account and the friend's money earn nothing here. A day's interest is the last recorded
     // balance at the rate, the shared definition of period-gains, so it is the same figure on every page
     const other = blocks[1]!.sections[0]!.rows[0]!;
-    expect(ov.today.savings).toBeCloseTo(((e.recorded! + other.recorded!) * 0.03) / 365, 8);
+    // (interest credited on 30 Sep earns too, so the day's interest is a little above the recorded balance at the rate)
+    expect(ov.today.savings).toBeCloseTo(((e.recorded! + other.recorded!) * 0.03) / 365, 1);
+    expect(ov.today.savings).toBeGreaterThanOrEqual(((e.recorded! + other.recorded!) * 0.03) / 365);
     expect(ov.today.change).toBeCloseTo(ov.today.fd + ov.today.savings, 9);
     expect(ov.today.basis).toBe('estimate');
   });
@@ -177,7 +207,8 @@ describe('bankOverview: today’s change', () => {
 
   it('takes the tax rate off savings interest', () => {
     const net = bankOverview(blocks, { ...base, tdsRate: 0.1 });
-    expect(net.today.savings).toBeCloseTo(ov.today.savings * 0.9, 9);
+    expect(net.today.savings).toBeCloseTo(ov.today.savings * 0.9, 2);
+    expect(net.today.savings).toBeLessThan(ov.today.savings);
   });
 });
 
