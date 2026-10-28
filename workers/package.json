@@ -15,6 +15,7 @@
     "numbers-check": "tsx src/numbers-check.ts",
     "diary": "tsx src/diary.ts",
     "wise": "tsx src/wise.ts",
+    "fund-txns": "tsx src/fund-txns.ts",
     "bank-statements": "tsx src/bank-statements.ts"
   },
   "dependencies": {

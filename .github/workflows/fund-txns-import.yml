@@ -1,0 +1,39 @@
+name: Fund transactions (by hand)
+# Run by hand only. The fund lines are this run's input (gzipped base64 JSON), never stored in the repository. "plan" writes nothing;
+# "apply" writes them through the same import as Import > fund transactions. The log shows fund names, counts and totals only.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      payload:
+        description: the lines, gzipped base64 JSON
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fund-txns-import
+  cancel-in-progress: false
+jobs:
+  funds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      FUND_B64: ${{ inputs.payload }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers fund-txns
