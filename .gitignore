@@ -2,6 +2,8 @@
 .local/
 *.xlsx
 *.xls
+# an invented statement used by the old-Excel reader's tests: no real data
+!packages/ingest/test/fixtures/sample-statement.xls
 *.csv
 *.pdf
 .env
