@@ -246,3 +246,18 @@ describe('a download from the day the account was opened, with no balances', () 
     expect(() => fromAccountOpening(late)).toThrow(/below zero/);
   });
 });
+
+describe('a heading spelt as one bank spells it', () => {
+  it('reads "Withdrawl Amt" as the money out', async () => {
+    const csv = [
+      ',ACCOUNT DETAILS,,,,,,,',
+      ',Transaction Date,Transaction Details,,Cheque ID,Value Date,Withdrawl Amt,Deposit Amt,Balance (₹)',
+      ',30/09/2026,Int.Pd:01-09-2026 to 30-09-2026,,,30/09/2026,,390,555853',
+      ',23/09/2026,Closure Proceeds,,,23/09/2026,,555463,555463',
+      ',08/09/2026,NEFT/RIB/SAMPLE PERSON,,,08/09/2026,67,,0',
+    ].join('\n');
+    const s = await readBankStatement(new TextEncoder().encode(csv));
+    expect(s.lines.map((l) => l.credit - l.debit)).toEqual([-67, 555_463, 390]);
+    expect(s).toMatchObject({ breaks: 0, opening: 67, closing: 555_853 });
+  });
+});

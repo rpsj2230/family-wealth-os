@@ -167,7 +167,7 @@ export function headingColumns(row: Cell[]): Columns | null {
   );
   const refAt = find(/chq|cheque|ref|instrument/);
   const ref = refAt === narration ? -1 : refAt;
-  const debit = find(/withdrawal|debit|^dr$|^dr amount|paid out|money out/);
+  const debit = find(/withdrawa?l|debit|^dr$|^dr amount|paid out|money out/);
   const credit = find(/deposit|credit|^cr$|^cr amount|paid in|money in/);
   const balance = find(/balance/);
   const drcr = find(/^(dr ?\/ ?cr|cr ?\/ ?dr|dr cr|cr dr|type|txn type|transaction type)$/);
