@@ -75,23 +75,42 @@ async function main() {
       (a) => a.owner_id === owner && a.institution_id === inst?.id && a.currency === 'INR',
     );
     const byDigits = cands.filter((a) => a.identifier_last4 === input.account.last4);
-    const nre = cands.filter((a) => a.account_kind === 'NRE');
+    // when the digits given are on no account there, an account with no digits on record can still be it, if it is the only one
+    const blank = cands.filter((a) => !a.identifier_last4);
+    const one = (list: Record<string, unknown>[]) => {
+      const nre = list.filter((a) => a.account_kind === 'NRE');
+      return list.length === 1 ? list[0] : nre.length === 1 ? nre[0] : undefined;
+    };
     const acct = input.account.last4
       ? byDigits.length === 1
         ? byDigits[0]
-        : undefined
-      : nre.length === 1
-        ? nre[0]
-        : cands.length === 1
-          ? cands[0]
-          : undefined;
+        : byDigits.length === 0
+          ? one(blank)
+          : undefined
+      : one(cands);
     if (!acct)
       throw new Error(
         `The account at ${bank ?? input.account.bank} (${input.account.person.slice(0, 2)}., …${input.account.last4}) was not found (${cands.length} at that bank: ${cands.map((c) => `…${String(c.identifier_last4 ?? '?')} ${String(c.account_kind ?? '')}`).join(', ')}).`,
       );
-    return { input, bank, assetId: acct.id as string };
+    return {
+      input,
+      bank,
+      assetId: acct.id as string,
+      fillLast4: !acct.identifier_last4 && input.account.last4 ? input.account.last4 : null,
+    };
   });
-  for (const r of resolved) await importOne(db, hh, write, r.input, r.bank, r.assetId);
+  for (const r of resolved) {
+    await importOne(db, hh, write, r.input, r.bank, r.assetId);
+    // the account's last four digits, from the statement, when none were on record
+    if (write && r.fillLast4) {
+      const { error } = await db
+        .from('assets')
+        .update({ identifier_last4: r.fillLast4 })
+        .eq('id', r.assetId)
+        .eq('household_id', hh);
+      if (error) throw new Error(`last four digits: ${error.message}`);
+    }
+  }
   if (!write) {
     console.log('Plan only: nothing was written. Run again with mode "apply" to write it.');
     return;
