@@ -190,6 +190,7 @@ const KIND: Record<string, string> = {
   switch_in: 'Switch in',
   switch_out: 'Switch out',
   dividend_reinvest: 'Dividend reinvested',
+  dividend_payout: 'IDCW paid out',
   bonus: 'Bonus units',
   redeem: 'Sale',
   other: 'Other',

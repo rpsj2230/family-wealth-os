@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isCashFlow, matchLines, statementLineKeys, type OnFileLine } from '@fwos/core';
 import { casDate, casNumber, classify, cleanSchemeName, fifoLots, parseCas } from '../src/cas';
 
 // Invented statement in the layout the CAMS and KFintech statements use.
@@ -38,6 +39,10 @@ describe('small readers', () => {
     expect(classify('Switch In from X', 5)).toBe('switch_in');
     expect(classify('Dividend Reinvested', 1)).toBe('dividend_reinvest');
     expect(classify('Purchase', 1)).toBe('purchase');
+    // the CAMS short form of a SIP instalment
+    expect(classify('Sys. Investment (12/120)', 10)).toBe('sip');
+    expect(classify('Sys. Investment Successfully Uploaded (1/120)', 10)).toBe('sip');
+    expect(classify('IDCW Reinvestment', 1)).toBe('dividend_reinvest');
   });
   it('cleans scheme names', () => {
     expect(
@@ -121,5 +126,58 @@ describe('fifoLots', () => {
   it('does not claim to be reconciled when the lots do not add up', () => {
     const r = fifoLots({ ...a!, closingUnits: 100 });
     expect(r.reconciled).toBe(false);
+  });
+});
+
+describe('IDCW paid out in cash', () => {
+  const WITH_PAYOUT = SAMPLE.replace(
+    '15-Jun-2025 Dividend Reinvested 500.00 5.000 100.00 205.000',
+    '15-Jun-2025 Dividend Reinvested 500.00 5.000 100.00 205.000\n15-Mar-2026 IDCW Paid @ Rs.0.25 per unit 51.25\n20-Mar-2026 *** Stamp Duty *** 1.00',
+  );
+
+  it('is read as its own line with no units, and the unit balance is untouched', () => {
+    const s = parseCas(WITH_PAYOUT).schemes[1]!;
+    const payout = s.transactions.find((t) => t.kind === 'dividend_payout');
+    expect(payout).toMatchObject({ date: '2026-03-15', amount: 51.25, units: 0, nav: null });
+    expect(s.transactions.filter((t) => t.kind === 'dividend_payout')).toHaveLength(1);
+    expect(s.closingUnits).toBe(205);
+    // the stamp-duty line is not a payout
+    expect(s.transactions.some((t) => /stamp/i.test(t.description))).toBe(false);
+  });
+
+  it('counts as money returned to you in the return, unlike a reinvested dividend', () => {
+    const t = parseCas(WITH_PAYOUT).schemes[1]!.transactions;
+    expect(t.filter(isCashFlow).map((x) => x.kind)).toEqual(['dividend_payout']);
+  });
+});
+
+describe('acceptance test 7: the same statement imported twice', () => {
+  it('finds every line of the second import already on file, so nothing is added twice', () => {
+    const first = parseCas(SAMPLE);
+    for (const s of first.schemes) {
+      const keys = statementLineKeys(s.folio, s.transactions);
+      const stmt = s.transactions.map((t, i) => ({
+        key: keys[i]!,
+        date: t.date,
+        kind: t.kind,
+        description: t.description,
+        amount: t.amount,
+        units: t.units,
+        nav: t.nav,
+        balance: t.balance,
+      }));
+      const onFile: OnFileLine[] = stmt.map((l) => ({ ...l, source: 'cas' }));
+      // the second import reads the same file again
+      const again = parseCas(SAMPLE).schemes.find((x) => x.folio === s.folio)!;
+      const keys2 = statementLineKeys(again.folio, again.transactions);
+      expect(keys2).toEqual(keys);
+      const m = matchLines(
+        again.transactions.map((t, i) => ({ ...stmt[i]!, key: keys2[i]!, date: t.date })),
+        onFile,
+        { units: 0.001, money: 1 },
+      );
+      expect(m.fresh).toHaveLength(0);
+      expect(m.duplicates).toBe(stmt.length);
+    }
   });
 });

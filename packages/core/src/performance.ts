@@ -18,9 +18,16 @@ export interface FundTxn {
   kind?: string | null;
 }
 
-/** A line that moves money in or out of the investor's pocket (units bought with a reinvested dividend do not). */
+/** An IDCW (dividend) paid out in cash: no units change hands, the money comes to you. */
+export const isIdcwPayout = (t: { units: number; amount: number; kind?: string | null }) =>
+  t.kind === 'dividend_payout' && t.units === 0 && t.amount !== 0;
+
+/**
+ * A line that moves money in or out of the investor's pocket: units bought or sold, and an IDCW paid out (units bought with a reinvested
+ * dividend do not). A payout has no units, so the usual "units bought: money in" rule takes it as money out to you.
+ */
 export const isCashFlow = (t: { units: number; amount: number; kind?: string | null }) =>
-  t.units !== 0 && t.amount !== 0 && t.kind !== 'dividend_reinvest';
+  (t.units !== 0 && t.amount !== 0 && t.kind !== 'dividend_reinvest') || isIdcwPayout(t);
 
 export interface FundForReturns {
   assetId: string;

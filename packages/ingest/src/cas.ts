@@ -9,6 +9,8 @@ export type CasKind =
   | 'sip'
   | 'switch_in'
   | 'dividend_reinvest'
+  /** an IDCW (dividend) paid out in cash: no units, money to you */
+  | 'dividend_payout'
   | 'bonus'
   | 'redeem'
   | 'switch_out'
@@ -99,13 +101,20 @@ const TXN = new RegExp(
   'g',
 );
 
+// a cash IDCW (dividend) line: date, a description that says it was paid out, the amount, and then no units column
+const PAYOUT = new RegExp(
+  String.raw`(${DATE})\s+((?:(?!${DATE}).){0,60}?\b(?:IDCW|Dividend)\b(?:(?!${DATE}).){0,20}?\b(?:Paid|Payout|Pay-?out)\b(?:(?!${DATE}).){0,60}?)\s+(${AMT})(?!\s+${UNITS}\s+${PRICE})(?=\s|$)`,
+  'gi',
+);
+
 export function classify(description: string, units: number): CasKind {
   const d = description.toLowerCase();
   if (units < 0) return /switch/.test(d) ? 'switch_out' : 'redeem';
   if (/switch/.test(d)) return 'switch_in';
-  if (/dividend|reinvest/.test(d)) return 'dividend_reinvest';
+  if (/dividend|idcw|reinvest/.test(d)) return 'dividend_reinvest';
   if (/bonus/.test(d)) return 'bonus';
-  if (/systematic|\bsip\b/.test(d)) return 'sip';
+  // "Systematic Investment", "SIP Purchase", and the CAMS short form "Sys. Investment (12/120)"
+  if (/systematic|\bsip\b|\bsys\.?\s*invest/.test(d)) return 'sip';
   if (/purchase|subscription|new fund offer|nfo|additional/.test(d)) return 'purchase';
   return 'other';
 }
@@ -165,6 +174,25 @@ function parseSchemeBody(
       balance: casNumber(m[6]!),
     });
   }
+  // an IDCW (dividend) paid out in cash has an amount and no units: "15-Mar-2026 IDCW Paid @ Rs.0.25 per unit 1,234.56"
+  for (const m of t.matchAll(PAYOUT)) {
+    const date = casDate(m[1]!);
+    if (!date) continue;
+    const description = m[2]!.replace(/\*+/g, ' ').replace(/\s+/g, ' ').trim();
+    const amount = casNumber(m[3]!);
+    if (!(amount > 0) || txns.some((x) => x.date === date && x.description === description))
+      continue;
+    txns.push({
+      date,
+      kind: 'dividend_payout',
+      description: description.slice(0, 200),
+      amount,
+      units: 0,
+      nav: null,
+      balance: null,
+    });
+  }
+  txns.sort((a, b) => a.date.localeCompare(b.date));
   // "dd-Mon-yyyy ***Cancelled***" / "***Cancellation***" in the table is a SIP cancelled on that date; a SIP started again afterwards
   // ("Instalment No - 1" later) is a replacement, not a stop
   const table = closeAtEarly(t);

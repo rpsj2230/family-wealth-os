@@ -60,6 +60,7 @@ export type LineKind =
   | 'sip'
   | 'switch_in'
   | 'dividend_reinvest'
+  | 'dividend_payout'
   | 'bonus'
   | 'redeem'
   | 'switch_out'

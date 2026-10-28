@@ -29,6 +29,7 @@ export const LEDGER_KIND_LABEL: Record<string, string> = {
   sip: 'SIP instalment',
   switch_in: 'Switch in',
   dividend_reinvest: 'Dividend reinvested',
+  dividend_payout: 'IDCW paid out',
   bonus: 'Bonus units',
   redeem: 'Sale',
   switch_out: 'Switch out',
@@ -42,7 +43,11 @@ export const LEDGER_TYPES: { key: string; label: string; kinds: string[] }[] = [
   { key: 'buy', label: 'One-off purchases', kinds: ['purchase', 'other'] },
   { key: 'sell', label: 'Sales', kinds: ['redeem'] },
   { key: 'switch', label: 'Switches', kinds: ['switch_in', 'switch_out'] },
-  { key: 'dividend', label: 'Dividends and bonus', kinds: ['dividend_reinvest', 'bonus'] },
+  {
+    key: 'dividend',
+    label: 'Dividends and bonus',
+    kinds: ['dividend_reinvest', 'dividend_payout', 'bonus'],
+  },
 ];
 
 export interface LedgerRow {

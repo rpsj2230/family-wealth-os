@@ -8,7 +8,7 @@ import { isEstimatedTxn } from './estimate';
 import { addDaysIso, addMonthsIso } from './harvest-lots';
 import { monthEnds, type SeriesPoint } from './fund-series';
 import { xirr } from './xirr';
-import { isCashFlow } from './performance';
+import { isCashFlow, isIdcwPayout } from './performance';
 
 const DAY = 86_400_000;
 const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
@@ -243,8 +243,13 @@ export function monthlyContributions(
   const at = new Map(list.map((m) => [m.month, m]));
   for (const x of txns) {
     const m = at.get(x.date.slice(0, 7));
-    if (!m || x.units === 0 || x.amount === 0) continue;
+    if (!m || x.amount === 0) continue;
     const a = Math.abs(x.amount);
+    // an IDCW paid out is money out of the fund to you
+    if (x.units === 0) {
+      if (isIdcwPayout(x)) m.out += a;
+      continue;
+    }
     if (x.units < 0) m.out += a;
     else if (x.kind === 'sip') m.sip += a;
     else if (MOVED_KINDS.has(x.kind)) m.moved += a;
