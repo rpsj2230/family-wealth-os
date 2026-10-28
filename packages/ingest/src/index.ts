@@ -88,3 +88,4 @@ export * from './statement-mail';
 export * from './statement-scan';
 export * from './cas-open';
 export * from './bank-statement';
+export * from './diary-history';

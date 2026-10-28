@@ -93,6 +93,11 @@ export interface HistoryOptions {
   pins?: Record<string, string>;
   /** Settings: how the other tabs are used to identify a line (defaults from the built-in configuration) */
   identity?: { jumpFactor?: number; jumpFloor?: number; tieRatio?: number };
+  /**
+   * The latest tab is itself in the past (old diary notes, not the workbook's current month): a deposit it lists that is not on file
+   * and has matured since is added as matured on its maturity day, instead of waiting for the current month to be imported.
+   */
+  latestIsHistory?: boolean;
 }
 
 /** Source references: a value written by this importer is recognised by its reference. */
@@ -1117,16 +1122,26 @@ export function planHistoryFrom(wb: ExcelJS.Workbook, opts: HistoryOptions): His
     const months = [...new Set(inTimeline.map((x) => ymKey(x.t.ym)))].sort();
     const first = months[0]!;
     const last = months[months.length - 1]!;
-    if (last === latestMonth) {
+    // in the latest tab: on file already unless the tabs are old notes and it is a deposit that has matured since
+    const latestMaturity =
+      last === latestMonth && g.kind === 'fd'
+        ? (g.rows[g.rows.length - 1]!.row.fd?.maturityOn ?? null)
+        : null;
+    if (
+      last === latestMonth &&
+      !(opts.latestIsHistory && latestMaturity && latestMaturity <= opts.today)
+    ) {
       skipGroup.set(
         key,
-        'It is still listed in the latest tab but is not on file. Import balances and deposits for the latest tab first.',
+        opts.latestIsHistory
+          ? 'It is in the latest note and may still be held: add it on Accounts if it is not on file.'
+          : 'It is still listed in the latest tab but is not on file. Import balances and deposits for the latest tab first.',
       );
       continue;
     }
     const nextIdx = timeline.findIndex((m) => m > last);
-    const endedMonth = timeline[nextIdx]!;
-    const endAsOf = asOfOfMonth.get(endedMonth)!;
+    const endedMonth = nextIdx >= 0 ? timeline[nextIdx]! : latestMaturity!.slice(0, 7);
+    const endAsOf = nextIdx >= 0 ? asOfOfMonth.get(endedMonth)! : latestMaturity!;
     const lastAsOf = asOfOfMonth.get(last)!;
     const sample = inTimeline[inTimeline.length - 1]!.row;
     const firstAsOf = asOfOfMonth.get(first)!;
