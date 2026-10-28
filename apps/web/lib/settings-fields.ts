@@ -1034,8 +1034,7 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
         .map((x) => x.trim().toLowerCase().replace(/\s+/g, ' '))
         .filter(Boolean);
       const bad = rows.find((x) => x.length < 2 || x.length > 60);
-      if (bad)
-        return { ok: false, message: `${f.label}: “${bad}” should be 2 to 60 characters.` };
+      if (bad) return { ok: false, message: `${f.label}: “${bad}” should be 2 to 60 characters.` };
       if (rows.length > 60) return { ok: false, message: `${f.label}: at most 60 lines.` };
       bucket[key] = [...new Set(rows)];
       continue;
