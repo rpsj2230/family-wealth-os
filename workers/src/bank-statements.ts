@@ -98,6 +98,22 @@ async function main() {
     lines += s.lines.length;
     if (!write) {
       const wrong = await conflictingBalances(db, assetId, s);
+      if (opened && wrong.length) {
+        // how far apart, and whether the recorded figure is the statement's on a nearby day (a reading taken on another date)
+        const near = (o: { as_of: string; amount: number }) =>
+          s.lines.some(
+            (l) =>
+              Math.abs(Date.parse(l.date) - Date.parse(o.as_of)) <= 20 * 86400000 &&
+              Math.abs((l.balance ?? 0) - Number(o.amount)) <= 1,
+          );
+        const gaps = wrong.map((w) => Math.abs(Number(w.amount) - w.proved!)).sort((a, b) => a - b);
+        const pct = wrong.map(
+          (w) => Math.abs(Number(w.amount) - w.proved!) / Math.max(w.proved!, 1),
+        );
+        console.log(
+          `  differences: median ${Math.round(gaps[Math.floor(gaps.length / 2)]!)}, largest ${Math.round(gaps[gaps.length - 1]!)}; within 1% ${pct.filter((x) => x <= 0.01).length}, within 10% ${pct.filter((x) => x <= 0.1).length}; recorded figure is the balance on a day within 20 days ${wrong.filter(near).length}; recorded higher ${wrong.filter((w) => Number(w.amount) > w.proved!).length}; years ${[...new Set(wrong.map((w) => w.as_of.slice(0, 4)))].join(' ')}`,
+        );
+      }
       console.log(
         `- ${tag}: ${s.lines.length} lines, ${s.breaks} breaks${opened ? `, balances summed from the opening (closing ${Math.round(s.closing ?? 0)}), ${wrong.length} recorded balances differ` : ''}${s.warnings.length ? `; ${s.warnings.join(' ')}` : ''}`,
       );
