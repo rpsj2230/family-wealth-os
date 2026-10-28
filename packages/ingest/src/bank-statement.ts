@@ -240,7 +240,30 @@ function finish(
   last4: string | null,
   warnings: string[],
 ): BankStatement {
-  const s = settle(lines);
+  let s = settle(lines);
+  // a line that shows no amount but moves the balance (a bank printing ₹0.62 of tax as 0.00): its amount is the balance's move
+  const blank = (l: StatementLine) => l.debit === 0 && l.credit === 0;
+  if (s.lines.some(blank)) {
+    let filled = 0;
+    const kept: StatementLine[] = [];
+    for (const l of s.lines) {
+      const prev = kept[kept.length - 1]?.balance;
+      if (blank(l)) {
+        const move =
+          prev !== undefined && prev !== null && l.balance !== null
+            ? Math.round((l.balance - prev) * 100) / 100
+            : 0;
+        if (Math.abs(move) < 0.005) continue;
+        kept.push({ ...l, debit: move < 0 ? -move : 0, credit: move > 0 ? move : 0 });
+        filled++;
+      } else kept.push(l);
+    }
+    if (filled > 0)
+      warnings.push(
+        `${filled} line${filled === 1 ? '' : 's'} showed no amount but moved the balance; the amount was taken from the balance.`,
+      );
+    s = settle(kept);
+  }
   const ls = s.lines;
   const first = ls[0];
   const last = ls[ls.length - 1];
@@ -346,7 +369,7 @@ export function readStatementGrid(grid: Cell[][]): BankStatement {
     }
     if (/^(opening|closing) balance|^b\/f|^brought forward|^balance forward/i.test(narration))
       continue;
-    if (debit === 0 && credit === 0) {
+    if (debit === 0 && credit === 0 && balance === null) {
       skipped++;
       continue;
     }

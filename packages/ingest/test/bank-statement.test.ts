@@ -261,3 +261,21 @@ describe('a heading spelt as one bank spells it', () => {
     expect(s).toMatchObject({ breaks: 0, opening: 67, closing: 555_853 });
   });
 });
+
+describe('a line printed with no amount', () => {
+  it('takes its amount from the balance when the balance moved, and drops it when it did not', async () => {
+    const csv = [
+      'Txn Date,Narration,Deposits,Withdrawal,Balance',
+      '01/04/2025,TAX DEDUCTED,0.00,0.00,334.53',
+      '01/04/2025,CREDIT INTEREST CAPITALISED,2.00,0.00,335.15',
+      '01/01/2025,TAX DEDUCTED,0.00,0.00,333.15',
+      '01/01/2025,CREDIT INTEREST CAPITALISED,2.00,0.00,333.15',
+      '31/12/2024,NEFT CR SAMPLE,331.15,0.00,331.15',
+    ].join('\n');
+    const s = await readBankStatement(new TextEncoder().encode(csv));
+    expect(s.breaks).toBe(0);
+    expect(s.lines.map((l) => Math.round((l.credit - l.debit) * 100) / 100)).toEqual([
+      331.15, 2, 2, -0.62,
+    ]);
+  });
+});
