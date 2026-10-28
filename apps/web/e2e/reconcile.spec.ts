@@ -57,6 +57,21 @@ test.describe('Explain movements (public sample)', () => {
     await noSideways(page);
   });
 
+  test('interest: what the banks reported against the estimate, with a year to settle', async ({
+    page,
+  }) => {
+    await page.goto('/demo/reconcile?tab=interest');
+    await expect(
+      page.getByRole('heading', { name: /Interest: what the banks reported/ }),
+    ).toBeVisible();
+    await expect(page.getByTestId('rc-i-cover')).toContainText('1 year to settle');
+    const flagged = page.locator('li.rc-item[data-state="flagged"]');
+    await expect(flagged).toHaveCount(1);
+    await expect(flagged.getByRole('button', { name: /Record as extra earnings/ })).toBeVisible();
+    await expect(page.locator('li.rc-item[data-state="ok"]')).toHaveCount(1);
+    await noSideways(page);
+  });
+
   test('Home links to it from the sample', async ({ page }) => {
     await page.goto('/demo/dashboard');
     await expect(page.getByRole('link', { name: 'Explain movements' }).first()).toHaveAttribute(

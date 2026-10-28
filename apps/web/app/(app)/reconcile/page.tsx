@@ -1,15 +1,17 @@
 import { redirect } from 'next/navigation';
-import { positionInputFrom, reconcileQueue } from '@fwos/core';
-import { loadSettings } from '@fwos/data';
+import { interestCheck, positionInputFrom, reconcileQueue } from '@fwos/core';
+import { capitalStart, loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
 import { loadHistoryReview } from '@/lib/history-data';
 import { holdingLabels } from '@/lib/holding-label';
+import { loadReportedInterest } from '@/lib/interest-data';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { confirmProceeds, explainBalance, recordFunding } from './actions';
 import { History } from './History';
+import { Interest, type InterestAnswer } from './Interest';
 import { Recent } from './Recent';
 import './reconcile.css';
 
@@ -25,7 +27,7 @@ export default async function Reconcile({
   searchParams: Promise<{ msg?: string; tab?: string }>;
 }) {
   const { msg, tab: tabParam } = await searchParams;
-  const tab = tabParam === 'history' ? 'history' : 'recent';
+  const tab = tabParam === 'history' || tabParam === 'interest' ? tabParam : 'recent';
   if ((await loadAccess()).role === 'emergency_viewer') redirect('/emergency');
   const { supabase } = await loadContext();
   const loaded = await loadPortfolio(supabase);
@@ -83,6 +85,40 @@ export default async function Reconcile({
     .filter((a) => a.status !== 'gifted')
     .map((a) => ({ id: a.id, label: labels[a.id]! }))
     .sort((x, y) => x.label.localeCompare(y.label));
+  const interest = tab === 'interest' ? await interestTab() : null;
+
+  /** Interest: each stored AIS or Form 26AS against the estimate for the same person's taxable accounts, and the years already settled. */
+  async function interestTab() {
+    const nre = new Set(loaded.assetRows.filter((a) => a.account_kind === 'NRE').map((a) => a.id));
+    const rows = interestCheck({
+      position,
+      statements: await loadReportedInterest(supabase as unknown as SupabaseClient),
+      taxable: (id) => !nre.has(id),
+      tolerance: {
+        rupees: config.estimates.unexplainedTolerance,
+        share: config.estimates.reconcileTolerance,
+      },
+      coveredFrom: capitalStart(loaded, config),
+    });
+    const answers: InterestAnswer[] = loaded.engine.moves
+      .filter((m) => m.status === 'confirmed' && /^ais:[^:]+:\d{4}-\d{2}$/.test(m.idemKey ?? ''))
+      .map((m) => {
+        const [, ownerId = '', fy = ''] = m.idemKey!.split(':');
+        return {
+          key: m.idemKey!,
+          ownerId,
+          fy,
+          amount: m.fromAssetId === null ? m.amount : -m.amount,
+          assetId: m.toAssetId ?? m.fromAssetId,
+        };
+      });
+    const accountsOf: Record<string, { id: string; label: string }[]> = {};
+    for (const a of accounts)
+      (accountsOf[a.owner_id] ??= []).push({ id: a.id, label: labels[a.id]! });
+    for (const list of Object.values(accountsOf))
+      list.sort((x, y) => x.label.localeCompare(y.label));
+    return { rows, answers, accountsOf };
+  }
 
   return (
     <>
@@ -106,9 +142,17 @@ export default async function Reconcile({
         tabs={[
           { key: 'recent', label: 'Recent', badge: q.count || null },
           { key: 'history', label: 'Earlier months' },
+          { key: 'interest', label: 'Interest (AIS)' },
         ]}
       />
-      {history ? (
+      {interest ? (
+        <Interest
+          rows={interest.rows}
+          answers={interest.answers}
+          ownerName={Object.fromEntries(loaded.ownerName)}
+          accountsOf={interest.accountsOf}
+        />
+      ) : history ? (
         <History
           review={history.review}
           answers={history.answers}

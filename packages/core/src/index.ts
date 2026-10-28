@@ -97,5 +97,6 @@ export * from './valuation';
 export * from './savings-rates';
 export * from './capital';
 export * from './history-review';
+export * from './interest-check';
 export * from './fund-views';
 export * from './reconcile';

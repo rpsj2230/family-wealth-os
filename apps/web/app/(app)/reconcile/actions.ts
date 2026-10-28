@@ -279,3 +279,77 @@ function historyDone(message: string): never {
   revalidatePath('/');
   redirect(`/reconcile?tab=history&msg=${encodeURIComponent(message)}`);
 }
+
+const FY = /^\d{4}-\d{2}$/;
+
+/**
+ * Records the difference between the interest the tax department was told about (AIS or Form 26AS) and the interest the app estimated
+ * for one person's taxable accounts in one finished year (Explain movements > Interest). It is earnings, not money moved: one confirmed
+ * movement of kind income on the account you chose, dated the year's last day, into the account when the banks paid more than the
+ * estimate and out of it when they paid less. One answer per person and year; saving it again changes nothing.
+ */
+export async function recordInterestDifference(f: FormData): Promise<void> {
+  const fy = String(f.get('fy') ?? '');
+  const owner = String(f.get('owner') ?? '');
+  const asset = String(f.get('asset') ?? '');
+  const direction = String(f.get('direction') ?? '');
+  const amount = money(f.get('amount'));
+  if (
+    !FY.test(fy) ||
+    !UUID.test(owner) ||
+    !UUID.test(asset) ||
+    amount === null ||
+    !['more', 'less'].includes(direction)
+  )
+    interestDone('Choose the account and the amount.');
+  const end = `${Number(fy.slice(0, 4)) + 1}-03-31`;
+  if (end >= new Date().toISOString().slice(0, 10))
+    interestDone('A year still running cannot be settled: wait until it ends.');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) interestDone('Create your household first.');
+  const { data: held } = await supabase
+    .from('assets')
+    .select('id')
+    .eq('id', asset)
+    .eq('owner_id', owner)
+    .eq('household_id', householdId!)
+    .maybeSingle();
+  if (!held) interestDone('Choose one of that person’s own accounts.');
+  const r = await write([
+    {
+      moved_on: end,
+      amount,
+      from_asset_id: direction === 'more' ? null : asset,
+      to_asset_id: direction === 'more' ? asset : null,
+      kind: 'income',
+      note: `Interest reported for ${fy} against the app's estimate`,
+      idem_key: `ais:${owner}:${fy}`,
+    },
+  ]);
+  if (r !== 'ok' && r !== 'duplicate') interestDone(r);
+  interestDone(
+    r === 'duplicate'
+      ? 'That year is already settled. Undo it first to record a different amount.'
+      : 'Recorded as earnings for that year: lifetime profit now matches the interest reported.',
+  );
+}
+
+/** Takes back a settled year: its difference is "not yet explained" again. */
+export async function undoInterestDifference(f: FormData): Promise<void> {
+  const key = String(f.get('key') ?? '');
+  if (!/^ais:[0-9a-f-]{36}:\d{4}-\d{2}$/.test(key)) interestDone('That answer was not found.');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) interestDone('Create your household first.');
+  const { error } = await supabase
+    .from('money_moves')
+    .delete()
+    .eq('household_id', householdId!)
+    .eq('idem_key', key);
+  interestDone(error ? `That could not be undone: ${error.message}` : 'Answer taken back.');
+}
+
+function interestDone(message: string): never {
+  revalidatePath('/reconcile');
+  revalidatePath('/');
+  redirect(`/reconcile?tab=interest&msg=${encodeURIComponent(message)}`);
+}
