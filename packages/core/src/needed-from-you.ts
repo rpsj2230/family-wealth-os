@@ -149,8 +149,8 @@ export function neededFromYou(input: {
 }
 
 /**
- * The first recorded balance from which the summed lines are off by the same amount at every later one (within 2% of it, and at
- * least three times): a missing line, and the days it can be in. A missing debit can only fall on a day after which the summed
+ * The first recorded balance from which the summed lines are off by the same amount at every later one (within 10% of it, at
+ * least three times and at most of the later ones): a missing line, and the days it can be in. A missing debit can only fall on a day after which the summed
  * balance stays above the amount (the real one cannot go below zero).
  */
 export function steadyGap(
@@ -179,7 +179,8 @@ export function steadyGap(
     const g = checks[i]!.gap;
     if (Math.abs(g) < 1000) continue;
     const later = checks.slice(i);
-    const same = later.filter((c) => Math.abs(c.gap - g) <= Math.abs(g) * 0.02);
+    // within 10%: a balance on record is often read a few days off the month's end, so the gap wobbles around the missing line
+    const same = later.filter((c) => Math.abs(c.gap - g) <= Math.abs(g) * 0.1);
     if (same.length < 3 || same.length < later.length * 0.6) continue;
     const lastGood = [...checks.slice(0, i)].reverse().find((c) => Math.abs(c.gap) < 1000);
     let from = lastGood ? addDaysIso(lastGood.date, 1) : lines[0]!.date;
@@ -188,8 +189,10 @@ export function steadyGap(
       // day the summed balance was below it
       const before = run.filter((r) => r.date < checks[i]!.date);
       const low = before.map((r) => r.balance < -g - 0.5).lastIndexOf(true);
-      const next = low >= 0 ? before[low + 1] : undefined;
-      if (next && next.date > from) from = next.date;
+      if (low >= 0) {
+        const after = before[low + 1]?.date ?? addDaysIso(before[low]!.date, 1);
+        if (after > from) from = after;
+      }
     }
     return { from, to: endOfMonth(checks[i]!.date), amount: g };
   }

@@ -1,9 +1,9 @@
-import { neededFromYou, type AppConfig, type Need } from '@fwos/core';
+import { classifyLines, neededFromYou, type AppConfig, type Need } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData, type LoadedPortfolio } from './index';
 import { pageAll } from './paging';
 import { loadSettings } from './settings';
-import { loadStatements } from './statement-store';
+import { classifyContext, loadStatements, stmtLinesOf } from './statement-store';
 
 const PREFIX = 'needed:';
 const PROVEN = new Set(['statement', 'person']);
@@ -98,7 +98,13 @@ export async function loadNeeds(
         amount: Number(r.amount_inr),
         candidates: r.candidate_asset_ids ?? [],
       })),
-    toAnswer: pre?.toAnswer ?? 0,
+    // the lines still to answer, sorted by the same rules as Explain movements when the caller has not counted them
+    toAnswer:
+      pre?.toAnswer ??
+      classifyLines(
+        stmtLinesOf(stored.lines, loaded),
+        classifyContext(loaded, config, stored.remittances),
+      ).filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out').length,
     ownershipFrom: config.capital.ownershipFrom,
   });
 }

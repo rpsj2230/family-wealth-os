@@ -82,4 +82,18 @@ describe('a line missing from a download with no balances', () => {
   it('finds nothing when the balances agree', () => {
     expect(steadyGap(lines, [{ date: '2020-08-31', amount: 692_050 }])).toBeNull();
   });
+  it('allows for balances read a few days off the month’s end', () => {
+    const wobbly = [
+      { date: '2020-03-31', amount: 200_050 },
+      { date: '2020-05-31', amount: 170_050 },
+      { date: '2020-08-31', amount: 192_050 },
+      { date: '2020-09-30', amount: 230_000 },
+      { date: '2020-10-31', amount: 192_050 },
+    ];
+    expect(steadyGap(lines, wobbly)).toMatchObject({
+      from: '2020-02-05',
+      to: '2020-03-31',
+      amount: -500_000,
+    });
+  });
 });
