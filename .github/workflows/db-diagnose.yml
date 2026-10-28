@@ -31,6 +31,10 @@ jobs:
             from public.mf_positions p left join public.amfi_schemes s on s.code = p.amfi_code group by 1 order by 1;
           \echo '== fund statement lines by kind, counts only'
           select kind, count(*) from public.mf_transactions group by 1 order by 1;
+          \echo '== statement lines classed "other": description pattern (digits masked), sign of units and amount, count'
+          select regexp_replace(regexp_replace(lower(left(description, 45)), '[0-9]', '#', 'g'), '[a-z]{2,}[0-9#]{4,}', '…', 'g') as pattern,
+                 sign(units) as units_sign, sign(amount) as amount_sign, count(*)
+            from public.mf_transactions where kind = 'other' group by 1, 2, 3 order by 4 desc limit 20;
           \echo '== fund statements imported, counts only'
           select outcome, count(*) from public.cas_imports group by 1 order by 1;
           SQL
