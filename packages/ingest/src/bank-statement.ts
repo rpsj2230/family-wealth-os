@@ -14,6 +14,7 @@
  *
  * Pure apart from opening the file: no database, no AI.
  */
+import { gridsFromXls } from './xls-binary';
 import ExcelJS from 'exceljs';
 import { casPdfText } from './cas-pdf';
 import { maskIdentifiers } from './workbook';
@@ -608,10 +609,15 @@ export async function readBankStatement(
   password?: string,
 ): Promise<BankStatement> {
   const kind = statementFileKind(bytes);
-  if (kind === 'xls-binary')
-    throw new Error(
-      'This is an old Excel file (.xls). Open it in Excel or Google Sheets and save it as .xlsx or CSV, then choose it again.',
-    );
+  if (kind === 'xls-binary') {
+    // an old Excel file (Excel 97–2003): the sheet with the most statement lines
+    let best: BankStatement | null = null;
+    for (const g of gridsFromXls(bytes)) {
+      const st = readStatementGrid(g);
+      if (st.lines.length > (best?.lines.length ?? -1)) best = st;
+    }
+    return best ?? readStatementGrid([]);
+  }
   if (kind === 'pdf') {
     const t = await casPdfText(bytes, password);
     return readStatementText(t.split('\n'));

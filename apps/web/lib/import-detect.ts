@@ -76,10 +76,10 @@ export function detectImport(file: { name: string; size: number }, head: string)
     };
   if (ext === 'xls')
     return {
-      kind: null,
+      kind: 'bank',
       confident: false,
       message:
-        'This is an old Excel file. Open it in Excel, choose Save As, pick .xlsx and choose that file.',
+        'This is an old Excel file, which banks send as account statements, so its lines are read. If it is something else, say what it is below.',
     };
 
   if (ext === 'csv') {

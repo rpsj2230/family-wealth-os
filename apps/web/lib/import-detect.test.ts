@@ -16,10 +16,10 @@ describe('detectImport', () => {
     expect(d.confident).toBe(true);
   });
 
-  it('an old .xls file asks for a re-save instead of failing later', () => {
+  it('an old .xls file is read as a bank statement, and the person can say otherwise', () => {
     const d = detectImport(f('sheet.xls'), '');
-    expect(d.kind).toBeNull();
-    expect(d.message).toMatch(/Save As/);
+    expect(d).toMatchObject({ kind: 'bank', confident: false });
+    expect(d.message).toMatch(/old Excel file/);
   });
 
   it('a CSV with Folio and Units columns is a fund export; any other CSV needs a confirmation', () => {
