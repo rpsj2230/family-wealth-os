@@ -48,7 +48,24 @@ describe('detectImport', () => {
     expect(detectImport(f('Rupash AIS 2025-26.pdf'), '%PDF')).toMatchObject({ kind: 'tax' });
     const unknown = detectImport(f('scan0001.pdf'), '%PDF');
     expect(unknown.kind).toBeNull();
-    expect(unknown.message).toMatch(/fund statement or a tax statement/);
+    expect(unknown.message).toMatch(/a fund statement, a tax statement or a bank statement/);
+  });
+
+  it('a bank statement is told apart by its name or its columns', () => {
+    expect(detectImport(f('Acct Statement_XX1234_01042024.xlsx'), 'PK')).toMatchObject({
+      kind: 'bank',
+      confident: true,
+    });
+    expect(detectImport(f('OpTransactionHistory01-04-2024.xlsx'), 'PK').kind).toBe('bank');
+    expect(detectImport(f('Family workbook.xlsx'), 'PK').kind).toBe('workbook');
+    expect(detectImport(f('AccountStatement.pdf'), '%PDF')).toMatchObject({
+      kind: 'bank',
+      confident: false,
+    });
+    expect(detectImport(f('Consolidated Account Statement.pdf'), '%PDF').kind).toBe('cas');
+    const head = 'Sample Bank\nDate,Narration,Chq/Ref,Withdrawal Amt,Deposit Amt,Closing Balance\n';
+    expect(detectImport(f('export.csv'), head).kind).toBe('bank');
+    expect(detectImport(f('export.xls'), `<table><tr><td>${head}</td></tr>`).kind).toBe('bank');
   });
 
   it('does not mistake a name that merely contains letters of a keyword', () => {
@@ -102,7 +119,7 @@ describe('guessOwner', () => {
 
 describe('KIND_CHOICES', () => {
   it('lists each kind once, in plain words', () => {
-    expect(KIND_CHOICES.map((k) => k.kind)).toEqual(['workbook', 'cas', 'csv', 'tax']);
+    expect(KIND_CHOICES.map((k) => k.kind)).toEqual(['workbook', 'cas', 'csv', 'tax', 'bank']);
     expect(KIND_CHOICES.every((k) => !/observation/i.test(k.label))).toBe(true);
   });
 });

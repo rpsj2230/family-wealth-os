@@ -5,6 +5,7 @@ import { TaxFileForm } from '@/app/(app)/tax/filing/TaxFileForm';
 import { KIND_CHOICES, detectMany, guessOwner, type ImportKind } from '@/lib/import-detect';
 import { CasForm, FundCsvForm, ImportForm, SyncLayoutForm } from './ImportForm';
 import { HistoryForm } from './HistoryForm';
+import { BankStatementForm } from './BankStatementForm';
 import '@/components/quickedit.css';
 
 interface Chosen {
@@ -25,12 +26,15 @@ async function peek(file: File): Promise<string> {
  */
 export function ImportDoor({
   owners,
+  accounts = [],
   today,
   taxFy,
   hasWorkbook,
   demo = false,
 }: {
   owners: { id: string; name: string }[];
+  /** the bank accounts a statement can be for, labelled so they can be told apart */
+  accounts?: { id: string; label: string; last4: string | null }[];
   today: string;
   taxFy: string;
   /** a workbook has been imported before: only its order, names and links usually need updating */
@@ -219,6 +223,20 @@ export function ImportDoor({
                   owners={owners}
                   initialFiles={chosen.map((c) => c.file).filter((f) => /\.csv$/i.test(f.name))}
                 />
+              </fieldset>
+            </>
+          )}
+          {kind === 'bank' && (
+            <>
+              <h2>Bank statement</h2>
+              <p className="muted small">
+                Reads every line: interest, rent, money from abroad, transfers between your
+                accounts, deposits, fund purchases and spending. Your own money and lifetime profit
+                are then worked out from what really happened. Press Preview first; nothing is saved
+                until you press Save.
+              </p>
+              <fieldset disabled={demo} className="plain">
+                <BankStatementForm key={pick.name + pick.size} accounts={accounts} file={pick} />
               </fieldset>
             </>
           )}

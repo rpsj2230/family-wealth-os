@@ -25,6 +25,8 @@ export interface ImportData {
   /** the financial year whose tax papers are filed now, e.g. 2025-26 */
   taxFy: string;
   owners: { id: string; name: string; panLast4: string | null; hasDob: boolean }[];
+  /** bank accounts a statement can be imported for */
+  accounts?: { id: string; label: string; last4: string | null }[];
   workbook: {
     at: string;
     asOf: string;
@@ -102,6 +104,7 @@ export function ImportHub({
       <>
         <ImportDoor
           owners={data.owners}
+          {...(data.accounts ? { accounts: data.accounts } : {})}
           today={data.today}
           taxFy={data.taxFy}
           hasWorkbook={!!data.workbook}

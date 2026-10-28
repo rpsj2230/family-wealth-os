@@ -3,7 +3,7 @@
  * first. Pure: it looks at the file name and the first few kilobytes only, in the browser, before anything is uploaded.
  */
 
-export type ImportKind = 'workbook' | 'cas' | 'csv' | 'tax';
+export type ImportKind = 'workbook' | 'cas' | 'csv' | 'tax' | 'bank';
 
 export interface Detected {
   /** what the file is taken to be; null when it could not be told */
@@ -19,6 +19,7 @@ export const KIND_LABEL: Record<ImportKind, string> = {
   cas: 'a fund statement (PDF)',
   csv: 'a fund transactions export (CSV)',
   tax: 'a tax statement (Form 26AS or AIS)',
+  bank: 'a bank account statement',
 };
 
 /** Short names for the "what is this file?" list. */
@@ -27,11 +28,21 @@ export const KIND_CHOICES: { kind: ImportKind; label: string }[] = [
   { kind: 'cas', label: 'Fund statement (PDF from CAMS, KFintech, MF Central)' },
   { kind: 'csv', label: 'Fund app export (CSV)' },
   { kind: 'tax', label: 'Tax statement (Form 26AS or AIS)' },
+  { kind: 'bank', label: 'Bank account statement (Excel, CSV or PDF)' },
 ];
 
 const has = (name: string, re: RegExp) => re.test(name.toLowerCase());
 const TAX_NAME =
   /26[\s_-]?as|form[\s_-]?26|(^|[^a-z0-9])(ais|annual[\s_-]?information|traces)([^a-z0-9]|$)/;
+/** what a bank names its statement downloads: "Acct Statement_XX1234", "OpTransactionHistory", "AccountStatement", "passbook" */
+const BANK_NAME =
+  /(acc(oun)?t|a\/c)[\s_-]*statement|statement[\s_-]*of[\s_-]*acc(oun)?t|e[\s_-]?statement|optransaction|transaction[\s_-]*history|passbook|(^|[^a-z])(stmt|acct)([^a-z]|$)/;
+/** what a registrar's fund statement is named, which wins over the words a bank statement shares with it */
+const REGISTRAR_NAME =
+  /(^|[^a-z])(cas|consolidated|cams|kfin|kfintech|karvy|mf[\s_-]?central|cdsl|nsdl|folio)([^a-z]|$)/;
+/** the column headings of a bank statement, in a CSV or a web page */
+const BANK_HEAD =
+  /(narration|particulars|description|remarks)[\s\S]{0,400}(withdrawal|debit|dr\b)[\s\S]{0,200}(balance)|(withdrawal|debit)[\s\S]{0,200}(deposit|credit)[\s\S]{0,200}balance/i;
 const CAS_NAME =
   /(^|[^a-z])(cas|consolidated|cams|kfin|kfintech|karvy|mf[\s_-]?central|cdsl|nsdl|folio|statement of account)([^a-z]|$)/;
 
@@ -44,11 +55,24 @@ export function detectImport(file: { name: string; size: number }, head: string)
   const ext = /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase() ?? '';
   if (file.size === 0) return { kind: null, confident: false, message: 'That file is empty.' };
 
+  if ((ext === 'xlsx' || ext === 'xlsm') && has(name, BANK_NAME) && !has(name, REGISTRAR_NAME))
+    return {
+      kind: 'bank',
+      confident: true,
+      message: 'The file name looks like a bank statement download, so its lines are read.',
+    };
   if (ext === 'xlsx' || ext === 'xlsm')
     return {
       kind: 'workbook',
       confident: true,
       message: 'This is an Excel workbook, so it is read as your banks, savings and deposits.',
+    };
+  if (ext === 'xls' && BANK_HEAD.test(head))
+    return {
+      kind: 'bank',
+      confident: true,
+      message:
+        'This has a bank statement’s columns (narration, withdrawal, deposit, balance), so its lines are read.',
     };
   if (ext === 'xls')
     return {
@@ -64,6 +88,13 @@ export function detectImport(file: { name: string; size: number }, head: string)
         .split(/\r?\n/)
         .find((l) => l.trim() !== '')
         ?.toLowerCase() ?? '';
+    if (BANK_HEAD.test(head))
+      return {
+        kind: 'bank',
+        confident: true,
+        message:
+          'This has a bank statement’s columns (narration, withdrawal, deposit, balance), so its lines are read.',
+      };
     if (/folio/.test(first) && /(units|nav|amount)/.test(first))
       return {
         kind: 'csv',
@@ -86,6 +117,13 @@ export function detectImport(file: { name: string; size: number }, head: string)
         confident: true,
         message: 'The file name says Form 26AS or AIS, so this is read as a tax statement.',
       };
+    if (has(name, BANK_NAME) && !has(name, REGISTRAR_NAME))
+      return {
+        kind: 'bank',
+        confident: false,
+        message:
+          'The file name looks like a bank statement. Confirm below, or choose a fund statement if it is one.',
+      };
     if (has(name, CAS_NAME))
       return {
         kind: 'cas',
@@ -97,7 +135,7 @@ export function detectImport(file: { name: string; size: number }, head: string)
       kind: null,
       confident: false,
       message:
-        'This is a PDF, and its name does not say which kind. Choose below: a fund statement or a tax statement.',
+        'This is a PDF, and its name does not say which kind. Choose below: a fund statement, a tax statement or a bank statement.',
     };
   }
 
@@ -110,6 +148,12 @@ export function detectImport(file: { name: string; size: number }, head: string)
     };
 
   if (ext === 'txt' || ext === 'htm' || ext === 'html') {
+    if (BANK_HEAD.test(head))
+      return {
+        kind: 'bank',
+        confident: true,
+        message: 'This has a bank statement’s columns, so its lines are read.',
+      };
     if (
       /26as|annual tax statement|traces|tax deducted at source/i.test(head) ||
       has(name, TAX_NAME)

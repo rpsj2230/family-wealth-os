@@ -4,11 +4,13 @@ import {
   DEFAULT_CONFIG,
   addDaysIso,
   capitalLedger,
+  classifyLines,
   estimatedInterest,
   historyReview,
   interestCheck,
   parseHomeRange,
   reconcileQueue,
+  type StmtLine,
 } from '@fwos/core';
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
@@ -18,6 +20,7 @@ import { demoHomeInput } from '@/lib/demo-home';
 import { holdingLabels } from '@/lib/holding-label';
 import { History } from '@/app/(app)/reconcile/History';
 import { Interest } from '@/app/(app)/reconcile/Interest';
+import { Statements } from '@/app/(app)/reconcile/Statements';
 import { Recent } from '@/app/(app)/reconcile/Recent';
 import { sampleFinish } from '../sample-actions';
 import '@/app/(app)/reconcile/reconcile.css';
@@ -38,7 +41,8 @@ export default async function DemoReconcile({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const sp = await searchParams;
-  const tab = sp.tab === 'history' || sp.tab === 'interest' ? sp.tab : 'recent';
+  const tab =
+    sp.tab === 'history' || sp.tab === 'interest' || sp.tab === 'statements' ? sp.tab : 'recent';
   const input = demoHomeInput(parseHomeRange('1y'));
   const position = input.position!;
   const cfg = DEFAULT_CONFIG;
@@ -106,6 +110,63 @@ export default async function DemoReconcile({
           },
         })
       : null;
+  // invented statement lines on two of the sample's accounts: a remittance, rent, a transfer between them, spending, interest and
+  // one large payment the rules cannot place
+  const sampleAccounts = rows.filter((r) => r.type === 'bank_account').slice(0, 2);
+  const stmt =
+    tab === 'statements' && sampleAccounts.length === 2
+      ? (() => {
+          const [a, b] = sampleAccounts as [(typeof rows)[number], (typeof rows)[number]];
+          const y = Number(today.slice(0, 4)) - 1;
+          const d = (m: number, day: number) =>
+            `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const raw: [string, string, number, string][] = [
+            [a.id, d(4, 2), 500_000, 'INWARD REMITTANCE SGD'],
+            [a.id, d(4, 5), 30_000, 'NEFT CR-SAMPLE TENANT-RENT'],
+            [a.id, d(4, 8), -200_000, 'IMPS TO OWN A/C'],
+            [b.id, d(4, 9), 200_000, 'IMPS FROM SAMPLE BANK'],
+            [a.id, d(4, 15), -2_400, 'UPI/…4321/GROCER'],
+            [a.id, d(4, 20), -85_000, 'NEFT TO SAMPLE BUILDER'],
+            [a.id, d(6, 30), 3_900, 'INT.PD:01-04 TO 30-06'],
+          ];
+          const lines: StmtLine[] = raw.map(([assetId, date, amount, narration], i) => ({
+            id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+            assetId,
+            ownerId: rows.find((r) => r.id === assetId)!.owner_id,
+            date,
+            amount,
+            narration,
+          }));
+          const classified = classifyLines(lines, {
+            accounts: sampleAccounts.map((r) => ({
+              assetId: r.id,
+              ownerId: r.owner_id,
+              last4: null,
+            })),
+            deposits: [],
+            fundTxns: [],
+            rentWords: ['sample tenant'],
+            remittanceWords: cfg.statements.remittanceWords,
+            reviewAbove: cfg.statements.reviewAbove,
+            pairDays: cfg.estimates.transferPairDays,
+            fundDays: cfg.statements.fundMatchDays,
+          });
+          const statements = sampleAccounts.map((r, i) => ({
+            id: `00000000-0000-0000-0001-${String(i + 1).padStart(12, '0')}`,
+            asset_id: r.id,
+            from_on: d(4, 1),
+            to_on: d(6, 30),
+            opening: null,
+            closing: null,
+            line_count: lines.filter((l) => l.assetId === r.id).length,
+            breaks: 0,
+            layout: 'debit-credit',
+            file_label: null,
+            uploaded_at: today,
+          }));
+          return { lines, classified, statements };
+        })()
+      : null;
   const accountsOf: Record<string, { id: string; label: string }[]> = {};
   for (const r of rows.filter((x) => x.type === 'bank_account'))
     (accountsOf[r.owner_id] ??= []).push({ id: r.id, label: labels[r.id]! });
@@ -139,9 +200,26 @@ export default async function DemoReconcile({
               { key: 'recent', label: 'Recent', badge: q.count || null },
               { key: 'history', label: 'Earlier months' },
               { key: 'interest', label: 'Interest (AIS)' },
+              { key: 'statements', label: 'Bank statements' },
             ]}
           />
-          {interest ? (
+          {stmt ? (
+            <Statements
+              statements={stmt.statements}
+              lines={stmt.lines}
+              classified={stmt.classified}
+              interest={[]}
+              labels={labels}
+              covered={[]}
+              act={{
+                answer: sampleFinish,
+                remove: sampleFinish,
+                rebuild: sampleFinish,
+                covered: sampleFinish,
+              }}
+              sample
+            />
+          ) : interest ? (
             <Interest
               rows={interest}
               answers={[]}

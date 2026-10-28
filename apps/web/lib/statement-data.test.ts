@@ -1,0 +1,38 @@
+import { describe, expect, it } from 'vitest';
+import { readStatementGrid } from '@fwos/ingest';
+import { balanceOn, lineKeys, monthBalances } from './statement-data';
+
+// Invented figures.
+const s = readStatementGrid([
+  ['Date', 'Narration', 'Withdrawal', 'Deposit', 'Balance'],
+  ['30/03/2024', 'NEFT CR', '', '10,000.00', '1,10,000.00'],
+  ['02/04/2024', 'UPI', '500.00', '', '1,09,500.00'],
+  ['02/04/2024', 'UPI', '500.00', '', '1,09,000.00'],
+  ['15/05/2024', 'INT.PD', '', '1,000.00', '1,10,000.00'],
+]);
+
+describe('saving a statement', () => {
+  it('gives two identical lines on one day different keys, and the same keys when read again', () => {
+    const k = lineKeys(s.lines);
+    expect(new Set(k).size).toBe(4);
+    expect(lineKeys(s.lines)).toEqual(k);
+    expect(k[0]).toBe('2024-03-30|1000000|11000000|0');
+  });
+
+  it('proves the balance before the first line and at each month end it covers', () => {
+    expect(monthBalances(s)).toEqual([
+      { date: '2024-03-29', amount: 100000 },
+      { date: '2024-03-31', amount: 110000 },
+      { date: '2024-04-30', amount: 109000 },
+      { date: '2024-05-15', amount: 110000 },
+    ]);
+  });
+
+  it('knows the balance at the end of any day it covers', () => {
+    expect(balanceOn(s, '2024-03-29')).toBe(100000);
+    expect(balanceOn(s, '2024-04-02')).toBe(109000);
+    expect(balanceOn(s, '2024-05-01')).toBe(109000);
+    expect(balanceOn(s, '2024-05-16')).toBeNull();
+    expect(balanceOn(s, '2024-03-01')).toBeNull();
+  });
+});

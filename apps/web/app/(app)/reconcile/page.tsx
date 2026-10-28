@@ -7,11 +7,14 @@ import { Tabs } from '@/components/Tabs';
 import { loadHistoryReview } from '@/lib/history-data';
 import { holdingLabels } from '@/lib/holding-label';
 import { loadReportedInterest } from '@/lib/interest-data';
+import { loadStatements, statementPicture } from '@/lib/statement-data';
+import { positionFor } from '@/lib/statement-rebuild';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { confirmProceeds, explainBalance, recordFunding } from './actions';
 import { History } from './History';
 import { Interest, type InterestAnswer } from './Interest';
+import { Statements, type CoveredMove } from './Statements';
 import { Recent } from './Recent';
 import './reconcile.css';
 
@@ -27,7 +30,10 @@ export default async function Reconcile({
   searchParams: Promise<{ msg?: string; tab?: string }>;
 }) {
   const { msg, tab: tabParam } = await searchParams;
-  const tab = tabParam === 'history' || tabParam === 'interest' ? tabParam : 'recent';
+  const tab =
+    tabParam === 'history' || tabParam === 'interest' || tabParam === 'statements'
+      ? tabParam
+      : 'recent';
   if ((await loadAccess()).role === 'emergency_viewer') redirect('/emergency');
   const { supabase } = await loadContext();
   const loaded = await loadPortfolio(supabase);
@@ -86,12 +92,54 @@ export default async function Reconcile({
     .map((a) => ({ id: a.id, label: labels[a.id]! }))
     .sort((x, y) => x.label.localeCompare(y.label));
   const interest = tab === 'interest' ? await interestTab() : null;
+  const statements = tab === 'statements' ? await statementsTab() : null;
+
+  /** Bank statements: every line sorted, and the answers given by hand that the statements now cover. */
+  async function statementsTab() {
+    const stored = await loadStatements(supabase as unknown as SupabaseClient);
+    const picture = statementPicture(stored, loaded, config, positionFor(loaded, config, true));
+    const covered: CoveredMove[] = loaded.engine.moves
+      .filter(
+        (m) =>
+          m.status === 'confirmed' &&
+          m.source !== 'statement' &&
+          !/^(stmt|ais):/.test(m.idemKey ?? '') &&
+          (m.fromAssetId === null) !== (m.toAssetId === null),
+      )
+      .map((m) => ({
+        id: m.id,
+        on: m.movedOn,
+        amount: m.amount,
+        kind: m.kind,
+        assetId: (m.toAssetId ?? m.fromAssetId)!,
+        into: m.fromAssetId === null,
+      }))
+      .filter((m) =>
+        stored.statements.some(
+          (s) => s.asset_id === m.assetId && m.on >= s.from_on && m.on <= s.to_on,
+        ),
+      );
+    return { stored, picture, covered };
+  }
 
   /** Interest: each stored AIS or Form 26AS against the estimate for the same person's taxable accounts, and the years already settled. */
   async function interestTab() {
     const nre = new Set(loaded.assetRows.filter((a) => a.account_kind === 'NRE').map((a) => a.id));
+    const ownerOf = new Map(loaded.assetRows.map((a) => [a.id, a.owner_id]));
+    // interest already put right from bank statements, by person and year (taxable accounts only: the AIS leaves NRE out)
+    const fromStatements = new Map<string, number>();
+    for (const m of loaded.engine.moves) {
+      const k = /^stmt:([^:]+):int:(\d{4}-\d{2})$/.exec(m.idemKey ?? '');
+      if (!k || m.status !== 'confirmed' || nre.has(k[1]!)) continue;
+      const key = `${ownerOf.get(k[1]!) ?? ''}|${k[2]}`;
+      fromStatements.set(
+        key,
+        (fromStatements.get(key) ?? 0) + (m.fromAssetId === null ? m.amount : -m.amount),
+      );
+    }
     const rows = interestCheck({
-      position,
+      position: positionFor(loaded, config, true),
+      recorded: (ownerId, fy) => fromStatements.get(`${ownerId}|${fy}`) ?? 0,
       statements: await loadReportedInterest(supabase as unknown as SupabaseClient),
       taxable: (id) => !nre.has(id),
       tolerance: {
@@ -143,9 +191,19 @@ export default async function Reconcile({
           { key: 'recent', label: 'Recent', badge: q.count || null },
           { key: 'history', label: 'Earlier months' },
           { key: 'interest', label: 'Interest (AIS)' },
+          { key: 'statements', label: 'Bank statements' },
         ]}
       />
-      {interest ? (
+      {statements ? (
+        <Statements
+          statements={statements.stored.statements}
+          lines={statements.picture.lines}
+          classified={statements.picture.classified}
+          interest={statements.picture.interest}
+          labels={labels}
+          covered={statements.covered}
+        />
+      ) : interest ? (
         <Interest
           rows={interest.rows}
           answers={interest.answers}

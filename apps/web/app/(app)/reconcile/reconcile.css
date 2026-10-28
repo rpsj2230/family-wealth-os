@@ -59,3 +59,11 @@
   align-items: center;
   gap: 0.35rem;
 }
+/* a wide table scrolls inside its card, never the page */
+.rc-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.rc-scroll table {
+  min-width: 36rem;
+}

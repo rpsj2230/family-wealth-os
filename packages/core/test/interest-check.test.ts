@@ -120,6 +120,20 @@ describe('the interest check against AIS and Form 26AS', () => {
     expect(row!.flagged).toBe(false);
   });
 
+  it('takes off what bank statements already recorded for the year', () => {
+    const [row] = interestCheck({
+      position,
+      statements: [
+        { ownerId: 'r', fy: '2025-26', kind: 'ais', lines: [{ source: 'X', amount: 136_000 }] },
+      ],
+      taxable,
+      tolerance: { rupees: 500, share: 0.01 },
+      recorded: () => 136_000 - estimatedInterest(position, 'r', '2025-26', taxable),
+    });
+    expect(Math.abs(row!.difference)).toBeLessThan(1);
+    expect(row!.flagged).toBe(false);
+  });
+
   it('reads the interest sections of Form 26AS', () => {
     expect(isInterestSection('194A')).toBe(true);
     expect(isInterestSection('195')).toBe(true);

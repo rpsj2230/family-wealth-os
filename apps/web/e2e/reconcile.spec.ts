@@ -72,6 +72,42 @@ test.describe('Explain movements (public sample)', () => {
     await noSideways(page);
   });
 
+  test('bank statements: what every line was, the years, and the lines to answer', async ({
+    page,
+  }) => {
+    await page.goto('/demo/reconcile?tab=statements');
+    await expect(
+      page.getByRole('heading', { name: /Bank statements: what every line was/ }),
+    ).toBeVisible();
+    await expect(page.getByTestId('rc-s-cover')).toBeVisible();
+    await expect(page.getByTestId('rc-s-years')).toBeVisible();
+    await expect(page.getByTestId('rc-s-ask')).toContainText('1 line');
+    const ask = page.locator('li.rc-item[data-line]');
+    await expect(ask).toHaveCount(1);
+    await expect(ask).toContainText('NEFT TO SAMPLE BUILDER');
+    await expect(ask.getByRole('radio')).toHaveCount(2);
+    await expect(ask.locator('input[type="radio"]:checked')).toHaveCount(1);
+    await noSideways(page);
+  });
+
+  test('Import recognises a bank statement and offers its form', async ({ page }) => {
+    await page.goto('/demo/import');
+    await page
+      .locator('input[type="file"]')
+      .first()
+      .setInputFiles({
+        name: 'Acct Statement_XX1234_2024.csv',
+        mimeType: 'text/csv',
+        buffer: Buffer.from(
+          'Date,Narration,Chq./Ref.No.,Withdrawal Amt.,Deposit Amt.,Closing Balance\n01/04/24,NEFT CR,,,"25,000.00","1,25,000.00"\n',
+        ),
+      });
+    await expect(page.getByRole('heading', { name: 'Bank statement' })).toBeVisible();
+    // the account is chosen from the last four digits in the file name
+    await expect(page.locator('select').filter({ hasText: 'Sample Bank' })).toHaveValue('a1');
+    await noSideways(page);
+  });
+
   test('Home links to it from the sample', async ({ page }) => {
     await page.goto('/demo/dashboard');
     await expect(page.getByRole('link', { name: 'Explain movements' }).first()).toHaveAttribute(

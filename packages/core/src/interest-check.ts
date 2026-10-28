@@ -32,7 +32,7 @@ export interface InterestCheckRow {
   bySource: { source: string; amount: number }[];
   /** what the app worked out for the same accounts and the same year, before tax at source */
   estimated: number;
-  /** reported − estimated: positive when the banks credited more than the app estimated */
+  /** reported − estimated − what bank statements already corrected: positive when the banks credited more than the app counted */
   difference: number;
   /** the year is over (a year still running cannot be compared) */
   complete: boolean;
@@ -90,6 +90,8 @@ export function interestCheck(args: {
   tolerance: { rupees: number; share: number };
   /** the first day the app has records from (the opening date); a year starting before it is shown but never flagged */
   coveredFrom?: string | null;
+  /** earnings already recorded for the person and year from bank statements (their interest against the estimate) */
+  recorded?: (ownerId: string, fy: string) => number;
 }): InterestCheckRow[] {
   const today = args.position.config.today;
   // one statement per person and year: AIS when there is one (it has savings and deposit interest apart), else Form 26AS
@@ -105,7 +107,7 @@ export function interestCheck(args: {
     for (const l of s.lines) bySource.set(l.source, (bySource.get(l.source) ?? 0) + l.amount);
     const reported = s.lines.reduce((a, l) => a + l.amount, 0);
     const estimated = estimatedInterest(args.position, s.ownerId, s.fy, args.taxable);
-    const difference = reported - estimated;
+    const difference = reported - estimated - (args.recorded?.(s.ownerId, s.fy) ?? 0);
     const complete = fyRange(s.fy).to <= today;
     const covered = !args.coveredFrom || fyRange(s.fy).from >= args.coveredFrom;
     rows.push({

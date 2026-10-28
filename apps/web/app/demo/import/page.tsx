@@ -38,6 +38,10 @@ const DATA: ImportData = {
     { id: 'p2', name: 'Beena', panLast4: null, hasDob: false },
     { id: 'p3', name: 'Charu', panLast4: '567G', hasDob: false },
   ],
+  accounts: [
+    { id: 'a1', label: 'Sample Bank · Savings-NRO-1234 · Anil', last4: '1234' },
+    { id: 'a2', label: 'Other Bank · Savings-NRE-5678 · Beena', last4: '5678' },
+  ],
   workbook: {
     at: '2026-10-20T08:00:00Z',
     asOf: '2026-10-19',

@@ -6,6 +6,7 @@ import { PageHead } from '@/components/PageHead';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
 import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
+import { holdingLabels } from '@/lib/holding-label';
 import { IMPORT_TABS, ImportHub, changeRecord, type ImportData, type ImportTab } from './Hub';
 import { HistoryCoverage } from './HistoryCoverage';
 
@@ -90,6 +91,41 @@ export default async function ImportPage({
     email: auto.cards.find((c) => c.key === 'email') ?? null,
     sheet,
   };
+  // the bank accounts a statement can be for, told apart by bank, name, last digits and whose they are
+  if (tab === 'start') {
+    const [accts, banks] = await Promise.all([
+      supabase
+        .from('assets')
+        .select('id, owner_id, nickname, label, identifier_last4, institution_id, status')
+        .eq('type', 'bank_account')
+        .neq('status', 'gifted'),
+      supabase.from('institutions').select('id, name'),
+    ]);
+    const bankName = new Map(
+      ((banks.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]),
+    );
+    const rows = (accts.data ?? []) as {
+      id: string;
+      owner_id: string;
+      nickname: string;
+      label: string | null;
+      identifier_last4: string | null;
+      institution_id: string | null;
+    }[];
+    const labels = holdingLabels(
+      rows.map((a) => ({
+        id: a.id,
+        nickname: a.label || a.nickname,
+        owner: name.get(a.owner_id) ?? '',
+        bank: a.institution_id ? (bankName.get(a.institution_id) ?? null) : null,
+        last4: a.identifier_last4,
+        fd: null,
+      })),
+    );
+    data.accounts = rows
+      .map((a) => ({ id: a.id, label: labels[a.id]!, last4: a.identifier_last4 }))
+      .sort((x, y) => x.label.localeCompare(y.label));
+  }
   // the Gmail statements card belongs to the Fund statement tab
   if (tab === 'cas') {
     const settings = householdId
