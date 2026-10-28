@@ -56,7 +56,12 @@ export function parseBankDate(s: string): string | null {
   const t = s.trim().replace(/[.,]$/, '');
   let m = /^(\d{1,2})[-\s/]([A-Za-z]{3,9})[-\s/](\d{2}|\d{4})$/.exec(t);
   let d: number, mo: number, y: number;
-  if (m) {
+  const us = /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/.exec(t);
+  if (us) {
+    d = Number(us[2]);
+    mo = MONTHS[us[1]!.slice(0, 3).toLowerCase()] ?? 0;
+    y = Number(us[3]);
+  } else if (m) {
     d = Number(m[1]);
     mo = MONTHS[m[2]!.slice(0, 3).toLowerCase()] ?? 0;
     y = Number(m[3]);
@@ -97,6 +102,10 @@ const BANK_DOMAINS: Record<string, string[]> = {
   YES: ['yes.bank.in', 'yesbank.in'],
   IDFC: ['idfcfirst.bank.in', 'idfcfirstbank.com'],
   INDUSIND: ['indusind.bank.in', 'indusind.com'],
+  EQUITAS: ['equitas.bank.in', 'equitasbank.com'],
+  ESAF: ['esaf.bank.in', 'esafbank.com'],
+  JANA: ['jana.bank.in', 'janabank.com'],
+  AU: ['au.bank.in', 'aubank.in'],
   DBS: ['dbs.com', 'dbs.com.sg'],
   OCBC: ['ocbc.com'],
   UOB: ['uob.com.sg'],
@@ -107,10 +116,83 @@ const BANK_DOMAINS: Record<string, string[]> = {
 const BANK_NAMES: Record<string, string> = {
   YES: 'YES Bank',
   RBL: 'RBL Bank',
+  EQUITAS: 'Equitas',
+  ESAF: 'ESAF',
+  JANA: 'Jana',
+  IDFC: 'IDFC',
+  AU: 'AU Small',
   SC: 'Standard Chartered',
   INDUSIND: 'IndusInd',
-  IDFC: 'IDFC First',
 };
+
+const AMT = String.raw`[\d,]+(?:\.\d+)?`;
+const DMY = String.raw`\d{1,2}-(?:[A-Za-z]{3}|\d{1,2})-\d{2,4}`;
+const CUR = String.raw`(?:INR|Rs\.?)\s*`;
+const MASK = String.raw`[Xx*]*`;
+
+/**
+ * Alert formats of the banks the family uses, from the bank's own messages. Each gives (1) the account's last digits, (2) the date of the
+ * balance and (3) the balance: always the balance after the transaction, never the amount moved. A format that changes stops matching
+ * and the email goes to the AI reader instead, so a rule never guesses.
+ */
+const BANK_RULES: { bank: string; re: RegExp }[] = [
+  // YES: "... your A/C. No. XX1234 on 28-OCT-2026 ... Available Balance on 28-OCT-26 is INR 1,23,456.78" (also "on 14-SEP-2026 12:43:48")
+  {
+    bank: 'YES',
+    re: new RegExp(
+      String.raw`A\/?C\.?\s*No\.?\s*:?\s*${MASK}(\d{3,4})\b.{0,400}?Available Balance on\s+(${DMY})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\s+is\s+${CUR}(${AMT})`,
+      'i',
+    ),
+  },
+  // RBL: "your a/c no. ending XX1234 has been debited for INR 1,23,456.78 on 28-10-2026 at 12:57:37 ... Your available balance is INR 1,23,456.78."
+  {
+    bank: 'RBL',
+    re: new RegExp(
+      String.raw`a\/c\s*no\.?\s*ending\s+${MASK}(\d{3,4})\b.{0,300}?\bon\s+(${DMY}).{0,300}?available balance is\s+${CUR}(${AMT})`,
+      'i',
+    ),
+  },
+  // Equitas: "The balance in A/c No XXXXXXXX1234 at M P NAGAR as of 06-OCT-2026 is INR 1,23,456.78."
+  {
+    bank: 'EQUITAS',
+    re: new RegExp(
+      String.raw`balance in A\/c\s*No\.?\s*${MASK}(\d{3,4})\b.{0,120}?as of\s+(${DMY})\s+is\s+${CUR}(${AMT})`,
+      'i',
+    ),
+  },
+  // Equitas: "... debited from account # XXXXXXXX1234 Ref towards ... on 30-SEP-2026. The available balance is INR 1,23,456.78."
+  {
+    bank: 'EQUITAS',
+    re: new RegExp(
+      String.raw`(?:debited from|credited to)\s+(?:your\s+)?account\s*#?\s*${MASK}(\d{3,4})\b.{0,400}?\bon\s+(${DMY})\.?\s*.{0,40}?available balance is\s+${CUR}(${AMT})`,
+      'i',
+    ),
+  },
+  // ESAF: "... credited to your ESAF Small Finance Bank account XXXXXXXX1234 ... Date & Time SEP 08, 2026 01:36 PM ... Ledger Balance (INR) 123456.78"
+  {
+    bank: 'ESAF',
+    re: new RegExp(
+      String.raw`account\s+${MASK}(\d{3,4})\b.{0,400}?Date\s*&(?:amp;)?\s*Time\s*:?\s*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}).{0,200}?Ledger Balance\s*\(INR\)\s*:?\s*(${AMT})`,
+      'i',
+    ),
+  },
+  // IDFC FIRST: "Your A/C XXXXXXX1234 has been credited with INR 1,23,456.78 on 08-09-2026 17:03:06 vide NEFT ... New balance is INR 1,23,456.78."
+  {
+    bank: 'IDFC',
+    re: new RegExp(
+      String.raw`A\/C\s+${MASK}(\d{3,4})\s+has been (?:credited|debited).{0,200}?\bon\s+(${DMY}).{0,400}?New balance is\s+${CUR}(${AMT})`,
+      'i',
+    ),
+  },
+  // Jana: "Your Jana Bank A/c no. XX1234 is credited with INR 1,23,456.78 on 30-SEP-2026. ... Your account balance is INR 1,23,456.78."
+  {
+    bank: 'JANA',
+    re: new RegExp(
+      String.raw`A\/c\s*no\.?\s*${MASK}(\d{3,4})\b.{0,200}?\bon\s+(${DMY})\..{0,300}?account balance is\s+${CUR}(${AMT})`,
+      'i',
+    ),
+  },
+];
 
 /** Which bank a sender domain belongs to, or null. */
 export function bankForDomain(domain: string): string | null {
@@ -124,10 +206,11 @@ export function senderMatchesBank(domain: string, bankName: string): boolean {
   const b = bankForDomain(domain);
   if (!b) return false;
   const n = bankName.toLowerCase();
+  // a two-letter key (AU, SC) is too short to find inside a name; its full name is used instead
   return (
-    n.includes(b.toLowerCase()) ||
-    (b === 'YES' && n.includes('yes bank')) ||
-    (b === 'SC' && n.includes('standard chartered'))
+    (b.length > 2 && n.includes(b.toLowerCase())) ||
+    (BANK_NAMES[b] !== undefined && n.includes(BANK_NAMES[b]!.toLowerCase())) ||
+    (b === 'AU' && /\bau\b/.test(n))
   );
 }
 
@@ -143,7 +226,7 @@ export function parseBankEmail(e: EmailInput): EmailOutcome {
   const domain = senderDomain(e.from);
   const text = e.text.replace(/\s+/g, ' ');
 
-  // HDFC: "Available balance in your account ending XX7240 is Rs. INR 10,711.96 as on 25-OCT-26."
+  // HDFC: "Available balance in your account ending XX1234 is Rs. INR 1,23,456.78 as on 25-OCT-26."
   const hdfc =
     /available balance in your account ending\s+[Xx*]*(\d{3,4})\s+is\s+(?:Rs\.?\s*)?(?:INR\s*)?([\d,]+(?:\.\d+)?)\s+as on\s+(\d{1,2}-[A-Za-z]{3}-\d{2,4})/i.exec(
       text,
@@ -166,29 +249,27 @@ export function parseBankEmail(e: EmailInput): EmailOutcome {
       };
   }
 
-  // YES Bank and others: "credited to your A/C. No. XX0037 on ... Available Balance on 28-OCT-26 is INR 5,57,006.53". Read only from a
-  // bank's own domain, so the bank is known; any other sender goes to the AI reader
+  // the other banks' alerts, each read only from that bank's own address (also inside a forward of it); anything else goes to the AI
   const sender = bankForDomain(domain);
-  const avail =
-    /A\/?C\.?\s*No\.?\s*:?\s*[Xx*]*(\d{3,4})\b.{0,400}?Available Balance on\s+(\d{1,2}-[A-Za-z]{3}-\d{2,4})\s+is\s+(?:Rs\.?\s*)?(?:INR\s*)?([\d,]+(?:\.\d+)?)/i.exec(
-      text,
-    );
-  if (avail && sender) {
-    const amount = parseAmount(avail[3]!);
-    const asOf = parseBankDate(avail[2]!);
-    if (amount !== null && asOf)
-      return {
-        kind: 'balance',
-        reading: {
-          bank: BANK_NAMES[sender] ?? sender,
-          last4: avail[1]!.slice(-4),
-          amount,
-          currency: 'INR',
-          asOf,
-          source: 'rule',
-          senderVerified: true,
-        },
-      };
+  for (const rule of BANK_RULES) {
+    if (rule.bank !== sender) continue;
+    const m = rule.re.exec(text);
+    if (!m) continue;
+    const amount = parseAmount(m[3]!);
+    const asOf = parseBankDate(m[2]!);
+    if (amount === null || !asOf) continue;
+    return {
+      kind: 'balance',
+      reading: {
+        bank: BANK_NAMES[rule.bank] ?? rule.bank,
+        last4: m[1]!.slice(-4),
+        amount,
+        currency: 'INR',
+        asOf,
+        source: 'rule',
+        senderVerified: true,
+      },
+    };
   }
 
   const pdfs = (e.attachments ?? []).filter((a) => /\.pdf$/i.test(a));

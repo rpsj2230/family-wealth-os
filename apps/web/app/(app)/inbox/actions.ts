@@ -72,26 +72,45 @@ export async function applyReading(
     .select('id, reading, reason, message_id, resolved_at')
     .eq('id', id)
     .maybeSingle();
-  const r = msg?.reading as {
+  const read = msg?.reading as {
     amount: number;
     currency: string;
     asOf: string;
-    source: 'rule' | 'ai';
+    source: 'rule' | 'ai' | 'manual';
     last4?: string | null;
   } | null;
   if (!msg) return { ok: false, message: 'That message could not be found.' };
   if (msg.resolved_at) return { ok: false, message: 'This message was already handled.' };
-  if (!r || !(Number(r.amount) >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(r.asOf))
-    return {
-      ok: false,
-      message: 'No balance was read from this message. Record it in Monthly update instead.',
-    };
   const { data: a } = await supabase
     .from('assets')
     .select('currency, nickname, identifier_last4, institution_id')
     .eq('id', asset)
     .maybeSingle();
   if (!a) return { ok: false, message: 'Choose the account first.' };
+  // nothing could be read from the email: you typed the balance and its date, in the account's currency
+  const typedOn = String(formData.get('on') ?? '');
+  const r =
+    read ??
+    (() => {
+      const amount = parseAmount(formData.get('amount'));
+      if (amount === null || !/^\d{4}-\d{2}-\d{2}$/.test(typedOn)) return null;
+      return {
+        amount,
+        currency: a.currency as string,
+        asOf: typedOn,
+        source: 'manual' as const,
+        last4: null,
+      };
+    })();
+  if (!r || !(Number(r.amount) >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(r.asOf))
+    return {
+      ok: false,
+      message: read
+        ? 'No balance was read from this message. Record it in Monthly update instead.'
+        : 'Type the balance and the date it is for.',
+    };
+  if (!read && r.asOf > new Date().toISOString().slice(0, 10))
+    return { ok: false, message: 'The date cannot be in the future.' };
   if (a.currency !== r.currency)
     return {
       ok: false,
@@ -100,7 +119,7 @@ export async function applyReading(
   // you may have corrected the number before applying it
   const typed = parseAmount(formData.get('amount'));
   const amount = typed !== null && typed !== Number(r.amount) ? typed : Number(r.amount);
-  const edited = amount !== Number(r.amount);
+  const edited = !!read && amount !== Number(r.amount);
   const saved = await recordBalance(supabase, {
     householdId,
     assetId: asset,
@@ -110,18 +129,22 @@ export async function applyReading(
     messageId: String(msg.message_id),
     source: 'email',
     confidence: 'manual_confirmed',
-    note: edited
-      ? 'Number corrected by you in the bank-email inbox'
-      : 'Confirmed by you from the bank-email inbox',
+    note: !read
+      ? 'Typed by you for an email nothing could be read from'
+      : edited
+        ? 'Number corrected by you in the bank-email inbox'
+        : 'Confirmed by you from the bank-email inbox',
     replaceNewer: true,
   });
   if (!saved.ok) return { ok: false, message: saved.message };
-  if (edited)
+  if (edited || !read)
     await supabase.rpc('save_inbox_result', {
       p_id: id,
       p_outcome: 'needs_review',
       p_reason: msg.reason ?? null,
-      p_reading: { ...(msg.reading as object), amount, editedByYou: true },
+      p_reading: read
+        ? { ...(msg.reading as object), amount, editedByYou: true }
+        : { ...r, amount, bank: '', editedByYou: true },
       p_asset: asset,
       p_resolved: false,
     });

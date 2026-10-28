@@ -246,22 +246,20 @@ export async function runInbox(
         }
         readings = await readWithAi(chain, `${m.subject}\n${text}`, domain, 'inbox_statement');
         if (readings.length === 0) note = 'the AI found no balance in the statement';
-      } else if (!m.reread && !mentionsBalance(m.subject, m.text)) {
-        await log({ outcome: 'ignored', reason: null, reading: null, assetId: null });
-        continue;
       } else if (!chain) {
-        // it looks like a balance alert in a format the rules do not know: say so instead of calling it "not a balance email"
+        // every email under the label is shown, never dropped: with no AI to read an unknown format, it waits for you to type the number
         await log({
           outcome: 'needs_review',
           reason: m.reread
             ? 'add an AI key (or switch one on) in Settings to read this email'
-            : 'balance email in a format the rules do not know; add an AI key (or switch one on) to read it',
+            : 'no rule knows this format; type the balance in, or add an AI key (or switch one on) to read it',
           reading: null,
           assetId: null,
         });
         continue;
       } else {
-        // an unfamiliar format: the AI reads it, and what it finds is still checked like any other reading (sender, account, size)
+        // a format the rules do not know (or one a bank changed): the AI reads it, and what it finds is still checked like any other
+        // reading (sender, account, size)
         readings = await readWithAi(
           chain,
           `${m.subject}
@@ -272,8 +270,10 @@ ${m.text}`,
         );
         if (readings.length === 0) {
           await log({
-            outcome: 'ignored',
-            reason: 'the AI found no balance in this email',
+            outcome: 'needs_review',
+            reason: mentionsBalance(m.subject, m.text)
+              ? 'neither the rules nor the AI found a balance; type it in if this email has one'
+              : 'this email does not seem to carry a balance; type it in if it does, or ignore it',
             reading: null,
             assetId: null,
           });

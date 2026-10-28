@@ -132,6 +132,38 @@ test.describe('Bank emails (public sample)', () => {
     await expect(page.getByText('A statement needs a look')).toHaveCount(0);
   });
 
+  test('an email nothing could be read from waits with boxes to type the balance and its date', async ({
+    page,
+  }) => {
+    await page.goto('/demo/inbox');
+    const card = page.locator('article.inbox-card', {
+      hasText: 'Transaction alert for your account',
+    });
+    await expect(card).toContainText('neither the rules nor the AI found a balance');
+    await expect(card.getByRole('combobox', { name: /Account of/ })).toBeVisible();
+    await expect(card.getByRole('textbox', { name: /Balance in this email/ })).toBeVisible();
+    await expect(card.getByLabel('Date of the balance')).toHaveValue('2026-10-23');
+    await card.getByRole('combobox', { name: /Account of/ }).selectOption({ index: 1 });
+    await card.getByRole('textbox', { name: /Balance in this email/ }).fill('12345.67');
+    await card.getByRole('button', { name: 'Record this balance' }).click();
+    await expect(card.getByRole('alert').filter({ hasText: /sample/ })).toBeVisible();
+    await noOverflow(page);
+  });
+
+  test('All fetched lists every email from the label, whatever its format', async ({ page }) => {
+    await page.goto('/demo/inbox?tab=all');
+    const list = page.getByRole('region', { name: 'All fetched' });
+    await expect(list).toContainText('Every email the reader fetched from the label');
+    for (const subject of [
+      'Balance alert for your account ending 1117',
+      'Transaction alert for your account',
+      'Our new savings rates are here',
+      'Consolidated account statement',
+    ])
+      await expect(list.getByRole('heading', { name: subject }).first()).toBeVisible();
+    await noOverflow(page);
+  });
+
   test('skipped messages say why, and the filter narrows them by reason', async ({ page }) => {
     await page.goto('/demo/inbox?tab=skipped');
     await expect(

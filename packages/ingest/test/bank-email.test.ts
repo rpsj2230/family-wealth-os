@@ -252,9 +252,9 @@ describe('OpenRouter request and answers', () => {
 describe('YES Bank credit alerts and the new .bank.in domains', () => {
   const YES_TEXT = `Dear Customer,
 
-An amount of INR 5,56,750.00 has been credited to your A/C. No. XX0037 on 28-OCT-2026 12:57:59 on account of RTGS:RATNR0000000000000001/From:SOMEONE.
+An amount of INR 1,00,000.00 has been credited to your A/C. No. XX1111 on 28-OCT-2026 12:57:59 on account of RTGS:RATNR0000000000000001/From:SOMEONE.
 
-Available Balance on 28-OCT-26 is INR 5,57,006.53 and Total available balance (including linked deposits and Limit) is INR 5,57,006.53.`;
+Available Balance on 28-OCT-26 is INR 1,23,456.78 and Total available balance (including linked deposits and Limit) is INR 1,23,456.78.`;
 
   it('knows the banks by their new domains as well as the old ones', () => {
     expect(senderMatchesBank('yes.bank.in', 'YES Bank')).toBe(true);
@@ -275,8 +275,8 @@ Available Balance on 28-OCT-26 is INR 5,57,006.53 and Total available balance (i
       kind: 'balance',
       reading: {
         bank: 'YES Bank',
-        last4: '0037',
-        amount: 557006.53,
+        last4: '1111',
+        amount: 123456.78,
         currency: 'INR',
         asOf: '2026-10-28',
         source: 'rule',
@@ -300,7 +300,7 @@ Available Balance on 28-OCT-26 is INR 5,57,006.53 and Total available balance (i
       {
         assetId: 'y1',
         institution: 'Yes Bank',
-        last4: '0037',
+        last4: '1111',
         currency: 'INR',
         type: 'bank_account',
       },
@@ -324,5 +324,129 @@ Available Balance on 28-OCT-26 is INR 5,57,006.53 and Total available balance (i
       assetId: 'y1',
       autoApply: true,
     });
+  });
+});
+
+describe('alert formats of each bank, read from its own address', () => {
+  const read = (from: string, text: string, subject = 'Alert') =>
+    parseBankEmail({ from, subject, text, receivedOn: '2026-10-28' });
+  const reading = (from: string, text: string) => {
+    const out = read(from, text);
+    if (out.kind !== 'balance') throw new Error(`not read: ${from}`);
+    return out.reading;
+  };
+
+  it('YES Bank debit: the balance with a time after its date', () => {
+    expect(
+      reading(
+        '<alerts@yes.bank.in>',
+        `Dear Customer,
+An amount of INR 5,00,000.00 has been debited to your A/C. No. XX1111 on 14-SEP-26- on account of NET-TPT-SOMEONE-transfer to Someone-XX2222
+
+Available Balance on 14-SEP-2026 12:43:48 is INR 2.53 and Total available balance (including linked deposits and Limit) is INR 2.53.`,
+      ),
+    ).toMatchObject({ bank: 'YES Bank', last4: '1111', amount: 2.53, asOf: '2026-09-14' });
+  });
+
+  it('RBL: the available balance after the debit, dated by the transaction', () => {
+    expect(
+      reading(
+        'RBL Bank <RBLAlerts@rbl.bank.in>',
+        `Greetings from RBL Bank!
+This is to inform you that your a/c no. ending XX3333 has been debited for INR 556750.0 on 28-10-2026 at 12:57:37 through RTGS trf vide UTR No. RATNH00000000000.
+Your available balance is INR 0.05.`,
+      ),
+    ).toMatchObject({ bank: 'RBL Bank', last4: '3333', amount: 0.05, asOf: '2026-10-28' });
+  });
+
+  it('Equitas: the balance alert', () => {
+    expect(
+      reading(
+        '<esfb-alerts@equitas.bank.in>',
+        `Dear Customer,
+The balance in A/c No XXXXXXXX4444 at M P NAGAR as of 06-OCT-2026 is INR 2,82,298.69. You may also login to Equitas Internet / Mobile banking to check for current balance.`,
+      ),
+    ).toMatchObject({ bank: 'Equitas', last4: '4444', amount: 282298.69, asOf: '2026-10-06' });
+  });
+
+  it('Equitas: a debit, with a long reference in the middle', () => {
+    expect(
+      reading(
+        '<esfb-alerts@equitas.bank.in>',
+        `Greetings from Equitas Small Finance Bank!
+Please note that an amount of INR 5,00,000.00 has been debited from account # XXXXXXXX5555 Ref  towards Initial Payin FD300000000000    /1 SOMEONE Equitas TD/00000000/SOMEONE on 14-SEP-2026. The available balance is INR 5,00,000.35. In case this transaction was not done by you Click https://equitas.bank.in/unauthorized-transaction to report this transaction immediately.`,
+      ),
+    ).toMatchObject({ last4: '5555', amount: 500000.35, asOf: '2026-09-14' });
+    expect(
+      reading(
+        '<esfb-alerts@equitas.bank.in>',
+        `Please note that an amount of INR 2,157.48 has been debited from account # XXXXXXXX5555 Ref  towards TAX Deducted on 30-SEP-2026. The available balance is INR 3,97,541.17.`,
+      ),
+    ).toMatchObject({ last4: '5555', amount: 397541.17, asOf: '2026-09-30' });
+  });
+
+  it('ESAF: the ledger balance from the table, not the amount credited', () => {
+    expect(
+      reading(
+        'ESAF Bank <alerts@trans.esafbank.com>',
+        `Credit Alert
+Dear SOMEONE,
+An amount of INR 83061.71 credited to your ESAF Small Finance Bank account XXXXXXXX6666 towards the below transaction :
+Description	Value
+Amount (INR)	83061.71
+Date & Time	SEP 08, 2026 01:36 PM
+Reference ID	221002
+Ledger Balance (INR)	171769.42`,
+      ),
+    ).toMatchObject({ bank: 'ESAF', last4: '6666', amount: 171769.42, asOf: '2026-09-08' });
+  });
+
+  it('Jana: the account balance after an interest credit', () => {
+    expect(
+      reading(
+        '<noreply@jana.bank.in>',
+        `Dear Customer,
+Thank you for banking with us
+Your Jana Bank A/c no. XX7777 is credited with INR 112.00 on 30-SEP-2026.
+Info: CASA Credit Interest Capi
+
+Your account balance is INR 112.00.`,
+      ),
+    ).toMatchObject({ bank: 'Jana', last4: '7777', amount: 112, asOf: '2026-09-30' });
+  });
+
+  it('IDFC FIRST: the new balance, with international commas', () => {
+    expect(
+      reading(
+        'IDFC FIRST Bank <transaction.alerts@idfcfirstbank.com>',
+        `Greetings from IDFC FIRST Bank.
+Your A/C XXXXXXX8888 has been credited with INR 113,687.00 on 08-09-2026 17:03:06 vide NEFT payment reference 000000000000 received from SOMEONE.
+
+New balance is INR 8,654,533.93.`,
+      ),
+    ).toMatchObject({ bank: 'IDFC', last4: '8888', amount: 8654533.93, asOf: '2026-09-08' });
+  });
+
+  it('a format a bank changes, or a sender that is not the bank, is left to the AI reader', () => {
+    expect(read('<esfb-alerts@equitas.bank.in>', 'Your FD has been renewed. Thank you.').kind).toBe(
+      'unknown',
+    );
+    expect(
+      read(
+        '<noreply@jana-bank.example>',
+        'Your Jana Bank A/c no. XX7777 is credited with INR 112.00 on 30-SEP-2026. Your account balance is INR 112.00.',
+      ).kind,
+    ).toBe('unknown');
+  });
+
+  it('a short bank key is not found inside another bank name', () => {
+    expect(senderMatchesBank('au.bank.in', 'AU Small Finance Bank')).toBe(true);
+    expect(senderMatchesBank('au.bank.in', 'Saurashtra Gramin')).toBe(false);
+    expect(senderMatchesBank('equitas.bank.in', 'Equitas Small Finance Bank')).toBe(true);
+  });
+
+  it('reads US-style dates', () => {
+    expect(parseBankDate('SEP 08, 2026')).toBe('2026-09-08');
+    expect(parseBankDate('Sept 8 2026')).toBe('2026-09-08');
   });
 });

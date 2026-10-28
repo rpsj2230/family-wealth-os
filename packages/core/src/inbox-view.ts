@@ -12,7 +12,8 @@ export interface InboxReading {
   amount: number;
   currency: string;
   asOf: string;
-  source: 'rule' | 'ai';
+  /** read by a rule, by the AI, or typed by you for an email nothing could be read from */
+  source: 'rule' | 'ai' | 'manual';
   /** the number was corrected by you after it was read */
   editedByYou?: boolean;
 }
@@ -116,7 +117,7 @@ export function explainEntry(m: InboxEntry): Explained {
   const reason = (m.reason ?? '').trim();
   const q = queueOf(m);
   const found = r
-    ? `Balance ${readingAmount(r)} as of ${longDate(r.asOf)}${r.last4 ? `, account ending ${r.last4}` : ''}, read from ${r.source === 'ai' ? 'a statement by the AI reader' : 'an email'}`
+    ? `Balance ${readingAmount(r)} as of ${longDate(r.asOf)}${r.last4 ? `, account ending ${r.last4}` : ''}, ${r.source === 'manual' ? 'typed in by you' : r.source === 'ai' ? 'read from the email by the AI reader' : 'read from an email'}`
     : null;
 
   if (q === 'recorded') {

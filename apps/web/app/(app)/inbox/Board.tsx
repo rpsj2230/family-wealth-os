@@ -16,7 +16,7 @@ import { EntryTools } from './EntryTools';
 import { ReviewCard, RestoreButton } from './Parts';
 import '@/components/datain.css';
 
-export const INBOX_TABS = ['review', 'recorded', 'skipped', 'automation'] as const;
+export const INBOX_TABS = ['review', 'all', 'recorded', 'skipped', 'automation'] as const;
 export type InboxTab = (typeof INBOX_TABS)[number];
 
 const SKIP_LABEL: Record<SkipGroup | 'all', string> = {
@@ -69,6 +69,7 @@ export function InboxBoard({
         current={tab}
         tabs={[
           { key: 'review', label: 'Needs your review', badge: review.length },
+          { key: 'all', label: 'All fetched', badge: entries.length || null },
           { key: 'recorded', label: 'Recorded' },
           { key: 'skipped', label: 'Skipped', badge: counts.problem || null },
           { key: 'automation', label: 'Automation' },
@@ -103,6 +104,18 @@ export function InboxBoard({
               ))}
             </>
           )}
+        </section>
+      )}
+
+      {tab === 'all' && (
+        <section aria-label="All fetched">
+          <p className="muted small">
+            Every email the reader fetched from the label <strong>{label}</strong>, newest first,
+            whatever its format: what was read from it and what happened. One that waits for you can
+            be recorded under <Link href={`${base}?tab=review`}>Needs your review</Link>, typing the
+            number when nothing could be read.
+          </p>
+          <MessageList entries={entries} demo={demo} empty="No email has been fetched yet." />
         </section>
       )}
 

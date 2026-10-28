@@ -75,6 +75,14 @@ export function demoInbox(): InboxEntry[] {
       reason: 'statement found; add an AI key in Settings to read it',
     }),
     m({
+      id: 'r4',
+      receivedOn: '2026-10-23',
+      subject: 'Transaction alert for your account',
+      reason: 'neither the rules nor the AI found a balance; type it in if this email has one',
+      bodyText:
+        'Dear Customer,\n\nA payment of INR 4,500.00 was made from your account. Log in to see your balance.',
+    }),
+    m({
       id: 'a1',
       receivedOn: '2026-10-22',
       outcome: 'applied',

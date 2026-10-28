@@ -98,11 +98,11 @@ describe('runInbox: rule-based alerts', () => {
     expect(applied).toHaveLength(1);
   });
 
-  it('ignores marketing mail and reviews a balance for an unknown account', async () => {
+  it('keeps every labelled email for you, even one with no balance, and reviews a balance for an unknown account', async () => {
     const a = fakeIo();
-    expect(
-      (await runInbox([msg({ text: 'Festive offers', subject: 'Offers' })], a.io, cfgNoAi)).ignored,
-    ).toBe(1);
+    const r = await runInbox([msg({ text: 'Festive offers', subject: 'Offers' })], a.io, cfgNoAi);
+    expect(r).toMatchObject({ ignored: 0, needsReview: 1 });
+    expect(a.rows[0]!.reason).toContain('type the balance in');
     const b = fakeIo({ accounts: async () => [] });
     expect((await runInbox([msg()], b.io, cfgNoAi)).needsReview).toBe(1);
   });
@@ -301,10 +301,10 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
     const { io, rows } = fakeIo();
     const r = await runInbox([forwarded], io, cfgNoAi);
     expect(r.needsReview).toBe(1);
-    expect(rows[0]!.reason).toContain('balance email in a format the rules do not know');
+    expect(rows[0]!.reason).toContain('no rule knows this format');
   });
 
-  it('ignores it when the AI finds no balance, and never asks about an offer', async () => {
+  it('asks the AI about any format the rules do not know, and keeps it for you to fill in when nothing is found', async () => {
     let asked = 0;
     const { io, rows } = fakeIo();
     const cfg = withAi(() => {
@@ -313,15 +313,16 @@ describe('runInbox: a balance email in a format the rules do not know', () => {
     });
     await runInbox([forwarded], io, cfg);
     expect(rows[0]).toMatchObject({
-      outcome: 'ignored',
-      reason: 'the AI found no balance in this email',
+      outcome: 'needs_review',
+      reason: 'neither the rules nor the AI found a balance; type it in if this email has one',
     });
     await runInbox(
       [msg({ messageId: 'o1', subject: 'Offers', text: 'Festive offers up to 50% off' })],
       io,
       cfg,
     );
-    expect(asked).toBe(1);
+    expect(asked).toBe(2);
+    expect(rows.at(-1)).toMatchObject({ outcome: 'needs_review' });
   });
 
   it('goes to the next key when the first is refused, and says who answered', async () => {

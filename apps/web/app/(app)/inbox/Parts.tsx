@@ -151,12 +151,46 @@ export function ReviewCard({
             </button>
           </>
         )}
-        <button
-          className={`btn ${r ? 'ghost' : ''}`}
-          formAction={dismissAction}
-          formNoValidate
-          disabled={busy}
-        >
+        {!r && (
+          <>
+            <select
+              name="asset"
+              aria-label={`Account of ${entry.subject || 'this message'}`}
+              defaultValue=""
+              required
+            >
+              <option value="" disabled>
+                Choose the account…
+              </option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <input
+              name="amount"
+              inputMode="decimal"
+              placeholder="Balance"
+              required
+              aria-label="Balance in this email (type it in)"
+              className="numinput"
+              style={{ width: '9.5rem', textAlign: 'right' }}
+            />
+            <input
+              type="date"
+              name="on"
+              defaultValue={entry.receivedOn ?? ''}
+              max={new Date().toISOString().slice(0, 10)}
+              required
+              aria-label="Date of the balance"
+            />
+            <button className="btn primary" disabled={busy}>
+              {applying ? 'Recording…' : 'Record this balance'}
+            </button>
+          </>
+        )}
+        <button className="btn ghost" formAction={dismissAction} formNoValidate disabled={busy}>
           Ignore
         </button>
       </form>
