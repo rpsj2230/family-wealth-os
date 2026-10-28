@@ -74,6 +74,14 @@ export interface ClassifyContext {
   reviewAbove: number;
   pairDays: number;
   fundDays: number;
+  /** transfers from Singapore already on file (Wise): a credit of the same sum a few days after is that transfer */
+  remittances?: {
+    id: string;
+    date: string;
+    amount: number;
+    toAssetId: string | null;
+    fromAssetId: string | null;
+  }[];
 }
 
 export interface Classified {
@@ -145,6 +153,23 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     if (interestDays.has(`${l.assetId}|${l.date}`) && !DEPOSIT_WORDS.test(l.narration))
       set(l, 'interest_tax', 'Tax taken at source on the interest the same day');
     else set(l, 'tax', 'Tax taken at source');
+  }
+
+  // 3. a transfer from Singapore on file (Wise): the same sum arriving within a few days, in the account it went to when that is known
+  const usedRemit = new Set<string>();
+  for (const l of sorted) {
+    if (!open(l) || l.amount <= 0) continue;
+    const r = (ctx.remittances ?? []).find(
+      (x) =>
+        !usedRemit.has(x.id) &&
+        near(x.amount, l.amount) &&
+        (!x.toAssetId || x.toAssetId === l.assetId) &&
+        l.date >= addDaysIso(x.date, -2) &&
+        l.date <= addDaysIso(x.date, 4),
+    );
+    if (!r) continue;
+    usedRemit.add(r.id);
+    set(l, 'own_transfer', `The transfer from Singapore (Wise) of ${r.date}`, r.fromAssetId);
   }
 
   // 3–4. rent and money from abroad, by their wording

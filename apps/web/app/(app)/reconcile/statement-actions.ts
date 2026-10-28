@@ -143,7 +143,7 @@ export async function previewStatement(
   }));
   const classified = classifyLines(
     [...stmtLinesOf(stored.lines, loaded), ...preview],
-    classifyContext(loaded, config),
+    classifyContext(loaded, config, stored.remittances),
   ).filter((c) => c.id.startsWith('new:'));
   const amountOf = new Map(preview.map((p) => [p.id, p.amount]));
   const by = new Map<LineClass, { count: number; total: number }>();

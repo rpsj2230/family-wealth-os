@@ -102,3 +102,4 @@ export * from './fund-views';
 export * from './reconcile';
 export * from './statement-classify';
 export * from './statement-interest';
+export * from './remittance';

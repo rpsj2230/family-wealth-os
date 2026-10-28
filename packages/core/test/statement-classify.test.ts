@@ -101,6 +101,16 @@ describe('what each statement line was', () => {
     expect(byNarr(cs, 'NEFT CR-UNKNOWN').cls).toBe('ask_in');
   });
 
+  it('a credit that is a Wise transfer on file is your own money moving from Singapore, not new money', () => {
+    const wise = classifyLines([line('a', '2024-07-19', 1_241_354.41, 'NEFT CR-WISE PAYMENTS')], {
+      ...ctx,
+      remittances: [
+        { id: 'w1', date: '2024-07-18', amount: 1_241_354.41, toAssetId: null, fromAssetId: 'dbs' },
+      ],
+    });
+    expect(wise[0]).toMatchObject({ cls: 'own_transfer', counterpart: 'dbs' });
+  });
+
   it('your answer decides', () => {
     const answered = lines.map((l) =>
       l.narration === 'NEFT CR-UNKNOWN' ? { ...l, answer: 'income' as const } : l,

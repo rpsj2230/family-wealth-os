@@ -93,10 +93,15 @@ export function balanceOn(s: BankStatement, date: string): number | null {
 }
 
 /** Every stored line and statement of the household, read in pages (ten years are thousands of lines). */
-export async function loadStatements(
-  supabase: SupabaseClient,
-): Promise<{ lines: StoredLine[]; statements: StoredStatement[] }> {
-  const [lines, statements] = await Promise.all([
+/** A transfer from Singapore on file (Wise), as the rules read it. */
+export type StoredRemittance = NonNullable<ClassifyContext['remittances']>[number];
+
+export async function loadStatements(supabase: SupabaseClient): Promise<{
+  lines: StoredLine[];
+  statements: StoredStatement[];
+  remittances: StoredRemittance[];
+}> {
+  const [lines, statements, remits] = await Promise.all([
     pageAll<StoredLine>((from, to) =>
       supabase
         .from('statement_lines')
@@ -114,8 +119,28 @@ export async function loadStatements(
         .order('from_on')
         .range(from, to),
     ),
+    pageAll<{
+      id: string;
+      received_on: string;
+      amount_inr: number;
+      to_asset_id: string | null;
+      from_asset_id: string | null;
+    }>((from, to) =>
+      supabase
+        .from('remittances')
+        .select('id, received_on, amount_inr, to_asset_id, from_asset_id')
+        .order('received_on')
+        .range(from, to),
+    ),
   ]);
   return {
+    remittances: remits.map((r) => ({
+      id: r.id,
+      date: r.received_on,
+      amount: Number(r.amount_inr),
+      toAssetId: r.to_asset_id,
+      fromAssetId: r.from_asset_id,
+    })),
     lines: lines.map((l) => ({
       ...l,
       amount: Number(l.amount),
@@ -126,7 +151,11 @@ export async function loadStatements(
 }
 
 /** What the rules need to know about the holdings on file: accounts, deposits and the purchases and sales in the CAS. */
-export function classifyContext(loaded: LoadedPortfolio, config: AppConfig): ClassifyContext {
+export function classifyContext(
+  loaded: LoadedPortfolio,
+  config: AppConfig,
+  remittances: StoredRemittance[] = [],
+): ClassifyContext {
   const owner = new Map(loaded.assetRows.map((a) => [a.id, a.owner_id]));
   const fundTxns: ClassifyContext['fundTxns'] = [];
   for (const [assetId, rows] of loaded.engine?.fundLines ?? new Map()) {
@@ -164,6 +193,7 @@ export function classifyContext(loaded: LoadedPortfolio, config: AppConfig): Cla
     reviewAbove: config.statements.reviewAbove,
     pairDays: config.estimates.transferPairDays,
     fundDays: config.statements.fundMatchDays,
+    remittances,
   };
 }
 
@@ -190,13 +220,13 @@ export interface StatementPicture {
 
 /** Every line sorted, the yearly interest compared, and the movements that follow. */
 export function statementPicture(
-  stored: { lines: StoredLine[]; statements: StoredStatement[] },
+  stored: { lines: StoredLine[]; statements: StoredStatement[]; remittances: StoredRemittance[] },
   loaded: LoadedPortfolio,
   config: AppConfig,
   position: PositionInput,
 ): StatementPicture {
   const lines = stmtLinesOf(stored.lines, loaded);
-  const classified = classifyLines(lines, classifyContext(loaded, config));
+  const classified = classifyLines(lines, classifyContext(loaded, config, stored.remittances));
   const interest = statementInterest({
     lines,
     classified,
