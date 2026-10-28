@@ -212,6 +212,9 @@ async function afterImport(
   console.log(
     `Movements from statements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}`,
   );
+  console.log(
+    `Needed from you (Tasks): ${rb.needed.open} open, ${rb.needed.added} added, ${rb.needed.closed} closed`,
+  );
   // what the account's lines are, by kind
   const loaded = await loadPortfolioData(db, { householdId: hh });
   const { config } = await loadSettings(db, hh);
