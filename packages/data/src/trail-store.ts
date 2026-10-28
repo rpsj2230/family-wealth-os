@@ -77,11 +77,12 @@ export async function loadMoneyTrail(
       id: a.id,
       ownerId: a.owner_id,
       kind: a.type === 'fixed_deposit' ? ('deposit' as const) : ('account' as const),
+      ...(a.type === 'bank_account' && a.currency !== 'INR' ? { abroad: true } : {}),
     }));
   const trails = moneyTrail({ lines: tl, assets, openings });
   const holdings = assets
-    .filter((a) => trails.has(a.id))
-    .map((a) => ({ ...a, statements: withLines.has(a.id) }));
+    .filter((a) => !a.abroad && trails.has(a.id))
+    .map(({ id, ownerId, kind }) => ({ id, ownerId, kind, statements: withLines.has(id) }));
   return {
     trails,
     holdings,

@@ -76,4 +76,18 @@ describe('the money trail', () => {
     expect(t.parts.find((p) => p.kind === 'singapore')!.amount).toBeCloseTo(500_000, 2);
     expect(t.parts.find((p) => p.kind === 'deposit_interest')!.amount).toBeCloseTo(35_000, 2);
   });
+
+  it('treats money from a Singapore account on file as money from Singapore, not a crossing', () => {
+    const t = moneyTrail({
+      lines: [ln('A', '2024-01-02', 500_000, 'own_transfer', 'SGJ')],
+      assets: [...assets, { id: 'SGJ', ownerId: 'vikram', kind: 'account', abroad: true }],
+      openings: new Map(),
+    });
+    const a = t.get('A')!;
+    expect(a.parts).toEqual([
+      expect.objectContaining({ kind: 'singapore', person: 'asha', amount: 500_000 }),
+    ]);
+    expect(a.crossings).toEqual([]);
+    expect(t.has('SGJ')).toBe(false);
+  });
 });

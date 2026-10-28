@@ -60,6 +60,8 @@ export interface TrailAsset {
   /** a deposit (its make-up is the money that booked it) or an account */
   kind: 'account' | 'deposit';
   principal?: number;
+  /** an account abroad (the Singapore accounts): money from it is money from Singapore, whoever's name the account is in */
+  abroad?: boolean;
 }
 
 export interface Part extends MoneyOrigin {
@@ -126,9 +128,11 @@ export function moneyTrail(args: {
   /** each account's balance before its first statement line */
   openings: Map<string, number>;
 }): Map<string, Trail> {
-  const owner = new Map(args.assets.map((a) => [a.id, a.ownerId]));
+  // the Singapore accounts are where the money starts, not holdings it passes through: DBS is joint, so it is nobody's crossing
+  const owner = new Map(args.assets.filter((a) => !a.abroad).map((a) => [a.id, a.ownerId]));
   const isDeposit = new Set(args.assets.filter((a) => a.kind === 'deposit').map((a) => a.id));
-  const withLines = new Set(args.lines.map((l) => l.assetId));
+  const abroad = new Set(args.assets.filter((a) => a.abroad).map((a) => a.id));
+  const withLines = new Set(args.lines.filter((l) => !abroad.has(l.assetId)).map((l) => l.assetId));
   const pools = new Map<string, Pool>();
   const trails = new Map<string, Trail>();
   const trail = (id: string) =>
@@ -148,6 +152,7 @@ export function moneyTrail(args: {
     (a, b) => a.date.localeCompare(b.date) || a.amount - b.amount || a.id.localeCompare(b.id),
   );
   for (const l of sorted) {
+    if (abroad.has(l.assetId)) continue;
     const holder = owner.get(l.assetId) ?? '';
     const p = pool(l.assetId);
     if (l.amount < 0) {
