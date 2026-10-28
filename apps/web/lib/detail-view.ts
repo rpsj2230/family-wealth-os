@@ -17,6 +17,8 @@ import {
   returnsFor,
   sourceTag,
   type FdForFiling,
+  type FundSplit,
+  type SavingsDetail,
 } from '@fwos/core';
 import { fifoLots, type CasTxn } from '@fwos/ingest';
 import type { ActivityItem } from '@/components/ActivityLog';
@@ -113,6 +115,13 @@ export interface AssetViewInput {
   payments: { amount: number; paid_on: string; note: string | null }[];
   goalNames: string[];
   linked: { id: string; label: string } | null;
+  /** how the central engine reached today's value (savings: from the last confirmed balance; a fund: statement units and SIPs since) */
+  breakdown?: {
+    savings: SavingsDetail | null;
+    fund: FundSplit | null;
+    /** Settings: a NAV older than this many days is shown as old */
+    navStaleDays: number | null;
+  } | null;
   /** the rate a savings account earns today and where that figure comes from */
   rateInfo?: { rate: number; tag: 'own' | 'market' | 'assumed'; note: string } | null;
   /** the best NRE fixed deposit on offer right now, from the rates on file */
@@ -320,6 +329,106 @@ function fdTable(i: AssetViewInput): DetailTableData | null {
   };
 }
 
+/** The title of the "how today's value is worked out" table, so the fund pages can pick it out. */
+export const VALUE_TABLE = 'How today’s value is worked out';
+
+/**
+ * How a savings account's value today is worked out, step by step: the last balance you or the bank confirmed, the money moved since
+ * that you confirmed, and the interest since (credited by the bank, then accrued and not yet credited), after tax at source. Each line
+ * says whether it is an actual figure or an estimate. The next actual balance replaces the estimate; a difference goes to Explain
+ * movements, never to profit.
+ */
+export function savingsBreakdown(
+  s: SavingsDetail,
+  value: number | null,
+  rate: AssetViewInput['rateInfo'],
+  today: string,
+): DetailTableData {
+  const rows: DetailTableData['rows'] = [
+    {
+      cells: [`Last confirmed balance, ${s.baseline.date}`, inr(s.baseline.amount), 'Actual'],
+    },
+  ];
+  if (Math.abs(s.moved) >= 1)
+    rows.push({ cells: ['Money in or out since, as you confirmed it', signed(s.moved), 'Actual'] });
+  rows.push(
+    { cells: ['Interest credited by the bank since', signed(s.credited), 'Estimate'] },
+    { cells: ['Interest earned, not yet credited', signed(s.accrued), 'Estimate'] },
+    {
+      cells: [
+        `Value today, ${today}`,
+        inr(value ?? s.baseline.amount + s.moved + s.interest),
+        s.interest === 0 && s.moved === 0 ? 'Actual' : 'Estimate',
+      ],
+    },
+  );
+  const age = daysBetween(s.baseline.date, today);
+  return {
+    title: VALUE_TABLE,
+    hint: `From the balance of ${s.baseline.date} (${age} day${age === 1 ? '' : 's'} ago)${rate ? `, with interest at ${pct(rate.rate)} a year (${rate.note})` : ''}, credited on the bank’s schedule and after tax at source (Settings). The next actual balance replaces this estimate; any difference is shown on Explain movements, never as profit.`,
+    columns: ['Step', 'Amount', 'Kind'],
+    numeric: [1],
+    rows,
+  };
+}
+
+/**
+ * How a fund's value today is worked out: the units a fund statement confirmed, at the latest official price (NAV), and apart from them
+ * the SIP instalments bought since that no statement has confirmed yet (projected). Each line says which it is, and an old price says so.
+ */
+export function fundBreakdown(
+  f: FundSplit,
+  value: number | null,
+  today: string,
+  navStaleDays: number | null,
+): DetailTableData {
+  const nav = f.nav;
+  const navNote = nav ? `${nav.nav.toFixed(4)} on ${nav.date}` : 'no price on file';
+  const navAge = nav ? daysBetween(nav.date, today) : null;
+  const rows: DetailTableData['rows'] = [];
+  if (f.confirmedUnits !== null)
+    rows.push({
+      cells: [
+        `Units confirmed by a fund statement: ${f.confirmedUnits.toFixed(3)} × ${navNote}`,
+        inr(f.confirmedValue),
+        'Actual units × market price',
+      ],
+    });
+  if (f.projectedCount > 0 || f.projectedUnits > 0)
+    rows.push({
+      cells: [
+        `SIP instalments since, not yet on a statement: ${f.projectedCount} (${inr(f.projectedInvested)} put in, ${f.projectedUnits.toFixed(3)} units)`,
+        inr(f.projectedValue),
+        'Projected',
+      ],
+    });
+  if (f.confirmedUnits === null)
+    rows.push({
+      cells: [
+        'All units estimated from your SIP plan (no fund statement imported yet)',
+        inr(value),
+        'Estimate',
+      ],
+    });
+  rows.push({
+    cells: [
+      `Value today, ${today}`,
+      inr(value),
+      f.confirmedUnits !== null && f.projectedUnits === 0
+        ? 'Actual units × market price'
+        : 'Partly projected',
+    ],
+  });
+  const stale = navAge !== null && navStaleDays !== null && navAge > navStaleDays;
+  return {
+    title: VALUE_TABLE,
+    hint: `Units × the official price (NAV) ${nav ? `of ${nav.date}` : ''}${stale ? `, which is ${navAge} days old: older than the ${navStaleDays} days set in Settings, so the value may be out of date` : ''}. SIP instalments after the last statement are shown apart as projected until a statement confirms them; an upcoming instalment is never valued before its price is known.`,
+    columns: ['Step', 'Amount', 'Kind'],
+    numeric: [1],
+    rows,
+  };
+}
+
 function fundTables(i: AssetViewInput, value: number | null) {
   const tables: DetailTableData[] = [];
   const txns = [...i.txns].sort((a, b) => a.txn_on.localeCompare(b.txn_on));
@@ -435,7 +544,12 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     label: 'Status',
     value: pastDate ? 'Past its maturity date, not confirmed' : (STATUS[a.status] ?? a.status),
     ...(pastDate || a.status === 'matured_unconfirmed'
-      ? { note: 'Not counted in any total: its money is in a savings account or a new deposit.' }
+      ? {
+          note:
+            a.status === 'active' && cur.amount !== null && cur.amount > 0
+              ? 'Counted once, at what it paid out, until you say where the money went (Explain movements).'
+              : 'Not counted here: its money is probably already in a savings account or a new deposit.',
+        }
       : {}),
   });
   if (a.currency !== 'INR') facts.push({ label: 'Currency', value: a.currency });
@@ -633,6 +747,11 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         });
     }
   }
+
+  if (a.type === 'bank_account' && i.breakdown?.savings)
+    tables.push(savingsBreakdown(i.breakdown.savings, cur.amount, i.rateInfo ?? null, i.today));
+  if (i.breakdown?.fund)
+    tables.push(fundBreakdown(i.breakdown.fund, cur.amount, i.today, i.breakdown.navStaleDays));
 
   if (i.position) {
     const p = i.position;

@@ -218,12 +218,17 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     .flatMap((sct) => sct.rows)
     .filter((r) => r.assetId !== id)
     .map((r) => ({ id: r.assetId, label: r.code, value: r.current }));
-  const unitTolerance =
+  const fundCfg =
     asset.type === 'mutual_fund'
-      ? (await loadSettings(supabase as unknown as SupabaseClient)).config.funds.unitTolerance
+      ? (await loadSettings(supabase as unknown as SupabaseClient)).config.funds
       : undefined;
+  const unitTolerance = fundCfg?.unitTolerance;
   const input: AssetViewInput = {
     ...(unitTolerance !== undefined ? { unitTolerance } : {}),
+    // how the central engine reached today's value: savings from the last confirmed balance, a fund from statement units and SIPs
+    breakdown: valued?.detail
+      ? { ...valued.detail, navStaleDays: fundCfg?.navStaleDays ?? null }
+      : null,
     rateInfo: cashRate ?? null,
     market: bestFd
       ? {

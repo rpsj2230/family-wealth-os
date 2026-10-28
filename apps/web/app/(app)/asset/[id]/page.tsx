@@ -7,6 +7,7 @@ import { HistoryLine } from '@/components/HistoryLine';
 import { EditButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
 import { loadAssetDetail } from '@/lib/detail-data';
+import { VALUE_TABLE } from '@/lib/detail-view';
 import { loadFundDetail } from '@/lib/fund-detail-data';
 import { fundEditRows } from '@/lib/invest-ledger';
 import { parseRange, personStyles } from '@fwos/core';
@@ -53,7 +54,12 @@ export default async function AssetPage({
     const records = (
       <>
         <AssetFacts facts={d.view.facts} />
-        <DetailTables tables={d.view.tables.filter((t) => t.title === 'Recorded values')} />
+        <DetailTables
+          tables={[
+            ...d.view.tables.filter((t) => t.title === VALUE_TABLE),
+            ...d.view.tables.filter((t) => t.title === 'Recorded values'),
+          ]}
+        />
         <ActivityLog items={d.activity} />
       </>
     );

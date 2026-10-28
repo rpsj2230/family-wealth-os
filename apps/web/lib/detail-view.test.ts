@@ -3,7 +3,9 @@ import {
   bankHistory,
   buildActivity,
   buildAssetView,
+  fundBreakdown,
   observationsTable,
+  savingsBreakdown,
   type AssetViewInput,
 } from './detail-view';
 
@@ -145,11 +147,20 @@ describe('buildAssetView: a deposit from the history import, or past its date', 
     );
     expect(v.facts.some((x) => x.label === 'About the monthly-tabs import')).toBe(true);
   });
-  it('says a deposit still marked active but past its date is not confirmed and not counted', () => {
+  it('says a deposit past its date is not confirmed: counted once while its proceeds wait, not counted once they are probably placed', () => {
     const v = buildAssetView(base({ fd: { ...base().fd!, maturity_on: '2026-10-20' } }));
     const st = v.facts.find((x) => x.label === 'Status')!;
     expect(st.value).toBe('Past its maturity date, not confirmed');
-    expect(st.note).toContain('Not counted');
+    expect(st.note).toContain('Counted once');
+    // the engine found the money already in a new deposit or a later balance: no value of its own
+    const placed = buildAssetView(
+      base({
+        fd: { ...base().fd!, maturity_on: '2026-10-20' },
+        asset: { ...base().asset, status: 'matured_unconfirmed' },
+        current: { amount: null, basis: null, ageDays: null, asOf: null },
+      }),
+    );
+    expect(placed.facts.find((x) => x.label === 'Status')!.note).toContain('Not counted');
     expect(buildAssetView(base()).facts.find((x) => x.label === 'Status')!.value).toBe('Active');
   });
 });
@@ -341,5 +352,103 @@ describe('observationsTable: change and links', () => {
       'x',
     );
     expect(t.rows.find((r) => r.href?.endsWith('/c'))!.cells[3]).toBe('+₹100');
+  });
+});
+
+describe('how today’s value is worked out', () => {
+  it('a savings account: the confirmed balance, money moved, interest credited and accrued, each marked actual or estimate', () => {
+    const t = savingsBreakdown(
+      {
+        baseline: { date: '2026-09-30', amount: 100_000 },
+        interest: 450,
+        credited: 300,
+        accrued: 150,
+        moved: 5_000,
+      },
+      105_450,
+      { rate: 0.035, tag: 'own', note: 'your bank’s rate' },
+      '2026-10-28',
+    );
+    expect(t.rows.map((r) => r.cells[0])).toEqual([
+      'Last confirmed balance, 2026-09-30',
+      'Money in or out since, as you confirmed it',
+      'Interest credited by the bank since',
+      'Interest earned, not yet credited',
+      'Value today, 2026-10-28',
+    ]);
+    expect(t.rows.map((r) => r.cells[2])).toEqual([
+      'Actual',
+      'Actual',
+      'Estimate',
+      'Estimate',
+      'Estimate',
+    ]);
+    expect(t.rows.at(-1)!.cells[1]).toBe('₹1,05,450');
+    expect(t.hint).toContain('28 days ago');
+    expect(t.hint).toContain('3.5% a year');
+    expect(t.hint).toContain('never as profit');
+  });
+
+  it('a balance recorded today is an actual figure with no interest lines doing anything', () => {
+    const t = savingsBreakdown(
+      {
+        baseline: { date: '2026-10-28', amount: 5_000 },
+        interest: 0,
+        credited: 0,
+        accrued: 0,
+        moved: 0,
+      },
+      5_000,
+      null,
+      '2026-10-28',
+    );
+    expect(t.rows.at(-1)!.cells[2]).toBe('Actual');
+    expect(t.rows.some((r) => r.cells[0]!.startsWith('Money in or out'))).toBe(false);
+  });
+
+  it('a fund: statement units at the official price, and SIP instalments since shown apart as projected', () => {
+    const t = fundBreakdown(
+      {
+        confirmedUnits: 1_000,
+        projectedUnits: 20,
+        confirmedValue: 100_000,
+        projectedValue: 2_000,
+        projectedInvested: 1_900,
+        projectedCount: 2,
+        nav: { date: '2026-10-27', nav: 100 },
+      },
+      102_000,
+      '2026-10-28',
+      4,
+    );
+    expect(t.rows).toHaveLength(3);
+    expect(t.rows[0]!.cells).toEqual([
+      'Units confirmed by a fund statement: 1000.000 × 100.0000 on 2026-10-27',
+      '₹1,00,000',
+      'Actual units × market price',
+    ]);
+    expect(t.rows[1]!.cells[2]).toBe('Projected');
+    expect(t.rows[2]!.cells[2]).toBe('Partly projected');
+    expect(t.hint).not.toContain('out of date');
+  });
+
+  it('a fund whose price is older than the setting says so, and one with no statement is an estimate', () => {
+    const old = fundBreakdown(
+      {
+        confirmedUnits: null,
+        projectedUnits: 0,
+        confirmedValue: null,
+        projectedValue: 0,
+        projectedInvested: 0,
+        projectedCount: 0,
+        nav: { date: '2026-10-20', nav: 50 },
+      },
+      10_000,
+      '2026-10-28',
+      4,
+    );
+    expect(old.rows[0]!.cells[0]).toContain('estimated from your SIP plan');
+    expect(old.hint).toContain('8 days old');
+    expect(old.hint).toContain('out of date');
   });
 });

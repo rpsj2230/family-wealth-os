@@ -61,6 +61,12 @@ test('sample fund: headline, figures, graphs and every tab', async ({ page }) =>
   await tabs.getByRole('link', { name: 'Records' }).click();
   await expect(page.getByRole('region', { name: 'Key facts' })).toContainText('Education fund');
   await expect(page.getByRole('region', { name: 'Recorded values' })).toContainText('Replaced');
+  // how today's value is worked out: statement units apart from the SIP instalments since, each marked
+  const how = page.getByRole('region', { name: 'How today’s value is worked out' });
+  await expect(how).toContainText('Units confirmed by a fund statement');
+  await expect(how).toContainText('SIP instalments since, not yet on a statement: 2');
+  await expect(how).toContainText('Projected');
+  await expect(how).toContainText('Partly projected');
   await expect(page.getByRole('region', { name: 'Activity log' })).toContainText(
     'Fund position updated',
   );

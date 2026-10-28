@@ -2,6 +2,7 @@ import {
   buildBankBlocks,
   buildSources,
   personStyles,
+  reconcileQueue,
   receivableStatus,
   settingsFromJson,
   type HomeRange,
@@ -232,6 +233,20 @@ export async function loadHome(
       .map((t) => ({ id: t.id as string, title: t.title as string, dueOn: t.due_on as string })),
     openTasks: (tasks.data ?? []).length,
     inboxReview: inbox.count ?? 0,
+    toExplain: (() => {
+      // the same queue as the Explain movements page
+      const q = reconcileQueue({
+        position,
+        moves: loaded.engine.moves,
+        tolerance: settings.config.estimates.unexplainedTolerance,
+        sinceDays: Math.max(settings.config.deposits.hideMaturedAfterDays, 120),
+      });
+      return {
+        balances: q.balances.length,
+        unexplained: q.balances.reduce((a, b) => a + Math.abs(b.difference), 0),
+        funding: q.funding.length,
+      };
+    })(),
     fundsNoPrice: (await unpricedFunds(supabase as unknown as SupabaseClient, assetRows)).waiting
       .length,
     position,

@@ -370,6 +370,19 @@ describe('attentionItems', () => {
   };
   it('is empty when nothing needs a person', () => {
     expect(attentionItems(none)).toEqual([]);
+    expect(
+      attentionItems({ ...none, toExplain: { balances: 0, unexplained: 0, funding: 0 } }),
+    ).toEqual([]);
+  });
+  it('sends balances that moved more than expected and deposits with no source to Explain movements', () => {
+    const [item] = attentionItems({
+      ...none,
+      toExplain: { balances: 2, unexplained: 1_250_000, funding: 1 },
+    });
+    expect(item).toMatchObject({ key: 'explain', tone: 'warn', count: 3, href: '/reconcile' });
+    expect(item!.text).toBe(
+      '2 balances changed more than expected (₹12.50 L not yet explained, kept out of profit); 1 new deposit with no recorded source: say what they were.',
+    );
   });
   it('orders what is late before what is coming before housekeeping', () => {
     const items = attentionItems({

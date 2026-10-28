@@ -256,6 +256,9 @@ export function portfolioFromPosition(
       status,
       name: h.name,
       estimate,
+      ...(h.savings || h.fundSplit
+        ? { detail: { savings: h.savings ?? null, fund: h.fundSplit ?? null } }
+        : {}),
     });
     let freshness: AssetStatusLine['freshness'] = 'missing';
     let ageDays: number | null = null;

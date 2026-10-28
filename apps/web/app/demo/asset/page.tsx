@@ -26,6 +26,7 @@ import type { FundRow } from '@/lib/investments';
 import {
   buildActivity,
   buildAssetView,
+  VALUE_TABLE,
   type AssetViewInput,
   type AuditIn,
 } from '@/lib/detail-view';
@@ -89,9 +90,28 @@ function fdInput(): AssetViewInput {
   };
 }
 
+/** Invented: two SIP instalments since the last statement, kept apart as projected; the rest confirmed by the statement. */
+function demoFundSplit(value: number, navs: NavPoint[]) {
+  const last = navs[navs.length - 1] ?? { date: DEMO_TODAY, nav: 100 };
+  const projectedInvested = 20_000;
+  const projectedUnits = Math.round((projectedInvested / last.nav) * 1000) / 1000;
+  const projectedValue = projectedUnits * last.nav;
+  const confirmedValue = value - projectedValue;
+  return {
+    confirmedUnits: Math.round((confirmedValue / last.nav) * 1000) / 1000,
+    projectedUnits,
+    confirmedValue,
+    projectedValue,
+    projectedInvested,
+    projectedCount: 2,
+    nav: { date: last.date, nav: last.nav },
+  };
+}
+
 function fundInput(f: FundRow, navs: NavPoint[]): AssetViewInput {
   return {
     ...common,
+    breakdown: { savings: null, fund: demoFundSplit(f.value, navs), navStaleDays: 4 },
     asset: {
       id: 'mf1',
       type: 'mutual_fund',
@@ -349,7 +369,12 @@ export default async function DemoAsset({
             records={
               <>
                 <AssetFacts facts={view.facts} />
-                <DetailTables tables={view.tables.filter((t) => t.title === 'Recorded values')} />
+                <DetailTables
+                  tables={[
+                    ...view.tables.filter((t) => t.title === VALUE_TABLE),
+                    ...view.tables.filter((t) => t.title === 'Recorded values'),
+                  ]}
+                />
                 <ActivityLog items={activity} />
               </>
             }

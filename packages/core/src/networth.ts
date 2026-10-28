@@ -1,3 +1,4 @@
+import type { FundSplit, SavingsDetail } from './position';
 import { sumExact } from './money';
 import type { CurrentValueEstimate, EstimateTotals } from './estimate';
 import { sumEstimates } from './estimate';
@@ -25,6 +26,11 @@ export interface ValuedAsset {
   name: string;
   /** null = no usable valuation yet. Such assets are reported as missing, never counted as zero. */
   estimate: CurrentValueEstimate | null;
+  /** how the central engine reached the value (valuation.ts), for the "how it is worked out" table of a detail page */
+  detail?: {
+    savings: SavingsDetail | null;
+    fund: FundSplit | null;
+  };
 }
 
 export type ExclusionReason =

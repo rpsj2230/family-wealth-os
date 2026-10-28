@@ -658,6 +658,8 @@ export interface AttentionInput {
   uninsured: { amount: number; banks: number; limit: number };
   /** bank e-mails waiting for a decision */
   inboxReview: number;
+  /** on Explain movements: balances that changed more than expected, and new deposits with no recorded source */
+  toExplain?: { balances: number; unexplained: number; funding: number };
   /** held funds not matched to an official scheme (no price source) and not marked "not a listed fund" */
   fundsNoPrice?: number;
   tasks: { title: string; dueOn: string }[];
@@ -751,6 +753,23 @@ export function attentionItems(i: AttentionInput): AttentionItem[] {
       count: i.uninsured.banks,
       text: `${formatInrCompact(i.uninsured.amount)} is above the ${formatInrCompact(i.uninsured.limit)} deposit-insurance limit, in ${plural(i.uninsured.banks, 'bank')}.`,
       href: '/deposits?tab=cover',
+    });
+  const ex = i.toExplain;
+  if (ex && ex.balances + ex.funding > 0)
+    out.push({
+      key: 'explain',
+      tone: 'warn',
+      count: ex.balances + ex.funding,
+      text: [
+        ex.balances > 0
+          ? `${plural(ex.balances, 'balance')} changed more than expected (${formatInrCompact(ex.unexplained)} not yet explained, kept out of profit)`
+          : null,
+        ex.funding > 0 ? `${plural(ex.funding, 'new deposit')} with no recorded source` : null,
+      ]
+        .filter(Boolean)
+        .join('; ')
+        .concat(': say what they were.'),
+      href: '/reconcile',
     });
   if (i.inboxReview > 0)
     out.push({
