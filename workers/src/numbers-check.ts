@@ -5,7 +5,8 @@
  * (Actions > Numbers check). It prints totals only: no account names, numbers or per-account balances.
  */
 import { createClient } from '@supabase/supabase-js';
-import { buildDigestInput, loadPortfolioData } from '@fwos/data';
+import { positionGains } from '@fwos/core';
+import { buildDigestInput, loadPortfolioData, loadPositionInput, loadSettings } from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -107,6 +108,31 @@ async function main() {
         `Last ${'30'} days (as Home shows it): ₹${inr(d.month.amount)} (${pct(d.month.pct)})`,
       );
     console.log(`Values as of: ${d.asOf ?? '-'}   late inputs: ${d.lateInputs ?? 0}`);
+
+    // the period tiles and the profit-by-period table, from the position engine (Home's), per kind of holding
+    try {
+      const cfg = (await loadSettings(db, household)).config;
+      const position = await loadPositionInput(db, l, { householdId: household, config: cfg });
+      const g = positionGains({ position, recentDays: cfg.home.changeDays });
+      console.log(`\nPeriod tiles (data starts ${g.dataStarts ?? '-'}):`);
+      for (const t of g.tiles)
+        console.log(
+          `  ${t.label}: ₹${inr(t.amount)} (${pct(t.pct)}) from ${t.from} to ${t.to}${t.clamped ? '  [clamped: data starts later than the period]' : ''}${t.estimated ? '  [est.]' : ''}${t.empty ? '  [no data]' : ''}`,
+        );
+      console.log('Profit by period, per kind (amount in rupees):');
+      for (const r of [...g.periods.rows, g.periods.total])
+        console.log(
+          `  ${r.label}: ${Object.entries(r.cells)
+            .map(
+              ([k, c]) =>
+                `${k} ₹${inr(c.profit)} on ₹${inr(c.base)} (start ₹${inr(c.startValue)}, in ₹${inr(c.putIn)}, out ₹${inr(c.takenOut)})`,
+            )
+            .join(' | ')}`,
+        );
+      console.log(`Basis: ${JSON.stringify(g.periods.basis)}`);
+    } catch (e) {
+      console.log(`Period figures could not be worked out: ${(e as Error).message}`);
+    }
 
     // how much past data there is
     const snaps = await db
