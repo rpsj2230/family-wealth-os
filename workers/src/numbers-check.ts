@@ -293,6 +293,21 @@ async function main() {
     console.log(
       `  Money moved between people: ${crossings.length} movements, ${lakh(crossings.reduce((s, c) => s + c.amount, 0))}`,
     );
+    // where those movements were found, without naming anyone: into a deposit or an account, and through which kind of line
+    const kindOf = new Map(t.holdings.map((h) => [h.id, h]));
+    const where = new Map<string, { n: number; amount: number }>();
+    for (const tr of t.trails.values())
+      for (const c of tr.crossings) {
+        const h = kindOf.get(c.assetId);
+        const hop = tr.hops.find((x) => x.date === c.date && Math.abs(x.amount - c.amount) < 0.01);
+        const k = `${h?.kind ?? '?'}${h?.statements ? ' (statements)' : ''} via ${hop?.cls ?? '?'}${hop?.from ? (kindOf.has(hop.from) ? ' from a holding' : ' from elsewhere') : ' named'}`;
+        const cur = where.get(k) ?? { n: 0, amount: 0 };
+        cur.n++;
+        cur.amount += c.amount;
+        where.set(k, cur);
+      }
+    for (const [k, v] of [...where].sort((a, b) => b[1].amount - a[1].amount))
+      console.log(`    ${k}: ${v.n}, ${lakh(v.amount)}`);
   }
 }
 
