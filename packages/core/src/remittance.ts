@@ -54,6 +54,8 @@ export function remittanceDestinations(args: {
   windowDays?: number;
   /** the share of a transfer a rise must reach to hold it (interest and small spending blur the rest) */
   fit?: number;
+  /** an account whose statements cover the day and do not show the transfer: it did not receive it */
+  ruledOut?: (transferId: string, assetId: string) => boolean;
 }): Destination[] {
   const windowDays = args.windowDays ?? 160;
   const fit = args.fit ?? 0.9;
@@ -90,7 +92,9 @@ export function remittanceDestinations(args: {
   };
 
   const open = (t: Transfer) =>
-    args.accounts.filter((a) => !(a.openedAfter && t.date <= a.openedAfter));
+    args.accounts.filter(
+      (a) => !(a.openedAfter && t.date <= a.openedAfter) && !args.ruledOut?.(t.id, a.assetId),
+    );
   const left = new Map<string, number>();
   const out = new Map<string, Destination>();
   for (const t of [...args.transfers].sort((x, y) => y.amount - x.amount)) {
@@ -111,7 +115,9 @@ export function remittanceDestinations(args: {
         assetId: cands[0]!.assetId,
         basis: 'only_open',
         alternatives: [],
-        reason: 'The only one of the accounts open on that day.',
+        reason: args.ruledOut
+          ? 'The only one of the accounts open on that day whose statements do not rule it out.'
+          : 'The only one of the accounts open on that day.',
       });
       continue;
     }

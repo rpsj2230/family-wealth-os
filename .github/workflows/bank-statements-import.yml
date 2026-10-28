@@ -1,0 +1,39 @@
+name: Bank statements (by hand)
+# Run by hand only. The statement files are this run's input (base64 JSON), never stored in the repository. "plan" writes nothing; "apply"
+# saves them and rebuilds the movements. The log shows counts, totals and bank names only.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      payload:
+        description: the files, gzipped base64 JSON
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: bank-statements-import
+  cancel-in-progress: false
+jobs:
+  statements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      STMT_B64: ${{ inputs.payload }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers bank-statements

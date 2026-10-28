@@ -13,7 +13,8 @@ import {
   type StatementMove,
   type StmtLine,
 } from '@fwos/core';
-import { pageAll, type LoadedPortfolio } from '@fwos/data';
+import type { LoadedPortfolio } from './index';
+import { pageAll } from './paging';
 import type { BankStatement, StatementLine } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -30,7 +31,7 @@ export interface StoredLine {
 }
 
 /** An imported statement file. */
-export interface StoredStatement {
+export interface StoredBankStatement {
   id: string;
   asset_id: string;
   from_on: string;
@@ -96,26 +97,36 @@ export function balanceOn(s: BankStatement, date: string): number | null {
 /** A transfer from Singapore on file (Wise), as the rules read it. */
 export type StoredRemittance = NonNullable<ClassifyContext['remittances']>[number];
 
-export async function loadStatements(supabase: SupabaseClient): Promise<{
+/** `householdId` is needed when the caller is not a signed-in member (a job); a member's reads are limited to the household anyway. */
+export async function loadStatements(
+  supabase: SupabaseClient,
+  householdId?: string,
+): Promise<{
   lines: StoredLine[];
-  statements: StoredStatement[];
+  statements: StoredBankStatement[];
   remittances: StoredRemittance[];
 }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the query builders of three tables, narrowed alike
+  const scoped = (q: any) => (householdId ? q.eq('household_id', householdId) : q);
   const [lines, statements, remits] = await Promise.all([
     pageAll<StoredLine>((from, to) =>
-      supabase
-        .from('statement_lines')
-        .select('id, statement_id, asset_id, txn_on, amount, balance, narration, answer')
+      scoped(
+        supabase
+          .from('statement_lines')
+          .select('id, statement_id, asset_id, txn_on, amount, balance, narration, answer'),
+      )
         .order('txn_on')
         .order('id')
         .range(from, to),
     ),
-    pageAll<StoredStatement>((from, to) =>
-      supabase
-        .from('bank_statements')
-        .select(
-          'id, asset_id, from_on, to_on, opening, closing, line_count, breaks, layout, file_label, uploaded_at',
-        )
+    pageAll<StoredBankStatement>((from, to) =>
+      scoped(
+        supabase
+          .from('bank_statements')
+          .select(
+            'id, asset_id, from_on, to_on, opening, closing, line_count, breaks, layout, file_label, uploaded_at',
+          ),
+      )
         .order('from_on')
         .range(from, to),
     ),
@@ -124,11 +135,14 @@ export async function loadStatements(supabase: SupabaseClient): Promise<{
       received_on: string;
       amount_inr: number;
       to_asset_id: string | null;
+      to_basis: string | null;
       from_asset_id: string | null;
     }>((from, to) =>
-      supabase
-        .from('remittances')
-        .select('id, received_on, amount_inr, to_asset_id, from_asset_id')
+      scoped(
+        supabase
+          .from('remittances')
+          .select('id, received_on, amount_inr, to_asset_id, to_basis, from_asset_id'),
+      )
         .order('received_on')
         .range(from, to),
     ),
@@ -138,7 +152,8 @@ export async function loadStatements(supabase: SupabaseClient): Promise<{
       id: r.id,
       date: r.received_on,
       amount: Number(r.amount_inr),
-      toAssetId: r.to_asset_id,
+      // only a proven account limits which credit can be the transfer; a guess must not stop a statement correcting it
+      toAssetId: r.to_basis === 'statement' || r.to_basis === 'person' ? r.to_asset_id : null,
       fromAssetId: r.from_asset_id,
     })),
     lines: lines.map((l) => ({
@@ -220,7 +235,11 @@ export interface StatementPicture {
 
 /** Every line sorted, the yearly interest compared, and the movements that follow. */
 export function statementPicture(
-  stored: { lines: StoredLine[]; statements: StoredStatement[]; remittances: StoredRemittance[] },
+  stored: {
+    lines: StoredLine[];
+    statements: StoredBankStatement[];
+    remittances: StoredRemittance[];
+  },
   loaded: LoadedPortfolio,
   config: AppConfig,
   position: PositionInput,

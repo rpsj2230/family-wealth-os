@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   gridFromCsv,
   gridFromHtml,
+  gridFromSpreadsheetML,
   readStatementGrid,
   readStatementText,
   statementAmount,
@@ -113,6 +114,40 @@ describe('a statement laid out as a table', () => {
       [0, 200000],
     ]);
     expect(s.opening).toBe(100000);
+  });
+
+  it('reads a negative withdrawal as a charge put back', () => {
+    const s = readStatementGrid([
+      ['Transaction Date', 'Description', 'Withdrawals', 'Deposits', 'Running Balance'],
+      ['27 Feb 2022', 'CHARGE', '100.00', '', '1,000.00'],
+      ['27 Feb 2022', 'CHARGE REVERSAL', '-100.00', '', '1,100.00'],
+    ]);
+    expect(s.lines.map((l) => [l.debit, l.credit])).toEqual([
+      [100, 0],
+      [0, 100],
+    ]);
+    expect(s.breaks).toBe(0);
+  });
+
+  it('reads an Excel 2003 XML statement and the account opening date', () => {
+    const xml =
+      '<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet><Table>' +
+      '<Row><Cell ss:Index="5"><Data>Account No :</Data></Cell><Cell><Data>123456789012 (SAVING)</Data></Cell>' +
+      '<Cell><Data>A/C Opening Date :</Data></Cell><Cell><Data>25/04/2016 </Data></Cell></Row>' +
+      '<Row><Cell><Data>Transaction Date</Data></Cell><Cell><Data>Value Date</Data></Cell><Cell><Data>Cheque No/Reference No</Data></Cell>' +
+      '<Cell><Data>Description</Data></Cell><Cell><Data>Withdrawals</Data></Cell><Cell><Data>Deposits</Data></Cell><Cell><Data>Running Balance</Data></Cell></Row>' +
+      '<Row><Cell><Data>10 May 2016</Data></Cell><Cell><Data>10 May 2016</Data></Cell><Cell/><Cell><Data>CHARGES</Data></Cell><Cell><Data>200.00</Data></Cell><Cell/><Cell><Data>300.00</Data></Cell></Row>' +
+      '<Row><Cell><Data>09 May 2016</Data></Cell><Cell><Data>09 May 2016</Data></Cell><Cell/><Cell><Data>NEFT CR</Data></Cell><Cell/><Cell><Data>500.00</Data></Cell><Cell><Data>500.00</Data></Cell></Row>' +
+      '</Table></Worksheet></Workbook>';
+    expect(statementFileKind(new TextEncoder().encode(xml))).toBe('spreadsheetml');
+    const s = readStatementGrid(gridFromSpreadsheetML(xml));
+    expect(s.last4).toBe('9012');
+    expect(s.openedOn).toBe('2016-04-25');
+    expect(s.lines.map((l) => [l.date, l.debit, l.credit])).toEqual([
+      ['2016-05-09', 0, 500],
+      ['2016-05-10', 200, 0],
+    ]);
+    expect(s.opening).toBe(0);
   });
 
   it('says so when the file has no statement heading', () => {

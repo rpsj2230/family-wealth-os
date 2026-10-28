@@ -8,7 +8,7 @@ import {
   type StmtLine,
 } from '@fwos/core';
 import { niceDate } from '@/lib/dates';
-import type { StoredStatement } from '@/lib/statement-data';
+import type { StoredBankStatement } from '@fwos/data';
 import { answerLine, deleteStatement, rebuildStatements, removeCovered } from './statement-actions';
 
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
@@ -69,7 +69,7 @@ export function Statements({
   },
   sample = false,
 }: {
-  statements: StoredStatement[];
+  statements: StoredBankStatement[];
   lines: StmtLine[];
   classified: Classified[];
   interest: StatementInterestRow[];
@@ -83,7 +83,7 @@ export function Statements({
   const importHref = sample ? '/demo/import' : '/import';
 
   // coverage per account, with the gaps between statements
-  const byAccount = new Map<string, StoredStatement[]>();
+  const byAccount = new Map<string, StoredBankStatement[]>();
   for (const s of statements) byAccount.set(s.asset_id, [...(byAccount.get(s.asset_id) ?? []), s]);
 
   // the yearly summary

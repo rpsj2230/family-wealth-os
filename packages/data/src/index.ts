@@ -508,3 +508,7 @@ export * from './history';
 export * from './position';
 export * from './snapshots';
 export * from './daily-valuation';
+export * from './statement-store';
+export * from './statement-rebuild';
+export * from './statement-save';
+export * from './remittance-store';

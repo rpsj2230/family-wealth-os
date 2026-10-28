@@ -48,6 +48,8 @@ export interface BankStatement {
   /** lines whose balance does not follow from the one before, after the order was settled */
   breaks: number;
   warnings: string[];
+  /** the day the account was opened, when the statement prints it ("A/C Opening Date") */
+  openedOn?: string | null;
 }
 
 const MONTHS: Record<string, number> = {
@@ -294,6 +296,16 @@ export function readStatementGrid(grid: Cell[][]): BankStatement {
     };
   const c = cols;
   const last4 = accountLast4(grid.slice(0, at).map((r) => r.map(text).join(' ')));
+  // the account's opening date, when the heading block prints it beside its label
+  let openedOn: string | null = null;
+  for (const r of grid.slice(0, at)) {
+    const i = r.findIndex((c) => /open(ing)?\s*date/i.test(text(c)));
+    if (i < 0) continue;
+    const after = r.slice(i + 1).find((c) => text(c) !== '');
+    openedOn =
+      after !== undefined ? statementDate(typeof after === 'string' ? after.trim() : after) : null;
+    if (openedOn) break;
+  }
   const lines: StatementLine[] = [];
   let skipped = 0;
   for (const row of grid.slice(at + 1)) {
@@ -310,8 +322,11 @@ export function readStatementGrid(grid: Cell[][]): BankStatement {
         else credit = Math.abs(a);
       }
     } else {
-      debit = Math.abs(statementAmount(row[c.debit!] ?? null) ?? 0);
-      credit = Math.abs(statementAmount(row[c.credit!] ?? null) ?? 0);
+      // a negative withdrawal is money back in (a charge reversed), a negative deposit money out
+      const dv = statementAmount(row[c.debit!] ?? null) ?? 0;
+      const cv = statementAmount(row[c.credit!] ?? null) ?? 0;
+      debit = (dv > 0 ? dv : 0) + (cv < 0 ? -cv : 0);
+      credit = (cv > 0 ? cv : 0) + (dv < 0 ? -dv : 0);
     }
     const balance = c.balance !== null ? statementAmount(row[c.balance] ?? null) : null;
     if (!date) {
@@ -354,7 +369,10 @@ export function readStatementGrid(grid: Cell[][]): BankStatement {
   if (skipped > 0)
     warnings.push(`${skipped} dated line${skipped === 1 ? '' : 's'} with no amount left out.`);
   for (const l of lines) l.narration = cleanNarration(l.narration);
-  return finish(lines, c.amount !== null ? 'amount-drcr' : 'debit-credit', last4, warnings);
+  return {
+    ...finish(lines, c.amount !== null ? 'amount-drcr' : 'debit-credit', last4, warnings),
+    openedOn,
+  };
 }
 
 const LEAD_DATE = /^(\d{1,2}[/\-. ](?:\d{1,2}|[A-Za-z]{3,4})[/\-. ,]*(?:\d{4}|\d{2}))(?![\d])\s*/;
@@ -544,7 +562,29 @@ export async function gridsFromXlsx(bytes: Uint8Array): Promise<Cell[][][]> {
   });
 }
 
-export type StatementFileKind = 'xlsx' | 'xls-binary' | 'html' | 'csv' | 'pdf';
+export type StatementFileKind = 'xlsx' | 'xls-binary' | 'spreadsheetml' | 'html' | 'csv' | 'pdf';
+
+/**
+ * An Excel 2003 XML file ("XML Spreadsheet", which several banks send named .xls) as rows of cells. A cell's ss:Index puts it in a
+ * later column, leaving the ones it skips empty.
+ */
+export function gridFromSpreadsheetML(src: string): Cell[][] {
+  const rows: Cell[][] = [];
+  for (const row of src.match(/<(?:ss:)?Row\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:ss:)?Row>)/g) ?? []) {
+    const cells: Cell[] = [];
+    let col = 0;
+    for (const m of row.matchAll(/<(?:ss:)?Cell\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:ss:)?Cell>)/g)) {
+      const idx = /(?:ss:)?Index="(\d+)"/.exec(m[1] ?? '');
+      col = idx ? Number(idx[1]) - 1 : col;
+      const data = /<(?:ss:)?Data\b[^>]*>([\s\S]*?)<\/(?:ss:)?Data>/.exec(m[2] ?? '');
+      while (cells.length < col) cells.push(null);
+      cells[col] = data ? unescapeHtml(data[1]!).replace(/\s+/g, ' ').trim() : null;
+      col++;
+    }
+    rows.push(cells);
+  }
+  return rows;
+}
 
 /** What a file really is, from its first bytes (a bank's ".xls" is often a web page or a CSV). */
 export function statementFileKind(bytes: Uint8Array): StatementFileKind {
@@ -552,7 +592,8 @@ export function statementFileKind(bytes: Uint8Array): StatementFileKind {
   if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'pdf';
   if (b[0] === 0x50 && b[1] === 0x4b) return 'xlsx';
   if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return 'xls-binary';
-  const start = new TextDecoder('latin1').decode(b.slice(0, 2048)).toLowerCase();
+  const start = new TextDecoder('latin1').decode(b.slice(0, 4096)).toLowerCase();
+  if (start.includes('urn:schemas-microsoft-com:office:spreadsheet')) return 'spreadsheetml';
   if (/<(html|table|tr|\?xml)/.test(start)) return 'html';
   return 'csv';
 }
@@ -585,5 +626,11 @@ export async function readBankStatement(
     return best ?? readStatementGrid([]);
   }
   const src = new TextDecoder('utf-8').decode(bytes);
-  return readStatementGrid(kind === 'html' ? gridFromHtml(src) : gridFromCsv(src));
+  return readStatementGrid(
+    kind === 'spreadsheetml'
+      ? gridFromSpreadsheetML(src)
+      : kind === 'html'
+        ? gridFromHtml(src)
+        : gridFromCsv(src),
+  );
 }

@@ -108,7 +108,7 @@ describe('what each statement line was', () => {
         { id: 'w1', date: '2024-07-18', amount: 1_241_354.41, toAssetId: null, fromAssetId: 'dbs' },
       ],
     });
-    expect(wise[0]).toMatchObject({ cls: 'own_transfer', counterpart: 'dbs' });
+    expect(wise[0]).toMatchObject({ cls: 'own_transfer', counterpart: 'dbs', remittanceId: 'w1' });
   });
 
   it('your answer decides', () => {

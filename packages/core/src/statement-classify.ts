@@ -90,6 +90,8 @@ export interface Classified {
   /** the other holding, when it is known: the paired account, the deposit */
   counterpart: string | null;
   reason: string;
+  /** the transfer from Singapore on file that this credit is */
+  remittanceId?: string;
 }
 
 const daysApart = (a: string, b: string) =>
@@ -170,6 +172,7 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     if (!r) continue;
     usedRemit.add(r.id);
     set(l, 'own_transfer', `The transfer from Singapore (Wise) of ${r.date}`, r.fromAssetId);
+    out.get(l.id)!.remittanceId = r.id;
   }
 
   // 3–4. rent and money from abroad, by their wording

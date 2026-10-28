@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readStatementGrid } from '@fwos/ingest';
-import { balanceOn, lineKeys, monthBalances } from './statement-data';
+import { balanceOn, lineKeys, monthBalances } from '../src/statement-store';
 
 // Invented figures.
 const s = readStatementGrid([

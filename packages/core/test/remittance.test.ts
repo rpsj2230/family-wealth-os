@@ -70,6 +70,17 @@ describe('which account a transfer from Singapore reached', () => {
     expect([d!.assetId, d!.basis]).toEqual(['yes', 'only_open']);
   });
 
+  it('an account whose statements do not show it is ruled out', () => {
+    const [d] = remittanceDestinations({
+      transfers: [{ id: 't', date: '2019-02-20', amount: 366_869 }],
+      accounts: [yes, idfc, equitas],
+      balances: [],
+      deposits: [],
+      ruledOut: (_t, a) => a === 'yes',
+    });
+    expect([d!.assetId, d!.basis]).toEqual(['idfc', 'only_open']);
+  });
+
   it('leaves it open when no balance shows it, and names the accounts it could be', () => {
     const [d] = remittanceDestinations({
       transfers: [{ id: 't', date: '2021-04-19', amount: 1_117_973 }],

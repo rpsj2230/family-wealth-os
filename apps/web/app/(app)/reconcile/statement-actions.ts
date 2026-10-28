@@ -3,20 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { classifyLines, LINE_CLASS_LABEL, type LineClass } from '@fwos/core';
-import { loadSettings, pageAll, type LoadedPortfolio } from '@fwos/data';
+import {
+  classifyContext,
+  conflictingBalances,
+  lineKeys,
+  loadSettings,
+  loadStatements,
+  pageAll,
+  rebuildStatementMoves,
+  saveBankStatement,
+  stmtLinesOf,
+  type LoadedPortfolio,
+} from '@fwos/data';
 import { isPasswordError, readBankStatement, type BankStatement } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
-import {
-  balanceOn,
-  classifyContext,
-  lineKeys,
-  loadStatements,
-  monthBalances,
-  stmtLinesOf,
-} from '@/lib/statement-data';
-import { rebuildStatementMoves } from '@/lib/statement-rebuild';
 
 const UUID = /^[0-9a-f-]{36}$/;
 const MAX_BYTES = 5.5 * 1024 * 1024;
@@ -94,21 +96,6 @@ async function last4Of(db: SupabaseClient, assetId: string) {
   return (data?.identifier_last4 as string | null) ?? null;
 }
 
-/** The recorded balances of the account inside the statement's days that the statement shows to be different. */
-async function conflicting(db: SupabaseClient, assetId: string, s: BankStatement) {
-  const { data } = await db
-    .from('observations')
-    .select('id, as_of, amount')
-    .eq('asset_id', assetId)
-    .eq('kind', 'balance')
-    .is('superseded_by', null)
-    .gte('as_of', s.from!)
-    .lte('as_of', s.to!);
-  return ((data ?? []) as { id: string; as_of: string; amount: number }[])
-    .map((o) => ({ ...o, proved: balanceOn(s, o.as_of) }))
-    .filter((o) => o.proved !== null && Math.abs(Number(o.amount) - o.proved) > 1);
-}
-
 /** Reads the file and shows what it holds and what its lines are; nothing is saved. */
 export async function previewStatement(
   _prev: StatementState,
@@ -167,7 +154,7 @@ export async function previewStatement(
     classes: [...by.entries()]
       .map(([cls, g]) => ({ label: LINE_CLASS_LABEL[cls], count: g.count, total: g.total }))
       .sort((a, b) => Math.abs(b.total) - Math.abs(a.total)),
-    corrected: (await conflicting(db, assetId, s)).length,
+    corrected: (await conflictingBalances(db, assetId, s)).length,
   };
 }
 
@@ -186,95 +173,17 @@ export async function saveStatement(_prev: StatementState, f: FormData): Promise
       stage: 'error',
       message: `The statement is for an account ending ${s.last4}, not ${mine}. Choose the right account, or tick that it is right.`,
     };
-  const { data: st, error: e1 } = await db
-    .from('bank_statements')
-    .insert({
-      household_id: householdId,
-      asset_id: assetId,
-      from_on: s.from,
-      to_on: s.to,
-      opening: s.opening,
-      closing: s.closing,
-      line_count: s.lines.length,
-      layout: s.layout,
-      breaks: s.breaks,
-      file_label: name.replace(/\d{6,}/g, (m) => `…${m.slice(-4)}`).slice(0, 120),
-    })
-    .select('id')
-    .single();
-  if (e1 || !st)
-    return { stage: 'error', message: `The statement could not be saved: ${e1?.message ?? ''}` };
-  const keys = lineKeys(s.lines);
-  const rows = s.lines.map((l, i) => ({
-    household_id: householdId,
-    statement_id: st.id as string,
-    asset_id: assetId,
-    txn_on: l.date,
-    amount: Math.round((l.credit - l.debit) * 100) / 100,
-    balance: l.balance,
-    narration: l.narration,
-    line_key: keys[i]!,
-  }));
-  let added = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const { data, error } = await db
-      .from('statement_lines')
-      .upsert(rows.slice(i, i + 500), {
-        onConflict: 'household_id,asset_id,line_key',
-        ignoreDuplicates: true,
-      })
-      .select('id');
-    if (error) return { stage: 'error', message: `The lines could not be saved: ${error.message}` };
-    added += data?.length ?? 0;
-  }
-
-  // the balances the statement proves, and the recorded ones it shows to be different
-  const wrong = await conflicting(db, assetId, s);
-  const { data: existing } = await db
-    .from('observations')
-    .select('as_of, amount')
-    .eq('asset_id', assetId)
-    .eq('kind', 'balance')
-    .is('superseded_by', null)
-    .gte('as_of', s.from!)
-    .lte('as_of', s.to!);
-  const have = new Set(
-    ((existing ?? []) as { as_of: string; amount: number }[])
-      .filter((o) => !wrong.some((w) => w.as_of === o.as_of))
-      .map((o) => `${o.as_of}|${Math.round(Number(o.amount))}`),
-  );
-  const proven = new Map<string, number>();
-  for (const b of monthBalances(s)) proven.set(b.date, b.amount);
-  for (const w of wrong) proven.set(w.as_of, w.proved!);
-  let balances = 0;
-  const now = new Date().toISOString();
-  for (const [date, amount] of proven) {
-    if (have.has(`${date}|${Math.round(amount)}`)) continue;
-    const { data: obs, error } = await db
-      .from('observations')
-      .insert({
-        household_id: householdId,
-        asset_id: assetId,
-        kind: 'balance',
-        amount,
-        currency: 'INR',
-        fx_rate: null,
-        as_of: date,
-        received_at: now,
-        source: 'statement',
-        source_ref: `stmt:${st.id as string}:${date}`,
-        confidence: 'verified',
-        note: 'Balance from a bank statement',
-      })
-      .select('id')
-      .single();
-    if (error || !obs) continue;
-    balances++;
-    for (const w of wrong.filter((x) => x.as_of === date))
-      await db
-        .from('observations')
-        .update({ superseded_by: obs.id as string })
-        .eq('id', w.id);
+  let added: number;
+  let balances: number;
+  try {
+    const saved = await saveBankStatement(db, householdId, assetId, s, name);
+    added = saved.lines;
+    balances = saved.balances;
+  } catch (e) {
+    return {
+      stage: 'error',
+      message: e instanceof Error ? e.message : 'The statement could not be saved.',
+    };
   }
 
   let moves: number;
