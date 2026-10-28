@@ -137,6 +137,29 @@ describe('diary notes as history', () => {
   });
 });
 
+describe('a savings line and the account on file', () => {
+  it('goes onto the person’s only account at the bank even when it is recorded as another type', () => {
+    const only = [{ ...acct('h1', 'Asha', 'Samplebank Ltd'), accountKind: 'SB' }];
+    const note: DiaryNote = {
+      title: 'Jul 2020',
+      asOf: '2020-07-26',
+      lines: [{ bank: 'Samplebank', person: 'Asha', kind: 'cash', amount: 900 }],
+    };
+    const { notes: aligned } = alignDiary(
+      [note, { ...note, title: 'Nov 2020', asOf: '2020-11-01' }],
+      only,
+    );
+    expect(aligned[0]!.lines[0]!.accountKind).toBe('any');
+    const plan = planHistoryFrom(diaryWorkbook(aligned), {
+      today: '2026-10-28',
+      ownerNames: OWNERS,
+      existing: { assets: only, observations: [] },
+      latestIsHistory: true,
+    });
+    expect(plan.months[0]!.writes.map((w) => w.assetId)).toEqual(['h1']);
+  });
+});
+
 describe('when accounts were opened, from the records', () => {
   it('dates an account between the last full snapshot without it and its first record', () => {
     const rec = (assetId: string, asOf: string) => ({ assetId, asOf });

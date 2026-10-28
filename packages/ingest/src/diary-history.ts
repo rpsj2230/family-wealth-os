@@ -31,8 +31,8 @@ export interface DiaryLine {
   sgd?: number;
   /** money lent and memos: the counterparty; a fund summary: its label */
   label?: string;
-  /** the account type, for savings: NRE unless said */
-  accountKind?: 'NRE' | 'NRO';
+  /** the account type, for savings: NRE unless said; 'any' when the person's only account at that bank is recorded otherwise */
+  accountKind?: 'NRE' | 'NRO' | 'any';
 }
 
 export interface DiaryNote {
@@ -94,6 +94,20 @@ export function alignDiary(
     ...n,
     lines: n.lines.map((l) => {
       const bank = bankFor(l.bank);
+      if (l.kind === 'cash') {
+        // the person's only account at the bank is that account, whatever type it is recorded as
+        const kind = l.accountKind ?? 'NRE';
+        const theirs = existing.filter(
+          (a) =>
+            a.type === 'bank_account' &&
+            a.currency === 'INR' &&
+            personKey(a.ownerName) === personKey(l.person) &&
+            bankKey(a.bank) === bankKey(bank),
+        );
+        if (theirs.length === 1 && theirs[0]!.accountKind && theirs[0]!.accountKind !== kind)
+          return { ...l, bank, accountKind: 'any' as const };
+        return { ...l, bank };
+      }
       if (l.kind !== 'fd' || !l.maturity) return { ...l, bank };
       const twin = deposits.find(
         (a) =>
@@ -149,7 +163,7 @@ export function diaryWorkbook(notes: DiaryNote[]): ExcelJS.Workbook {
           break;
         case 'cash':
           set(`B${r}`, 'Cash');
-          set(`E${r}`, `Cash-${l.accountKind ?? 'NRE'}`);
+          set(`E${r}`, l.accountKind === 'any' ? 'Cash' : `Cash-${l.accountKind ?? 'NRE'}`);
           break;
         case 'sg': {
           set(`B${r}`, 'Cash');

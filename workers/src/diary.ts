@@ -33,7 +33,7 @@ interface Input {
   openings: DiaryOpening[];
 }
 
-const initial = (name: string | null | undefined) => (name ? `${name[0]!.toUpperCase()}.` : '?');
+const initial = (name: string | null | undefined) => (name ? `${name.slice(0, 2)}.` : '?');
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 function read(): Input {
