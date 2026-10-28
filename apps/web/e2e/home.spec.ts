@@ -233,6 +233,22 @@ test.describe('Home (public sample)', () => {
     await context.close();
   });
 
+  test('acceptance test 15: the summary at the top states each figure once, with no repeated headline metric', async ({
+    page,
+  }) => {
+    await page.goto('/demo/dashboard');
+    const hero = page.getByRole('region', { name: 'Net worth' });
+    const labels = (
+      await hero.locator('.bv-eyebrow, .bv-delta-label, .hm-cap-label, dl dt').allInnerTexts()
+    )
+      .map((t) => t.replace(/\?/g, '').replace(/\s+/g, ' ').trim().toLowerCase())
+      .filter(Boolean);
+    expect(labels.length).toBeGreaterThan(5);
+    expect(new Set(labels).size).toBe(labels.length);
+    // net worth is shown once at the top: no second "total" tile repeats it
+    await expect(page.getByTestId('hm-total')).toHaveCount(1);
+  });
+
   test('the four cards sit in a row on a wide screen, two by two and then one by one when narrow', async ({
     browser,
   }) => {
