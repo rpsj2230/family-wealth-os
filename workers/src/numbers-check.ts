@@ -2,7 +2,8 @@
 /**
  * Read-only: works out the household's headline figures from the live database with the same functions the portal and the daily e-mail
  * use, prints them with the checks that tie them together and how complete the data behind them is. Writes nothing. Run by hand
- * (Actions > Numbers check). It prints totals only: no account names, numbers or per-account balances.
+ * (Actions > Numbers check). It prints totals only: no account names, numbers or per-account balances, except the list of what is
+ * still needed from you, which names each account by its bank, its holder and its last four digits, as the Tasks page does.
  */
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -19,6 +20,7 @@ import {
 } from '@fwos/core';
 import {
   buildDigestInput,
+  loadNeeds,
   ledgerMovesOf,
   loadPortfolioData,
   loadPositionInput,
@@ -308,6 +310,10 @@ async function main() {
       }
     for (const [k, v] of [...where].sort((a, b) => b[1].amount - a[1].amount))
       console.log(`    ${k}: ${v.n}, ${lakh(v.amount)}`);
+    // what is still needed from the household, as the tasks say it
+    const needs = await loadNeeds(db, String((hh.data ?? [])[0]?.id ?? ''));
+    console.log(`\nNeeded from you: ${needs.length}`);
+    for (const n of needs) console.log(`  - ${n.title}`);
     const clubbed = [...t.trails.values()].flatMap((x) => x.clubbed);
     console.log(
       `  Clubbing (since ${t.ownershipFrom || 'not set'}): ${clubbed.length} items, ${lakh(clubbed.reduce((s, c) => s + c.amount, 0))}`,
