@@ -103,3 +103,4 @@ export * from './reconcile';
 export * from './statement-classify';
 export * from './statement-interest';
 export * from './remittance';
+export * from './money-trail';

@@ -73,6 +73,11 @@ export interface AppConfig {
     reviewMinimum: number;
     /** two months this many months apart or less whose unexplained amounts cancel out are one transfer recorded in two months */
     reviewPairMonths: number;
+    /**
+     * Money trail: from this day, money moved from one person's account to another's is counted for clubbing; what each person held
+     * before it is theirs (ISO date). Empty: nothing is counted yet.
+     */
+    ownershipFrom: string;
   };
   /** bank statements read line by line (statement-classify.ts) */
   statements: {
@@ -339,7 +344,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     unexplainedTolerance: 500,
     transferPairDays: 3,
   },
-  capital: { openingDate: '', reviewMinimum: 25_000, reviewPairMonths: 2 },
+  capital: { openingDate: '', reviewMinimum: 25_000, reviewPairMonths: 2, ownershipFrom: '' },
   statements: {
     rentWords: [],
     remittanceWords: [
@@ -660,6 +665,10 @@ export function configFromJson(raw: unknown): AppConfig {
       reviewPairMonths: Math.round(
         num(obj(r.capital).reviewPairMonths, d.capital.reviewPairMonths, 0, 12),
       ),
+      ownershipFrom: (() => {
+        const v = obj(r.capital).ownershipFrom;
+        return v === '' || v === null || v === undefined ? '' : isoDate(v, d.capital.ownershipFrom);
+      })(),
     },
     statements: {
       rentWords: words(obj(r.statements).rentWords, d.statements.rentWords),

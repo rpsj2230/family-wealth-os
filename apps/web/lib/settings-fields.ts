@@ -389,6 +389,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         max: 12,
       },
       {
+        name: 'ownershipFrom',
+        label: 'Count money moved between you for clubbing from',
+        hint: 'Money trail: what each person held before this day is theirs. From this day, money moved from one person’s account to another’s is listed for clubbing, with the income it earns. Leave empty to count nothing yet.',
+        kind: 'date',
+        path: ['capital', 'ownershipFrom'],
+        optional: true,
+      },
+      {
         name: 'stmtRentWords',
         label: 'Bank statements: words that mark rent from your tenant',
         hint: 'One per line: the tenant’s name as the bank writes it, or a reference the rent always carries. A credit with any of these is counted as rent, which is earnings (lifetime profit), not your own money.',

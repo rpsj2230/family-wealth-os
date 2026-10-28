@@ -16,6 +16,7 @@ import {
   PiggyBank,
   Banknote,
   Receipt,
+  Route,
   Scale,
   Settings,
   Share2,
@@ -98,6 +99,12 @@ export const MENU: MenuGroup[] = [
         label: 'Explain movements',
         hint: 'Where matured money went, what a balance change was, where a new deposit came from.',
         icon: Scale,
+      },
+      {
+        href: '/trail',
+        label: 'Money trail',
+        hint: 'Where the money in each account and deposit came from, and whose it was.',
+        icon: Route,
       },
       {
         href: '/raise',

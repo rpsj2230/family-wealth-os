@@ -1,0 +1,78 @@
+.tr-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+  background: var(--border);
+}
+.tr-cut,
+.tr-swatch {
+  display: inline-block;
+}
+.tr-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+.tr-singapore {
+  background: var(--accent, #4f46e5);
+}
+.tr-interest,
+.tr-deposit_interest {
+  background: var(--ok, #16a34a);
+}
+.tr-before_records {
+  background: var(--muted, #64748b);
+}
+.tr-outside,
+.tr-rent {
+  background: #d97706;
+}
+.tr-untraced_account,
+.tr-untraced_deposit {
+  background: color-mix(in srgb, var(--muted, #64748b) 45%, var(--card, #fff));
+}
+.tr-unexplained {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--muted, #64748b),
+    var(--muted, #64748b) 3px,
+    var(--card, #fff) 3px,
+    var(--card, #fff) 6px
+  );
+}
+.tr-parts li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+.tr-what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tr-holdings {
+  columns: 2 18rem;
+}
+.tr-holdings li {
+  break-inside: avoid;
+  padding: 0.15rem 0;
+  overflow-wrap: anywhere;
+}
+.tr-holdings a.on {
+  font-weight: 650;
+}
+.tr-h3 {
+  margin-top: 1rem;
+  font-size: 1rem;
+}
+.tr-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.tr-scroll table {
+  min-width: 30rem;
+}

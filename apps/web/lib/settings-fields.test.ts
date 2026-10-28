@@ -128,6 +128,7 @@ describe('settings fields', () => {
         openingDate: '',
         reviewMinimum: '25,000',
         reviewPairMonths: '2',
+        ownershipFrom: '2026-10-28',
         stmtRentWords: 'Sample Tenant\n  RENT  FLAT 4B ',
         stmtRemittanceWords: 'inward remittance',
         stmtReviewAbove: '10,000',
@@ -158,7 +159,12 @@ describe('settings fields', () => {
           transferPairDays: 3,
           includeSip: true,
         },
-        capital: { openingDate: '', reviewMinimum: 25000, reviewPairMonths: 2 },
+        capital: {
+          openingDate: '',
+          reviewMinimum: 25000,
+          reviewPairMonths: 2,
+          ownershipFrom: '2026-10-28',
+        },
         statements: {
           rentWords: ['sample tenant', 'rent flat 4b'],
           remittanceWords: ['inward remittance'],
