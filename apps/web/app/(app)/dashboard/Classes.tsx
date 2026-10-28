@@ -11,6 +11,7 @@ import { plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
 import { ForeignCashLines } from '@/components/ForeignCash';
 import { Why } from '@/components/Why';
+import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
 import { Signed, homeLink } from './parts';
 
@@ -92,6 +93,39 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
 }
 
 /**
+ * Where the funds' value comes from and how fresh its prices are: the part a fund statement confirmed (units × the official price), the
+ * SIP instalments since that no statement has confirmed (projected), the part estimated from a plan alone, and the funds whose latest
+ * price is older than the setting.
+ */
+function FundSplitLine({ m }: { m: HomeModel }) {
+  const f = m.capital.funds;
+  if (f.confirmed + f.estimated <= 0) return null;
+  const parts = [
+    `${formatInrCompact(f.confirmed)} confirmed by fund statements (units × the latest official price)`,
+    f.projected.count > 0
+      ? `${formatInrCompact(f.projected.value)} projected from ${plural(f.projected.count, 'SIP instalment')} since the last statement`
+      : null,
+    f.unconfirmedFunds > 0
+      ? `${formatInrCompact(f.unconfirmedFunds)} estimated from a plan, with no statement yet`
+      : null,
+  ].filter(Boolean);
+  return (
+    <p className="small muted" data-testid="hm-fund-split">
+      <strong>Funds:</strong> {parts.join('; ')}.{' '}
+      {f.staleCount > 0 ? (
+        <span className="warn">
+          {plural(f.staleCount, 'fund price')} older than {plural(f.navStaleDays, 'day')}
+          {f.oldestNav ? ` (oldest ${niceDate(f.oldestNav)})` : ''}: those values may be out of
+          date.
+        </span>
+      ) : (
+        `Every fund price is within ${plural(f.navStaleDays, 'day')}.`
+      )}
+    </p>
+  );
+}
+
+/**
  * Four small cards, one per kind of holding, in one row (four columns, then two, then one by the width of the page): deposits,
  * mutual funds, cash and the rest. Together they are the net worth. Each links to the page that has the detail.
  */
@@ -133,6 +167,7 @@ export function Classes({
           />
         ))}
       </ul>
+      <FundSplitLine m={m} />
       <details className="bv-how">
         <summary>How these are worked out</summary>
         <ul className="list small muted">

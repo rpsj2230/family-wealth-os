@@ -171,6 +171,10 @@ test.describe('Home (public sample)', () => {
     }
     // a loss or a gain is an arrow and a word, never colour alone
     await expect(section.locator('.hm-signed .sr-only').first()).toHaveText(/up|down|no change/);
+    // where the funds' value comes from, and whether their prices are fresh
+    const split = section.getByTestId('hm-fund-split');
+    await expect(split).toContainText('confirmed by fund statements');
+    await expect(split).toContainText(/fund prices? older than|Every fund price is within/);
     // the definitions are stated, including where the cash rate comes from
     await section.getByText('How these are worked out').click();
     await expect(section.getByText('rate on the Rates list for its bank')).toBeVisible();

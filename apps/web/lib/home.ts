@@ -156,7 +156,10 @@ export interface HomeCapital {
     | 'oldestNav'
     | 'unconfirmedFunds'
     | 'upcoming'
-  >;
+  > & {
+    /** Settings: a price older than this many days is shown as old */
+    navStaleDays: number;
+  };
   /** deposits that matured whose proceeds are counted until you say where they went, and how much */
   proceeds: { count: number; amount: number };
   /** of net worth, how much each kind of figure makes up (figure.ts) */
@@ -755,6 +758,7 @@ export function buildHome(i: HomeInput): HomeModel {
       oldestNav: views.oldestNav,
       unconfirmedFunds: views.unconfirmedFunds,
       upcoming: views.upcoming.slice(0, 6),
+      navStaleDays: cfg.funds.navStaleDays,
     },
     proceeds: {
       count: proceedsRows.length,
