@@ -71,8 +71,12 @@ export interface Part extends MoneyOrigin {
   amount: number;
 }
 
-/** One movement into a holding, with what it brought. */
+/** One movement into a holding (or, in `outs`, out of an account), with what it brought or took. */
 export interface Hop {
+  /** the statement line it is (absent for a deposit's booking, which is the account's line) */
+  lineId?: string;
+  /** the line on the other side, when both sides are statement lines: the money out for a money in, and the other way round */
+  pairLineId?: string;
   date: string;
   amount: number;
   /** where it came from: an account or a deposit on file, or null (Singapore, interest, outside, untraced) */
@@ -88,6 +92,8 @@ export interface Trail {
   parts: Part[];
   /** the movements into it, newest first */
   hops: Hop[];
+  /** the money that left it (an account), newest first, with what it was made of */
+  outs: Hop[];
   /** money that moved from one person's account to another's, by the person whose money it was */
   crossings: {
     date: string;
@@ -166,7 +172,9 @@ export function moneyTrail(args: {
   const trails = new Map<string, Trail>();
   const trail = (id: string) =>
     trails.get(id) ??
-    trails.set(id, { assetId: id, parts: [], hops: [], crossings: [], clubbed: [] }).get(id)!;
+    trails
+      .set(id, { assetId: id, parts: [], hops: [], outs: [], crossings: [], clubbed: [] })
+      .get(id)!;
   /** the income `amount` earned on a pool, by the people other than the holder whose money is in it */
   const club = (
     t: Trail,
@@ -199,7 +207,7 @@ export function moneyTrail(args: {
     counted(date) ? parts : parts.map((x) => ({ ...x, person: to }));
   const pool = (id: string) => pools.get(id) ?? pools.set(id, new Map()).get(id)!;
   // money in flight between two accounts with statements: the debit's make-up waits for its credit
-  const inFlight = new Map<string, Part[][]>();
+  const inFlight = new Map<string, { parts: Part[]; lineId: string; hop: Hop }[]>();
   const flightKey = (from: string, to: string, amount: number) =>
     `${from}|${to}|${Math.round(Math.abs(amount) * 100)}`;
 
@@ -218,6 +226,16 @@ export function moneyTrail(args: {
     if (l.amount < 0) {
       const parts = take(p, -l.amount, holder);
       const to = l.counterpart;
+      const out: Hop = {
+        lineId: l.id,
+        date: l.date,
+        amount: l.amount,
+        from: to,
+        cls: l.cls,
+        narration: l.narration,
+        parts,
+      };
+      trail(l.assetId).outs.unshift(out);
       if (to && isDeposit.has(to)) {
         // a deposit booked, or a fund bought: it is made of this money
         const depOwner = owner.get(to) ?? holder;
@@ -225,6 +243,7 @@ export function moneyTrail(args: {
         for (const part of booked) add(pool(to), part);
         const t = trail(to);
         t.hops.unshift({
+          pairLineId: l.id,
           date: l.date,
           amount: -l.amount,
           from: l.assetId,
@@ -242,7 +261,7 @@ export function moneyTrail(args: {
           });
       } else if (to && withLines.has(to)) {
         const k = flightKey(l.assetId, to, l.amount);
-        inFlight.set(k, [...(inFlight.get(k) ?? []), parts]);
+        inFlight.set(k, [...(inFlight.get(k) ?? []), { parts, lineId: l.id, hop: out }]);
       } else if (!to && l.cls === 'fd_funding') {
         // a deposit not on file, booked from this account: its money waits for the deposit to be paid back here
         for (const part of parts) add(pool(`held:${l.assetId}`), part);
@@ -253,8 +272,13 @@ export function moneyTrail(args: {
     let parts: Part[];
     const from = l.counterpart;
     const flying = from ? inFlight.get(flightKey(from, l.assetId, l.amount)) : undefined;
-    if (flying && flying.length) parts = flying.shift()!;
-    else if (from && isFund.has(from) && l.cls === 'fund_sell') {
+    let pairLineId: string | undefined;
+    if (flying && flying.length) {
+      const f = flying.shift()!;
+      parts = f.parts;
+      pairLineId = f.lineId;
+      f.hop.pairLineId = l.id;
+    } else if (from && isFund.has(from) && l.cls === 'fund_sell') {
       // a fund sold: the money that bought it comes back in its make-up; what the sale brings above that is the fund's gain
       const fund = pool(from);
       const fundOwner = owner.get(from) ?? holder;
@@ -309,6 +333,8 @@ export function moneyTrail(args: {
     for (const part of parts) add(p, part);
     const t = trail(l.assetId);
     t.hops.unshift({
+      lineId: l.id,
+      ...(pairLineId ? { pairLineId } : {}),
       date: l.date,
       amount: l.amount,
       from,

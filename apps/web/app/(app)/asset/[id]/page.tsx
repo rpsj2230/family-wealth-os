@@ -6,7 +6,11 @@ import { FundDetailPanel } from '@/components/FundDetailPanel';
 import { HistoryLine } from '@/components/HistoryLine';
 import { EditButton } from '@/components/QuickEdit';
 import { QuickEditHost } from '@/components/QuickEditHost';
+import { StatementLines } from '@/components/StatementLines';
 import { loadAssetDetail } from '@/lib/detail-data';
+import { loadContext } from '@/lib/data';
+import { loadTrailContext } from '@/lib/trail-data';
+import { accountLines } from '@fwos/data';
 import { VALUE_TABLE } from '@/lib/detail-view';
 import { loadFundDetail } from '@/lib/fund-detail-data';
 import { fundEditRows } from '@/lib/invest-ledger';
@@ -33,6 +37,18 @@ export default async function AssetPage({
     d.type === 'bank_account' || d.type === 'fixed_deposit' || d.type === 'third_party_held';
   const isLoan = d.type === 'receivable';
   const isDeposit = d.type === 'fixed_deposit';
+  // the account's bank statement lines, each opening its own page with its trail
+  const hasLines =
+    d.type === 'bank_account' &&
+    ((
+      await (
+        await loadContext()
+      ).supabase
+        .from('statement_lines')
+        .select('id', { count: 'exact', head: true })
+        .eq('asset_id', id)
+    ).count ?? 0) > 0;
+  const lines = hasLines ? accountLines((await loadTrailContext()).data, id) : [];
   const crumbs: Crumb[] = isFund
     ? [{ label: 'Investments', href: '/investments' }]
     : isBankLike
@@ -229,6 +245,7 @@ export default async function AssetPage({
           </ul>
         </section>
       )}
+      <StatementLines assetId={id} lines={lines} />
       <DetailTables tables={d.view.tables} />
       <ActivityLog items={d.activity} />
     </>

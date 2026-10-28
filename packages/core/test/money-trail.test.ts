@@ -46,6 +46,22 @@ describe('the money trail', () => {
     expect(sg).toBeCloseTo((300_000 * 400_000) / 500_000, 2);
   });
 
+  it('ties each movement to its statement line, and a transfer’s two lines to each other', () => {
+    const inB = trails.get('B')!.hops.find((h) => h.date === '2024-01-05')!;
+    const outA = trails.get('A')!.outs.find((h) => h.date === '2024-01-05')!;
+    expect(inB.lineId).toBe(lines[2]!.id);
+    expect(inB.pairLineId).toBe(lines[1]!.id);
+    expect(outA).toMatchObject({
+      lineId: lines[1]!.id,
+      pairLineId: lines[2]!.id,
+      amount: -400_000,
+    });
+    // the money that left A was A's mix at the time: all of it from Singapore
+    expect(outA.parts).toEqual([expect.objectContaining({ kind: 'singapore', amount: 400_000 })]);
+    // a deposit's booking points at the account line that paid for it
+    expect(trails.get('D')!.hops[0]!.pairLineId).toBe(lines[6]!.id);
+  });
+
   it('keeps whose money it was, and lists the crossing from one person to the other', () => {
     const v = trails.get('V')!;
     expect(v.crossings.reduce((s, c) => s + c.amount, 0)).toBeCloseTo(300_000, 2);

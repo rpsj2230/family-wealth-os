@@ -38,7 +38,7 @@ const fyOf = (date: string) => {
 };
 
 /** A holding's make-up by where the money came from, each with whose money it was. */
-function Makeup({
+export function Makeup({
   parts,
   labels,
   names,
@@ -205,7 +205,15 @@ export function TrailView({
                     const top = [...h.parts].sort((a, b) => b.amount - a.amount)[0];
                     return (
                       <tr key={i}>
-                        <td>{niceDate(h.date)}</td>
+                        <td>
+                          {!sample && h.lineId && !h.lineId.startsWith('remit:') ? (
+                            <Link href={`/asset/${t.assetId}/line/${h.lineId}`}>
+                              {niceDate(h.date)}
+                            </Link>
+                          ) : (
+                            niceDate(h.date)
+                          )}
+                        </td>
                         <td className="num">{signed(h.amount)}</td>
                         <td>
                           {h.from && labels[h.from] ? (

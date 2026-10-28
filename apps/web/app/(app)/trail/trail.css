@@ -76,3 +76,8 @@
 .tr-scroll table {
   min-width: 30rem;
 }
+
+/* a step of a transaction's trail: the line on the other side, the whole account's trail */
+.ln-step {
+  margin: 0.6rem 0;
+}
