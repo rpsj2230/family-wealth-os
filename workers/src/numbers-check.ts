@@ -5,8 +5,23 @@
  * (Actions > Numbers check). It prints totals only: no account names, numbers or per-account balances.
  */
 import { createClient } from '@supabase/supabase-js';
-import { fundValueFrom, planOf, positionAsOf, positionGains, valueOn } from '@fwos/core';
-import { buildDigestInput, loadPortfolioData, loadPositionInput, loadSettings } from '@fwos/data';
+import {
+  capitalLedger,
+  fundValueFrom,
+  fundViews,
+  planOf,
+  positionGains,
+  reconcileQueue,
+  valueOn,
+  wealthMovement,
+} from '@fwos/core';
+import {
+  buildDigestInput,
+  ledgerMovesOf,
+  loadPortfolioData,
+  loadPositionInput,
+  loadSettings,
+} from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -162,55 +177,56 @@ async function main() {
       console.log(
         `Plan-built funds: ${adjusted} had their plan adjusted to the amount invested, ${skipped} instalments had no price; on the day of each fund's newest sheet value the sheet adds up to ₹${inr(sheetTotal)} and the plan with prices to ₹${inr(engineTotal)} (difference ₹${inr(sheetTotal - engineTotal)})`,
       );
-      // funds by day around the start of the last-30-days window, to see that the series moves with prices and plans and steps only where a
-      // new monthly value is on file (totals and counts only)
-      const first = '2026-09-24';
-      const days: string[] = [];
-      const walk = new Date(`${first}T00:00:00Z`);
-      while (walk.toISOString().slice(0, 10) <= date) {
-        days.push(walk.toISOString().slice(0, 10));
-        walk.setUTCDate(walk.getUTCDate() + 1);
-      }
-      const rolledFunds = position.assets.filter(
-        (x) => x.type === 'mutual_fund' && x.fund && x.fund.txns.length === 0,
-      ).length;
+      // the capital and earnings ledger (Home's own money, profit, return), the fund views and what is waiting to be explained
+      const ledger = capitalLedger({
+        position,
+        moves: ledgerMovesOf(l.engine.moves),
+        openingDate: cfg.capital.openingDate || null,
+      });
+      const t = ledger.totals;
       console.log(
-        `Funds by day (value, held, no data, estimated; ${rolledFunds} funds have no ledger and are moved on from their monthly values):`,
+        `\nCapital: opening ₹${inr(t.opening)} on ${ledger.opening?.date ?? '-'} (${ledger.opening ? `${ledger.opening.coverage.withValue} of ${ledger.opening.coverage.of} holdings had a value` : '-'})`,
       );
-      let before = 0;
-      for (const day of days) {
-        const p = positionAsOf(position, day);
-        const f = p.holdings.filter((h) => h.cls === 'funds');
-        const held = f.filter((h) => h.state === 'held' && h.value !== null);
+      console.log(
+        `  outside money confirmed ₹${inr(t.confirmedExternal)}, moved and not yet explained ₹${inr(t.unexplained)}, corrections ₹${inr(t.corrections)} => own money ₹${inr(t.ownMoney)}`,
+      );
+      console.log(
+        `  profit so far ₹${inr(t.profit)} (${pct(t.profitPct)} of own money): savings ₹${inr(t.earnings.savings)}, deposits ₹${inr(t.earnings.deposits)}, funds ₹${inr(t.earnings.funds)}, fx ₹${inr(t.earnings.fx)}, others ₹${inr(t.earnings.others)}, income ₹${inr(t.earnings.income)}`,
+      );
+      console.log(
+        `  XIRR ${pct(t.xirr.rate)} (${t.xirr.status}); time-weighted ${pct(t.twr.total)} total, ${pct(t.twr.annualised)} a year`,
+      );
+      console.log(
+        `CHECK net worth = own money + profit: ${Math.abs(t.ownMoney + t.profit - t.netWorth) < 1 ? 'yes' : `NO (differs by ₹${inr(t.ownMoney + t.profit - t.netWorth)})`}`,
+      );
+      console.log(
+        `CHECK the ledger's net worth today equals the portfolio's: ${Math.abs(t.netWorth - nw.total) < 1 ? 'yes' : `NO (differs by ₹${inr(t.netWorth - nw.total)})`}`,
+      );
+      for (const lim of ledger.limitations) console.log(`  limitation: ${lim}`);
+      const fy = wealthMovement(ledger, 'fy', date);
+      if (fy.figures)
         console.log(
-          `  ${day}: ₹${inr(p.byClass.funds)} (${before ? (p.byClass.funds >= before ? '+' : '-') + inr(Math.abs(p.byClass.funds - before)) : 'start'})  held ${held.length} of ${f.length}, no data ${f.filter((h) => h.state === 'no_data').length}, estimated ${held.filter((h) => h.estimated).length}`,
+          `This FY: start ₹${inr(fy.figures.start)}, outside confirmed ₹${inr(fy.figures.confirmedExternal)}, not explained ₹${inr(fy.figures.unexplained)}, earned ₹${inr(fy.figures.earnings.total)} (savings ₹${inr(fy.figures.earnings.savings)}, deposits ₹${inr(fy.figures.earnings.deposits)}, funds ₹${inr(fy.figures.earnings.funds)}), end ₹${inr(fy.figures.end)}; time-weighted ${pct(fy.twr)}`,
         );
-        before = p.byClass.funds;
-      }
-      const a = positionAsOf(position, '2026-09-28');
-      const b = positionAsOf(position, '2026-10-01');
-      const moved = b.holdings
-        .filter((h) => h.cls === 'funds')
-        .map((h, i) => ({ i, h, was: a.holdings.find((x) => x.assetId === h.assetId) }))
-        .map(({ i, h, was }) => ({
-          i,
-          from: was?.value ?? null,
-          to: h.value,
-          fromState: was?.state,
-          toState: h.state,
-          basis: h.basis,
-          asOfFrom: was?.asOf ?? null,
-          asOfTo: h.asOf,
-        }))
-        .filter((r) => r.from !== r.to && Math.abs((r.to ?? 0) - (r.from ?? 0)) > 20000)
-        .sort(
-          (x, y) => Math.abs((y.to ?? 0) - (y.from ?? 0)) - Math.abs((x.to ?? 0) - (x.from ?? 0)),
-        );
-      console.log('Funds whose value moved more than ₹20,000 between 28 Sep and 1 Oct (no names):');
-      for (const r of moved.slice(0, 12))
-        console.log(
-          `  fund #${r.i}: ${r.from === null ? 'no data' : '₹' + inr(r.from)} (${r.fromState}, record ${r.asOfFrom ?? '-'}) -> ${r.to === null ? 'no data' : '₹' + inr(r.to)} (${r.toState}, record ${r.asOfTo ?? '-'}) basis ${r.basis ?? '-'}`,
-        );
+      const fv = fundViews(position, { navStaleDays: cfg.funds.navStaleDays, upcomingDays: 31 });
+      console.log(
+        `Funds: confirmed ₹${inr(fv.confirmed)}, estimated ₹${inr(fv.estimated)} (with no confirmed units ₹${inr(fv.unconfirmedFunds)}), projected SIP ₹${inr(fv.projected.value)} from ${fv.projected.count} instalments (₹${inr(fv.projected.invested)}); stale prices ${fv.staleCount}, oldest NAV ${fv.oldestNav ?? '-'}`,
+      );
+      const proceeds = l.portfolio.valued.filter(
+        (v) => v.estimate?.method === 'fd_proceeds' && v.status === 'active',
+      );
+      console.log(
+        `Maturity proceeds counted until placed: ${proceeds.length} deposits, ₹${inr(proceeds.reduce((x, v) => x + (v.estimate?.estimatedAmount ?? 0), 0))}`,
+      );
+      const q = reconcileQueue({
+        position,
+        moves: l.engine.moves,
+        tolerance: cfg.estimates.unexplainedTolerance,
+        sinceDays: Math.max(cfg.deposits.hideMaturedAfterDays, 120),
+      });
+      console.log(
+        `Explain movements: ${q.proceeds.length} proceeds to place, ${q.balances.length} balances that changed more than expected (net ₹${inr(q.balances.reduce((x, b) => x + b.difference, 0))}), ${q.funding.length} new deposits with no source`,
+      );
     } catch (e) {
       console.log(`Period figures could not be worked out: ${(e as Error).message}`);
     }
