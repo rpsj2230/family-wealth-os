@@ -9,6 +9,7 @@ import {
 } from '@fwos/core';
 import { plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
+import { ForeignCashLines } from '@/components/ForeignCash';
 import { Why } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 import { Signed, homeLink } from './parts';
@@ -47,6 +48,7 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
         {formatInrCompact(c.current)}
       </div>
       <div className="bv-exact">{whole(c.current)}</div>
+      {c.key === 'cash' && <ForeignCashLines items={c.foreign} testid="hm-class-cash-fx" />}
       <dl className="hm-class-facts">
         <div>
           <dt>Invested</dt>
@@ -155,7 +157,9 @@ export function Classes({
             rate on the Rates list for its bank, else the {formatPct(rates.savingsRate, 2)} assumed
             in Settings, less the {formatPct(rates.tdsRate, 0)} tax taken at source. Profit is that
             interest, an <Est /> because banks credit interest in lumps. A balance in another
-            currency earns nothing here: a changing exchange rate is not interest.
+            currency (for example Singapore dollars) is counted in the figure at today’s exchange
+            rate and shown on its own under it, with its rupee value and the rate’s date; it earns
+            nothing here, because a changing exchange rate is not interest.
           </li>
           <li>
             <strong>Others.</strong> Shares, property, money lent, money held by others, pension

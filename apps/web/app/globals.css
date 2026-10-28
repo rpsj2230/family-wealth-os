@@ -1188,6 +1188,17 @@ table.xl {
   color: var(--fg);
   font-weight: 650;
 }
+/* the bank's total with the foreign part of its cash in small type below */
+.tot.headtot {
+  flex-direction: column;
+  gap: 0;
+  align-items: flex-start;
+  min-width: 0;
+}
+/* in a person's line the foreign part starts a quiet second line */
+.secthead .tot .fxc-inline {
+  flex-basis: 100%;
+}
 .chip.tiny {
   font-size: 0.68rem;
   padding: 0 6px;

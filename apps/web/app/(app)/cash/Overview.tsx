@@ -11,6 +11,7 @@ import {
 import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
 import '@/app/(app)/accounts/bankoverview.css';
 import '@/app/(app)/deposits/overview.css';
+import { ForeignCashLines } from '@/components/ForeignCash';
 import { PersonBadge } from '@/components/Person';
 import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
@@ -63,6 +64,7 @@ export function CashOverviewPanel({
             {formatInrCompact(o.current)}
           </div>
           <div className="bv-exact">{whole(o.current)}</div>
+          <ForeignCashLines items={o.foreign} testid="cv-fx" />
           <p className="bv-count">
             {empty
               ? 'No savings account is recorded.'
@@ -260,7 +262,9 @@ export function CashOverviewPanel({
           <li>
             A savings balance is the last one recorded, moved forward at the account&apos;s rate
             when it is old. “Since the last balances” is that movement; a foreign-currency balance
-            is counted at today&apos;s rupee value with no gain.
+            is counted at today&apos;s rupee value with no gain, and shown on its own under the
+            total with its rupee value, the rate and the day of the rate (the latest exchange rate
+            on file, refreshed every day).
           </li>
           <li>
             Interest is an estimate: balance times rate, less the tax taken at source set in

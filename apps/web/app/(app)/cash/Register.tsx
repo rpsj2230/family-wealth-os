@@ -1,5 +1,12 @@
 import Link from 'next/link';
-import { bankRowFigures, formatInr, type BankBlock, type PersonStyle } from '@fwos/core';
+import {
+  bankRowFigures,
+  formatForeign,
+  formatInr,
+  formatRate,
+  type BankBlock,
+  type PersonStyle,
+} from '@fwos/core';
 import { UpdatedCell, pctText } from '@/components/BankTable';
 import { BankBadge } from '@/components/BankBadge';
 import { PersonBadge } from '@/components/Person';
@@ -69,10 +76,20 @@ export function CashRegister({
                   {inr ? pctText(rate) : '–'}
                 </td>
                 <td data-label="Last recorded" className="num">
-                  {r.recorded === null ? '–' : formatInr(Math.round(r.recorded))}
+                  {r.recorded === null
+                    ? '–'
+                    : inr
+                      ? formatInr(Math.round(r.recorded))
+                      : formatForeign(r.recorded, r.currency)}
                 </td>
                 <td data-label="Value today" className="num">
                   <b>{formatInr(Math.round(r.current ?? 0))}</b>
+                  {!inr && r.recorded ? (
+                    <div className="muted small" data-testid="cr-fx">
+                      {formatForeign(r.recorded, r.currency)} at ₹
+                      {formatRate((r.current ?? 0) / r.recorded)}
+                    </div>
+                  ) : null}
                 </td>
                 <td data-label="Interest a year" className="num">
                   {inr

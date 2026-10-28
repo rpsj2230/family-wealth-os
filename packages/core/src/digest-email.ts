@@ -24,6 +24,13 @@ import {
   tone,
 } from './digest-format';
 import type { DigestGoalCard } from './digest-goals';
+import {
+  foreignRupeeLine,
+  foreignShort,
+  formatForeign,
+  formatRate,
+  shortDay,
+} from './foreign-cash';
 import { digestSubject, needsYouMarker, DIGEST_SUBJECT_NAME } from './digest-subject';
 import type { Change, ClassCard } from './home';
 
@@ -346,6 +353,12 @@ function tile(c: ClassCard, label: string): string {
     lines.push(
       `<div class="mu" style="color:${L.mute};font-size:12px;line-height:17px">Overall <span class="${toneClass(pt)}" style="color:${toneColor(pt)};font-weight:700" title="${esc(inrExact(c.profit))}">${esc(signedInr(c.profit))}${c.profitPct !== null ? ` (${esc(signedPct(c.profitPct))})` : ''}${c.estimated ? ' est.' : ''}</span></div>`,
     );
+  // foreign cash: the savings in S$ (or another currency) on their own, with the rupee value and the rate in small type under it.
+  // The tile's own figure above stays the rupee total of all cash.
+  for (const f of c.foreign ?? [])
+    lines.push(
+      `<div class="mu" title="${esc(foreignRupeeLine(f))}" style="color:${L.mute};font-size:12px;line-height:17px;padding-top:3px">of it <span class="ink" style="color:${L.ink};font-weight:700;white-space:nowrap">${esc(formatForeign(f.native, f.currency))}</span></div><div class="mu" style="color:${L.mute};font-size:11px;line-height:15px">≈ ${esc(inr(f.inr))} at ₹${esc(formatRate(f.rate))}${f.rateDate ? ` (${esc(shortDay(f.rateDate))})` : ''}</div>`,
+    );
   return `<div style="display:inline-block;width:100%;max-width:142px;vertical-align:top;font-size:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="tl" style="background:${L.tile};border-radius:10px;table-layout:fixed"><tr><td height="132" valign="top" align="left" style="height:132px;text-align:left;padding:10px 10px 11px 10px;font-family:${FONT}">
 <div class="mu" style="color:${L.mute};font-size:11px;line-height:15px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">${esc(label)}</div>
 <div class="ink" title="${esc(inrExact(c.current))}" style="color:${L.ink};font-size:20px;line-height:27px;font-weight:700;white-space:nowrap">${esc(inr(c.current))}</div>
@@ -656,6 +669,11 @@ function buildText(m: Model, wa: boolean): string {
       out.push(
         `${pad(TILE_SHORT[c.key]!, 14)}${padL(inr(c.current), 9)} ${padL(`${Math.round(c.share * 100)}%`, 4)}  ${bits.join(' · ')}`.trimEnd(),
       );
+      // the foreign part of the cash, small, under the cash line; the figure above it is still all the cash in rupees
+      for (const f of c.foreign ?? [])
+        out.push(
+          `${' '.repeat(14)}of it ${foreignShort(f)} at ₹${formatRate(f.rate)}${f.rateDate ? ` (${shortDay(f.rateDate)})` : ''}`,
+        );
     }
   }
   if (m.goals !== null) {

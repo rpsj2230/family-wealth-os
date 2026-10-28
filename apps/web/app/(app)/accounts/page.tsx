@@ -104,6 +104,7 @@ export default async function AccountsPage({
       (inst.data ?? []).filter((i) => i.deposit_insured === false).map((i) => i.id as string),
     ),
     jointHolders,
+    fx: marketDates.fx,
   });
   const exA = accountsExplain(
     overview,

@@ -366,6 +366,7 @@ export function buildHome(i: HomeInput): HomeModel {
     awaiting,
     cash: overview.parts.cash,
     cashToday: overview.today.savings,
+    cashForeign: overview.foreign,
     othersHeld: overview.parts.others,
     funds: fundsIn,
   };

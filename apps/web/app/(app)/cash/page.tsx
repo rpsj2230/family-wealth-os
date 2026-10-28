@@ -32,7 +32,7 @@ export default async function CashPage({
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
   const [
-    { today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays },
+    { today, assetRows, obsRows, fdRows, ownerName, portfolio, hideMaturedAfterDays, marketDates },
     inst,
     settings,
     offers,
@@ -73,6 +73,7 @@ export default async function CashPage({
     savingsRates: rateOf,
     defaultSavingsRate: savingsRate,
     tdsRate: interestTdsRate,
+    fx: marketDates.fx,
   });
   const banks = cashByBank(blocks, rateOf, interestTdsRate, savingsRate);
   const interestYear = banks.reduce((s, b) => s + b.interestYear, 0);

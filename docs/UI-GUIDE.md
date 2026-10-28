@@ -80,6 +80,10 @@ card per kind on a narrow one with each cell labelled by its period; the header 
 word and the figure; money put in or paid out is a separate muted line; an empty cell says "nothing held". Period figures come from `packages/core/src/period-gains.ts`, with every start and end value built by the position engine (`packages/core/src/position.ts`): each holding is valued from the nearest record on or before the day (see "Period figures" below).
 The signed-in page and `/demo/dashboard` both draw `HomeView` from a `HomeModel` (`lib/home.ts`), so the sample can never look different.
 
+### Cash in another currency
+
+A Cash figure is always the rupee total of all cash. Foreign-currency cash is listed beneath it, never instead of it: `ForeignCashLines` (`components/ForeignCash.tsx`) draws the balance in its own currency (`S$ 41,250`) and, in small muted type, the rupee value with the rate and its day. In a header (a bank or a person on Accounts) `ForeignCashInline` is one quiet line (`incl. S$ 41,250 ≈ ₹23.14 L`). Words and numbers come from `packages/core/src/foreign-cash.ts` (`foreignCash`, `sumForeignCash`, `datedForeignCash`, `foreignRupeeLine`); components never recompute a rate. Where a cash figure is built (`ClassCard.foreign`, `BankOverview.foreign`, `OverviewPerson.foreign`, `Totals.foreign`) the foreign part rides with it, so a new page that shows a Cash figure should show the same lines.
+
 ## Dashboard research (Home)
 
 Done before redesigning Home (26 Oct 2026). The aim was to learn what people want to see first on a wealth home page, then keep only what a two-person Indian

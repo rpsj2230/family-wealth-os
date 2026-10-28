@@ -21,6 +21,7 @@ import {
 } from './explain';
 import type { BankOverview } from './bank-overview';
 import { maturedRuleText } from './deposit-state';
+import { foreignExplain } from './foreign-cash';
 import type { FreshnessSummary } from './dashboard';
 import type {
   AllocShare,
@@ -495,6 +496,13 @@ function classCard(key: ClassCard['key'], id: string, i: HomeExplainInput): Expl
             },
           ]
         : []),
+      ...(foreignExplain(c.foreign)?.lines ?? []).map((l) => ({
+        label: l.label,
+        value: l.value,
+        basis: 'calculated' as const,
+        to: l.to,
+        note: `${l.note}${l.live ? '' : ' (no rate on file)'}`,
+      })),
       ...(c.awaiting
         ? [
             {
@@ -513,6 +521,7 @@ function classCard(key: ClassCard['key'], id: string, i: HomeExplainInput): Expl
         : 'Part of the profit rests on an estimate (a plan, assumed instalments or no statement).'
       : 'Worked out from recorded facts and contract terms.',
     notes: [
+      foreignExplain(c.foreign)?.sentence ?? null,
       c.awaiting
         ? `Leaves out ${exInr(c.awaiting.current)} in ${exPlural(c.awaiting.count, 'deposit')} past their date: once a deposit has matured its money is in a savings account or a new deposit, which are counted on their own.`
         : null,

@@ -50,6 +50,7 @@ export * from './reports';
 export * from './deposit-views';
 export * from './placement-options';
 export * from './cash-view';
+export * from './foreign-cash';
 export * from './return-profile';
 export * from './benchmark';
 export * from './ledger-rows';

@@ -18,7 +18,7 @@ import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
 import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
-import type { ForeignLine } from '@/lib/accounts-summary';
+import { foreignLines } from '@/lib/accounts-summary';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
 import { accountsExplain, bankBase } from '@/lib/explain-money';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
@@ -29,20 +29,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const FOREIGN: ForeignLine[] = [
-  {
-    assetId: 'sg1',
-    ownerId: 'p1',
-    name: 'Sample Singapore savings',
-    currency: 'SGD',
-    amount: 4_200,
-    asOf: '2026-10-12',
-    rate: 63.412,
-    rateDate: '2026-10-25',
-    inr: 266_330,
-  },
-];
-
 export default async function DemoAccounts({
   searchParams,
 }: {
@@ -51,7 +37,8 @@ export default async function DemoAccounts({
   const { p, tab: rawTab, matured } = await searchParams;
   const showAll = showsMatured(matured);
   const tab = rawTab === 'manage' ? 'manage' : 'banks';
-  const { blocks, styles, portfolio, assets, fds, people, institutionNames } = demoModel();
+  const { blocks, styles, portfolio, assets, observations, fds, people, institutionNames, fx } =
+    demoModel();
   const who = p && styles[p] ? p : null;
   // matured long ago or confirmed: out of the rows (they are in no total); ?matured=all lists them again, dimmed
   const { blocks: shown, counts: hiddenCounts } = withoutHiddenDeposits(
@@ -64,6 +51,7 @@ export default async function DemoAccounts({
     defaultSavingsRate: DEFAULT_CONFIG.estimates.savingsRate,
     tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
     insuranceLimit: DEFAULT_CONFIG.deposits.insuranceLimit,
+    fx,
   });
   const exA = accountsExplain(
     overview,
@@ -83,6 +71,12 @@ export default async function DemoAccounts({
     b.sections.flatMap((s) => s.rows),
   );
   const assumed = rows.filter((r) => r.kindInferred).length;
+  const foreign = foreignLines(
+    who ? assets.filter((a) => a.owner_id === who) : assets,
+    observations,
+    new Map(portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? null])),
+    fx,
+  );
   const quick = quickModel({
     blocks,
     assets,
@@ -169,7 +163,7 @@ export default async function DemoAccounts({
               showHref={maturedHref('/demo/accounts', { p: who }, true)}
               hideHref={maturedHref('/demo/accounts', { p: who }, false)}
             />
-            <ForeignCard lines={FOREIGN} styles={styles} />
+            <ForeignCard lines={foreign} styles={styles} />
           </>
         )}
       </QuickEditProvider>

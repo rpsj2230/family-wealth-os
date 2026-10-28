@@ -11,6 +11,7 @@ import {
 } from '@fwos/core';
 import './bankoverview.css';
 import { Est } from '@/components/Est';
+import { ForeignCashLines } from '@/components/ForeignCash';
 import { PersonBadge } from '@/components/Person';
 import { Why, WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
@@ -274,7 +275,13 @@ export function BankOverviewPanel({
         <Stat
           label="Savings and cash"
           value={formatInrCompact(o.parts.cash.current)}
-          sub={`${plural(o.parts.cash.count, 'account')} · ${formatInrCompact(o.parts.cash.invested)} last recorded`}
+          sub={
+            <>
+              {plural(o.parts.cash.count, 'account')} · {formatInrCompact(o.parts.cash.invested)}{' '}
+              last recorded
+              <ForeignCashLines items={o.foreign} testid="bv-cash-fx" />
+            </>
+          }
           href={to('/cash')}
           why={ex['accounts.cash']}
         />

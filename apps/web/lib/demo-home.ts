@@ -17,7 +17,7 @@ import {
 } from '@fwos/core';
 import { buildDeposits, type DepositAsset } from './deposits';
 import { demoInbox } from './demo-datain';
-import { DEMO_TODAY as DEMO_DATE, demoModel } from './demo-fixture';
+import { DEMO_PORTFOLIO_DEFAULTS, DEMO_TODAY as DEMO_DATE, demoModel } from './demo-fixture';
 import { demoView } from './demo-funds';
 import { DEFAULT_INFLATION, returnFor, type GoalSummary } from './goals-view';
 import type { HomeInput, HomeSnapshot } from './home';
@@ -136,7 +136,7 @@ export function demoHomeInput(range: HomeRange): HomeInput {
       });
   }
 
-  const portfolio = buildPortfolio(assets, observations, m.fds, DEMO_DATE);
+  const portfolio = buildPortfolio(assets, observations, m.fds, DEMO_DATE, DEMO_PORTFOLIO_DEFAULTS);
   const nw = portfolio.netWorth;
   const config = DEFAULT_CONFIG;
 
@@ -184,6 +184,7 @@ export function demoHomeInput(range: HomeRange): HomeInput {
     defaultSavingsRate: config.estimates.savingsRate,
     tdsRate: config.estimates.interestTdsRate,
     insuranceLimit: config.deposits.insuranceLimit,
+    fx: m.fx,
   };
 
   const goal = (
