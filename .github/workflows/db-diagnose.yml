@@ -91,6 +91,12 @@ jobs:
           select f.nickname, f.as_of as first_on, f.amount > 0 as value_on_first_day, l.as_of as last_on,
                  round(l.amount / nullif(f.amount, 0), 2) as last_over_first
             from r f join r l on l.nickname = f.nickname and l.m = 1 where f.n = 1 order by 1;
+          \echo '== Rupash fund rows with no statement lines: record id, then each reading: date, source and the sheet tab and cell it was read from (no amounts)'
+          select a.id as record_id, a.nickname, ob.as_of, ob.source, ob.source_ref
+            from public.observations ob join public.assets a on a.id = ob.asset_id join public.owners o on o.id = a.owner_id
+           where o.display_name = 'Rupash' and a.type = 'mutual_fund' and a.status <> 'closed' and ob.superseded_by is null
+             and not exists (select 1 from public.mf_transactions t where t.asset_id = a.id)
+           order by a.nickname, ob.as_of;
           \echo '== fund import choices left aside (verdict and basis), by fund'
           select a.nickname, i.verdict, i.basis from public.fund_import_ignores i join public.assets a on a.id = i.asset_id order by 1;
           \echo '== fund statements imported, counts only'
