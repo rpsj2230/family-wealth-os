@@ -3,8 +3,10 @@
  * Joins two records of the same fund held by one person (Actions > Fund merge, run by hand): everything recorded against the record
  * named FROM (its statement lines, value readings, SIP changes, folio links, goal shares, tasks) moves to the record named INTO, the
  * scheme details on file for FROM fill in what INTO lacks, and the empty FROM record is removed. INTO keeps its own name, status and
- * history. Used when a fund was entered twice (a spreadsheet row and a statement under a newer scheme name). MODE=plan writes
- * nothing. Prints the two names and counts only, never amounts.
+ * history. Used when a fund was entered twice (a spreadsheet row and a statement under a newer scheme name). Value readings are
+ * append-only and cannot move or be deleted: when FROM has any, it is retired instead of removed (closed, so it counts nowhere, with
+ * its scheme details row removed so no fund list shows it; its readings stay as history). MODE=plan writes nothing. Prints the two
+ * names and counts only, never amounts.
  */
 import { connectDb, householdId, must, need } from './shared';
 
@@ -16,7 +18,6 @@ const TABLES: { table: string; unique: string[] | null }[] = [
   { table: 'fund_import_ignores', unique: ['verdict', 'basis'] },
   { table: 'goal_allocations', unique: ['goal_id'] },
   { table: 'fund_folio_links', unique: null },
-  { table: 'observations', unique: null },
   { table: 'tasks', unique: null },
   { table: 'inbox_messages', unique: null },
   { table: 'asset_rate_history', unique: null },
@@ -136,9 +137,30 @@ async function main() {
     if (write && Object.keys(fill).length)
       must(await db.from('mf_positions').update(fill).eq('asset_id', into.id), 'mf_positions');
   }
+  const { count: readings } = await db
+    .from('observations')
+    .select('*', { count: 'exact', head: true })
+    .eq('asset_id', from.id);
+  if (readings)
+    console.log(
+      `- observations: ${readings} stay on the retired record (value readings are append-only)`,
+    );
   if (write) {
-    must(await db.from('assets').delete().eq('id', from.id).eq('household_id', hh), 'assets');
-    console.log(`Removed the empty record "${from.nickname}".`);
+    if (readings) {
+      must(await db.from('mf_positions').delete().eq('asset_id', from.id), 'mf_positions');
+      must(
+        await db
+          .from('assets')
+          .update({ status: 'closed' })
+          .eq('id', from.id)
+          .eq('household_id', hh),
+        'assets',
+      );
+      console.log(`Retired "${from.nickname}": closed, and no longer listed with the funds.`);
+    } else {
+      must(await db.from('assets').delete().eq('id', from.id).eq('household_id', hh), 'assets');
+      console.log(`Removed the empty record "${from.nickname}".`);
+    }
   } else console.log('Plan only: nothing was written');
 }
 
