@@ -158,6 +158,12 @@ async function main() {
             .join(' | ')}`,
         );
       console.log(`Basis: ${JSON.stringify(g.periods.basis)}`);
+      // the funds Home's note counts as held with no transaction ledger: names, owner and status only
+      for (const x of position.assets.filter((a) => a.type === 'mutual_fund' && a.fund)) {
+        const v = valueOn(x, position.config.today, position.config, position.current);
+        if (isHeld(v) && (v.value ?? 0) > 0 && !x.fund!.hasStatement)
+          console.log(`  no ledger: ${x.name} (${x.status})`);
+      }
       // where each fund's value comes from, and how well the plan-built units agree with the monthly sheet (counts and totals only)
       const funds = position.assets.filter((x) => x.type === 'mutual_fund' && x.fund);
       const from = (k: string) =>
