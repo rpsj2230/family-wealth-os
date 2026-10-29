@@ -6,6 +6,7 @@
 import {
   buildPortfolio,
   creditEvery,
+  isEstimatedTxn,
   lastNavMove,
   addDaysIso,
   planLedger,
@@ -236,6 +237,10 @@ export async function loadPortfolioData(
   // fund-plan.ts) shared with the position engine, so today's value here and the value on any past day agree. A counted unit count or
   // a statement replaces them. Prices are public and read once (nav-history.ts); without them the fund is valued from its last record.
   const planUnits = new Map<string, number>();
+  const planPrior = new Map<
+    string,
+    { units: number | null; asOf: string | null; source: 'plan' | null }
+  >();
   const planNavs = new Map<string, { date: string; nav: number }[]>();
   try {
     const startedOf = new Map(
@@ -279,6 +284,11 @@ export async function loadPortfolioData(
           },
         );
         if (pl && pl.units > 0) {
+          planPrior.set(a.id, {
+            units: a.units ?? null,
+            asOf: a.units_as_of ?? null,
+            source: a.units_source ?? null,
+          });
           planUnits.set(a.id, pl.units);
           a.units = pl.units;
           a.units_as_of = todayIso0;
@@ -406,6 +416,28 @@ export async function loadPortfolioData(
     for (const l of lines) {
       const id = l.asset_id as string;
       (fundLines.get(id) ?? fundLines.set(id, []).get(id)!).push(l);
+    }
+    // statement lines replace the plan: a fund with real lines never shows units rebuilt from its plan as the units it records
+    for (const [id, prior] of planPrior) {
+      const real = (fundLines.get(id) ?? []).some(
+        (l) => !isEstimatedTxn({ description: (l.description as string | null) ?? null }),
+      );
+      if (!real) continue;
+      planUnits.delete(id);
+      const a = assetRows.find((x) => x.id === id);
+      if (a) {
+        a.units = prior.units;
+        a.units_as_of = prior.asOf;
+        a.units_source = prior.source;
+      }
+      const pos = ((positions.data ?? []) as unknown as PositionRow[]).find(
+        (x) => x.asset_id === id,
+      );
+      const info = fundInfo[id];
+      if (info && pos) {
+        info.units = pos.units === null ? null : Number(pos.units);
+        info.unitsAsOf = pos.units_as_of;
+      }
     }
     for (const x of snaps) {
       const id = x.asset_id as string;
