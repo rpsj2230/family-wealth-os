@@ -44,7 +44,7 @@ export function GrandTotal({
       </div>
       <dl className="gt-grid">
         <div>
-          <dt>Invested / balance</dt>
+          <dt>Amount invested now / balance</dt>
           <dd data-gt="inv">{formatInr(Math.round(invested))}</dd>
         </div>
         <div>
@@ -52,7 +52,7 @@ export function GrandTotal({
           <dd data-gt="mat">{formatInr(Math.round(maturity))}</dd>
         </div>
         <div>
-          <dt>Current value</dt>
+          <dt>Value today</dt>
           <dd data-gt="cur" className="gt-main">
             {formatInr(Math.round(current))}
           </dd>

@@ -437,7 +437,7 @@ export function bankFigure(
     case 'invested':
       return explain({
         id,
-        title: 'Cost of current holdings',
+        title: 'Amount invested now',
         exact: exInr(o.invested),
         what: 'The amount put in: the principal of each running deposit.',
         how: `Principal of ${exPlural(o.deposits, 'running deposit')} added = ${exInr(o.invested)}. Interest is not in it.`,

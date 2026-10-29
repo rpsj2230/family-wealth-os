@@ -35,9 +35,9 @@ test.describe('Home (public sample)', () => {
     for (const label of [
       'Today',
       'Last 30 days',
-      'Own money put in (lifetime)',
-      'Lifetime profit',
-      'Yearly return (XIRR)',
+      'Your own money brought in',
+      'Total profit on your own money',
+      'Yearly return on your own money (XIRR)',
       'Confirmed recently',
       'Older or unconfirmed',
       'Cash and deposits',
@@ -109,7 +109,11 @@ test.describe('Home (public sample)', () => {
   }) => {
     await page.goto('/demo/dashboard');
     const figures = hero(page).getByRole('group', { name: 'Own money and profit' });
-    for (const label of ['Own money put in (lifetime)', 'Lifetime profit', 'Yearly return (XIRR)'])
+    for (const label of [
+      'Your own money brought in',
+      'Total profit on your own money',
+      'Yearly return on your own money (XIRR)',
+    ])
       await expect(figures.locator('.hm-cap-label', { hasText: label })).toBeVisible();
     await expect(figures.getByTestId('hm-own-money')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(/^[+−]₹[\d,]+$/);
@@ -166,9 +170,9 @@ test.describe('Home (public sample)', () => {
       const card = section.getByTestId(`hm-class-${key}`);
       await expect(card.getByRole('link').first()).toHaveAttribute('href', href);
       for (const label of [
-        'Cost of current holdings',
-        'Earned since first record',
-        'Gain on current holdings',
+        'Amount invested now',
+        'Interest and gains earned since first record',
+        'Profit on amount invested now',
       ])
         await expect(card.getByText(label, { exact: true })).toBeVisible();
       await expect(card.getByText(/% of net worth/)).toBeVisible();
@@ -380,12 +384,14 @@ test.describe('Home (public sample)', () => {
   }) => {
     await page.goto('/demo/dashboard');
     await expect(page.getByTestId('hm-class-fd-yearly')).toContainText(
-      /Yearly return \(XIRR\)\s*\d+\.\d%/,
+      /Yearly return on amount invested \(XIRR\)\s*\d+\.\d%/,
     );
     await expect(page.getByTestId('hm-class-funds-yearly')).toContainText(
-      /Yearly return \(XIRR\)\s*-?\d+\.\d%/,
+      /Yearly return on amount invested \(XIRR\)\s*-?\d+\.\d%/,
     );
-    await expect(page.getByTestId('hm-class-cash-yearly')).toContainText(/Earns\s*\d+\.\d% a year/);
+    await expect(page.getByTestId('hm-class-cash-yearly')).toContainText(
+      /Earns interest at\s*\d+\.\d% a year/,
+    );
     await expect(page.getByTestId('hm-class-others-yearly')).toContainText('not measurable');
   });
 

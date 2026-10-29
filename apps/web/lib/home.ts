@@ -142,6 +142,8 @@ export interface HomeInput {
   newestRecorded: string | null;
   /** confirmed money movements as the family ledger reads them (capital.ts) */
   moves?: LedgerMove[];
+  /** confirmed transfers from a foreign-currency account into a rupee holding (money sent from abroad, e.g. by Wise) */
+  abroad?: { date: string; amount: number }[];
   /** the period of the wealth movement panel, from the address */
   movement?: { key: MovementKey; custom?: { from?: string; to?: string } };
 }
@@ -167,6 +169,8 @@ export interface HomeCapital {
   };
   /** deposits that matured whose proceeds are counted until you say where they went, and how much */
   proceeds: { count: number; amount: number };
+  /** money sent from abroad into the rupee holdings after the opening day: part of the money worked out from balances */
+  abroad: { count: number; amount: number };
   /** of net worth, how much each kind of figure makes up (figure.ts) */
   mix: Partial<Record<FigureKind, number>>;
 }
@@ -778,6 +782,10 @@ export function buildHome(i: HomeInput): HomeModel {
       amount: proceedsRows.reduce((a, v) => a + (v.estimate?.estimatedAmount ?? 0), 0),
     },
     mix: mixOf(mixParts).by,
+    abroad: (() => {
+      const after = (i.abroad ?? []).filter((x) => !ledger.opening || x.date > ledger.opening.date);
+      return { count: after.length, amount: after.reduce((a, x) => a + x.amount, 0) };
+    })(),
   };
 
   return {

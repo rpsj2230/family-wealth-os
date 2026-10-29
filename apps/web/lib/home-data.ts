@@ -200,6 +200,20 @@ export async function loadHome(
 
   const input: HomeInput = {
     moves: ledgerMovesOf(loaded.engine.moves),
+    abroad: loaded.engine.moves
+      .filter((m) => {
+        const from = m.fromAssetId ? assetRows.find((a) => a.id === m.fromAssetId) : undefined;
+        const to = m.toAssetId ? assetRows.find((a) => a.id === m.toAssetId) : undefined;
+        return (
+          m.status === 'confirmed' &&
+          m.kind === 'transfer' &&
+          !!from &&
+          !!to &&
+          from.currency !== 'INR' &&
+          to.currency === 'INR'
+        );
+      })
+      .map((m) => ({ date: m.movedOn, amount: m.amount })),
     ...(movement ? { movement } : {}),
     today: todayIso,
     range,

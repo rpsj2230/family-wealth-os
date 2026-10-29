@@ -19,10 +19,10 @@ test.describe('Deposits: the overview (public sample)', () => {
     await expect(p.getByRole('heading', { name: /Fixed deposits today/, level: 2 })).toBeVisible();
     await expect(p.getByTestId('dv-current')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     for (const label of [
-      'Cost of current holdings',
-      'Current value',
-      'Maturity value',
-      'Gain on current holdings',
+      'Amount invested now',
+      'Value today',
+      'Value at maturity',
+      'Profit on amount invested now',
       'Earned today',
       'Which bank holds how much',
       'What matures, year by year',

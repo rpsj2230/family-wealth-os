@@ -14,6 +14,7 @@ import { ForeignCashLines } from '@/components/ForeignCash';
 import { Why } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
+import { MONEY_WORDS as W } from '@/lib/money-words';
 import { Signed, homeLink } from './parts';
 
 const NOUN: Record<ClassCard['key'], [string, string]> = {
@@ -63,11 +64,11 @@ function ClassCardView({
       {c.key === 'cash' && <ForeignCashLines items={c.foreign} testid="hm-class-cash-fx" />}
       <dl className="hm-class-facts">
         <div>
-          <dt>Cost of current holdings</dt>
+          <dt>{W.investedNow}</dt>
           <dd>{formatInrCompact(c.invested)}</dd>
         </div>
         <div>
-          <dt>Earned since first record</dt>
+          <dt>{W.earnedSince}</dt>
           <dd>
             {c.earned === null ? '–' : formatInrCompact(c.earned)}
             {c.earned !== null && c.key === 'cash' && <Est />}
@@ -80,7 +81,7 @@ function ClassCardView({
         title={yearly?.basis}
       >
         <span className="muted">
-          {yearly?.kind === 'rate' ? 'Earns ' : 'Yearly return (XIRR) '}
+          {yearly?.kind === 'rate' ? `${W.earnsRate} ` : `${W.xirrInvested} `}
         </span>
         {yearly ? (
           <>
@@ -101,13 +102,13 @@ function ClassCardView({
       </p>
       <p className="hm-class-pl">
         <Signed
-          label="Gain on current holdings"
+          label={W.profitOnInvested}
           amount={c.profit}
           pct={c.profitPct}
           estimate={c.estimated && Math.round(c.profit) !== 0}
         />
         {c.profitPct !== null && (
-          <span className="small muted"> on the {formatInrCompact(c.invested)} they cost</span>
+          <span className="small muted"> on the {formatInrCompact(c.invested)} invested now</span>
         )}
       </p>
       <p className="hm-class-share small muted">

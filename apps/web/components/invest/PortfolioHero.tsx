@@ -5,6 +5,7 @@ import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { Why } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import './invest.css';
+import { MONEY_WORDS as W } from '@/lib/money-words';
 
 /** The explainers the hero carries: one for each headline figure. */
 export interface HeroExplain {
@@ -289,7 +290,7 @@ export function PortfolioHero({
               <i className="ln" aria-hidden="true" /> Value
             </span>
             <span>
-              <i className="ln dash" aria-hidden="true" /> Money put in
+              <i className="ln dash" aria-hidden="true" /> Amount invested
             </span>
             <Link href={tabLinks.performance}>See performance</Link>
           </div>
@@ -298,7 +299,7 @@ export function PortfolioHero({
 
       <dl className="invhero-grid">
         <Cell
-          label="Money put in"
+          label={W.investedNow}
           value={formatInrCompact(h.invested)}
           exact={formatInr(Math.round(h.invested))}
           sub="cost of the units still held"
@@ -306,19 +307,19 @@ export function PortfolioHero({
           why={ex['invest.moneyIn']}
         />
         <Cell
-          label="Profit or loss"
+          label={W.profitOnInvested}
           value={rupees(h.unrealised)}
           sub={
             h.unrealisedPct === null
               ? 'no cost recorded'
-              : `${pct(h.unrealisedPct, 1)} on the ${formatInrCompact(h.invested)} put in`
+              : `${pct(h.unrealisedPct, 1)} on the ${formatInrCompact(h.invested)} invested now`
           }
           cls={tone(h.unrealised)}
           est={h.unreconciled > 0}
           why={ex['invest.profit']}
         />
         <Cell
-          label="Annual return (XIRR)"
+          label={W.xirrInvested}
           value={h.xirr === null ? '–' : pct(h.xirr, 1)}
           sub={
             h.xirr === null
@@ -333,7 +334,7 @@ export function PortfolioHero({
           why={ex['invest.xirr']}
         />
         <Cell
-          label="Booked by selling"
+          label={W.booked}
           value={h.realised.sales === 0 ? 'None' : rupees(h.realised.total)}
           sub={
             h.realised.sales === 0
@@ -345,7 +346,7 @@ export function PortfolioHero({
           why={ex['invest.booked']}
         />
         <Cell
-          label="Total gain"
+          label={W.profitAll}
           value={rupees(h.totalGain)}
           sub="held plus booked"
           cls={tone(h.totalGain)}

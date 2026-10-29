@@ -33,9 +33,9 @@ test('sample deposit: facts, value chart, interest by year and the activity log'
 test('sample fund: headline, figures, graphs and every tab', async ({ page }) => {
   await page.goto('/demo/asset?kind=fund');
   const hero = page.getByRole('region', { name: 'This fund at a glance' });
-  await expect(hero).toContainText('Value now');
-  await expect(hero).toContainText('Return a year (XIRR)');
-  await expect(hero).toContainText('Profit or loss');
+  await expect(hero).toContainText('Value today');
+  await expect(hero).toContainText('Yearly return on amount invested (XIRR)');
+  await expect(hero).toContainText('Profit on amount invested now');
   // overview: the figures and the graphs
   await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText(
     'Average cost per unit',
@@ -103,9 +103,9 @@ test('sample fund: every transaction can be filtered, searched, sorted and expor
   await expect(page.getByText(/^1 of 56 lines/)).toBeVisible();
   await expect(page.getByText('booked').first()).toBeVisible();
   await page.getByRole('button', { name: 'All', exact: true }).click();
-  await page.getByLabel('Year').selectOption('2024-25');
+  await page.getByLabel('Year', { exact: true }).selectOption('2024-25');
   await expect(page.getByText(/of 56 lines/)).toBeVisible();
-  await page.getByLabel('Year').selectOption('all');
+  await page.getByLabel('Year', { exact: true }).selectOption('all');
   await page.getByLabel('Search the transactions').fill('dividend');
   await expect(page.getByText(/^2 of 56 lines/)).toBeVisible();
   await page.getByRole('button', { name: 'Clear' }).click();

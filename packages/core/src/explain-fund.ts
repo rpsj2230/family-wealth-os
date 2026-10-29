@@ -208,7 +208,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
   const pctBase = i.invested > 0 ? profit / i.invested : null;
   const profitE = explain({
     id: 'fund.profit',
-    title: 'Profit or loss',
+    title: 'Profit on amount invested now',
     exact: exSigned(profit),
     what: 'How much the units you still hold are worth above (or below) what you paid for them.',
     how: `${exInr(i.value)} value − ${exInr(i.invested)} money put in = ${exSigned(profit)}.${pctBase === null ? ' No cost is recorded, so no percentage.' : ` As a share of the money put in: ${ratioHow({ label: 'profit', amount: profit }, { label: 'money put in', amount: i.invested })}.`}`,
@@ -272,7 +272,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     i.xirr === null
       ? explain({
           id: 'fund.xirr',
-          title: 'Annual return (XIRR)',
+          title: 'Yearly return on amount invested (XIRR)',
           what: 'The single yearly rate your money has grown at, given the date of each payment.',
           how: 'Not worked out: a dated payment (from a statement or a start date) is needed.',
           inputs: [{ label: 'Dated payments', value: 'none', basis: 'missing' }],
@@ -282,7 +282,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
         })
       : explain({
           id: 'fund.xirr',
-          title: 'Annual return (XIRR)',
+          title: 'Yearly return on amount invested (XIRR)',
           what: 'The single yearly rate your money has grown at, given the date of each payment in and out.',
           how: `Find the rate r so that each payment in and out, grown at r from its date, plus today’s value ${exInr(i.value)} on ${exDate(i.today)}, adds up to zero. ${exPlural(i.flowCount, 'dated payment')} from ${exDate(i.flowsFrom)} to ${exDate(i.flowsTo)} give ${exSignedPct(i.xirr, 1)} a year.`,
           inputs: [
@@ -497,7 +497,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     r.sales === 0
       ? explain({
           id: 'fund.booked',
-          title: 'Booked by selling',
+          title: 'Profit booked by selling',
           what: 'The gain or loss already locked in by units sold from this fund.',
           how: i.hasStatement
             ? 'No sale is on the statement.'
@@ -519,7 +519,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
         })
       : explain({
           id: 'fund.booked',
-          title: 'Booked by selling',
+          title: 'Profit booked by selling',
           exact: exSigned(r.stcg + r.ltcg + r.other),
           what: 'The gain or loss already locked in by units sold from this fund.',
           how: `For each sale: money received − what those units cost (oldest first). Short-term ${exSigned(r.stcg)} + long-term ${exSigned(r.ltcg)} + other ${exSigned(r.other)} = ${exSigned(r.stcg + r.ltcg + r.other)} over ${exPlural(r.sales, 'sale')}, ${exInr(r.proceeds)} received.`,

@@ -196,8 +196,8 @@ export function PersonCompare({
           <tr>
             <th>Person</th>
             <th className="num">Funds</th>
-            <th className="num">Invested</th>
-            <th className="num">Value</th>
+            <th className="num">Invested now</th>
+            <th className="num">Value today</th>
             <th className="num">Profit or loss</th>
             <th className="num">Today</th>
             <th className="num">Return a year</th>
@@ -220,10 +220,10 @@ export function PersonCompare({
                 {r.totals.funds}
                 {r.folios > 0 && <span className="fl-s">{r.folios} folios</span>}
               </td>
-              <td className="num" data-label="Invested">
+              <td className="num" data-label="Invested now">
                 {inr(r.totals.invested)}
               </td>
-              <td className="num" data-label="Value">
+              <td className="num" data-label="Value today">
                 {inr(r.totals.value)}
               </td>
               <td className={`num ${tone(r.totals.gain)}`} data-label="Profit or loss">

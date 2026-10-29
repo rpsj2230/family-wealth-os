@@ -21,10 +21,10 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     await expect(p.getByTestId('bv-current')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     await expect(p).toContainText(/₹\d{1,2},\d\d,\d\d,\d{3}/);
     for (const label of [
-      'Cost of current holdings',
-      'Current value',
-      'Maturity value',
-      'Gain on current holdings',
+      'Amount invested now',
+      'Value today',
+      'Value at maturity',
+      'Profit on amount invested now',
       'Earned today',
       'Where the money sits',
       'Savings and cash',
@@ -97,13 +97,13 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
   }) => {
     await page.goto('/demo/accounts');
     const v = panel(page).getByTestId('bv-view-current');
-    await expect(v).toContainText('Current holdings:');
+    await expect(v).toContainText('Amount invested now:');
     await expect(v.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/demo/dashboard');
   });
 
   test('is also at the top of Manage', async ({ page }) => {
     await page.goto('/demo/accounts?tab=manage');
-    await expect(panel(page)).toContainText('Gain on current holdings');
+    await expect(panel(page)).toContainText('Profit on amount invested now');
     await expect(page.getByRole('heading', { name: 'Edit many accounts at once' })).toBeVisible();
     await noSideways(page);
   });

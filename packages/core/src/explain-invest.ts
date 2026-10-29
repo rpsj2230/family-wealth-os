@@ -349,7 +349,7 @@ function profitExplain(
   const sharePct = h.value > 0 ? h.unrealised / h.value : null;
   return explain({
     id: 'invest.profit',
-    title: 'Profit or loss on the units held',
+    title: 'Profit on amount invested now (units held)',
     exact: exSigned(h.unrealised),
     shown: compactIfBig(h.unrealised),
     what: 'How much the units you still hold are worth above (or below) what you paid for them.',
@@ -513,7 +513,7 @@ function xirrExplain(i: InvestExplainInput, c: Coverage): Explain {
   if (h.xirr === null)
     return explain({
       id: 'invest.xirr',
-      title: 'Annual return (XIRR)',
+      title: 'Yearly return on amount invested (XIRR)',
       what: 'The single yearly rate that your money has grown at, given the dates each rupee went in or came out.',
       how: 'Not worked out: it needs at least one dated payment in and today’s value, from a statement or a start date.',
       inputs: [
@@ -541,7 +541,7 @@ function xirrExplain(i: InvestExplainInput, c: Coverage): Explain {
     );
   return explain({
     id: 'invest.xirr',
-    title: 'Annual return (XIRR)',
+    title: 'Yearly return on amount invested (XIRR)',
     what: 'The single yearly rate that makes every payment you made, every payment you took out and today’s value balance, given the date of each.',
     how: `Find the rate r so that each payment in (−) and out (+), grown at r from its date, plus today’s value ${exInr(h.value)} on ${exDate(i.today)}, adds up to zero. Over ${exPlural(flowsStatement + flowsPlan, 'dated payment')} from ${exDate(first)} to ${exDate(i.today)} the answer is ${exSignedPct(h.xirr, 1)} a year. It is a money-weighted return: when you paid in matters.`,
     inputs: [
@@ -616,7 +616,7 @@ function bookedExplain(i: InvestExplainInput, c: Coverage): Explain {
   if (r.sales === 0)
     return explain({
       id: 'invest.booked',
-      title: 'Booked by selling',
+      title: 'Profit booked by selling',
       what: 'The gain or loss already locked in by units you sold.',
       how: 'No sale is on the statements imported so far, so nothing is shown. Nothing has been booked, or the statements are not imported yet.',
       inputs: [
@@ -637,7 +637,7 @@ function bookedExplain(i: InvestExplainInput, c: Coverage): Explain {
     });
   return explain({
     id: 'invest.booked',
-    title: 'Booked by selling',
+    title: 'Profit booked by selling',
     exact: exSigned(r.total),
     shown: compactIfBig(r.total),
     what: 'The gain or loss already locked in by units you sold, from the sale lines on your statements.',
@@ -676,7 +676,7 @@ function totalGainExplain(i: InvestExplainInput, c: Coverage): Explain {
   const h = i.hero;
   return explain({
     id: 'invest.totalGain',
-    title: 'Total gain',
+    title: 'Total profit (held and booked)',
     exact: exSigned(h.totalGain),
     shown: compactIfBig(h.totalGain),
     what: 'The gain on units you still hold plus the gain already booked by selling.',

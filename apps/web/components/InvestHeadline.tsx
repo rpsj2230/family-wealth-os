@@ -27,12 +27,12 @@ export function InvestHeadline({ t, big = false }: { t: Totals; big?: boolean })
         </dd>
       </div>
       <div>
-        <dt>Total gain</dt>
+        <dt>Total profit</dt>
         <dd className={`num ${tone(t.gain)}`}>{rupees(t.gain)}</dd>
         <dd className={`sub ${tone(t.xirr)}`}>
           {t.xirr === null
-            ? 'XIRR not available'
-            : `XIRR ${pct(t.xirr, 1)} a year${t.xirrEstimated ? ' (est.)' : ''}`}
+            ? 'yearly return (XIRR) not available'
+            : `yearly return (XIRR) on amount invested ${pct(t.xirr, 1)}${t.xirrEstimated ? ' (est.)' : ''}`}
         </dd>
       </div>
       {t.sipMonthly > 0 && (

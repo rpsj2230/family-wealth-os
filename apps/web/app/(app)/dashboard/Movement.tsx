@@ -11,6 +11,7 @@ import { whole } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
+import { MONEY_WORDS as W } from '@/lib/money-words';
 import { CardHead, MaybeLink, homeLink, rupees, tone } from './parts';
 
 /**
@@ -33,25 +34,54 @@ export function Capital({
   return (
     <div className="hm-capital" role="group" aria-label="Own money and profit">
       <p className="hm-view small muted" data-testid="hm-view-lifetime">
-        <strong>Lifetime:</strong> all the money you brought in and everything earned on it since
-        the records began; interest that was reinvested is counted once, as profit.
+        <strong>Lifetime:</strong> your own money is only what you brought in from outside (salary,
+        money sent from Singapore, the balances on the first day). Interest and fund gains are never
+        counted as own money: they are the profit. Today’s deposits and funds cost more than your
+        own money because earlier interest was reinvested; that cost is the “amount invested now” on
+        the cards below.
       </p>
       <div className="hm-cap">
         <div className="hm-cap-label">
-          Own money put in (lifetime) <Why explain={ex['home.ownMoney']} />
+          {W.ownMoney} <Why explain={ex['home.ownMoney']} />
         </div>
         <div className="hm-cap-value" data-testid="hm-own-money">
           {opening ? formatInrCompact(t.ownMoney) : '–'}
         </div>
-        <div className="hm-cap-note">
-          {opening
-            ? `${formatInrCompact(t.opening)} on ${niceDate(opening.date)}${t.confirmedExternal !== 0 ? `, ${rupees(t.confirmedExternal)} confirmed since` : ''}${Math.abs(t.unexplained) >= 1 ? `, ${rupees(t.unexplained)} worked out from balances` : ''}`
-            : 'shows once balances or deposits are recorded'}
-        </div>
+        {opening ? (
+          <ul className="hm-cap-parts small" data-testid="hm-own-money-parts">
+            <li>
+              <span>Balances on {niceDate(opening.date)}</span>
+              <span>{formatInrCompact(t.opening)}</span>
+            </li>
+            {c.abroad.count > 0 && (
+              <li data-testid="hm-own-money-abroad">
+                <span>
+                  Sent from Singapore since ({c.abroad.count} transfer
+                  {c.abroad.count === 1 ? '' : 's'})
+                </span>
+                <span>{formatInrCompact(c.abroad.amount)}</span>
+              </li>
+            )}
+            {t.confirmedExternal !== 0 && (
+              <li>
+                <span>Other money in or out, confirmed</span>
+                <span>{rupees(t.confirmedExternal)}</span>
+              </li>
+            )}
+            {Math.abs(t.unexplained - c.abroad.amount) >= 1 && (
+              <li>
+                <span>Other money in or out, worked out from balances</span>
+                <span>{rupees(t.unexplained - c.abroad.amount)}</span>
+              </li>
+            )}
+          </ul>
+        ) : (
+          <div className="hm-cap-note">shows once balances or deposits are recorded</div>
+        )}
       </div>
       <div className="hm-cap">
         <div className="hm-cap-label">
-          Lifetime profit <Est /> <Why explain={ex['home.profitSoFar']} />
+          {W.profitTotal} <Est /> <Why explain={ex['home.profitSoFar']} />
         </div>
         <div
           className={`hm-cap-value ${tone(opening ? t.profit : null)}`}
@@ -61,20 +91,20 @@ export function Capital({
         </div>
         <div className="hm-cap-note">
           {t.profitPct !== null
-            ? `${formatPct(t.profitPct, 1)} of own money; interest, fund gains and exchange moves`
+            ? `${formatPct(t.profitPct, 1)} of your own money: today’s net worth less your own money (interest, fund gains, exchange moves)`
             : 'no own money to measure a per cent against'}
         </div>
       </div>
       <div className="hm-cap">
         <div className="hm-cap-label">
-          Yearly return (XIRR) <Why explain={ex['home.xirr']} />
+          {W.xirrOwn} <Why explain={ex['home.xirr']} />
         </div>
         <div className={`hm-cap-value ${tone(t.xirr.rate)}`} data-testid="hm-xirr">
           {t.xirr.rate !== null ? formatPct(t.xirr.rate, 1) : '–'}
         </div>
         <div className="hm-cap-note">
           {t.xirr.rate !== null
-            ? 'money-weighted, on own money with the dates it came in'
+            ? 'on your own money, with the dates it came in, to today’s net worth'
             : 'cannot be worked out yet'}
         </div>
       </div>

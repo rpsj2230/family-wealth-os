@@ -220,6 +220,11 @@ export interface BankRow {
     /** code of the savings account it is linked to, found by the last four digits */
     linkedTo: string | null;
     /**
+     * how the linked account is known: by the number recorded on the deposit, or (no number recorded) because it is the person's only
+     * savings account of the same kind (NRE/NRO) at this bank, which is a guess and shown as one
+     */
+    linkedBy?: 'number' | 'only_account' | null;
+    /**
      * the deposit's date has passed (or it is marked matured, not confirmed): its money has left the deposit, so it is in no total.
      * Counted by the same rule as net worth (deposit-state.ts).
      */
@@ -472,10 +477,25 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       });
     }
     for (const r of rows) {
-      if (r.kind === 'fd' && r.fd && r.last4) {
-        const target = rows.find((x) => x.kind === 'cash' && x.last4 === r.last4);
-        r.fd.linkedTo = target ? target.code : null;
+      if (r.kind !== 'fd' || !r.fd) continue;
+      const byNumber = r.last4
+        ? rows.find((x) => x.kind === 'cash' && x.last4 === r.last4)
+        : undefined;
+      if (byNumber) {
+        r.fd.linkedTo = byNumber.code;
+        r.fd.linkedBy = 'number';
+        continue;
       }
+      const same = rows.filter(
+        (x) =>
+          x.kind === 'cash' &&
+          x.ownerId === r.ownerId &&
+          x.currency === 'INR' &&
+          x.accountKind === r.accountKind &&
+          x.status !== 'closed',
+      );
+      r.fd.linkedTo = !r.last4 && same.length === 1 ? same[0]!.code : null;
+      r.fd.linkedBy = r.fd.linkedTo ? 'only_account' : null;
     }
     const sectionOrder = new Map<string, number>();
     for (const r of rows)

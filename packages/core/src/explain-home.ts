@@ -304,9 +304,9 @@ function capitalExplains(
     });
   if (!c || !t || !o)
     return {
-      'home.ownMoney': none('home.ownMoney', 'Own money put in (lifetime)'),
-      'home.profitSoFar': none('home.profitSoFar', 'Lifetime profit'),
-      'home.xirr': none('home.xirr', 'Yearly return (XIRR)'),
+      'home.ownMoney': none('home.ownMoney', 'Your own money brought in'),
+      'home.profitSoFar': none('home.profitSoFar', 'Total profit on your own money'),
+      'home.xirr': none('home.xirr', 'Yearly return on your own money (XIRR)'),
       'home.movement': none('home.movement', 'Wealth movement'),
     };
   const unexplainedShare = t.ownMoney > 0 ? Math.abs(t.unexplained) / t.ownMoney : 0;
@@ -316,7 +316,7 @@ function capitalExplains(
   return {
     'home.ownMoney': explain({
       id: 'home.ownMoney',
-      title: 'Own money put in (lifetime)',
+      title: 'Your own money brought in',
       exact: exInr(t.ownMoney),
       what: 'The family’s own money in what it holds: the opening position plus money that came in from outside its accounts, less money taken out. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.',
       how: `Opening position ${exInr(t.opening)} on ${exDate(o.date)} + outside money you confirmed ${exSigned(t.confirmedExternal)} + money moved in or out with nothing to say what it was ${exSigned(t.unexplained)} = ${exInr(t.ownMoney)}.`,
@@ -348,7 +348,7 @@ function capitalExplains(
     }),
     'home.profitSoFar': explain({
       id: 'home.profitSoFar',
-      title: 'Lifetime profit',
+      title: 'Total profit on your own money',
       exact: exSigned(t.profit),
       what: 'Net worth less own money put in: interest on savings and deposits, fund gains, exchange-rate moves and income, less fees and taxes, since the opening date.',
       how: `Net worth ${exInr(t.netWorth)} − own money ${exInr(t.ownMoney)} = ${exSigned(t.profit)}${t.profitPct === null ? '' : `; ÷ own money = ${exPct(t.profitPct, 1)}`}. By kind: savings interest ${exSigned(t.earnings.savings)}, deposit interest ${exSigned(t.earnings.deposits)}, funds ${exSigned(t.earnings.funds)}, exchange rates ${exSigned(t.earnings.fx)}, other ${exSigned(t.earnings.others + t.earnings.income)}.`,
@@ -378,7 +378,7 @@ function capitalExplains(
     }),
     'home.xirr': explain({
       id: 'home.xirr',
-      title: 'Yearly return (XIRR)',
+      title: 'Yearly return on your own money (XIRR)',
       exact: t.xirr.rate === null ? '–' : exPct(t.xirr.rate, 2),
       what: 'The yearly rate that turns the opening position and every dated sum of outside money into today’s net worth: a money-weighted return.',
       how: `Flows: −${exInr(t.opening)} on ${exDate(o.date)}, each sum of outside money on its date (a sum worked out from balances in the middle of its month), +${exInr(t.netWorth)} today. ${t.xirr.rate === null ? t.xirr.message : `Solved: ${exPct(t.xirr.rate, 2)} a year.`}`,

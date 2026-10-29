@@ -539,11 +539,12 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
       'Person',
       'Rate',
       'Maturity',
+      'Linked account',
       'Balance or invested',
       'Current value',
       'Status',
     ],
-    numeric: [2, 4, 5],
+    numeric: [2, 5, 6],
     rows: rows.map((r) => ({
       href: `/asset/${r.assetId}`,
       dim: r.status !== 'active',
@@ -552,6 +553,13 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
         styles[r.ownerId]?.name ?? '',
         r.fd ? `${(r.fd.rate * 100).toFixed(2).replace(/\.?0+$/, '')}%` : '',
         r.fd ? r.fd.maturityOn : '',
+        r.fd
+          ? r.fd.linkedTo
+            ? `${r.fd.linkedTo}${r.fd.linkedBy === 'only_account' ? ' (only account, not confirmed)' : ''}`
+            : r.last4
+              ? `…${r.last4} (not on file here)`
+              : 'Not set'
+          : '',
         inr(r.fd ? r.fd.principal : r.recorded),
         inr(r.current),
         r.status.replace(/_/g, ' '),

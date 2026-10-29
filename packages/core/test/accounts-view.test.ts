@@ -194,6 +194,38 @@ describe('buildBankBlocks', () => {
     expect(rows.find((r) => r.assetId === 'e-fd2')!.fd!.linkedTo).toBe('Cash-NRE JO-1111');
   });
 
+  it('with no number on the deposit, names the person’s only account of the same kind there, marked as a guess', () => {
+    const set: AssetRow[] = [
+      asset({ id: 'k-fd', institution_id: 'kb', type: 'fixed_deposit', label: 'FD-NRE' }),
+      asset({ id: 'k-nre', institution_id: 'kb', identifier_last4: '0037' }),
+      asset({ id: 'k-nro', institution_id: 'kb', account_kind: 'NRO', identifier_last4: '0099' }),
+      asset({ id: 'k-fd-g', institution_id: 'kb', type: 'fixed_deposit', owner_id: 'g' }),
+    ];
+    const deposits = [fd('k-fd'), fd('k-fd-g')];
+    const obsK = [obs({ id: 'o1', asset_id: 'k-nre' }), obs({ id: 'o2', asset_id: 'k-nro' })];
+    const pfK = buildPortfolio(set, obsK, deposits, today);
+    const [kb] = buildBankBlocks({
+      assets: set,
+      observations: obsK,
+      fds: deposits,
+      portfolio: pfK,
+      institutionNames: { kb: 'Karur' },
+      today,
+    });
+    const rows = kb!.sections.flatMap((x) => x.rows);
+    expect(rows.find((r) => r.assetId === 'k-fd')!.fd).toMatchObject({
+      linkedTo: 'Cash-NRE-0037',
+      linkedBy: 'only_account',
+    });
+    // the other person has no account here: nothing is guessed
+    expect(rows.find((r) => r.assetId === 'k-fd-g')!.fd).toMatchObject({
+      linkedTo: null,
+      linkedBy: null,
+    });
+    // a number on the deposit is never second-guessed
+    expect(blocks[1]!.sections[0]!.rows[0]!.fd!.linkedBy).toBe('number');
+  });
+
   it('shows invested, amount at maturity and today’s value for each deposit; the bank’s own maturity figure wins', () => {
     const f1 = blocks[1]!.sections[0]!.rows[0]!;
     expect(f1.fd).toMatchObject({

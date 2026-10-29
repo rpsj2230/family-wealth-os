@@ -16,6 +16,7 @@ import { ForeignCashLines } from '@/components/ForeignCash';
 import { PersonBadge } from '@/components/Person';
 import { Why, WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
+import { MONEY_WORDS as W } from '@/lib/money-words';
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 export const whole = (n: number) => formatInr(Math.round(n));
@@ -175,16 +176,17 @@ export function BankOverviewPanel({
               : `${plural(o.accounts, 'account')} and ${plural(o.deposits, 'deposit')}${o.banks > 0 ? ` in ${o.banks} ${bankWord}` : ''}`}
           </p>
           <p className="bv-view small muted" data-testid="bv-view-current">
-            <strong>Current holdings:</strong> what today’s deposits and balances cost and are
-            worth. Lifetime profit, with reinvested interest counted once, is on{' '}
+            <strong>Amount invested now:</strong> what today’s deposits and balances cost, including
+            interest reinvested from earlier deposits, against their value today. Your own money
+            (never including interest) and the total profit on it are on{' '}
             <Link href={sample ? '/demo/dashboard' : '/'}>Home</Link>.
           </p>
           <div className="bv-deltas">
             <Delta
-              label="Gain on current holdings"
+              label={W.profitOnInvested}
               amount={o.profit}
               pct={o.profitPct}
-              note="on what the deposits and balances cost"
+              note="value today less the amount invested now"
               why={ex['accounts.profit']}
             />
             <Delta
@@ -200,7 +202,7 @@ export function BankOverviewPanel({
 
         <div className="bv-journey">
           <WhyHead why={ex['accounts.journey']}>
-            <h3 className="bv-h">From invested to maturity</h3>
+            <h3 className="bv-h">From amount invested now to maturity</h3>
           </WhyHead>
           {pctDone === null ? (
             <p className="muted small">
@@ -218,15 +220,15 @@ export function BankOverviewPanel({
               </div>
               <dl className="bv-ends">
                 <div>
-                  <dt>Cost of current holdings</dt>
+                  <dt>{W.investedNow}</dt>
                   <dd>{formatInrCompact(o.invested)}</dd>
                 </div>
                 <div className="mid">
-                  <dt>Current value</dt>
+                  <dt>{W.valueToday}</dt>
                   <dd>{formatInrCompact(o.current)}</dd>
                 </div>
                 <div className="end">
-                  <dt>Maturity value</dt>
+                  <dt>{W.atMaturity}</dt>
                   <dd>{formatInrCompact(o.maturity)}</dd>
                 </div>
               </dl>

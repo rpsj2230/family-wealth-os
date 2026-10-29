@@ -33,7 +33,9 @@ test.describe('the "?" explainer (public sample)', () => {
     const p = panel(page);
     await expect(p).toBeVisible();
     await expect(p).toHaveAttribute('role', 'dialog');
-    await expect(p.getByRole('heading', { level: 2 })).toContainText('Profit or loss');
+    await expect(p.getByRole('heading', { level: 2 })).toContainText(
+      'Profit on amount invested now',
+    );
     // both percentages name what they are a share of
     await expect(p).toContainText('money put in =');
     await expect(p).toContainText('today’s value =');

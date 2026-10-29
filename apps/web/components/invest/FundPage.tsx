@@ -37,6 +37,7 @@ import {
   type PeriodRow,
 } from './PerfParts';
 import './invest.css';
+import { MONEY_WORDS as W } from '@/lib/money-words';
 
 export const FUND_TABS = ['overview', 'returns', 'transactions', 'lots', 'records'] as const;
 export type FundTab = (typeof FUND_TABS)[number];
@@ -174,7 +175,7 @@ export function FundPage({
         <Tile
           main
           why={ex['fund.value']}
-          label="Value now"
+          label={W.valueToday}
           value={
             <>
               {f.value ? inr(f.value) : '–'}
@@ -199,7 +200,7 @@ export function FundPage({
         />
         <Tile
           why={ex['fund.moneyIn']}
-          label="Money put in"
+          label={W.investedNow}
           value={
             <>
               {f.invested ? inr(f.invested) : '–'}
@@ -210,7 +211,7 @@ export function FundPage({
         />
         <Tile
           why={ex['fund.profit']}
-          label="Profit or loss"
+          label={W.profitOnInvested}
           value={
             <>
               {f.invested ? rupees(gain) : '–'}
@@ -221,12 +222,12 @@ export function FundPage({
           sub={
             gainPct === null
               ? 'no cost recorded'
-              : `${pct(gainPct, 1)} on the ${formatInrCompact(f.invested)} put in`
+              : `${pct(gainPct, 1)} on the ${formatInrCompact(f.invested)} invested now`
           }
         />
         <Tile
           why={ex['fund.xirr']}
-          label="Return a year (XIRR)"
+          label={W.xirrInvested}
           value={
             <>
               {f.xirr === null ? '–' : pct(f.xirr, 1)}
@@ -496,7 +497,7 @@ export function FundPage({
                           <td className="num" data-label="Cost">
                             {r.gainNow === null ? '–' : inr(cost)}
                           </td>
-                          <td className="num" data-label="Value now">
+                          <td className="num" data-label={W.valueToday}>
                             {inr(r.valueNow!)}
                           </td>
                           <td className={`num ${tone(r.gainNow)}`} data-label="Gain">
@@ -552,7 +553,7 @@ export function FundPage({
                         <td className="num" data-label="Cost">
                           {l.cost === null ? '–' : inr(l.cost)}
                         </td>
-                        <td className="num" data-label="Value now">
+                        <td className="num" data-label={W.valueToday}>
                           {v === null ? '–' : inr(v)}
                         </td>
                         <td className="num" data-label="Gain">

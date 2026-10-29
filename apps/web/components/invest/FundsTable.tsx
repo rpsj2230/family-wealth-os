@@ -33,11 +33,11 @@ const money2 = (n: number) =>
 
 const COLS: { key: FundSortKey; label: string; cls: string }[] = [
   { key: 'name', label: 'Fund', cls: 'c-name' },
-  { key: 'invested', label: 'Invested', cls: 'c-inv' },
-  { key: 'value', label: 'Value now', cls: 'c-val' },
+  { key: 'invested', label: 'Invested now', cls: 'c-inv' },
+  { key: 'value', label: 'Value today', cls: 'c-val' },
   { key: 'gain', label: 'Profit or loss', cls: 'c-pl' },
   { key: 'dayAmount', label: 'Today', cls: 'c-day' },
-  { key: 'xirr', label: 'Return a year', cls: 'c-xirr' },
+  { key: 'xirr', label: 'Yearly return (XIRR)', cls: 'c-xirr' },
   { key: 'sipMonthly', label: 'SIP a month', cls: 'c-sip' },
 ];
 
@@ -45,11 +45,11 @@ function Totals({ t, label }: { t: GroupTotals; label?: ReactNode }) {
   return (
     <>
       <td className="c-name fl-glabel">{label}</td>
-      <td className="num c-inv" data-label="Invested">
+      <td className="num c-inv" data-label="Invested now">
         {inr(t.invested)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
       </td>
-      <td className="num c-val" data-label="Value now">
+      <td className="num c-val" data-label="Value today">
         {inr(t.value)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
         <span className="fl-s">
@@ -154,14 +154,14 @@ function Row({
           <span className="fl-subtext">{sub.join(' · ')}</span>
         </div>
       </td>
-      <td className="num c-inv" data-label="Invested">
+      <td className="num c-inv" data-label="Invested now">
         {l.invested ? inr(l.invested) : '–'}
         <span className="fl-s">
           {l.avgCost !== null ? `avg ${money2(l.avgCost)}` : ''}
           {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
-      <td className="num c-val" data-label="Value now">
+      <td className="num c-val" data-label="Value today">
         {l.value ? inr(l.value) : '–'}
         <span className="fl-s">
           {l.value > 0 ? `${(l.share * 100).toFixed(l.share < 0.1 ? 1 : 0)}% of total value` : ''}
@@ -171,7 +171,7 @@ function Row({
       <td className={`num c-pl ${l.invested ? tone(l.gain) : ''}`} data-label="Profit or loss">
         {l.invested ? rupees(l.gain) : '–'}
         <span className="fl-s">
-          {l.gainPct === null ? '' : `${pct(l.gainPct, 1)} of invested`}
+          {l.gainPct === null ? '' : `${pct(l.gainPct, 1)} of invested now`}
           {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>

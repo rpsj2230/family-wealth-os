@@ -16,6 +16,7 @@ import './overview.css';
 import { PersonBadge } from '@/components/Person';
 import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
+import { MONEY_WORDS as W } from '@/lib/money-words';
 
 /**
  * The overview at the top of Deposits: what the fixed deposits are worth, what was put in, what they pay at maturity, the profit and
@@ -69,16 +70,17 @@ export function DepositOverviewPanel({
               : `${plural(o.deposits, 'deposit')} in ${plural(banks.length, 'bank')}${o.fdRate !== null ? ` · ${formatPct(o.fdRate, 2)} a year on average` : ''}`}
           </p>
           <p className="bv-view small muted" data-testid="bv-view-current">
-            <strong>Current holdings:</strong> what today’s deposits cost and are worth. Lifetime
-            profit, with reinvested interest counted once, is on{' '}
+            <strong>Amount invested now:</strong> the principal of today’s deposits (it includes
+            interest reinvested from earlier deposits), against their value today. Your own money
+            (never including interest) and the total profit on it are on{' '}
             <Link href={sample ? '/demo/dashboard' : '/'}>Home</Link>.
           </p>
           <div className="bv-deltas">
             <Delta
-              label="Gain on current holdings"
+              label={W.profitOnInvested}
               amount={o.profit}
               pct={o.profitPct}
-              note="interest earned on what the deposits cost"
+              note="interest earned so far on the principal"
               why={ex['deposits.profit']}
             />
             <Delta
@@ -94,7 +96,7 @@ export function DepositOverviewPanel({
 
         <div className="bv-journey">
           <WhyHead why={ex['deposits.journey']}>
-            <h3 className="bv-h">From invested to maturity</h3>
+            <h3 className="bv-h">From amount invested now to maturity</h3>
           </WhyHead>
           {pctDone === null ? (
             <p className="muted small">
@@ -112,15 +114,15 @@ export function DepositOverviewPanel({
               </div>
               <dl className="bv-ends">
                 <div>
-                  <dt>Cost of current holdings</dt>
+                  <dt>{W.investedNow}</dt>
                   <dd>{formatInrCompact(o.invested)}</dd>
                 </div>
                 <div className="mid">
-                  <dt>Current value</dt>
+                  <dt>{W.valueToday}</dt>
                   <dd>{formatInrCompact(o.current)}</dd>
                 </div>
                 <div className="end">
-                  <dt>Maturity value</dt>
+                  <dt>{W.atMaturity}</dt>
                   <dd>{formatInrCompact(o.maturity)}</dd>
                 </div>
               </dl>
@@ -193,7 +195,7 @@ export function DepositOverviewPanel({
 
       <dl className="bv-grid" aria-label="More figures">
         <Stat
-          label="Cost of current holdings"
+          label={W.principalNow}
           value={formatInrCompact(o.invested)}
           sub={`${plural(o.deposits, 'running deposit')} · principal only`}
           why={ex['deposits.invested']}
