@@ -39,7 +39,10 @@ jobs:
           select o.display_name as owner, a.nickname, p.fund_name, a.status, p.provenance, a.created_at::date as created,
                  (select count(*) from public.mf_transactions t where t.asset_id = a.id) as lines,
                  (select string_agg(distinct t.source, ',') from public.mf_transactions t where t.asset_id = a.id) as line_sources,
-                 p.amfi_code is not null as scheme_matched
+                 p.amfi_code is not null as scheme_matched,
+                 p.invested > 0 as has_invested,
+                 (select count(*) from public.observations ob where ob.asset_id = a.id and ob.superseded_by is null) as values_on_file,
+                 (select max(ob.as_of) from public.observations ob where ob.asset_id = a.id and ob.superseded_by is null) as latest_value_on
             from public.assets a join public.owners o on o.id = a.owner_id
             left join public.mf_positions p on p.asset_id = a.id
            where a.type = 'mutual_fund' order by o.display_name, coalesce(p.fund_name, a.nickname);
