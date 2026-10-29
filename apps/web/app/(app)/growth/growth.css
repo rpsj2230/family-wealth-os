@@ -1,0 +1,52 @@
+/* Money at work: the strip of figures, the list of moves and the year-by-year tables */
+.gw-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.gw-kpis > div {
+  background: var(--card);
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.gw-kpis dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.gw-kpis dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.gw-kpis dd.small {
+  font-weight: 400;
+}
+.gw-kpis > div.fail {
+  border-color: var(--fail-fg, #d03b3b);
+}
+.gw-kpis > div.warn {
+  border-color: var(--warn-fg, #b26b00);
+}
+.gw-kpis > div.ok {
+  border-color: var(--ok-fg, #0ca30c);
+}
+.gw-list {
+  margin: 0 0 8px;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 6px;
+}
+.gw-years td,
+.gw-years th {
+  white-space: nowrap;
+}
+.gw-years .gw-same {
+  font-weight: 650;
+}
+.gw-notes {
+  padding-left: 1.1rem;
+}

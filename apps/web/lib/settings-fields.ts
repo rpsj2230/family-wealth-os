@@ -212,6 +212,22 @@ export const CONFIG_GROUPS: GroupSpec[] = [
     purpose: 'How the app fills the gap between two bank updates.',
     fields: [
       {
+        name: 'growthYears',
+        label: 'Money at work: project the corpus for this many years',
+        hint: 'The table and graph on Money at work show every year from today to this many years ahead.',
+        kind: 'int',
+        path: ['growth', 'years'],
+        unit: 'years',
+      },
+      {
+        name: 'growthMargin',
+        label: 'Money at work: “growing well” means beating inflation by at least',
+        hint: 'After tax. Below inflation it is slow; between inflation and inflation plus this margin it is growing.',
+        kind: 'pct',
+        path: ['growth', 'goodMargin'],
+        unit: 'points a year',
+      },
+      {
         name: 'freshness',
         label: 'A balance counts as out of date after',
         hint: 'Balances older than this are marked out of date and listed on the Monthly update.',

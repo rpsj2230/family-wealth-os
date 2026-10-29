@@ -94,6 +94,15 @@ export interface AppConfig {
   setup: { off: string[] };
   /** the Report Centre: reports saved by name (the template, period and filters, rerun against today's data), favourites first */
   reports: { saved: SavedReport[] };
+  /** Money at work: which money grows slowly, and the corpus it grows to */
+  growth: {
+    /** years the corpus is projected for, year by year */
+    years: number;
+    /** money growing faster than inflation by at least this much (after tax) is "growing well" (0.03 = 3 points) */
+    goodMargin: number;
+    /** the slower and faster lines shown beside "the same pace", in points (0.01 = 1 point) */
+    steps: number[];
+  };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
     trustedForwarders: string[];
@@ -374,6 +383,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   setup: { off: [] },
   reports: { saved: [] },
+  growth: { years: 20, goodMargin: 0.03, steps: [0.01, 0.02] },
   inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
   rates: {
     staleDays: 45,
@@ -741,6 +751,26 @@ export function configFromJson(raw: unknown): AppConfig {
       })(),
     },
     reports: { saved: savedReportsFrom(obj(r.reports).saved) },
+    growth: (() => {
+      const g = obj(r.growth);
+      const steps = Array.isArray(g.steps)
+        ? [
+            ...new Set(
+              g.steps.filter(
+                (x): x is number =>
+                  typeof x === 'number' && Number.isFinite(x) && x > 0 && x <= 0.1,
+              ),
+            ),
+          ]
+            .sort((a, b) => a - b)
+            .slice(0, 3)
+        : [];
+      return {
+        years: Math.round(num(g.years, d.growth.years, 1, 50)),
+        goodMargin: num(g.goodMargin, d.growth.goodMargin, 0, 0.2),
+        steps: steps.length > 0 ? steps : d.growth.steps,
+      };
+    })(),
     inbox: {
       trustedForwarders: (() => {
         const raw = obj(r.inbox).trustedForwarders;

@@ -129,6 +129,8 @@ describe('settings fields', () => {
         reviewMinimum: '25,000',
         reviewPairMonths: '2',
         includeSip: 'on',
+        growthYears: '25',
+        growthMargin: '3',
       }),
     );
     expect(r).toEqual({
@@ -159,6 +161,7 @@ describe('settings fields', () => {
           reviewMinimum: 25000,
           reviewPairMonths: 2,
         },
+        growth: { years: 25, goodMargin: 0.03 },
       },
     });
     // clubbing and the money trail have their own card

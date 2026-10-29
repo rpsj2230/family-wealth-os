@@ -108,6 +108,7 @@ export * from './remittance';
 export * from './money-trail';
 export * from './needed-from-you';
 export * from './money-position';
+export * from './money-at-work';
 export * from './balance-changes';
 export * from './report-period';
 export * from './xlsx-write';

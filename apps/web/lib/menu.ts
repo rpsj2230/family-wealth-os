@@ -125,6 +125,12 @@ export const MENU: MenuGroup[] = [
         icon: Percent,
       },
       {
+        href: '/growth',
+        label: 'Money at work',
+        hint: 'Which money is not growing, what would make it grow, and the corpus in 20 years.',
+        icon: TrendingUp,
+      },
+      {
         href: '/retire',
         label: 'Can I retire now?',
         hint: 'The retirement verdict and the assumptions behind it.',
