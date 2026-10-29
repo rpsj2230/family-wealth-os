@@ -4,6 +4,7 @@ import {
   formatInrCompact,
   formatPct,
   type ClassCard,
+  type ClassYearly,
   type Explain,
   type ExplainSet,
 } from '@fwos/core';
@@ -23,7 +24,17 @@ const NOUN: Record<ClassCard['key'], [string, string]> = {
 };
 
 /** One kind of holding, small: what was put in, what it has earned, what it is worth, the profit or loss and its share of the total. */
-function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why: Explain }) {
+function ClassCardView({
+  c,
+  sample,
+  why,
+  yearly,
+}: {
+  c: ClassCard;
+  sample: boolean;
+  why: Explain;
+  yearly: ClassYearly | null | undefined;
+}) {
   const href = homeLink(classHref(c.key), sample);
   const [one, many] = NOUN[c.key];
   const title = href ? (
@@ -63,6 +74,31 @@ function ClassCardView({ c, sample, why }: { c: ClassCard; sample: boolean; why:
           </dd>
         </div>
       </dl>
+      <p
+        className="hm-class-yearly small"
+        data-testid={`hm-class-${c.key}-yearly`}
+        title={yearly?.basis}
+      >
+        <span className="muted">
+          {yearly?.kind === 'rate' ? 'Earns ' : 'Yearly return (XIRR) '}
+        </span>
+        {yearly ? (
+          <>
+            <strong>{formatPct(yearly.rate, 1)}</strong>
+            {yearly.kind === 'rate' ? <span className="muted"> a year</span> : null}
+            {yearly.estimated && (
+              <>
+                {' '}
+                <Est />
+              </>
+            )}
+          </>
+        ) : (
+          <span className="muted">
+            {c.key === 'others' ? 'not measurable: no dated money in and out' : 'not available yet'}
+          </span>
+        )}
+      </p>
       <p className="hm-class-pl">
         <Signed
           label="Gain on current holdings"
@@ -155,6 +191,7 @@ export function Classes({
           <ClassCardView
             key={c.key}
             c={c}
+            yearly={m.yearly[c.key]}
             sample={sample}
             why={
               ex[

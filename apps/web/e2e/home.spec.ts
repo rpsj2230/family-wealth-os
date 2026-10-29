@@ -375,6 +375,20 @@ test.describe('Home (public sample)', () => {
     await expect(page.locator('.hm-class')).toHaveCount(4);
   });
 
+  test('each kind of holding shows its yearly return: XIRR for deposits and funds, the rate for cash', async ({
+    page,
+  }) => {
+    await page.goto('/demo/dashboard');
+    await expect(page.getByTestId('hm-class-fd-yearly')).toContainText(
+      /Yearly return \(XIRR\)\s*\d+\.\d%/,
+    );
+    await expect(page.getByTestId('hm-class-funds-yearly')).toContainText(
+      /Yearly return \(XIRR\)\s*-?\d+\.\d%/,
+    );
+    await expect(page.getByTestId('hm-class-cash-yearly')).toContainText(/Earns\s*\d+\.\d% a year/);
+    await expect(page.getByTestId('hm-class-others-yearly')).toContainText('not measurable');
+  });
+
   test('money position fits a 390 px screen in light and in dark', async ({ browser }) => {
     for (const colorScheme of ['light', 'dark'] as const) {
       const context = await browser.newContext({

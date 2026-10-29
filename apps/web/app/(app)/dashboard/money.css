@@ -430,3 +430,7 @@
 .hm-pos-basis p {
   margin: 4px 0 0;
 }
+.hm-class-yearly {
+  margin: 4px 0 0;
+  font-variant-numeric: tabular-nums;
+}

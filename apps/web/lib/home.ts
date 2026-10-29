@@ -1,4 +1,7 @@
 import {
+  cashYearly,
+  depositsXirr,
+  type ClassYearly,
   moneyPosition,
   type PositionCard,
   capitalLedger,
@@ -232,6 +235,8 @@ export interface HomeModel {
   money: HomeMoney;
   /** deposits, funds, cash and the rest: together they are net worth */
   classes: ClassCard[];
+  /** the yearly return of each kind: XIRR for deposits and funds, the rate cash earns; none for the rest */
+  yearly: Partial<Record<ClassCard['key'], ClassYearly | null>>;
   /** profit earned in the last N days, this month, quarter and financial year, last financial year and since the start */
   periods: PeriodGains;
   /** the line under the period tiles about funds with no transaction ledger: their gains are approximate until a statement is imported */
@@ -791,6 +796,27 @@ export function buildHome(i: HomeInput): HomeModel {
       estimated: invested.estimated,
     },
     classes: classList,
+    yearly: {
+      fd: depositsXirr(
+        runningDeposits.map((r) => ({
+          principal: r.fd!.principal,
+          bookedOn: r.fd!.bookedOn,
+          value: r.current ?? 0,
+        })),
+        today,
+      ),
+      funds:
+        fundSnapshot && fundSnapshot.totals.xirr !== null
+          ? {
+              rate: fundSnapshot.totals.xirr,
+              kind: 'xirr',
+              estimated: !!fundSnapshot.totals.xirrEstimated,
+              basis: 'money-weighted, from the funds’ purchases and sales',
+            }
+          : null,
+      cash: cashYearly(overview.parts.cash.current, overview.today.savings),
+      others: null,
+    },
     periods,
     fundNote: fundLedgerNote(periods.basis, cfg.funds.noLedgerNoteAbove),
     assumptions: {
