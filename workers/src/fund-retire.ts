@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 /**
  * Retires fund records that repeat a holding already on file (Actions > Fund retire, run by hand): each named record of the person is
- * marked closed, so it counts nowhere, and its scheme details row is removed, so no fund list shows it; its value readings stay as
+ * marked merged, so it counts on no day (not even the days before it was found out), and its scheme details row is removed, so no fund list shows it; its value readings stay as
  * history (they are append-only). Only a record with no statement lines can be retired: one with lines carries real history and is
  * refused. MODE=plan writes nothing. Prints names and counts only.
  */
@@ -48,12 +48,12 @@ async function main() {
   );
   for (const f of picked) {
     console.log(
-      `- ${f.nickname} (${f.status}) → closed, removed from the fund lists; readings kept`,
+      `- ${f.nickname} (${f.status}) → merged, counted on no day, removed from the fund lists; readings kept`,
     );
     if (!write) continue;
     must(await db.from('mf_positions').delete().eq('asset_id', f.id), 'mf_positions');
     must(
-      await db.from('assets').update({ status: 'closed' }).eq('id', f.id).eq('household_id', hh),
+      await db.from('assets').update({ status: 'merged' }).eq('id', f.id).eq('household_id', hh),
       'assets',
     );
   }

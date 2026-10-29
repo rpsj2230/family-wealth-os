@@ -4,7 +4,7 @@
  * named FROM (its statement lines, value readings, SIP changes, folio links, goal shares, tasks) moves to the record named INTO, the
  * scheme details on file for FROM fill in what INTO lacks, and the empty FROM record is removed. INTO keeps its own name, status and
  * history. Used when a fund was entered twice (a spreadsheet row and a statement under a newer scheme name). Value readings are
- * append-only and cannot move or be deleted: when FROM has any, it is retired instead of removed (closed, so it counts nowhere, with
+ * append-only and cannot move or be deleted: when FROM has any, it is retired instead of removed (merged, so it counts on no day, with
  * its scheme details row removed so no fund list shows it; its readings stay as history). MODE=plan writes nothing. Prints the two
  * names and counts only, never amounts.
  */
@@ -151,12 +151,14 @@ async function main() {
       must(
         await db
           .from('assets')
-          .update({ status: 'closed' })
+          .update({ status: 'merged' })
           .eq('id', from.id)
           .eq('household_id', hh),
         'assets',
       );
-      console.log(`Retired "${from.nickname}": closed, and no longer listed with the funds.`);
+      console.log(
+        `Retired "${from.nickname}": kept as history, counted on no day and no longer listed with the funds.`,
+      );
     } else {
       must(await db.from('assets').delete().eq('id', from.id).eq('household_id', hh), 'assets');
       console.log(`Removed the empty record "${from.nickname}".`);

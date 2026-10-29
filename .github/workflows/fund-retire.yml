@@ -1,5 +1,5 @@
 name: Fund retire (by hand)
-# Run by hand only. Retires fund records that repeat a holding already on file (closed, out of the fund lists; readings kept).
+# Run by hand only. Retires fund records that repeat a holding already on file (merged: counted on no day, out of the fund lists; readings kept).
 # "plan" writes nothing. The log shows names and counts only, never amounts.
 on:
   workflow_dispatch:

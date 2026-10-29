@@ -1,0 +1,54 @@
+name: Fund units (by hand)
+# Run by hand only. Sets the unit count a fund records to the count on a statement; it must agree with the statement lines.
+# "plan" writes nothing. The log shows the fund name, dates and unit counts only, never amounts.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      person:
+        description: whose funds (first name as on file)
+        required: true
+        type: string
+      name:
+        description: the fund's exact name as on file
+        required: true
+        type: string
+      units:
+        description: the unit count on the statement
+        required: true
+        type: string
+      as_of:
+        description: the statement date (YYYY-MM-DD)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fund-units
+  cancel-in-progress: false
+jobs:
+  units:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      PERSON: ${{ inputs.person }}
+      NAME: ${{ inputs.name }}
+      UNITS: ${{ inputs.units }}
+      AS_OF: ${{ inputs.as_of }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers fund-units

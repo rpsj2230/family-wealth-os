@@ -124,6 +124,24 @@ export async function loadPortfolioData(
       ).eq('product', 'savings'),
       sel('mf_sip_changes', 'asset_id, effective_on, monthly').order('effective_on'),
     ]);
+  // a record joined into another (the same holding entered twice) is history only: it is in no figure, on any day
+  const mergedIds = new Set(
+    ((assets.data ?? []) as unknown as { id: string; status: string }[])
+      .filter((a) => a.status === 'merged')
+      .map((a) => a.id),
+  );
+  const kept = <T extends { asset_id: string }>(rows: T[]): T[] =>
+    mergedIds.size ? rows.filter((r) => !mergedIds.has(r.asset_id)) : rows;
+  if (mergedIds.size) {
+    assets.data = (assets.data ?? []).filter(
+      (a) => !mergedIds.has((a as unknown as { id: string }).id),
+    );
+    positions.data = kept((positions.data ?? []) as unknown as PositionRow[]) as never;
+    fds.data = kept((fds.data ?? []) as unknown as FdRow[]) as never;
+    sipChangeRows.data = kept(
+      (sipChangeRows.data ?? []) as unknown as { asset_id: string }[],
+    ) as never;
+  }
   const today = opts.today ?? todayDate();
   const code = new Map(
     ((positions.data ?? []) as unknown as PositionRow[]).map((p) => [
@@ -164,8 +182,8 @@ export async function loadPortfolioData(
   // a fund's value copied from the monthly sheet is kept only to check against: it is never a valuation
   const isSheet = (o: ObservationRow) =>
     ((o as { source_ref?: string | null }).source_ref ?? '').startsWith(HIST_FUND_REF);
-  const obsRows = obsRowsRead.filter((o) => !isSheet(o));
-  const sheetObs = obsRowsRead.filter(isSheet);
+  const obsRows = kept(obsRowsRead).filter((o) => !isSheet(o));
+  const sheetObs = kept(obsRowsRead).filter(isSheet);
   // a savings account with no rate of its own earns what the rate list says for its bank, kind and balance slab
   const bankName = new Map(
     ((institutions.data ?? []) as unknown as { id: string; name: string }[]).map((i) => [

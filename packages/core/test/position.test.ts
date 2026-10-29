@@ -361,6 +361,17 @@ describe('mutual funds: units held on the day times the price', () => {
     const noRecord = base({ assetId: 'f7', type: 'mutual_fund', status: 'closed', fund: fund() });
     expect(valueOn(noRecord, '2026-02-15', cfg()).state).toBe('ended');
   });
+  it('a record joined into another (entered twice) counts on no day, even on the days it has readings', () => {
+    const merged = base({
+      assetId: 'f8',
+      type: 'mutual_fund',
+      status: 'merged',
+      records: [rec('2026-01-31', 10_000)],
+      fund: fund({ navs: [{ date: '2026-01-30', nav: 100 }] }),
+    });
+    for (const day of ['2026-01-31', '2026-02-15'])
+      expect(valueOn(merged, day, cfg()).state).toBe('ended');
+  });
   it('lines assumed from a SIP plan make the figure an estimate', () => {
     const a2 = base({
       assetId: 'f5',

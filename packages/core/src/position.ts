@@ -1221,6 +1221,8 @@ export function valueOn(
   c: PositionConfig,
   cur?: Record<string, CurrentValue>,
 ): ValuedHolding {
+  // a record joined into another (the same holding entered twice) was never a holding of its own: it counts on no day
+  if (a.status === 'merged') return none(a, 'ended', 'joined into another record');
   const today = cur && on >= c.today ? cur[a.assetId] : undefined;
   if (a.currency !== 'INR' && a.type !== 'fixed_deposit' && a.type !== 'policy')
     return valueForeign(a, on, c, today);
