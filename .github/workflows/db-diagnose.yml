@@ -97,6 +97,15 @@ jobs:
            where o.display_name = 'Rupash' and a.type = 'mutual_fund' and a.status <> 'closed' and ob.superseded_by is null
              and not exists (select 1 from public.mf_transactions t where t.asset_id = a.id)
            order by a.nickname, ob.as_of;
+          \echo '== Rupash funds: folio links (last 4), units on the latest snapshot and units from the lines (no amounts)'
+          select a.nickname, a.status,
+                 (select string_agg(l.folio_last4, ',') from public.fund_folio_links l where l.asset_id = a.id) as folios,
+                 p.folio_last4 as position_folio,
+                 (select s.units from public.mf_snapshots s where s.asset_id = a.id order by s.as_of desc limit 1) as snapshot_units,
+                 (select s.as_of from public.mf_snapshots s where s.asset_id = a.id order by s.as_of desc limit 1) as snapshot_on,
+                 (select round(sum(t.units), 3) from public.mf_transactions t where t.asset_id = a.id) as line_units
+            from public.assets a join public.owners o on o.id = a.owner_id left join public.mf_positions p on p.asset_id = a.id
+           where o.display_name = 'Rupash' and a.type = 'mutual_fund' and a.status <> 'closed' order by 1;
           \echo '== fund import choices left aside (verdict and basis), by fund'
           select a.nickname, i.verdict, i.basis from public.fund_import_ignores i join public.assets a on a.id = i.asset_id order by 1;
           \echo '== fund statements imported, counts only'
