@@ -57,6 +57,7 @@ const base = (over: Partial<MoneyPositionInput> = {}): MoneyPositionInput => ({
     { daysLeft: 45, amount: 200_000 },
     { daysLeft: -2, amount: 999 },
   ],
+  maturityWindows: [90, 7, 30, 60],
   freshness: { stale: 2, missing: 1, total: 20 },
   monthlySpending: 100_000,
   snapshots: [

@@ -106,3 +106,4 @@ export * from './remittance';
 export * from './money-trail';
 export * from './needed-from-you';
 export * from './money-position';
+export * from './balance-changes';

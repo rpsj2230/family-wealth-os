@@ -10,6 +10,8 @@ import { daysPhrase, niceDate } from '@/lib/dates';
 import type { DepositsView, FdLine } from '@/lib/deposits';
 import {
   depositStatusWord,
+  interestAhead,
+  maturityWindows,
   needsConfirmation,
   type DepositSummary,
   type MonthGroup,
@@ -275,18 +277,147 @@ export function MaturitiesTab({
   s,
   months,
   windowDays,
+  windows,
+  today,
   links,
   styles,
 }: {
   s: DepositSummary;
   months: MonthGroup[];
   windowDays: number;
+  /** the maturity windows in days, from Settings (deposits.maturityAlertDays) */
+  windows: readonly number[];
+  /** ISO date the interest ahead is counted from */
+  today: string;
   links: DepositLinks;
   styles: Record<string, PersonStyle>;
 }) {
+  const bands = maturityWindows(s.running, windows);
+  const ahead = interestAhead(s.running, today);
+  const peak = Math.max(1, ...ahead.byMonth.map((m) => m.amount));
+  const byId = new Map(s.running.map((f) => [f.id, f]));
   return (
     <>
       <NoticeHost />
+      <section className="card" aria-labelledby="mwin" data-testid="dep-windows">
+        <div className="cardhead">
+          <h2 id="mwin">Maturing within</h2>
+          <span className="small muted">
+            Running deposits by days to maturity (windows from Settings → Deposits); each window
+            includes the shorter ones
+          </span>
+        </div>
+        <table className="tbl lines responsive">
+          <caption className="sr-only">Deposits maturing within each window</caption>
+          <thead>
+            <tr>
+              <th>Within</th>
+              <th className="num">Deposits</th>
+              <th className="num">Principal</th>
+              <th className="num">Comes back</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bands.map((b) => (
+              <tr key={b.days}>
+                <td data-label="Within">
+                  <strong>{b.days} days</strong>
+                </td>
+                <td className="num" data-label="Deposits">
+                  {b.count}
+                </td>
+                <td className="num" data-label="Principal">
+                  {b.count ? rupee(b.principal) : '—'}
+                </td>
+                <td className="num" data-label="Comes back">
+                  {b.count ? rupee(b.comesBack) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="small muted">
+          &ldquo;Comes back&rdquo; is the bank&rsquo;s maturity amount where it is on file, else the
+          amount worked out from the deposit&rsquo;s terms. A dash means no deposit matures in that
+          window.
+        </p>
+      </section>
+
+      <section className="card" aria-labelledby="int12" data-testid="dep-interest-ahead">
+        <div className="cardhead">
+          <h2 id="int12">Interest expected in the next 12 months</h2>
+          <span className="small muted">Estimated, before tax, to {niceDate(ahead.until)}</span>
+        </div>
+        {ahead.rows.length === 0 ? (
+          <p className="empty">No running deposit earns interest in the next 12 months.</p>
+        ) : (
+          <>
+            <dl className="dep-ahead-kpis">
+              <div>
+                <dt>All running deposits</dt>
+                <dd data-testid="dep-interest-ahead-total">{rupee(ahead.total)}</dd>
+              </div>
+              <div>
+                <dt>From deposits maturing in the period</dt>
+                <dd>{rupee(ahead.fromMaturing)}</dd>
+              </div>
+              <div>
+                <dt>Still building up at its end</dt>
+                <dd>{rupee(ahead.total - ahead.fromMaturing)}</dd>
+              </div>
+            </dl>
+            <table className="tbl lines dep-ahead-months">
+              <caption className="sr-only">Interest expected by month</caption>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th className="num">Interest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ahead.byMonth.map((m) => (
+                  <tr key={m.month}>
+                    <td data-label="Month">{monthName(m.month)}</td>
+                    <td className="num" data-label="Interest">
+                      <span
+                        className="dep-ahead-bar"
+                        aria-hidden="true"
+                        style={{ width: `${Math.round((m.amount / peak) * 100)}%` }}
+                      />
+                      {rupee(m.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <details className="disclose">
+              <summary>By deposit ({ahead.rows.length})</summary>
+              <ul className="list small">
+                {ahead.rows.map((r) => (
+                  <li key={r.id} className="listlink">
+                    <span>
+                      <PersonBadge p={styles[r.ownerId]} size={16} />{' '}
+                      <Link href={links.asset(byId.get(r.id)!)}>{r.bank}</Link>, {r.owner}
+                      <span className="muted">
+                        {' '}
+                        · {r.matures ? `matures ${niceDate(r.maturityOn)}` : 'runs past the period'}
+                      </span>
+                    </span>
+                    <span className="num">{rupee(r.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+            <p className="small muted">
+              Worked out from each deposit&rsquo;s principal, rate, booking date and compounding,
+              from today to its maturity or the end of the 12 months, whichever comes first. Money
+              paid back at maturity is not assumed to go into a new deposit. Interest paid out to a
+              savings account during the year is included. Tax deducted at source is not taken off.
+            </p>
+          </>
+        )}
+      </section>
+
       {s.confirm.length > 0 && (
         <section className="card" aria-labelledby="conf">
           <div className="cardhead">

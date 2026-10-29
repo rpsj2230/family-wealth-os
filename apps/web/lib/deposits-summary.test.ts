@@ -3,6 +3,8 @@ import type { FdLine } from './deposits';
 import {
   depositStatusWord,
   groupByMonth,
+  interestAhead,
+  maturityWindows,
   needsConfirmation,
   summariseDeposits,
 } from './deposits-summary';
@@ -81,5 +83,85 @@ describe('summariseDeposits', () => {
     expect(depositStatusWord(fds[2]!)).toBe('Matured, to confirm');
     expect(depositStatusWord(fds[3]!)).toBe('Matured, to confirm');
     expect(depositStatusWord(fds[4]!)).toBe('Closed');
+  });
+});
+
+describe('maturityWindows', () => {
+  it('counts running deposits inside each window, shortest first, each window including the shorter ones', () => {
+    const fds = [
+      line({ id: 'a', daysLeft: 5, principal: 100, bankMaturity: 110 }),
+      line({ id: 'b', daysLeft: 40, principal: 200, accruedToday: 215 }),
+      line({ id: 'c', daysLeft: -3, principal: 999 }),
+      line({ id: 'd', daysLeft: 20, principal: 999, status: 'matured' }),
+    ];
+    expect(maturityWindows(fds, [30, 7, 60, 7])).toEqual([
+      { days: 7, count: 1, principal: 100, comesBack: 110 },
+      { days: 30, count: 1, principal: 100, comesBack: 110 },
+      { days: 60, count: 2, principal: 300, comesBack: 325 },
+    ]);
+  });
+});
+
+describe('interestAhead', () => {
+  const today = '2026-10-29';
+  it('a deposit running past the period earns its growth over the twelve months, from its terms', () => {
+    const r = interestAhead(
+      [
+        line({
+          id: 'a',
+          bookedOn: '2025-10-29',
+          maturityOn: '2028-10-29',
+          principal: 1_000_000,
+          rate: 0.07,
+        }),
+      ],
+      today,
+    );
+    expect(r.until).toBe('2027-10-29');
+    expect(r.total).toBeCloseTo(1_000_000 * (1.0175 ** 8 - 1.0175 ** 4), 2);
+    expect(r.fromMaturing).toBe(0);
+    expect(r.rows[0]!.matures).toBe(false);
+  });
+
+  it('a deposit maturing inside the period earns up to the bank’s maturity amount, and nothing after', () => {
+    const r = interestAhead(
+      [
+        line({
+          id: 'a',
+          bookedOn: '2025-10-29',
+          maturityOn: '2027-04-29',
+          principal: 1_000_000,
+          rate: 0.07,
+          bankMaturity: 1_110_000,
+        }),
+      ],
+      today,
+    );
+    expect(r.total).toBeCloseTo(1_110_000 - 1_000_000 * 1.0175 ** 4, 2);
+    expect(r.fromMaturing).toBeCloseTo(r.total, 6);
+    // spread over the months it is earned in, up to the maturity month
+    expect(r.byMonth[0]!.month).toBe('2026-10');
+    expect(r.byMonth[r.byMonth.length - 1]!.month).toBe('2027-04');
+    expect(r.byMonth.reduce((s, m) => s + m.amount, 0)).toBeCloseTo(r.total, 6);
+  });
+
+  it('leaves out matured, closed and past-date deposits; simple interest follows its terms', () => {
+    const r = interestAhead(
+      [
+        line({ id: 'x', status: 'matured' }),
+        line({ id: 'y', daysLeft: -1 }),
+        line({
+          id: 's',
+          bookedOn: '2026-10-29',
+          maturityOn: '2030-01-01',
+          principal: 100_000,
+          rate: 0.073,
+          compounding: 'simple',
+        }),
+      ],
+      today,
+    );
+    expect(r.rows.map((x) => x.id)).toEqual(['s']);
+    expect(r.total).toBeCloseTo(7_300, 2);
   });
 });

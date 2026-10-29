@@ -190,6 +190,8 @@ export default async function DemoDeposits({
             s={s}
             months={groupByMonth(shown)}
             windowDays={windowDays}
+            windows={DEFAULT_CONFIG.deposits.maturityAlertDays}
+            today={todayIso}
             links={links}
             styles={m.styles}
           />

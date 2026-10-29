@@ -848,6 +848,7 @@ export function buildHome(i: HomeInput): HomeModel {
         ),
         amount: r.fd!.maturityAmount,
       })),
+      maturityWindows: cfg.deposits.maturityAlertDays,
       freshness: { stale: fresh.stale, missing: fresh.missing, total: fresh.total },
       monthlySpending: i.monthlySpending,
       snapshots: i.snapshots.filter((s) => s.date < today),

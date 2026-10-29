@@ -17,6 +17,7 @@ import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { cashExplain, bankBase } from '@/lib/explain-money';
 import { cashRatesFor, loadOffers } from '@/lib/rates-view';
+import { BalanceChanges } from './Changes';
 import { CashOverviewPanel } from './Overview';
 import { CashRegister } from './Register';
 
@@ -145,6 +146,12 @@ export default async function CashPage({
           styles={styles}
         />
       </ListingTools>
+      <BalanceChanges
+        blocks={blocks}
+        observations={obsRows}
+        today={today.toISOString().slice(0, 10)}
+        styles={styles}
+      />
     </>
   );
 }

@@ -9,6 +9,7 @@ import {
   largestCash,
 } from '@fwos/core';
 import { CashOverviewPanel } from '@/app/(app)/cash/Overview';
+import { BalanceChanges } from '@/app/(app)/cash/Changes';
 import { CashRegister } from '@/app/(app)/cash/Register';
 import { DemoShell } from '@/components/DemoShell';
 import { ListingTools } from '@/components/ListingTools';
@@ -29,7 +30,7 @@ export default async function DemoCash({
   searchParams: Promise<{ p?: string }>;
 }) {
   const { p } = await searchParams;
-  const { blocks: all, styles, fx } = demoModel();
+  const { blocks: all, styles, fx, observations } = demoModel();
   const who = p && styles[p] ? p : null;
   const blocks = cashBlocks(who ? filterBlocksByOwner(all, who) : all);
   const { savingsRate, interestTdsRate } = DEFAULT_CONFIG.estimates;
@@ -90,6 +91,13 @@ export default async function DemoCash({
           sample
         />
       </ListingTools>
+      <BalanceChanges
+        blocks={blocks}
+        observations={observations}
+        today={DEMO_TODAY.toISOString().slice(0, 10)}
+        styles={styles}
+        sample
+      />
     </DemoShell>
   );
 }

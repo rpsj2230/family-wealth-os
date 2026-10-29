@@ -80,6 +80,8 @@ export interface MoneyPositionInput {
   foreign: ForeignCash[];
   /** deposits by days to maturity, for the maturity lines */
   maturities: { daysLeft: number; amount: number }[];
+  /** the maturity windows in days, from Settings (deposits.maturityAlertDays) */
+  maturityWindows: readonly number[];
   /** how many records are out of date or missing, of how many */
   freshness: { stale: number; missing: number; total: number };
   /** monthly spending from the retirement plan (rupees); null or 0 when none is entered */
@@ -222,7 +224,7 @@ export function moneyPosition(i: MoneyPositionInput): PositionCard[] {
       { label: 'Principal', value: fd?.invested ?? 0 },
       { label: 'Interest earned so far (estimated)', value: fd ? fd.current - fd.invested : 0 },
       { label: 'Pays at maturity', value: fd?.maturity ?? 0 },
-      ...[7, 30, 60, 90].map((d) => {
+      ...[...i.maturityWindows].sort((a, b) => a - b).map((d) => {
         const s = soon(d);
         return {
           label: `Maturing in ${d} days`,

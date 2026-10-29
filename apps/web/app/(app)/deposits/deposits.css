@@ -64,3 +64,37 @@ details.parts ul {
 details.parts summary {
   cursor: pointer;
 }
+
+/* interest expected in the next 12 months */
+.dep-ahead-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.dep-ahead-kpis > div {
+  min-width: 0;
+}
+.dep-ahead-kpis dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.dep-ahead-kpis dd {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* a faint bar behind each month's figure, its length the share of the largest month */
+.dep-ahead-months td.num {
+  position: relative;
+  isolation: isolate;
+}
+.dep-ahead-bar {
+  position: absolute;
+  inset: 6px auto 6px 0;
+  max-width: 100%;
+  border-radius: 4px;
+  background: var(--primary-soft);
+  z-index: -1;
+}

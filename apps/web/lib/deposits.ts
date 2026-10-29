@@ -7,6 +7,7 @@ import {
   heldValueOf,
   maturityVariance,
   partnerMissing,
+  type Compounding,
   type CoverRow,
   type DepositListState,
   type FdRow,
@@ -40,6 +41,8 @@ export interface FdLine {
   bookedOn: string;
   maturityOn: string;
   bankMaturity: number | null;
+  /** how the bank compounds it (quarterly unless the deposit says otherwise) */
+  compounding?: Compounding;
   accruedToday: number;
   daysLeft: number;
   status: string;
@@ -107,6 +110,7 @@ export function buildDeposits(
       bookedOn: f.booked_on,
       maturityOn: f.maturity_on,
       bankMaturity: f.bank_maturity_amount === null ? null : Number(f.bank_maturity_amount),
+      compounding: f.compounding ?? 'quarterly',
       accruedToday: v,
       daysLeft: daysBetween(today, maturityOn),
       status: a.status,

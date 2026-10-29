@@ -233,6 +233,8 @@ export default async function DepositsPage({
             s={s}
             months={groupByMonth(shown)}
             windowDays={windowDays}
+            windows={settings.config.deposits.maturityAlertDays}
+            today={todayIso}
             links={liveLinks}
             styles={styles}
           />
