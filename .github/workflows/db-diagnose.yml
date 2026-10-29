@@ -110,4 +110,16 @@ jobs:
           select a.nickname, i.verdict, i.basis from public.fund_import_ignores i join public.assets a on a.id = i.asset_id order by 1;
           \echo '== fund statements imported, counts only'
           select outcome, count(*) from public.cas_imports group by 1 order by 1;
+          \echo '== transfers from Singapore (Wise): household totals by year, and whether the Indian account is known'
+          select extract(year from received_on)::int as year, count(*) as transfers, round(sum(amount_inr)) as inr_total,
+                 count(*) filter (where to_asset_id is not null) as account_known
+            from public.remittances group by 1 order by 1;
+          select count(*) as transfers, round(sum(amount_inr)) as inr_total, min(received_on) as first, max(received_on) as last from public.remittances;
+          \echo '== the Singapore accounts the transfers left from: type, currency, status, readings on file (no balances)'
+          select a.type, a.currency, a.status, count(distinct r.id) as transfers,
+                 (select count(*) from public.observations o where o.asset_id = a.id) as readings,
+                 (select min(as_of) from public.observations o where o.asset_id = a.id) as first_reading
+            from public.remittances r join public.assets a on a.id = r.from_asset_id group by a.id, a.type, a.currency, a.status;
+          \echo '== confirmed money moves by kind (totals)'
+          select kind, status, count(*), round(sum(amount)) as total from public.money_moves group by 1, 2 order by 1, 2;
           SQL
