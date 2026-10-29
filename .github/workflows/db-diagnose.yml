@@ -79,6 +79,18 @@ jobs:
            where o.display_name = 'Rupash' and a.type = 'mutual_fund' and ob.superseded_by is null
              and not exists (select 1 from public.mf_transactions t where t.asset_id = a.id)
            group by 1, 2 order by 1, 2;
+          \echo '== Rupash funds with no statement lines: was there value before the Direct plan began, and how it moved (ratios only)'
+          with r as (
+            select a.nickname, ob.as_of, ob.amount,
+                   row_number() over (partition by a.id order by ob.as_of) as n,
+                   row_number() over (partition by a.id order by ob.as_of desc) as m
+              from public.observations ob join public.assets a on a.id = ob.asset_id join public.owners o on o.id = a.owner_id
+             where o.display_name = 'Rupash' and a.type = 'mutual_fund' and ob.superseded_by is null
+               and not exists (select 1 from public.mf_transactions t where t.asset_id = a.id)
+          )
+          select f.nickname, f.as_of as first_on, f.amount > 0 as value_on_first_day, l.as_of as last_on,
+                 round(l.amount / nullif(f.amount, 0), 2) as last_over_first
+            from r f join r l on l.nickname = f.nickname and l.m = 1 where f.n = 1 order by 1;
           \echo '== fund import choices left aside (verdict and basis), by fund'
           select a.nickname, i.verdict, i.basis from public.fund_import_ignores i join public.assets a on a.id = i.asset_id order by 1;
           \echo '== fund statements imported, counts only'
