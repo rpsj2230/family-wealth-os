@@ -32,20 +32,41 @@ export async function loadHarvestPositions(
   /** net short- and long-term equity gains already booked this financial year per person, before set-off */
   ytd: Record<string, { stcg: number; ltcg: number }>;
 }> {
-  const [l, settings] = await Promise.all([
-    loadPortfolioData(db, {
-      ...(opts.householdId ? { householdId: opts.householdId } : {}),
-      ...(opts.today ? { today: opts.today } : {}),
-    }),
-    loadSettings(db, opts.householdId),
-  ]);
   const q = db
     .from('mf_positions')
     .select(
       'asset_id, fund_name, invested, started_on, sip_monthly, sip_stopped, amfi_code, exit_load_pct, exit_load_days',
     );
-  const rows = ((await (opts.householdId ? q.eq('household_id', opts.householdId) : q)).data ??
-    []) as unknown as {
+  // everything that does not depend on another read is asked for at once
+  const live = liveLinesFilter(db);
+  const txP = pageAll<{
+    asset_id: string;
+    txn_on: string;
+    kind: CasTxn['kind'];
+    amount: number;
+    units: number;
+    nav: number | null;
+    balance_units: number | null;
+    description: string | null;
+    source: string | null;
+  }>(async (from, to) => {
+    const tq = db
+      .from('mf_transactions')
+      .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description, source')
+      .or(await live)
+      .order('txn_on', { ascending: true })
+      .order('id');
+    return (opts.householdId ? tq.eq('household_id', opts.householdId) : tq).range(from, to);
+  });
+  const [l, settings, posRead] = await Promise.all([
+    loadPortfolioData(db, {
+      ...(opts.householdId ? { householdId: opts.householdId } : {}),
+      ...(opts.today ? { today: opts.today } : {}),
+    }),
+    loadSettings(db, opts.householdId),
+    opts.householdId ? q.eq('household_id', opts.householdId) : q,
+  ]);
+  const rows = (posRead.data ?? []) as unknown as {
     asset_id: string;
     fund_name: string;
     invested: number | null;
@@ -61,25 +82,7 @@ export async function loadHarvestPositions(
     l.portfolio.valued.map((v) => [v.assetId, v.estimate?.estimatedAmount ?? 0]),
   );
   // purchase history from imported fund statements
-  const txRows = await pageAll<{
-    asset_id: string;
-    txn_on: string;
-    kind: CasTxn['kind'];
-    amount: number;
-    units: number;
-    nav: number | null;
-    balance_units: number | null;
-    description: string | null;
-    source: string | null;
-  }>(async (from, to) => {
-    const tq = db
-      .from('mf_transactions')
-      .select('asset_id, txn_on, kind, amount, units, nav, balance_units, description, source')
-      .or(await liveLinesFilter(db))
-      .order('txn_on', { ascending: true })
-      .order('id');
-    return (opts.householdId ? tq.eq('household_id', opts.householdId) : tq).range(from, to);
-  });
+  const txRows = await txP;
   const byAsset = new Map<string, (CasTxn & { source: string | null })[]>();
   for (const t of txRows)
     byAsset.set(t.asset_id, [
@@ -99,24 +102,21 @@ export async function loadHarvestPositions(
   // categories (for the tax class) and prices on 31 Jan 2018 (for units bought before 1 Feb 2018)
   const codes = [...new Set(rows.map((r) => r.amfi_code).filter((c): c is string => !!c))];
   const categoryOf = new Map<string, string | null>();
-  if (codes.length > 0) {
-    const cq = db.from('amfi_schemes').select('code, category').in('code', codes);
-    for (const c of ((await cq).data ?? []) as unknown as {
-      code: string;
-      category: string | null;
-    }[])
-      categoryOf.set(c.code, c.category);
-  }
   const fmv2018 = new Map<string, number>();
   if (codes.length > 0) {
-    const fq = db
-      .from('mf_navs')
-      .select('amfi_code, nav_date, nav')
-      .in('amfi_code', codes)
-      .gte('nav_date', '2018-01-20')
-      .lte('nav_date', '2018-01-31')
-      .order('nav_date');
-    for (const n of ((await fq).data ?? []) as unknown as { amfi_code: string; nav: number }[])
+    const [cats, navs] = await Promise.all([
+      db.from('amfi_schemes').select('code, category').in('code', codes),
+      db
+        .from('mf_navs')
+        .select('amfi_code, nav_date, nav')
+        .in('amfi_code', codes)
+        .gte('nav_date', '2018-01-20')
+        .lte('nav_date', '2018-01-31')
+        .order('nav_date'),
+    ]);
+    for (const c of (cats.data ?? []) as unknown as { code: string; category: string | null }[])
+      categoryOf.set(c.code, c.category);
+    for (const n of (navs.data ?? []) as unknown as { amfi_code: string; nav: number }[])
       fmv2018.set(n.amfi_code, Number(n.nav)); // the last one on or before 31 Jan 2018 wins
   }
   // price history since each fund's start, to estimate lots for funds without a fund statement

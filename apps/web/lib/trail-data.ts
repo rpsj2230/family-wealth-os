@@ -1,11 +1,12 @@
+import { cache } from 'react';
 import { loadMoneyTrail, type LoadedPortfolio, type MoneyTrailData } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { holdingLabels } from '@/lib/holding-label';
 import { loadPortfolio } from '@/lib/portfolio-data';
 
-/** The money trail as the signed-in household sees it, with a label for every holding and every person's name. */
-export async function loadTrailContext(): Promise<{
+/** The money trail as the signed-in household sees it, with a label for every holding and every person's name. Once per page. */
+export const loadTrailContext = cache(async function loadTrailContext(): Promise<{
   data: MoneyTrailData;
   labels: Record<string, string>;
   names: Record<string, string>;
@@ -35,4 +36,4 @@ export async function loadTrailContext(): Promise<{
     }),
   );
   return { data, labels, names: Object.fromEntries(loaded.ownerName) };
-}
+});

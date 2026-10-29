@@ -18,7 +18,12 @@ const csp = [
 const config: NextConfig = {
   transpilePackages: ['@fwos/core', '@fwos/ingest', '@fwos/data'],
   serverExternalPackages: ['exceljs'],
-  experimental: { serverActions: { bodySizeLimit: '6mb' } },
+  experimental: {
+    serverActions: { bodySizeLimit: '6mb' },
+    // a page seen in the last 30 seconds opens at once from the browser's memory (back, forward, the menu); saving anything
+    // clears it, so a change always shows
+    staleTimes: { dynamic: 30, static: 300 },
+  },
   poweredByHeader: false,
   async headers() {
     return [

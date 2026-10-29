@@ -12,10 +12,8 @@ interface Hit {
 /** What the quick-find box searches: your banks, accounts, funds, policies, goals and open tasks. Signed-in members only; row-level security applies. */
 export async function GET() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ items: [] }, { status: 401 });
+  const { data } = await supabase.auth.getClaims();
+  if (!data?.claims?.sub) return NextResponse.json({ items: [] }, { status: 401 });
   const [inst, assets, goals, tasks, pols, pos] = await Promise.all([
     supabase.from('institutions').select('id, name'),
     supabase.from('assets').select('id, type, nickname, label, status, institution_id'),

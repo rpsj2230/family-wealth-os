@@ -10,24 +10,36 @@ export interface Ctx {
   role: string | null;
 }
 
-/** Signed-in user and their household (null until a household exists). Redirects to /login otherwise. */
-export const loadContext = cache(async function loadContext(): Promise<Ctx> {
+/**
+ * Who is signed in, once per page: the session's token is checked by its signature (getClaims), which needs no call to the auth
+ * server when the project signs with asymmetric keys, and asks the server otherwise. Redirects to /login when no one is.
+ */
+const currentUser = cache(async function currentUser() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims as { sub?: string; email?: string } | undefined;
+  if (!claims?.sub) redirect('/login');
+  return { supabase, userId: claims.sub, email: claims.email ?? '' };
+});
+
+/** The signed-in user's memberships, once per page. */
+const memberships = cache(async function memberships() {
+  const { supabase, userId } = await currentUser();
   const { data } = await supabase
     .from('household_members')
     .select('household_id, role')
-    .eq('user_id', user.id)
-    .in('role', ['admin', 'member'])
-    .limit(1);
-  const m = data?.[0];
+    .eq('user_id', userId);
+  return (data ?? []) as { household_id: string; role: string }[];
+});
+
+/** Signed-in user and their household (null until a household exists). Redirects to /login otherwise. */
+export const loadContext = cache(async function loadContext(): Promise<Ctx> {
+  const { supabase, userId, email } = await currentUser();
+  const m = (await memberships()).find((x) => x.role === 'admin' || x.role === 'member');
   return {
     supabase,
-    userId: user.id,
-    email: user.email ?? '',
+    userId,
+    email,
     householdId: m?.household_id ?? null,
     role: m?.role ?? null,
   };
@@ -40,20 +52,11 @@ export const loadAccess = cache(async function loadAccess(): Promise<{
   householdId: string | null;
   role: string | null;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data } = await supabase
-    .from('household_members')
-    .select('household_id, role')
-    .eq('user_id', user.id)
-    .limit(1);
-  const m = data?.[0];
+  const { supabase, email } = await currentUser();
+  const m = (await memberships())[0];
   return {
     supabase,
-    email: user.email ?? '',
+    email,
     householdId: m?.household_id ?? null,
     role: m?.role ?? null,
   };

@@ -51,16 +51,8 @@ export async function loadMoneyTrail(
   /** what the page already loaded, so it is not read twice */
   preloaded?: LoadedPortfolio,
 ): Promise<MoneyTrailData> {
-  const loaded = preloaded ?? (await loadPortfolioData(db, householdId ? { householdId } : {}));
-  const { config } = await loadSettings(db, householdId);
-  const stored = await loadStatements(db, householdId);
-  const lines = stmtLinesOf(stored.lines, loaded);
-  const classified = classifyLines(lines, classifyContext(loaded, config, stored.remittances));
-  const tl: TrailLine[] = trailLines(lines, classified);
-
-  // transfers from Singapore into an account with no statement: the only movements known for it
-  const withLines = new Set(stored.lines.map((l) => l.asset_id));
-  const remits = await pageAll<{
+  // the portfolio, the settings, the statement lines and the transfers are read at once
+  const remitsP = pageAll<{
     id: string;
     received_on: string;
     amount_inr: number;
@@ -70,9 +62,22 @@ export async function loadMoneyTrail(
   }>((a, b) => {
     const q = db
       .from('remittances')
-      .select('id, received_on, amount_inr, to_asset_id, to_basis, from_asset_id');
+      .select('id, received_on, amount_inr, to_asset_id, to_basis, from_asset_id')
+      .order('id');
     return (householdId ? q.eq('household_id', householdId) : q).range(a, b);
   });
+  const [loaded, { config }, stored, remits] = await Promise.all([
+    preloaded ?? loadPortfolioData(db, householdId ? { householdId } : {}),
+    loadSettings(db, householdId),
+    loadStatements(db, householdId),
+    remitsP,
+  ]);
+  const lines = stmtLinesOf(stored.lines, loaded);
+  const classified = classifyLines(lines, classifyContext(loaded, config, stored.remittances));
+  const tl: TrailLine[] = trailLines(lines, classified);
+
+  // transfers from Singapore into an account with no statement: the only movements known for it
+  const withLines = new Set(stored.lines.map((l) => l.asset_id));
   for (const r of remits)
     if (r.to_asset_id && !withLines.has(r.to_asset_id))
       tl.push({

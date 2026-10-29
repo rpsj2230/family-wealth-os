@@ -30,9 +30,10 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // the token is checked by its signature (no call to the auth server when the project signs with asymmetric keys); an expired
+  // session is refreshed and the new cookies set on the response
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

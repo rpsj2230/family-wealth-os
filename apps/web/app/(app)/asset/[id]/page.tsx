@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader, type Crumb } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
@@ -37,18 +38,6 @@ export default async function AssetPage({
     d.type === 'bank_account' || d.type === 'fixed_deposit' || d.type === 'third_party_held';
   const isLoan = d.type === 'receivable';
   const isDeposit = d.type === 'fixed_deposit';
-  // the account's bank statement lines, each opening its own page with its trail
-  const hasLines =
-    d.type === 'bank_account' &&
-    ((
-      await (
-        await loadContext()
-      ).supabase
-        .from('statement_lines')
-        .select('id', { count: 'exact', head: true })
-        .eq('asset_id', id)
-    ).count ?? 0) > 0;
-  const lines = hasLines ? accountLines((await loadTrailContext()).data, id) : [];
   const crumbs: Crumb[] = isFund
     ? [{ label: 'Investments', href: '/investments' }]
     : isBankLike
@@ -270,11 +259,22 @@ export default async function AssetPage({
           )}
         </section>
       )}
-      <StatementLines
-        assetId={id}
-        lines={lines}
-        fileName={`transactions-${d.view.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-      />
+      {d.type === 'bank_account' && (
+        // the transactions need every statement line sorted by the rules: they arrive after the rest of the page
+        <Suspense
+          fallback={
+            <section className="detailsection" aria-busy="true">
+              <h2>Transactions</h2>
+              <p className="muted small">Loading the transactions…</p>
+            </section>
+          }
+        >
+          <AccountTransactions
+            id={id}
+            fileName={`transactions-${d.view.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+          />
+        </Suspense>
+      )}
       <DetailTables tables={d.view.tables} />
       <ActivityLog items={d.activity} />
     </>
@@ -291,4 +291,17 @@ export default async function AssetPage({
   ) : (
     page
   );
+}
+
+/** The account's bank statement lines, each opening its own page with its trail; nothing when it has no statement on file. */
+async function AccountTransactions({ id, fileName }: { id: string; fileName: string }) {
+  const { count } = await (
+    await loadContext()
+  ).supabase
+    .from('statement_lines')
+    .select('id', { count: 'exact', head: true })
+    .eq('asset_id', id);
+  if (!count) return null;
+  const lines = accountLines((await loadTrailContext()).data, id);
+  return <StatementLines assetId={id} lines={lines} fileName={fileName} />;
 }
