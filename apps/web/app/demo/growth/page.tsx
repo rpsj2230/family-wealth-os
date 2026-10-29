@@ -146,6 +146,7 @@ export default async function DemoGrowthPage({
     stepUp: 0.05,
     today: TODAY,
     dobs: ['1984-04-10', '1986-01-01'],
+    longRunFundRate: 0.1,
   });
   return (
     <main className="content">

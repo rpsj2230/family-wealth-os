@@ -30,6 +30,7 @@ const BUCKET: Record<WorkBucket, { label: string; tone: string }> = {
 
 const COLOURS: Record<string, string> = {
   same: 'var(--viz-1)',
+  longrun: 'var(--viz-other)',
   moved: 'var(--viz-6)',
 };
 const lineColour = (key: string, k: number) =>
@@ -252,6 +253,13 @@ function ProjectionTab({
             {formatInrCompact(p.table[p.years]!.real)} in today’s rupees
           </dd>
         </div>
+        {p.fundsPace !== null && (
+          <div>
+            <dt>Funds’ actual past return</dt>
+            <dd>{pct(p.fundsPace)} a year</dd>
+            <dd className="small muted">long-run in your plan {pct(longRunEquity)}</dd>
+          </div>
+        )}
         <div>
           <dt>SIPs</dt>
           <dd>{inr(p.monthlyNow)} a month</dd>
@@ -265,7 +273,7 @@ function ProjectionTab({
           series={series}
           unit="inr"
           caption={`The corpus each year on every line, ${p.table[0]!.calendarYear} to ${p.table[p.years]!.calendarYear}`}
-          note="Solid: the same pace and the slow money moved. Dashed: slower and faster."
+          note="Solid: the same pace (funds at their actual past return), funds at the long-run return, and the slow money moved. Dashed: slower and faster."
         />
       </section>
 
@@ -360,9 +368,11 @@ function ProjectionTab({
           Interest and gains stay invested every year.
         </li>
         <li>
-          Funds’ own returns can be far above what the next 20 years bring; the long-run fund return
-          in your retirement plan is {pct(longRunEquity)}. The slower lines show what a lower pace
-          does.
+          The same pace grows every fund at its actual past return (XIRR)
+          {p.fundsPace !== null ? `, ${pct(p.fundsPace)} a year across your funds` : ''}. A fund’s
+          past few years can be far above what the next 20 bring, so “Funds at the long-run return”
+          grows them at your retirement plan’s {pct(longRunEquity)} instead, with everything else
+          unchanged. The slower lines show what a lower pace does.
         </li>
         <li>
           Slower and faster move every growing holding by the same points; money that earns nothing

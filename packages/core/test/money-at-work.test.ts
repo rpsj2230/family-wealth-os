@@ -88,12 +88,14 @@ describe('projectGrowth: the corpus year by year', () => {
     stepUp: 0.05,
     today: '2026-10-29',
     dobs: ['1985-06-01', null],
+    longRunFundRate: 0.1,
   });
   const line = (k: string) => p.lines.find((l) => l.key === k)!;
 
-  it('six lines: the same pace, 2% and 1% slower, 1% and 2% faster, and the slow money moved', () => {
+  it('the same pace (funds at their actual past return), the long-run line, 2% and 1% slower, 1% and 2% faster, and the slow money moved', () => {
     expect(p.lines.map((l) => l.key)).toEqual([
       'same',
+      'longrun',
       'slower-0.02',
       'slower-0.01',
       'faster-0.01',
@@ -134,6 +136,15 @@ describe('projectGrowth: the corpus year by year', () => {
       dobs: [],
     });
     expect(q.lines.find((l) => l.key === 'faster-0.02')!.values[5]).toBe(200_000);
+  });
+
+  it('names the funds’ actual past return on the same pace, and the long-run line grows the funds at the plan’s return', () => {
+    expect(p.fundsPace).toBe(0.12);
+    expect(line('same').label).toContain('funds at their actual past return (12.0%)');
+    // with the fund at 10% instead of its own 12%, the corpus is smaller
+    expect(line('longrun').values[20]!).toBeLessThan(line('same').values[20]!);
+    const y1 = 1_000_000 * 1.021 + 2_000_000 * 1.075 + (1_000_000 * 1.1 + 120_000 * 1.05) + 200_000;
+    expect(line('longrun').values[1]).toBeCloseTo(y1, 4);
   });
 
   it('shows the pace of each line, today’s rupees and the ages', () => {

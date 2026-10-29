@@ -99,6 +99,7 @@ export async function loadGrowth(supabase: Ctx['supabase']): Promise<GrowthData>
       stepUp: plan.annualStepUp,
       today,
       dobs: [plan.primaryDob || null, plan.spouseDob || null],
+      longRunFundRate: plan.assumptions.equityReturn,
     }),
     longRunEquity: plan.assumptions.equityReturn,
     ageNames: [primary?.display_name ?? 'You', spouse?.display_name ?? 'Spouse'],

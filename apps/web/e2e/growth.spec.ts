@@ -35,7 +35,8 @@ test.describe('Money at work (public sample)', () => {
     await page.goto('/demo/growth?tab=projection');
     const years = page.getByTestId('gw-years');
     for (const h of [
-      'Same pace',
+      'Same pace, funds at their actual past return',
+      'Funds at the long-run return',
       '2% slower',
       '1% slower',
       '1% faster',

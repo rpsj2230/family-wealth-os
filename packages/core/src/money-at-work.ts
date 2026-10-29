@@ -204,6 +204,8 @@ export interface GrowthProjection {
   table: GrowthYear[];
   /** the SIPs running today, a month */
   monthlyNow: number;
+  /** the funds' own past return (XIRR), weighted by value: what the same pace uses for them; null with no funds */
+  fundsPace: number | null;
 }
 
 interface Slot {
@@ -301,14 +303,44 @@ export function projectGrowth(input: {
   today: string;
   /** dates of birth, for the age columns (primary, spouse) */
   dobs: (string | null)[];
+  /** the long-run fund return of the retirement plan: a line with every fund at it instead of its own past return */
+  longRunFundRate?: number;
 }): GrowthProjection {
   const { work, years, stepUp } = input;
   const base = slotsOf(work.rows, null);
   const improved = slotsOf(work.rows, work.moves);
   const same = runSlots(base, years, 0, stepUp);
+  const funds = work.rows.filter((r) => r.kind === 'funds');
+  const fundsValue = funds.reduce((a, r) => a + r.value, 0);
+  const fundsPace =
+    fundsValue > 0 ? funds.reduce((a, r) => a + r.value * r.rate, 0) / fundsValue : null;
   const lines: GrowthLine[] = [
-    { key: 'same', label: 'Same pace', pace: paceOf(base, 0), shift: 0, values: same.values },
+    {
+      key: 'same',
+      label:
+        fundsPace === null
+          ? 'Same pace'
+          : `Same pace, funds at their actual past return (${pct(fundsPace)})`,
+      pace: paceOf(base, 0),
+      shift: 0,
+      values: same.values,
+    },
   ];
+  if (input.longRunFundRate !== undefined && fundsPace !== null) {
+    // the same holdings, with every fund growing at the plan's long-run return instead of its own past one
+    const longRun = base.map((x) =>
+      x.kind === 'funds'
+        ? { ...x, rate: input.longRunFundRate!, grows: input.longRunFundRate! > 0 }
+        : x,
+    );
+    lines.push({
+      key: 'longrun',
+      label: `Funds at the long-run return (${pct(input.longRunFundRate)})`,
+      pace: paceOf(longRun, 0),
+      shift: 0,
+      values: runSlots(longRun, years, 0, stepUp).values,
+    });
+  }
   for (const s of [...input.steps].sort((a, b) => b - a)) {
     lines.push({
       key: `slower-${s}`,
@@ -360,6 +392,7 @@ export function projectGrowth(input: {
     lines,
     table,
     monthlyNow: work.rows.reduce((a, r) => a + r.monthly, 0),
+    fundsPace,
   };
 }
 
