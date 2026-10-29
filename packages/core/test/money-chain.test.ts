@@ -260,3 +260,45 @@ describe('money chain: the order money leaves an account in, funds and matched t
     expect(cut.steps).toHaveLength(0);
   });
 });
+
+describe('money chain: longer transfers and deposits paid back into another account', () => {
+  it('pairs a transfer whose line in came later than usual, and marks it as matched', () => {
+    const out = ln('Z', '2024-04-01', -70_000, 'own_transfer', 'Y');
+    const late = ln('Y', '2024-04-07', 70_000, 'ask_in');
+    const c = moneyChain({
+      lines: [ln('Z', '2024-03-01', 100_000, 'outside_in'), out, late],
+      assets: [acct('Z'), acct('Y')],
+      deposits: [],
+      openings: new Map(),
+      method: 'recent',
+      pairDays: 3,
+    });
+    expect(c.guessed.transfers).toBe(1);
+    expect(traceBack(c, late.id, OPTS)!.pair!.id).toBe(out.id);
+  });
+
+  it('a deposit not on file, booked from one account and paid back into another of the same person at the same bank', () => {
+    const fund = ln('Z', '2023-01-01', 500_000, 'outside_in');
+    const book = ln('Z', '2023-01-02', -500_000, 'fd_funding');
+    const back = ln('Z2', '2024-01-02', 535_000, 'fd_proceeds');
+    const c = moneyChain({
+      lines: [fund, book, back],
+      assets: [acct('Z'), acct('Z2')],
+      deposits: [],
+      openings: new Map(),
+      method: 'recent',
+      pairDays: 3,
+      bankOf: new Map([
+        ['Z', 'RBL Bank'],
+        ['Z2', 'RBL Bank Ltd'],
+      ]),
+    });
+    const t = traceBack(c, back.id, OPTS)!;
+    expect(t.steps.map((s) => [s.node.id, s.amount, s.via])).toEqual([
+      [book.id, 500_000, 'held:Z'],
+    ]);
+    expect(t.starts).toEqual([
+      expect.objectContaining({ kind: 'deposit_interest', amount: 35_000 }),
+    ]);
+  });
+});

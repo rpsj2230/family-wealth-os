@@ -41,6 +41,15 @@ export default async function DemoTrail({
           />
           <TrailView
             data={data}
+            chain={{
+              chain: data.chain,
+              opts: data.traceOptions,
+              labels,
+              names,
+              remitById: data.remitById,
+              lineHref: (a, l) => `/demo/line?a=${a}&l=${l}`,
+              assetHref: (a) => `/demo/trail?h=${a}`,
+            }}
             selected={h && data.trails.has(h) ? h : accounts.dep}
             labels={labels}
             names={names}

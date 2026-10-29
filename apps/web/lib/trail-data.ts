@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { loadMoneyTrail, type LoadedPortfolio, type MoneyTrailData } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ChainContext } from '@/components/MoneyChainView';
 import { loadContext } from '@/lib/data';
 import { holdingLabels } from '@/lib/holding-label';
 import { loadPortfolio } from '@/lib/portfolio-data';
@@ -37,3 +38,20 @@ export const loadTrailContext = cache(async function loadTrailContext(): Promise
   );
   return { data, labels, names: Object.fromEntries(loaded.ownerName) };
 });
+
+/** What the step-by-step trail views need (components/MoneyChainView.tsx), for the signed-in pages. */
+export function chainContextOf(t: {
+  data: MoneyTrailData;
+  labels: Record<string, string>;
+  names: Record<string, string>;
+}): ChainContext {
+  return {
+    chain: t.data.chain,
+    opts: t.data.traceOptions,
+    labels: t.labels,
+    names: t.names,
+    remitById: t.data.remitById,
+    lineHref: (a, l) => `/asset/${a}/line/${l}`,
+    assetHref: (a) => `/asset/${a}`,
+  };
+}

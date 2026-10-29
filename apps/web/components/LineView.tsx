@@ -1,21 +1,22 @@
 import Link from 'next/link';
-import { formatInr, ORIGIN_LABEL, type Hop } from '@fwos/core';
+import { formatInr } from '@fwos/core';
 import type { LineDetail, MoneyTrailData } from '@fwos/data';
 import { AssetFacts, DetailHeader, type Fact } from '@/components/AssetFacts';
+import { LineChain, type ChainContext } from '@/components/MoneyChainView';
 import { niceDate } from '@/lib/dates';
-import { Makeup } from '@/app/(app)/trail/TrailView';
 import '@/app/(app)/trail/trail.css';
 
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(n))}`;
 
 /**
- * One bank statement line: what it is and why the rules say so, then its trail: what the money was made of (back to Singapore,
- * however many accounts it passed through), the line on the other side of a transfer, and, for money out, the money that came in
- * before it. Every step opens its own page, so the chain can be followed back.
+ * One bank statement line: what it is and why the rules say so, then its trail, step by step: the line on the other side of a
+ * transfer, where its money started (back to Singapore, however many accounts it passed through) with every step on the way, and
+ * where it went from here and where it is now. Every step opens its own page, so the chain can be followed as far as it goes.
  */
 export function LineView({
   d,
   data,
+  chain,
   labels,
   names,
   lineHref,
@@ -25,6 +26,7 @@ export function LineView({
 }: {
   d: LineDetail;
   data: Pick<MoneyTrailData, 'holdings'>;
+  chain: ChainContext;
   labels: Record<string, string>;
   names: Record<string, string>;
   lineHref: (assetId: string, lineId: string) => string;
@@ -72,12 +74,13 @@ export function LineView({
         ]
       : []),
   ];
-  const step = (h: Hop) => {
-    const top = [...h.parts].sort((a, b) => b.amount - a.amount)[0];
-    return top
-      ? `${ORIGIN_LABEL[top.kind]} ${Math.round((top.amount / Math.abs(h.amount)) * 100)}%`
-      : '';
-  };
+  // the line on the other side of a transfer, as the step-by-step trail links them
+  const node = chain.chain.nodes.get(d.line.id);
+  const pairLink = node
+    ? (into ? node.from : node.to).find((l) => !l.via && l.basis !== 'same_account')
+    : undefined;
+  const pair = pairLink ? chain.chain.nodes.get(pairLink.node) : undefined;
+  const pairGuessed = pairLink?.basis === 'guess';
   return (
     <>
       <DetailHeader
@@ -108,31 +111,18 @@ export function LineView({
 
       <section className="detailsection" aria-labelledby="ln-trail" data-testid="line-trail">
         <h2 id="ln-trail">The trail</h2>
-        {d.hop && d.hop.parts.length > 0 ? (
-          <>
-            <p className="muted small">
-              {into
-                ? 'Where the money this line brought came from, back to its start (Singapore, interest, money already there), and whose it was.'
-                : 'What the money that left was made of: the account’s mix at that moment, back to where each part started.'}
-            </p>
-            <Makeup parts={d.hop.parts} labels={labels} names={names} />
-          </>
-        ) : (
-          <p className="small">
-            This line has no trail of its own (a charge, or money the statements do not follow).
-          </p>
-        )}
-        {d.pair && (
+        {pair && (
           <p className="small ln-step" data-testid="line-pair">
             {into ? 'It came from ' : 'It went to '}
-            <Link href={lineHref(d.pair.assetId, d.pair.id)}>
-              {labels[d.pair.assetId] ?? 'another account'}, {niceDate(d.pair.date)},{' '}
-              {signed(d.pair.amount)}
+            <Link href={lineHref(pair.assetId, pair.id)}>
+              {labels[pair.assetId] ?? 'another account'}, {niceDate(pair.date)},{' '}
+              {signed(pair.amount)}
             </Link>
+            {pairGuessed ? ' (matched by amount and date)' : ''}
             {into ? ': open it to go one step further back.' : '.'}
           </p>
         )}
-        {!d.pair && other && (
+        {!pair && other && (
           <p className="small ln-step">
             {into ? 'It came from ' : 'It went to '}
             <Link href={assetHref(other)}>{labels[other]}</Link>
@@ -141,47 +131,7 @@ export function LineView({
               : ', which has no bank statement on file, so the trail stops there.'}
           </p>
         )}
-        {d.before.length > 0 && (
-          <>
-            <h3 className="tr-h3">Money that came into the account before it</h3>
-            <div className="tr-scroll">
-              <table className="table small">
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col" className="num">
-                      Amount
-                    </th>
-                    <th scope="col">From</th>
-                    <th scope="col">Made of</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.before.map((h, i) => (
-                    <tr key={h.lineId ?? i}>
-                      <td>
-                        {h.lineId && !h.lineId.startsWith('remit:') ? (
-                          <Link href={lineHref(id, h.lineId)}>{niceDate(h.date)}</Link>
-                        ) : (
-                          niceDate(h.date)
-                        )}
-                      </td>
-                      <td className="num">{signed(h.amount)}</td>
-                      <td>
-                        {h.from && labels[h.from] ? (
-                          labels[h.from]
-                        ) : (
-                          <span className="muted">{h.narration.slice(0, 40) || '—'}</span>
-                        )}
-                      </td>
-                      <td>{step(h)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+        <LineChain c={chain} lineId={d.line.id} />
         <p className="small ln-step">
           <Link href={trailHref(id)}>The whole trail of {account}</Link>
         </p>

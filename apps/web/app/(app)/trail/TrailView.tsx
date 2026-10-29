@@ -7,8 +7,10 @@ import {
   ORIGIN_LABEL,
   type OriginKind,
   type Part,
+  startPoints,
   type Trail,
 } from '@fwos/core';
+import { HoldingChain, type ChainContext } from '@/components/MoneyChainView';
 import { niceDate } from '@/lib/dates';
 import './trail.css';
 
@@ -82,6 +84,7 @@ export function Makeup({
  */
 export function TrailView({
   data,
+  chain,
   selected,
   labels,
   names,
@@ -89,6 +92,8 @@ export function TrailView({
   sample = false,
 }: {
   data: TrailViewData;
+  /** every line followed step by step: the selected holding's trail and the start of each line's money */
+  chain: ChainContext;
   selected: string | null;
   labels: Record<string, string>;
   names: Record<string, string>;
@@ -97,6 +102,9 @@ export function TrailView({
 }) {
   const { trails, holdings, remittances } = data;
   const t = selected ? trails.get(selected) : undefined;
+  // the selected holding followed step by step, when the statements reach it
+  const hasChain =
+    !!t && (chain.chain.into.get(t.assetId) ?? chain.chain.now.get(t.assetId) ?? []).length > 0;
   // every crossing once: on the holding it reached
   const crossings = [...trails.values()].flatMap((x) => x.crossings);
   const byYear = new Map<string, Map<string, number>>();
@@ -174,19 +182,29 @@ export function TrailView({
       {t && (
         <section className="card" aria-labelledby="tr-one" data-testid="tr-one">
           <h2 id="tr-one">{labels[t.assetId] ?? 'This holding'}</h2>
-          <p className="muted small">
-            {
+          {!hasChain && (
+            <p className="muted small">
               {
-                deposit: 'What the money that booked it was made of.',
-                fund: 'What the money that bought it is made of, less what its sales took back.',
-                account: 'What its balance is made of today.',
-              }[holdings.find((h) => h.id === t.assetId)?.kind ?? 'account']
-            }
-          </p>
-          <Makeup parts={t.parts} labels={labels} names={names} />
+                {
+                  deposit: 'What the money that booked it was made of.',
+                  fund: 'What the money that bought it is made of, less what its sales took back.',
+                  account: 'What its balance is made of today.',
+                }[holdings.find((h) => h.id === t.assetId)?.kind ?? 'account']
+              }
+            </p>
+          )}
+          {hasChain ? (
+            <HoldingChain
+              c={chain}
+              assetId={t.assetId}
+              kind={holdings.find((h) => h.id === t.assetId)?.kind ?? 'account'}
+            />
+          ) : (
+            <Makeup parts={t.parts} labels={labels} names={names} />
+          )}
           <h3 className="tr-h3">Money in, newest first</h3>
           <div className="tr-scroll">
-            <table className="table small">
+            <table className="tbl lines small">
               <thead>
                 <tr>
                   <th scope="col">Date</th>
@@ -202,7 +220,11 @@ export function TrailView({
                   .filter((h) => h.amount > 0)
                   .slice(0, 60)
                   .map((h, i) => {
-                    const top = [...h.parts].sort((a, b) => b.amount - a.amount)[0];
+                    // where the line's money started, as the step-by-step trail follows it; else the trail's mix
+                    const top =
+                      (h.lineId && chain.chain.nodes.has(h.lineId)
+                        ? startPoints(chain.chain, h.lineId)[0]
+                        : undefined) ?? [...h.parts].sort((a, b) => b.amount - a.amount)[0];
                     return (
                       <tr key={i}>
                         <td>
@@ -253,7 +275,7 @@ export function TrailView({
           <p className="small">None found in the statements on file.</p>
         ) : (
           <div className="tr-scroll">
-            <table className="table small" data-testid="tr-years">
+            <table className="tbl lines small" data-testid="tr-years">
               <thead>
                 <tr>
                   <th scope="col">Year</th>
@@ -333,7 +355,7 @@ export function TrailView({
           </p>
         ) : (
           <div className="tr-scroll">
-            <table className="table small" data-testid="tr-club">
+            <table className="tbl lines small" data-testid="tr-club">
               <thead>
                 <tr>
                   <th scope="col">Year</th>

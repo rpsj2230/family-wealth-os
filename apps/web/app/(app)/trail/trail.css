@@ -81,3 +81,157 @@
 .ln-step {
   margin: 0.6rem 0;
 }
+
+/* ---- the trail step by step (components/MoneyChainView.tsx) ---- */
+.tr-untraced_fund {
+  background: color-mix(in srgb, var(--muted, #64748b) 45%, var(--card, #fff));
+}
+.tr-still,
+.tr-end-still {
+  background: var(--primary, #4f46e5);
+}
+.tr-end-spent,
+.tr-end-fee,
+.tr-end-tax {
+  background: #d97706;
+}
+.tr-end-untraced_account,
+.tr-end-not_found,
+.tr-end-untraced_fund,
+.tr-small {
+  background: color-mix(in srgb, var(--muted, #64748b) 45%, var(--card, #fff));
+}
+.tr-end-unexplained {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--muted, #64748b),
+    var(--muted, #64748b) 3px,
+    var(--card, #fff) 3px,
+    var(--card, #fff) 6px
+  );
+}
+.ch {
+  min-width: 0;
+}
+.ch-items {
+  margin: 0.15rem 0 0;
+  padding: 0;
+}
+.ch-items li {
+  display: block;
+  padding: 0.05rem 0;
+  overflow-wrap: anywhere;
+}
+.tr-parts li.ch-group {
+  align-items: start;
+}
+/* the way most of the money went: holdings as chips joined by arrows, wrapping on a phone */
+.ch-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.1rem;
+  margin: 0.6rem 0;
+  padding: 0;
+}
+.ch-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--soft, var(--card));
+  overflow-wrap: anywhere;
+}
+.ch-chip + .ch-chip::before {
+  content: '→';
+  margin: 0 0.35rem 0 -0.2rem;
+  color: var(--muted);
+}
+.ch-chip-start {
+  font-weight: 600;
+}
+/* the steps: nested lists, each level a little in from the one it leads to, opening with a tap */
+.ch-tree,
+.ch-kids {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.ch-kids {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+  margin-left: 0.35rem;
+}
+.ch-deep > details > .ch-kids,
+.ch-deep .ch-kids {
+  /* far down a long chain: no further in, so a phone keeps its width */
+  padding-left: 0.25rem;
+  margin-left: 0;
+}
+.ch-node,
+.ch-leaf {
+  display: block;
+  padding: 0.2rem 0;
+  min-width: 0;
+}
+.ch-node > details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.ch-node > details > summary::-webkit-details-marker {
+  display: none;
+}
+.ch-node > details > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 1rem;
+  color: var(--muted);
+}
+.ch-node > details[open] > summary::before {
+  content: '▾';
+}
+.ch-node > details > summary .ch-row,
+.ch-solo .ch-row {
+  display: inline-grid;
+  width: calc(100% - 1rem);
+  vertical-align: top;
+}
+.ch-solo {
+  padding-left: 1rem;
+}
+.ch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+.ch-what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ch-meta {
+  display: block;
+}
+.ch-via {
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.ch-amt {
+  text-align: right;
+  white-space: nowrap;
+}
+.ch-leaf .ch-row {
+  padding-left: 1rem;
+}
+@media (max-width: 480px) {
+  .ch-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .ch-amt {
+    text-align: left;
+    white-space: normal;
+  }
+}

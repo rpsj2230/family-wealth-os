@@ -10,8 +10,10 @@ import { QuickEditHost } from '@/components/QuickEditHost';
 import { StatementLines } from '@/components/StatementLines';
 import { loadAssetDetail } from '@/lib/detail-data';
 import { loadContext } from '@/lib/data';
-import { loadTrailContext } from '@/lib/trail-data';
+import { HoldingChain } from '@/components/MoneyChainView';
+import { chainContextOf, loadTrailContext } from '@/lib/trail-data';
 import { accountLines } from '@fwos/data';
+import { holdingSources } from '@fwos/core';
 import { VALUE_TABLE } from '@/lib/detail-view';
 import { loadFundDetail } from '@/lib/fund-detail-data';
 import { fundEditRows } from '@/lib/invest-ledger';
@@ -71,6 +73,9 @@ export default async function AssetPage({
             ...d.view.tables.filter((t) => t.title === 'Recorded values'),
           ]}
         />
+        <Suspense fallback={null}>
+          <HoldingTrail id={id} kind="fund" />
+        </Suspense>
         <ActivityLog items={d.activity} />
       </>
     );
@@ -282,6 +287,12 @@ export default async function AssetPage({
           />
         </Suspense>
       )}
+      {(d.type === 'bank_account' || isDeposit) && (
+        // the money trail follows every statement line: it arrives after the rest of the page
+        <Suspense fallback={null}>
+          <HoldingTrail id={id} kind={isDeposit ? 'deposit' : 'account'} />
+        </Suspense>
+      )}
       <DetailTables tables={d.view.tables} />
       <ActivityLog items={d.activity} />
     </>
@@ -311,4 +322,23 @@ async function AccountTransactions({ id, fileName }: { id: string; fileName: str
   if (!count) return null;
   const lines = accountLines((await loadTrailContext()).data, id);
   return <StatementLines assetId={id} lines={lines} fileName={fileName} />;
+}
+
+/**
+ * The holding's money trail, step by step: for a deposit, the lines that booked it and where they came from, and where its money went
+ * when paid back; for a fund, its purchases paid from a statement on file; for an account, where today's money came from.
+ */
+async function HoldingTrail({ id, kind }: { id: string; kind: 'account' | 'deposit' | 'fund' }) {
+  const t = await loadTrailContext();
+  const c = chainContextOf(t);
+  if (!holdingSources(c.chain, id).length && !(c.chain.outOf.get(id) ?? []).length) return null;
+  return (
+    <section className="detailsection" aria-labelledby="ht-h" data-testid="holding-trail">
+      <h2 id="ht-h">Money trail</h2>
+      <HoldingChain c={c} assetId={id} kind={kind} />
+      <p className="small">
+        <Link href={`/trail?h=${id}`}>Open it on the Money trail page</Link>
+      </p>
+    </section>
+  );
 }

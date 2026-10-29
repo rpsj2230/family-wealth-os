@@ -270,6 +270,26 @@ export function moneyChain(args: {
     pairOf.set(d.id, c.id).set(c.id, d.id);
     link(d.id, c.id, -d.amount, 'pair');
   }
+  // the rules named the other account but its line came later than usual (a transfer that took longer): the same sum there, up to
+  // three times the days, among the lines in that are not placed yet
+  for (const d of byDate) {
+    if (d.amount >= 0 || pairOf.has(d.id) || d.cls !== 'own_transfer' || !d.counterpart) continue;
+    if (!withLines.has(d.counterpart) || d.counterpart === d.assetId) continue;
+    let best: TrailLine | null = null;
+    for (const c of byAmount.get(`${d.counterpart}|${cents(d.amount)}`) ?? []) {
+      if (pairOf.has(c.id) || c.date < d.date || daysApart(c.date, d.date) > pairDays * 3) continue;
+      if (!(
+        c.cls === 'ask_in' ||
+        (c.cls === 'own_transfer' && (!c.counterpart || c.counterpart === d.assetId))
+      ))
+        continue;
+      if (!best || daysApart(c.date, d.date) < daysApart(best.date, d.date)) best = c;
+    }
+    if (!best) continue;
+    pairOf.set(d.id, best.id).set(best.id, d.id);
+    link(d.id, best.id, -d.amount, 'guess');
+    guessed.transfers++;
+  }
   // the rules named no other side, or no line of it: the same sum in another account of the household within the days
   const loose = (l: TrailLine) =>
     !pairOf.has(l.id) &&
@@ -563,8 +583,20 @@ export function moneyChain(args: {
         });
       push(outOf, paid.dep, { node: n.id, amount: l.amount, via: paid.dep, basis: paid.basis });
     } else if (l.cls === 'fd_proceeds') {
-      const held = pool(`held:${l.assetId}`);
-      const got = payOut(`held:${l.assetId}`, held, l.amount, n.id);
+      // a deposit not on file booked from this account; else from another account of the same person at the same bank
+      const here = bankOf(l.assetId);
+      const from = [
+        l.assetId,
+        ...[...withLines].filter(
+          (x) =>
+            x !== l.assetId &&
+            owner.get(x) === holder &&
+            here !== '' &&
+            bankOf(x) === here &&
+            sum(pool(`held:${x}`)) > TINY,
+        ),
+      ].find((x) => sum(pool(`held:${x}`)) > TINY);
+      const got = from ? payOut(`held:${from}`, pool(`held:${from}`), l.amount, n.id) : 0;
       if (got <= TINY)
         n.starts.push({
           kind: 'untraced_deposit',

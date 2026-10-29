@@ -47,6 +47,15 @@ export default async function DemoLine({
             <LineView
               d={d}
               data={data}
+              chain={{
+                chain: data.chain,
+                opts: data.traceOptions,
+                labels,
+                names,
+                remitById: data.remitById,
+                lineHref: (a, l) => href(a, l),
+                assetHref: (a) => href(a),
+              }}
               labels={labels}
               names={names}
               lineHref={(a, l) => href(a, l)}

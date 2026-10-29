@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { PageHead } from '@/components/PageHead';
 import { loadAccess } from '@/lib/data';
-import { loadTrailContext } from '@/lib/trail-data';
+import { chainContextOf, loadTrailContext } from '@/lib/trail-data';
 import { TrailView } from './TrailView';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,8 @@ export default async function MoneyTrail({
 }) {
   const { h } = await searchParams;
   if ((await loadAccess()).role === 'emergency_viewer') redirect('/emergency');
-  const { data, labels, names } = await loadTrailContext();
+  const t = await loadTrailContext();
+  const { data, labels, names } = t;
   const selected = h && data.trails.has(h) ? h : null;
   return (
     <>
@@ -22,7 +23,13 @@ export default async function MoneyTrail({
         title="Money trail"
         subtitle="Where the money in each account and deposit came from, back to Singapore, and whose money it was."
       />
-      <TrailView data={data} selected={selected} labels={labels} names={names} />
+      <TrailView
+        data={data}
+        chain={chainContextOf(t)}
+        selected={selected}
+        labels={labels}
+        names={names}
+      />
     </>
   );
 }
