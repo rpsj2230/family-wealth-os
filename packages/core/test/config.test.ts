@@ -270,3 +270,30 @@ describe('Gmail statements settings', () => {
     });
   });
 });
+
+describe('saved reports in the config', () => {
+  it('keeps valid entries, drops unknown keys and bad ids, and lists favourites first', () => {
+    const cfg = configFromJson({
+      reports: {
+        saved: [
+          { id: 'b-1', name: 'Zed', params: { t: 'funds', g: 'amc', evil: 'x' }, favourite: false },
+          {
+            id: 'a-1',
+            name: 'Alpha',
+            params: { t: 'networth', period: 'last-fy' },
+            favourite: true,
+          },
+          { id: 'BAD ID', name: 'No', params: { t: 'funds' } },
+          { id: 'c-1', name: 'No template', params: { g: 'amc' } },
+          { id: 'a-1', name: 'Duplicate', params: { t: 'funds' } },
+        ],
+      },
+    });
+    expect(cfg.reports.saved.map((s) => [s.id, s.favourite])).toEqual([
+      ['a-1', true],
+      ['b-1', false],
+    ]);
+    expect(cfg.reports.saved[1]!.params).toEqual({ t: 'funds', g: 'amc' });
+    expect(configFromJson({}).reports.saved).toEqual([]);
+  });
+});

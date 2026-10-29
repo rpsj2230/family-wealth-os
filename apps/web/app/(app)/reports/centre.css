@@ -1,0 +1,159 @@
+/* ---- Report Centre ---- */
+.centre {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.centre > * {
+  min-width: 0;
+  margin: 0;
+}
+.centre-askform {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.centre-askform input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.centre-read {
+  margin-top: 10px;
+}
+.centre-read .chip,
+.centre-head .chip {
+  margin: 2px 4px 2px 0;
+}
+.centre-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.centre-templates .chip {
+  text-decoration: none;
+}
+.centre-templates .chip.on {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: var(--primary);
+}
+.centre-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+.centre-filters label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.centre-filters select,
+.centre-filters input:not([type='checkbox']) {
+  width: 100%;
+  min-width: 0;
+}
+.centre-filters label.centre-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / -1;
+}
+.centre-filters label.centre-check input {
+  width: auto;
+  margin: 0;
+}
+.centre-run {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+.centre-result {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.centre-result > * {
+  min-width: 0;
+  margin: 0;
+}
+.centre-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  align-items: flex-start;
+}
+.centre-head h2 {
+  margin: 0;
+}
+.centre-head p {
+  margin: 4px 0 0;
+}
+.centre-exports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.centre-table {
+  min-width: 0;
+}
+.centre-table h3,
+.centre-notes h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.centre-notes ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.centre-side {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.centre-side h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+.centre-saved-acts {
+  display: inline-flex;
+  gap: 4px;
+}
+.centre-saveform {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.centre-saveform input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* printed (or saved as PDF): the report alone, its tables in full */
+@media print {
+  .no-print,
+  .tabs2,
+  .personfilter,
+  .pagehead-actions {
+    display: none !important;
+  }
+  .centre-result {
+    border: 0;
+    padding: 0;
+  }
+  .centre-table {
+    break-inside: auto;
+  }
+  .centre .rptwrap,
+  .centre .xlwrap {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+}

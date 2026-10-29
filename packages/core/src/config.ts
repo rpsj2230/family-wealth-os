@@ -92,6 +92,8 @@ export interface AppConfig {
   };
   /** the setup checklist (Settings > Setup, the dashboard): the items the household switched off as not needed */
   setup: { off: string[] };
+  /** the Report Centre: reports saved by name (the template, period and filters, rerun against today's data), favourites first */
+  reports: { saved: SavedReport[] };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
     trustedForwarders: string[];
@@ -367,6 +369,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     fundMatchDays: 5,
   },
   setup: { off: [] },
+  reports: { saved: [] },
   inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
   rates: {
     staleDays: 45,
@@ -581,6 +584,47 @@ function withRecentDeposits(order: LiquidityKind[]): LiquidityKind[] {
   return out;
 }
 
+export interface SavedReport {
+  id: string;
+  name: string;
+  /** the report's address parameters (template, period, filters): what it reruns with */
+  params: Record<string, string>;
+  favourite: boolean;
+  savedAt: string;
+}
+
+const SAVED_PARAM = /^(t|period|from|to|p|cls|bank|cur|amc|plan|opt|kind|min|max|q|g|cmp)$/;
+/** Saved reports as stored: unknown keys and over-long values dropped, at most 50, favourites first. */
+export function savedReportsFrom(raw: unknown): SavedReport[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SavedReport[] = [];
+  const ids = new Set<string>();
+  for (const x of raw) {
+    const o = obj(x);
+    const id = String(o.id ?? '');
+    const name = String(o.name ?? '')
+      .trim()
+      .slice(0, 80);
+    if (!/^[a-z0-9-]{1,40}$/.test(id) || !name || ids.has(id)) continue;
+    const params: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj(o.params)))
+      if (SAVED_PARAM.test(k) && (typeof v === 'string' || typeof v === 'number'))
+        params[k] = String(v).slice(0, 80);
+    if (!params.t) continue;
+    ids.add(id);
+    out.push({
+      id,
+      name,
+      params,
+      favourite: o.favourite === true,
+      savedAt: typeof o.savedAt === 'string' ? o.savedAt.slice(0, 30) : '',
+    });
+  }
+  return out
+    .slice(0, 50)
+    .sort((a, b) => Number(b.favourite) - Number(a.favourite) || a.name.localeCompare(b.name));
+}
+
 export function configFromJson(raw: unknown): AppConfig {
   const d = DEFAULT_CONFIG;
   const r = obj(raw);
@@ -690,6 +734,7 @@ export function configFromJson(raw: unknown): AppConfig {
         return [...new Set(list)].slice(0, 50);
       })(),
     },
+    reports: { saved: savedReportsFrom(obj(r.reports).saved) },
     inbox: {
       trustedForwarders: (() => {
         const raw = obj(r.inbox).trustedForwarders;

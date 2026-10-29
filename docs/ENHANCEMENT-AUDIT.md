@@ -78,3 +78,28 @@ CSV, XLSX, print/PDF; saved configurations rerun against today's data.
   withdrawals" (**B**).
 - Before the first snapshot, net worth can only be shown where the history import rebuilt it (**B**).
 - Fund categories missing for a few schemes leave them "not classified" in equity/debt splits (**B**).
+
+## 6. What was built (29 Oct 2026)
+
+Every card, route and calculation listed in section 1 is still in place; the work below only adds. Each addition has unit tests on its
+pure calculation and browser tests at phone width in light and dark mode (and on tablet and desktop).
+
+| Where | Added | Class | Basis shown on screen |
+| --- | --- | --- | --- |
+| Home | **Money position**: net worth (family, and by person with each person's 1M / 3M / 1Y change); cash in rupees; cash in each foreign currency (own amount first, rupee value, rate and its date); all cash; fixed deposits (principal, interest earned so far, pays at maturity, maturing within each Settings window); mutual funds (value, cost of units held, gain not yet booked); liquid financial assets with its rule; money lent; property; retirement and insurance-linked savings; other holdings; months of spending covered; records out of date | A (C for deposit interest) | Status chip (actual / estimated / needs attention / not available), as-of date, "How it is worked out", link to the records |
+| Deposits → Maturities | **Maturing within** each window from Settings (count, principal, comes back); **Interest expected in the next 12 months** (total, from deposits maturing in the period, still building up, by month, by deposit) | A / C | Estimated, before tax; no reinvestment assumed |
+| Cash | **Balance changes and out-of-date records**: previous and latest balance, change, days since the latest reading; out-of-date accounts first | A | A change is a balance move, not profit |
+| Reports → **Report centre** | 13 reports built in (net worth, all holdings, cash and bank, deposits in a period, deposit maturities, mutual funds, investment transactions, SIPs and contributions, gains booked by selling, SGD and other currencies, money lent, goal funding, data quality) and 4 that open their own page (tax and capital gains, performance, retirement readiness, insurance/pension/property). 24 period presets including the Indian financial year, FY quarters (or calendar quarters per Settings), "to date", "next N days" and chosen dates. Filters: person, kind, bank, currency, fund house, plan, option, transaction type, amount range, name. Grouping by person, kind, bank, currency, fund house, category, plan, option, fund, type, month, quarter, FY, year. Comparison with the period before. Downloads: Excel workbook (one sheet per table, real numbers and dates), CSV per table, print / save as PDF. Saved and starred reports (kept in the household's settings, rerun on the day's data); recently opened reports (this device only). "Ask in words": a phrase becomes visible filters, with unknown words listed, and runs only when asked | A / B / C per report, shown on each | "What the figures rest on" under every report |
+| Settings | Date fields use the date picker | A | — |
+| Monthly update | The save bar floats only when there is something to save | A | — |
+
+**Still not available, and why**
+
+- Liabilities: none are recorded (D). Cards say so rather than show zero.
+- Net worth for a period that starts before the first daily snapshot (B): the report says no snapshot reaches back.
+- Gains booked on a sale whose purchase is not on the statement (B): proceeds are shown, cost and gain are left blank.
+- Funds with no statement (Rupash: Quant Small Cap, Kotak Small Cap, Parag Parikh Flexi Cap, Axis Bluechip (two rows), and the
+  plain "Nippon India small cap fund" row): values come from the spreadsheet; their transactions need statements.
+- Bank-statement lines still to answer are not counted inside the Report centre's data-quality report (the row is left out rather than
+  shown blank); the count is on Tasks and Explain movements.
+- PDF is the browser's "Save as PDF" from a print layout; no PDF is generated on the server.

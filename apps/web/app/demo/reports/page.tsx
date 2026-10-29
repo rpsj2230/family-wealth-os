@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
+import { Centre } from '@/app/(app)/reports/Centre';
 import { DepositReports, FundReports, type Params } from '@/app/(app)/reports/Parts';
 import { DemoShell } from '@/components/DemoShell';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
 import { DEMO_HOLDING_MONTHS, DEMO_TODAY, demoView } from '@/lib/demo-funds';
+import { demoCentreData } from '@/lib/demo-centre';
 import { DEMO_REPORT_FDS } from '@/lib/demo-reports';
 import { reportFunds } from '@/lib/reports-data';
 
@@ -14,7 +16,7 @@ export const metadata: Metadata = {
 
 export default async function DemoReports({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
-  const tab = sp.tab === 'funds' ? 'funds' : 'deposits';
+  const tab = sp.tab === 'funds' || sp.tab === 'centre' ? sp.tab : 'deposits';
   const params = { ...sp, tab };
   return (
     <DemoShell>
@@ -28,9 +30,12 @@ export default async function DemoReports({ searchParams }: { searchParams: Prom
         tabs={[
           { key: 'deposits', label: 'Deposits' },
           { key: 'funds', label: 'Mutual funds' },
+          { key: 'centre', label: 'Report centre' },
         ]}
       />
-      {tab === 'deposits' ? (
+      {tab === 'centre' ? (
+        <Centre data={demoCentreData()} sp={sp} base="/demo/reports" sample />
+      ) : tab === 'deposits' ? (
         <DepositReports
           fds={DEMO_REPORT_FDS}
           sample
