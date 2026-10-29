@@ -128,11 +128,6 @@ describe('settings fields', () => {
         openingDate: '',
         reviewMinimum: '25,000',
         reviewPairMonths: '2',
-        ownershipFrom: '2026-10-28',
-        stmtRentWords: 'Sample Tenant\n  RENT  FLAT 4B ',
-        stmtRemittanceWords: 'inward remittance',
-        stmtReviewAbove: '10,000',
-        stmtFundMatchDays: '5',
         includeSip: 'on',
       }),
     );
@@ -163,8 +158,25 @@ describe('settings fields', () => {
           openingDate: '',
           reviewMinimum: 25000,
           reviewPairMonths: 2,
-          ownershipFrom: '2026-10-28',
         },
+      },
+    });
+    // clubbing and the money trail have their own card
+    expect(
+      parseGroup(
+        group('trail'),
+        form({
+          ownershipFrom: '2026-10-28',
+          stmtRentWords: 'Sample Tenant\n  RENT  FLAT 4B ',
+          stmtRemittanceWords: 'inward remittance',
+          stmtReviewAbove: '10,000',
+          stmtFundMatchDays: '5',
+        }),
+      ),
+    ).toEqual({
+      ok: true,
+      raw: {
+        capital: { ownershipFrom: '2026-10-28' },
         statements: {
           rentWords: ['sample tenant', 'rent flat 4b'],
           remittanceWords: ['inward remittance'],
@@ -264,7 +276,7 @@ describe('settings fields', () => {
   it('a document saved before the list existed counts a group as confirmed when it differs from the built-in numbers', () => {
     const raw = { deposits: { insuranceLimit: 700000 } };
     expect(confirmedGroups(raw, configFromJson(raw))).toEqual(['deposits']);
-    expect(RULE_GROUPS).toHaveLength(11);
+    expect(RULE_GROUPS).toHaveLength(12);
   });
 });
 
@@ -282,6 +294,7 @@ describe('settings sections', () => {
     expect(tabForAnchor('#tax')).toBe('tax');
     expect(tabForAnchor('#limits')).toBe('rules');
     expect(tabForAnchor('#liquidity')).toBe('rules');
+    expect(tabForAnchor('#trail')).toBe('rules');
     expect(tabForAnchor('#emergency')).toBe('access');
     expect(tabForAnchor('#telegram')).toBe('notifications');
     expect(tabForAnchor('#people')).toBe('people');

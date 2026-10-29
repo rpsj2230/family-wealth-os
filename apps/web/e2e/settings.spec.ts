@@ -97,7 +97,11 @@ test.describe('Settings (public sample)', () => {
     page,
   }) => {
     await page.goto('/demo/settings?tab=rules');
-    await expect(page.getByText('10 of 11 cards still run on the built-in numbers.')).toBeVisible();
+    await expect(page.getByText('11 of 12 cards still run on the built-in numbers.')).toBeVisible();
+    // the day clubbing counts from has its own card
+    await expect(
+      page.locator('#trail').getByLabel(/Count money moved between you for clubbing from/),
+    ).toBeVisible();
     const harvest = page.locator('#harvest-rules');
     await expect(harvest.getByText('Confirmed by you')).toBeVisible();
     const deposits = page.locator('#limits');

@@ -40,6 +40,7 @@ export type RuleGroup =
   | 'deposits'
   | 'reminders'
   | 'estimates'
+  | 'trail'
   | 'inbox'
   | 'gmail'
   | 'ai'
@@ -62,6 +63,7 @@ export const RULE_GROUPS: RuleGroup[] = [
   'deposits',
   'reminders',
   'estimates',
+  'trail',
   'inbox',
   'gmail',
   'ai',
@@ -76,6 +78,7 @@ export const GROUP_TITLE: Record<RuleGroup, string> = {
   deposits: 'Deposits',
   reminders: 'Reminders',
   estimates: 'Estimated balances',
+  trail: 'Clubbing and money trail',
   inbox: 'Bank e-mail forwarding',
   gmail: 'Gmail statements',
   ai: 'AI prices',
@@ -389,6 +392,22 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         max: 12,
       },
       {
+        name: 'includeSip',
+        label: 'Add active monthly fund investments (SIPs) to fund estimates',
+        hint: 'Includes instalments made since the last recorded value in a fund’s estimated worth.',
+        kind: 'check',
+        path: ['estimates', 'includeSip'],
+      },
+    ],
+  },
+  {
+    key: 'trail',
+    id: 'trail',
+    title: 'Clubbing and money trail',
+    purpose:
+      'The day money moved between you starts to count for clubbing, and the words the bank statements are read by.',
+    fields: [
+      {
         name: 'ownershipFrom',
         label: 'Count money moved between you for clubbing from',
         hint: 'Money trail: what each person held before this day is theirs. From this day, money moved from one person’s account to another’s is listed for clubbing, with the income it earns. Leave empty to count nothing yet.',
@@ -431,13 +450,6 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'days',
         min: 0,
         max: 31,
-      },
-      {
-        name: 'includeSip',
-        label: 'Add active monthly fund investments (SIPs) to fund estimates',
-        hint: 'Includes instalments made since the last recorded value in a fund’s estimated worth.',
-        kind: 'check',
-        path: ['estimates', 'includeSip'],
       },
     ],
   },

@@ -142,7 +142,7 @@ export function neededFromYou(input: {
       key: 'clubbing-date',
       assetId: null,
       title:
-        'Set the day money moved between you is counted for clubbing from (Settings → Estimates), so income on money given from then on is listed',
+        'Set the day money moved between you is counted for clubbing from (Settings → Money rules → Clubbing and money trail), so income on money given from then on is listed',
       rank: 1,
     });
   return out.sort((x, y) => x.rank - y.rank || x.title.localeCompare(y.title));

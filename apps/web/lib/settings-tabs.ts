@@ -16,7 +16,7 @@ export const SETTINGS_TABS = [
     key: 'rules',
     label: 'Money rules',
     purpose:
-      'The numbers behind deposits, reminders, estimates, rate suggestions, harvesting, the fund history check and the “I need money” planner.',
+      'The numbers behind deposits, reminders, estimates, clubbing and the money trail, rate suggestions, harvesting, the fund history check and the “I need money” planner.',
   },
   {
     key: 'tax',
@@ -65,6 +65,7 @@ export const ANCHOR_TAB: Record<string, SettingsTab> = {
   limits: 'rules',
   reminders: 'rules',
   estimates: 'rules',
+  trail: 'rules',
   'rate-rules': 'rules',
   'refund-rules': 'rules',
   'harvest-rules': 'rules',

@@ -124,7 +124,9 @@ export function Statements({
           Each imported statement is read line by line. Interest, rent, money from abroad, transfers
           between your accounts, deposits, fund purchases and spending are sorted by the rules (the
           words for rent and remittances are in{' '}
-          <Link href={sample ? '/demo/settings#estimates' : '/settings#estimates'}>Settings</Link>
+          <Link href={sample ? '/demo/settings?tab=rules#trail' : '/settings?tab=rules#trail'}>
+            Settings
+          </Link>
           ). Your own money and lifetime profit then follow from what really happened. Add a
           statement on <Link href={importHref}>Import</Link>: one account and one year at a time is
           easiest.

@@ -289,7 +289,9 @@ export function TrailView({
         {!data.ownershipFrom ? (
           <p className="small">
             Set the day to start counting in{' '}
-            <Link href={sample ? '/demo/settings#estimates' : '/settings#estimates'}>Settings</Link>
+            <Link href={sample ? '/demo/settings?tab=rules#trail' : '/settings?tab=rules#trail'}>
+              Settings
+            </Link>
             .
           </p>
         ) : since.length === 0 ? (
@@ -320,7 +322,9 @@ export function TrailView({
         {!data.ownershipFrom ? (
           <p className="small">
             Nothing is counted until the day is set in{' '}
-            <Link href={sample ? '/demo/settings#estimates' : '/settings#estimates'}>Settings</Link>
+            <Link href={sample ? '/demo/settings?tab=rules#trail' : '/settings?tab=rules#trail'}>
+              Settings
+            </Link>
             .
           </p>
         ) : clubRows.size === 0 ? (

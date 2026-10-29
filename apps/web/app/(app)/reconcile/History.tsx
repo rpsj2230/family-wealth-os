@@ -65,7 +65,11 @@ export function History({
           {review.small.count > 0 &&
             `${review.small.count} smaller month${review.small.count === 1 ? '' : 's'} (under ${formatInr(minimum)} each, ${formatInrCompact(review.small.total)} in all) are left out; the limit is in `}
           {review.small.count > 0 && (
-            <Link href={sample ? '/demo/settings#estimates' : '/settings#estimates'}>Settings</Link>
+            <Link
+              href={sample ? '/demo/settings?tab=rules#estimates' : '/settings?tab=rules#estimates'}
+            >
+              Settings
+            </Link>
           )}
           {review.small.count > 0 && '.'}
         </p>
