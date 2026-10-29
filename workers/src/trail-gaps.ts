@@ -128,6 +128,63 @@ async function main() {
     );
   }
 
+  // 3b. for each deposit on file booked with nothing found on the statements: the lines around its booking day in its holder's
+  // accounts (days apart, kind, amount as a share of the principal, the bank's words with digits hidden)
+  const mask = (t: string) =>
+    t
+      .toLowerCase()
+      .replace(/[0-9]/g, '#')
+      .replace(/[a-z]{2,}[0-9#]{4,}/g, '…')
+      .slice(0, 50);
+  const days = (a: string, b: string) =>
+    Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000);
+  console.log(
+    '\n== Deposits booked with nothing found: lines within 10 days in the holder’s accounts',
+  );
+  for (const d of deps) {
+    const f = fdOf.get(d.id);
+    if (!f) continue;
+    const into = c.into.get(d.id) ?? [];
+    const before = into.find((l) => l.node.startsWith('before:'));
+    if (!before) continue;
+    const node = c.nodes.get(before.node);
+    if (node && node.from.length) continue; // booked from money outside the statements
+    const principal = Number(f.principal);
+    const near = [...c.nodes.values()].filter(
+      (n) =>
+        n.kind === 'line' &&
+        loaded.assetRows.find((a) => a.id === n.assetId)?.owner_id === d.owner_id &&
+        Math.abs(days(n.date, f.booked_on)) <= 10 &&
+        Math.abs(n.amount) >= principal * 0.2,
+    );
+    console.log(`  ${name(d.id)} booked ${f.booked_on}: ${near.length} line(s)`);
+    for (const n of near.slice(0, 8))
+      console.log(
+        `    ${days(n.date, f.booked_on) >= 0 ? '+' : ''}${days(n.date, f.booked_on)}d ${name(n.assetId)} ${n.cls} ${(n.amount / principal).toFixed(2)}x "${mask(n.narration)}"`,
+      );
+  }
+  console.log(
+    '\n== Deposit pay-backs with no deposit found: the deposits on file of that person ending within 45 days',
+  );
+  for (const n of ins) {
+    if (!n.starts.some((s) => s.kind === 'untraced_deposit') || n.holding) continue;
+    const who = loaded.assetRows.find((a) => a.id === n.assetId)?.owner_id;
+    const cands = deps
+      .filter((d) => d.owner_id === who)
+      .map((d) => ({ d, f: fdOf.get(d.id) }))
+      .filter((x) => x.f && Math.abs(days(n.date, x.f.ended_on ?? x.f.maturity_on)) <= 45);
+    console.log(
+      `  ${n.date} ${name(n.assetId)} "${mask(n.narration)}": ${
+        cands
+          .map(
+            (x) =>
+              `${name(x.d.id)} ends ${days(x.f!.ended_on ?? x.f!.maturity_on, n.date)}d ${(n.amount / Number(x.f!.principal)).toFixed(2)}x${(c.outOf.get(x.d.id) ?? []).length ? ' (paid)' : ''}`,
+          )
+          .join('; ') || 'none'
+      }`,
+    );
+  }
+
   // 4. money out that stops: where, by kind and the account named
   console.log(
     '\n== Money out that stops, by kind and the account named (count, share of all money out)',
