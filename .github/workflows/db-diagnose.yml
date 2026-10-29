@@ -63,6 +63,24 @@ jobs:
             join v v2 on v2.asset_id = o.id and v2.as_of = v1.as_of
            group by 1, 2 having sum(case when abs(v2.amount / v1.amount - 1) < 0.10 then 1 else 0 end) > 0
            order by 1, 5 desc;
+          \echo '== Rupash funds: statement lines by kind, with first and last date (no amounts)'
+          select a.nickname, t.kind, count(*) as lines, min(t.txn_on) as first_on, max(t.txn_on) as last_on
+            from public.mf_transactions t join public.assets a on a.id = t.asset_id join public.owners o on o.id = a.owner_id
+           where o.display_name = 'Rupash' group by 1, 2 order by 1, 2;
+          \echo '== Rupash statement lines that mention a switch or another plan (descriptions, digits masked)'
+          select a.nickname, t.kind, t.txn_on, regexp_replace(left(t.description, 90), '[0-9]', '#', 'g') as description
+            from public.mf_transactions t join public.assets a on a.id = t.asset_id join public.owners o on o.id = a.owner_id
+           where o.display_name = 'Rupash' and (t.kind in ('switch_in','switch_out','redeem') or t.description ~* 'switch|regular|stp|transfer')
+           order by 1, 3 limit 60;
+          \echo '== Rupash funds with no statement lines: their value readings (dates, sources, how many distinct values; no amounts)'
+          select a.nickname, ob.source, count(*) as readings, min(ob.as_of) as first_on, max(ob.as_of) as last_on,
+                 count(distinct round(ob.amount)) as distinct_values
+            from public.observations ob join public.assets a on a.id = ob.asset_id join public.owners o on o.id = a.owner_id
+           where o.display_name = 'Rupash' and a.type = 'mutual_fund' and ob.superseded_by is null
+             and not exists (select 1 from public.mf_transactions t where t.asset_id = a.id)
+           group by 1, 2 order by 1, 2;
+          \echo '== fund import choices left aside (verdict and basis), by fund'
+          select a.nickname, i.verdict, i.basis from public.fund_import_ignores i join public.assets a on a.id = i.asset_id order by 1;
           \echo '== fund statements imported, counts only'
           select outcome, count(*) from public.cas_imports group by 1 order by 1;
           SQL
