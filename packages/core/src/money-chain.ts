@@ -27,6 +27,7 @@ import {
   type TrailAsset,
   type TrailLine,
 } from './money-trail';
+import { addDaysIso } from './harvest-lots';
 import type { ReportTable } from './reports';
 import { bankWord, type LineClass } from './statement-classify';
 
@@ -385,7 +386,18 @@ export function moneyChain(args: {
             Number(there !== '' && bankOf(a.assetId) === there) ||
           daysApart(a.date, d.bookedOn) - daysApart(b.date, d.bookedOn),
       );
-    const set = subsetFor(cands, d.principal, d.bookedOn);
+    // a deposit booked in pieces: the lines of one day in one account that together make its amount
+    const byDay = new Map<string, TrailLine[]>();
+    for (const l of cands) {
+      const k = `${l.assetId}|${l.date}`;
+      byDay.set(k, [...(byDay.get(k) ?? []), l]);
+    }
+    const whole = [...byDay.values()]
+      .filter(
+        (g) => g.length > 3 && Math.abs(g.reduce((s2, l) => s2 - l.amount, 0) - d.principal) <= 1,
+      )
+      .sort((a, b) => daysApart(a[0]!.date, d.bookedOn) - daysApart(b[0]!.date, d.bookedOn))[0];
+    const set = whole ?? subsetFor(cands, d.principal, d.bookedOn);
     if (!set) continue;
     for (const l of set) bookedBy.set(l.id, { dep: d.assetId, basis: 'guess' });
     depHasFunding.add(d.assetId);
@@ -525,7 +537,37 @@ export function moneyChain(args: {
    * around that day, one to three of them, whose principal the amount covers with interest on top; paid from what booked them.
    */
   const payWindow = Math.max(pairDays, 7) * 4;
-  const fromDeposits = (l: TrailLine, holder: string, to: string) => {
+  // the deposit pay-back lines of one account on one day: a deposit on file is often several at the bank, paid back in pieces
+  const paybackDay = new Map<string, TrailLine[]>();
+  for (const l of byDate)
+    if (l.amount > 0 && l.cls === 'fd_proceeds' && free(l)) {
+      const k = `${l.assetId}|${l.date}`;
+      paybackDay.set(k, [...(paybackDay.get(k) ?? []), l]);
+    }
+  const groupMatch = new Map<string, ChainDeposit[] | null>();
+  /** takes back a pay-back into an account with no statement: the deposit holds its money again */
+  const unpay = (d: ChainDeposit) => {
+    const r = nodes.get(`payback:${d.assetId}`);
+    const away = pool(`away:${d.ownerId}`);
+    const lot = away.find((x) => x.node === `payback:${d.assetId}`);
+    if (!r || !lot || Math.abs(lot.amount - r.amount) > TINY) return false;
+    away.splice(away.indexOf(lot), 1);
+    for (const f of r.from) {
+      const src = nodes.get(f.node)!;
+      src.to = src.to.filter((e) => e.node !== r.id);
+      pool(d.assetId).push({ node: f.node, amount: f.amount, via: d.assetId, basis: f.basis });
+    }
+    nodes.delete(r.id);
+    outOf.set(
+      d.assetId,
+      (outOf.get(d.assetId) ?? []).filter((x) => x.node !== r.id),
+    );
+    paidDeps.delete(d.assetId);
+    guessed.paidOutside--;
+    return true;
+  };
+  /** the deposits on file one to three of which a day's pay-back lines cover: principal within, interest on top */
+  const matchDeps = (l: TrailLine, holder: string, amount: number): ChainDeposit[] | null => {
     const here = bankOf(l.assetId);
     const cands = depsByDate
       .filter((d) => {
@@ -535,10 +577,7 @@ export function moneyChain(args: {
         const there = d.bank ? bankWord(d.bank) : '';
         if (there && here && there !== here) return false;
         if (d.ownerId !== holder && !(there && there === here)) return false;
-        const left = paidDeps.has(d.assetId)
-          ? sum(pool(`away:${d.ownerId}`).filter((x) => x.node === `payback:${d.assetId}`))
-          : sum(pool(d.assetId));
-        return left > TINY;
+        return true;
       })
       .sort(
         (a, b) =>
@@ -551,9 +590,9 @@ export function moneyChain(args: {
     const score = (xs: ChainDeposit[]) => {
       const lo = xs.reduce((s2, d) => s2 + d.principal, 0);
       const exact = xs.every((d) => d.maturityAmount !== null)
-        ? Math.abs(xs.reduce((s2, d) => s2 + d.maturityAmount!, 0) - l.amount) <= 1
+        ? Math.abs(xs.reduce((s2, d) => s2 + d.maturityAmount!, 0) - amount) <= 1
         : false;
-      if (l.amount < lo - 1 || l.amount > lo * 1.6 + 1) return Infinity;
+      if (amount < lo - 1 || amount > lo * 1.6 + 1) return Infinity;
       return (
         (exact ? 0 : 1000) +
         xs.length * 100 +
@@ -572,48 +611,63 @@ export function moneyChain(args: {
       for (let i = start; i < cands.length; i++) pick(i + 1, [...chosen, cands[i]!]);
     };
     pick(0, []);
-    if (!best) return 0;
+    return best;
+  };
+  /**
+   * A deposit pay-back the rules did not tie to a deposit: with the other pay-back lines of that account that day, the deposits on
+   * file of the holder (or at the account's bank) that end around then; each line takes its share of what booked them.
+   */
+  const fromDeposits = (l: TrailLine, holder: string, to: string) => {
+    const key = `${l.assetId}|${l.date}`;
+    const group = paybackDay.get(key) ?? [l];
+    const total = group.reduce((s2, x) => s2 + x.amount, 0);
+    const mark = (ds: ChainDeposit[]) => {
+      for (const d of ds) {
+        depHasPayback.add(d.assetId);
+        if (paidDeps.has(d.assetId)) unpay(d);
+        paidDeps.add(d.assetId);
+      }
+      guessed.depositPaidBack++;
+    };
+    let deps = groupMatch.get(key);
+    if (deps === undefined) {
+      deps = group.length > 1 ? matchDeps(l, holder, total) : null;
+      groupMatch.set(key, deps);
+      if (deps) mark(deps);
+    }
+    // the day's lines together, each its share; else this line on its own
+    let share = 1;
+    if (deps) share = l.amount / total;
+    else {
+      deps = matchDeps(l, holder, l.amount);
+      if (deps) mark(deps);
+    }
+    if (!deps) return 0;
     let got = 0;
-    for (const d of best as ChainDeposit[]) {
-      depHasPayback.add(d.assetId);
-      if (paidDeps.has(d.assetId)) {
-        // taken as paid out into an account with no statement: this line is the pay-back instead
+    for (const d of deps) {
+      const p = pool(d.assetId);
+      if (sum(p) > TINY) got += payOut(d.assetId, p, d.principal * share, to);
+      else {
+        // paid out into an account with no statement, and some of it used since: what is left of that money
         const away = pool(`away:${d.ownerId}`);
         const lot = away.find((x) => x.node === `payback:${d.assetId}`);
-        const r = nodes.get(`payback:${d.assetId}`);
-        if (lot && r && Math.abs(lot.amount - r.amount) <= TINY) {
-          // untouched since: the deposit's money moves from that step to this line
-          away.splice(away.indexOf(lot), 1);
-          for (const f of r.from) {
-            const src = nodes.get(f.node)!;
-            for (const e of src.to) if (e.node === r.id) e.node = to;
-            nodes.get(to)!.from.push({ ...f });
-          }
-          const paidPrincipal = sum(r.from);
-          nodes.delete(r.id);
-          const outs = outOf.get(d.assetId) ?? [];
-          outOf.set(
-            d.assetId,
-            outs.map((x) => (x.node === r.id ? { ...x, node: to, amount: paidPrincipal } : x)),
-          );
-          guessed.paidOutside--;
-          got += paidPrincipal;
-        } else if (lot) {
-          link(lot.node, to, lot.amount, 'guess', `away:${d.ownerId}`);
-          got += lot.amount;
-          lot.amount = 0;
-          away.splice(away.indexOf(lot), 1);
+        if (lot) {
+          const a = Math.min(lot.amount, d.principal * share);
+          link(lot.node, to, a, 'guess', `away:${d.ownerId}`);
+          lot.amount -= a;
+          if (lot.amount <= TINY) away.splice(away.indexOf(lot), 1);
+          got += a;
         }
-      } else {
-        paidDeps.add(d.assetId);
-        got += payOut(d.assetId, depositPool(d.assetId), d.principal, to);
-        push(outOf, d.assetId, { node: to, amount: d.principal, via: d.assetId, basis: 'guess' });
       }
+      push(outOf, d.assetId, {
+        node: to,
+        amount: d.principal * share,
+        via: d.assetId,
+        basis: 'guess',
+      });
     }
-    guessed.depositPaidBack++;
     return got;
   };
-
   type Ev = { date: string; order: number; seq: number; run: () => void };
   const events: Ev[] = [];
   for (const [d2, d1] of renewalOf) {
@@ -649,11 +703,12 @@ export function moneyChain(args: {
     });
   }
   // a deposit on file that nothing on the statements booked: booked from its holder's money outside the statements, the latest first
+  // after the days a transfer for it may post in (dated the day it was booked)
   for (const d of depsByDate) {
     if (depHasFunding.has(d.assetId)) continue;
     events.push({
-      date: d.bookedOn,
-      order: 0,
+      date: addDaysIso(d.bookedOn, pairDays),
+      order: 2,
       seq: 1,
       run: () => {
         if (nodes.has(`before:${d.assetId}`)) return;

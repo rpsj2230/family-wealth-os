@@ -433,3 +433,42 @@ describe('money chain: the whole trail at once', () => {
     ]);
   });
 });
+
+describe('money chain: a deposit on file that the bank booked and paid back in pieces', () => {
+  it('matches five booking lines of one day and three pay-back lines of one day to the one deposit', () => {
+    const inZ = ln('Z', '2020-07-20', 1_000_000, 'outside_in');
+    const books = [1, 2, 3, 4, 5].map(() =>
+      ln('Z', '2020-07-26', -100_000, 'fd_funding', null, 'FD BOOKING'),
+    );
+    const backs = [1, 2, 3].map((i) =>
+      ln('Z', '2021-07-26', i === 3 ? 220_000 : 165_000, 'fd_proceeds', null, 'CLOSURE PROCEEDS'),
+    );
+    const c = moneyChain({
+      lines: [inZ, ...books, ...backs],
+      assets: [acct('Z'), { id: 'FDR', ownerId: 'R', kind: 'deposit' }],
+      deposits: [
+        dep({
+          assetId: 'FDR',
+          principal: 500_000,
+          bookedOn: '2020-07-26',
+          maturityOn: '2021-07-26',
+        }),
+      ],
+      openings: new Map(),
+      method: 'recent',
+      pairDays: 3,
+    });
+    expect(holdingSources(c, 'FDR').map((l) => l.amount)).toEqual([
+      100_000, 100_000, 100_000, 100_000, 100_000,
+    ]);
+    // ₹5.5L back in three lines: each takes its share of the ₹5L and the rest is interest
+    const total = backs.reduce((s, b) => s + b.amount, 0);
+    for (const b of backs) {
+      const t = traceBack(c, b.id, OPTS)!;
+      const principal = t.steps.reduce((s, x) => s + x.amount, 0);
+      expect(principal).toBeCloseTo((500_000 * b.amount) / total, 4);
+      expect(t.steps.every((x) => x.via === 'FDR')).toBe(true);
+    }
+    expect(c.guessed.paidOutside).toBe(0);
+  });
+});
