@@ -245,7 +245,11 @@ export default async function AssetPage({
           </ul>
         </section>
       )}
-      <StatementLines assetId={id} lines={lines} />
+      <StatementLines
+        assetId={id}
+        lines={lines}
+        fileName={`transactions-${d.view.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+      />
       <DetailTables tables={d.view.tables} />
       <ActivityLog items={d.activity} />
     </>

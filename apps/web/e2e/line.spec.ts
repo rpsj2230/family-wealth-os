@@ -13,8 +13,21 @@ test.describe('A transaction and its trail (public sample)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Money out');
     await expect(page.getByTestId('line-trail')).toContainText('From Singapore (Wise or DBS)');
     await expect(page.getByTestId('line-pair')).toContainText('It went to');
-    // every line in the list opens its own page
-    await page.getByTestId('statement-lines').getByRole('link').first().click();
+    // the list can be searched, filtered and sorted, and every line opens its own page
+    const table = page.getByTestId('txn-table');
+    await table.getByPlaceholder(/Search/).fill('interest');
+    await expect(table.getByText(/^1$/).first()).toBeVisible();
+    await table.getByRole('button', { name: 'Clear filters' }).click();
+    await table.getByLabel('Direction').selectOption('out');
+    await expect(table.locator('tbody tr')).toHaveCount(1);
+    await table.getByLabel('Direction').selectOption('all');
+    await table.getByLabel('Period').selectOption('custom');
+    await expect(table.getByLabel('From date')).toBeVisible();
+    await table.getByLabel('Period').selectOption('all');
+    const download = page.waitForEvent('download');
+    await table.getByRole('button', { name: 'Export CSV' }).click();
+    expect((await download).suggestedFilename()).toMatch(/\.csv$/);
+    await page.getByTestId('statement-lines').locator('tbody a').first().click();
     await expect(page.getByTestId('line-trail')).toBeVisible();
     expect(
       await page.evaluate(

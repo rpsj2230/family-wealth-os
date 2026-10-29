@@ -58,7 +58,7 @@ export default async function DemoLine({
           <StatementLines
             assetId={assetId}
             lines={lines}
-            lineHref={(l) => href(assetId, l)}
+            hrefTemplate={`/demo/line?a=${assetId}&l={id}`}
             answerHref="/demo/reconcile"
           />
         </main>

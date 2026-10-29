@@ -1,0 +1,244 @@
+/* the transactions table: filters in a wrapping row, a summary line, a tidy table with fixed number columns, a pager */
+.tx-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-end;
+  margin: 0.5rem 0 0.75rem;
+}
+.tx-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 0;
+}
+.tx-filters input,
+.tx-filters select {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  min-height: 2.2rem;
+  max-width: 100%;
+}
+.tx-search {
+  flex: 1 1 16rem;
+}
+.tx-search input {
+  width: 100%;
+}
+.tx-amt input {
+  width: 7.5rem;
+}
+.tx-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem !important;
+  padding-bottom: 0.45rem;
+}
+.tx-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.tx-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.tx-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  table-layout: fixed;
+}
+.tx-table th {
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+.tx-table th button {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+}
+.tx-table th button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.tx-table th.num,
+.tx-table th.num button {
+  text-align: right;
+}
+.tx-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.tx-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.tx-table th:nth-child(1) {
+  width: 7.5rem;
+}
+.tx-table th:nth-child(3) {
+  width: 13rem;
+}
+.tx-table th:nth-child(4),
+.tx-table th:nth-child(5) {
+  width: 9rem;
+}
+.tx-table td.num {
+  text-align: right;
+}
+.tx-date {
+  white-space: nowrap;
+}
+/* two lines of the bank's words at most; the whole text is in the tooltip and on the line's page */
+.tx-narr a {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: inherit;
+  text-decoration: none;
+}
+.tx-narr a:hover {
+  text-decoration: underline;
+}
+.tx-amount,
+.tx-bal {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tx-flag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn, #d97706) 18%, transparent);
+  color: var(--warn, #d97706);
+}
+.tx-ask td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn, #d97706);
+}
+.tx-empty {
+  padding: 1rem 0;
+  color: var(--muted);
+}
+.tx-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+}
+.tx-pager label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.tx-pager select {
+  font: inherit;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 0.4rem;
+}
+.tx-pages {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* on a phone every line is a small card: date and amount on top, the bank's words, then what it is and the balance */
+@media (max-width: 640px) {
+  .tx-table,
+  .tx-table tbody,
+  .tx-table tr,
+  .tx-table td {
+    display: block;
+    width: 100%;
+  }
+  .tx-table thead {
+    display: none;
+  }
+  .tx-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.15rem 0.75rem;
+    padding: 0.6rem 0.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .tx-table td {
+    border: 0;
+    padding: 0;
+  }
+  .tx-date {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .tx-amount {
+    grid-column: 2;
+    grid-row: 1;
+    font-weight: 600;
+  }
+  .tx-narr {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 0.85rem;
+  }
+  .tx-kind {
+    grid-column: 1;
+    grid-row: 3;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .tx-bal {
+    grid-column: 2;
+    grid-row: 3;
+    font-size: 0.8rem;
+  }
+  .tx-ask td:first-child {
+    box-shadow: none;
+  }
+  .tx-ask {
+    box-shadow: inset 3px 0 0 var(--warn, #d97706);
+  }
+  .tx-amt {
+    flex: 1 1 40%;
+  }
+  .tx-amt input {
+    width: 100%;
+  }
+  .tx-filters label:not(.tx-search):not(.tx-amt):not(.tx-check) {
+    flex: 1 1 9rem;
+  }
+  .tx-filters select {
+    width: 100%;
+  }
+}
