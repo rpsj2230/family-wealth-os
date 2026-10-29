@@ -165,6 +165,37 @@ async function main() {
           console.log(`  no ledger: ${x.name} (${x.status})`);
       }
       // where each fund's value comes from, and how well the plan-built units agree with the monthly sheet (counts and totals only)
+      // spreadsheet fund rows with no statement lines against the statement-backed fund they may repeat: ratios only
+      {
+        const byName = new Map(l.portfolio.valued.map((v) => [v.name, v]));
+        const latestOf = (id: string) =>
+          l.obsRows
+            .filter((o) => o.asset_id === id && !o.superseded_by)
+            .sort((a, b) => b.as_of.localeCompare(a.as_of))[0];
+        const pairs: [string, string][] = [
+          ['Axis Bluechip Growth', 'Axis Large Cap Growth Direct Plan'],
+          ['Axis Bluechip Growth Direct Plan', 'Axis Large Cap Growth Direct Plan'],
+          ['Kotak Small Cap Growth', 'Kotak Small Cap Growth Direct Plan'],
+          ['Nippon India small cap fund', 'Nippon India Small Cap Growth Direct Plan'],
+          ['Parag Parikh Flexi Cap Growth', 'Parag Parikh Flexi Cap Growth Direct Plan'],
+          ['Quant Small Cap Growth', 'Quant Small Cap Growth Direct Plan'],
+        ];
+        console.log(
+          '\nSheet row vs statement fund (statement value ÷ sheet value; 1.00 = the same money):',
+        );
+        for (const [sheetName, stmtName] of pairs) {
+          const a = byName.get(sheetName);
+          const b = byName.get(stmtName);
+          if (!a || !b) continue;
+          const av = a.estimate?.estimatedAmount ?? 0;
+          const bv = b.estimate?.estimatedAmount ?? 0;
+          const bSheet = latestOf(b.assetId);
+          const r = (x: number, y: number) => (y > 0 ? (x / y).toFixed(2) : '-');
+          console.log(
+            `  ${sheetName} → ${stmtName}: statement÷sheet row ${r(bv, av)}; statement÷its own last sheet value ${r(bv, Number(bSheet?.amount ?? 0))} (${bSheet?.as_of ?? '-'}, ${bSheet?.source ?? '-'}); statement÷(both sheet values) ${r(bv, av + Number(bSheet?.amount ?? 0))}; sheet row counted ${a.status}`,
+          );
+        }
+      }
       const funds = position.assets.filter((x) => x.type === 'mutual_fund' && x.fund);
       const from = (k: string) =>
         funds.filter((x) => fundValueFrom(x, position.config) === k).length;
