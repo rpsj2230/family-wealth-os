@@ -13,6 +13,7 @@
     "rates": "tsx src/rates.ts",
     "statements": "tsx src/statements.ts",
     "numbers-check": "tsx src/numbers-check.ts",
+    "trail-gaps": "tsx src/trail-gaps.ts",
     "diary": "tsx src/diary.ts",
     "wise": "tsx src/wise.ts",
     "fund-txns": "tsx src/fund-txns.ts",

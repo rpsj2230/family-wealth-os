@@ -1,0 +1,153 @@
+/* eslint-disable no-console */
+/**
+ * Read-only: where the money trail (money-chain.ts) stops on the live data, and why. Prints counts, dates and shares only: each
+ * account by its bank, last four digits and holder, with its statement dates and line counts, never an amount of a holding. Writes
+ * nothing. Run by hand (Actions > Trail gaps).
+ */
+import { createClient } from '@supabase/supabase-js';
+import { loadMoneyTrail, loadPortfolioData } from '@fwos/data';
+
+const need = (n: string) => {
+  const v = process.env[n];
+  if (!v) {
+    console.error(`${n} is required`);
+    process.exit(2);
+  }
+  return v;
+};
+const db = createClient(need('SUPABASE_URL'), need('SUPABASE_SERVICE_ROLE_KEY'), {
+  auth: { persistSession: false },
+});
+const pct = (a: number, b: number) => `${b > 0 ? Math.round((a / b) * 100) : 0}%`;
+
+async function main() {
+  const hh = await db.from('households').select('id').limit(1);
+  const household = String(hh.data?.[0]?.id ?? '');
+  const loaded = await loadPortfolioData(db, { householdId: household });
+  const t = await loadMoneyTrail(db, household, loaded);
+  const c = t.chain;
+  const label = new Map(
+    loaded.assetRows.map((a) => [
+      a.id,
+      [
+        a.institution_id ? loaded.institutionName?.get(a.institution_id) : null,
+        a.type === 'fixed_deposit' ? 'FD' : (a.account_kind ?? a.type),
+        a.identifier_last4 ? `…${a.identifier_last4}` : null,
+        loaded.ownerName.get(a.owner_id),
+        a.status !== 'active' ? `(${a.status})` : null,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    ]),
+  );
+  const name = (id: string | null | undefined) =>
+    !id ? '(none named)' : (label.get(id) ?? '(not on file)');
+
+  // 1. every bank account: statements on file, Wise transfers into it, lines in and out
+  console.log('\n== Bank accounts: statements and Wise transfers (counts and dates only)');
+  const remits = await db.from('remittances').select('id, received_on, to_asset_id, to_basis');
+  const linesBy = new Map<string, { first: string; last: string; n: number }>();
+  for (const l of t.lines) {
+    const x = linesBy.get(l.asset_id) ?? { first: '9999', last: '0000', n: 0 };
+    x.n++;
+    if (l.txn_on < x.first) x.first = l.txn_on;
+    if (l.txn_on > x.last) x.last = l.txn_on;
+    linesBy.set(l.asset_id, x);
+  }
+  const debitsTo = new Map<string, number>();
+  for (const n of c.nodes.values())
+    for (const e of n.ends)
+      if (e.assetId) debitsTo.set(e.assetId, (debitsTo.get(e.assetId) ?? 0) + 1);
+  for (const a of loaded.assetRows.filter((x) => x.type === 'bank_account')) {
+    const s = linesBy.get(a.id);
+    const r = (remits.data ?? []).filter((x) => x.to_asset_id === a.id);
+    const before = s ? r.filter((x) => String(x.received_on) < s.first).length : r.length;
+    console.log(
+      `  ${name(a.id)} | statements: ${s ? `${s.first} to ${s.last}, ${s.n} lines` : 'none'} | Wise in: ${r.length} (${before} before the first statement) | lines out of other accounts that stop here: ${debitsTo.get(a.id) ?? 0}`,
+    );
+  }
+  console.log(
+    `  Wise transfers with no account named: ${(remits.data ?? []).filter((x) => !x.to_asset_id).length} of ${(remits.data ?? []).length}`,
+  );
+
+  // 2. where money comes from nowhere the statements follow, by kind and year (shares of all money in)
+  const ins = [...c.nodes.values()].filter((n) => n.kind === 'line' && n.amount > 0);
+  const allIn = ins.reduce((s, n) => s + n.amount, 0);
+  const starts = new Map<string, number>();
+  const byYear = new Map<string, number>();
+  for (const n of c.nodes.values())
+    for (const s of n.starts) {
+      starts.set(s.kind, (starts.get(s.kind) ?? 0) + s.amount);
+      if (
+        s.kind === 'untraced_deposit' ||
+        s.kind === 'untraced_account' ||
+        s.kind === 'unexplained'
+      )
+        byYear.set(
+          `${s.kind} ${n.date.slice(0, 4)}`,
+          (byYear.get(`${s.kind} ${n.date.slice(0, 4)}`) ?? 0) + s.amount,
+        );
+    }
+  console.log('\n== Where money starts, as a share of all money in on the statements');
+  for (const [k, v] of [...starts].sort((a, b) => b[1] - a[1]))
+    console.log(`  ${k}: ${pct(v, allIn)}`);
+  console.log('  by year (gaps only):');
+  for (const [k, v] of [...byYear].sort()) console.log(`    ${k}: ${pct(v, allIn)}`);
+
+  // 3. deposits paid back with nothing found that booked them: why
+  console.log('\n== Deposit pay-backs with no booking found (count, by account and year)');
+  const dep = new Map<string, number>();
+  for (const n of ins)
+    if (n.starts.some((s) => s.kind === 'untraced_deposit')) {
+      const k = `${name(n.assetId)} ${n.date.slice(0, 4)} ${n.holding ? 'deposit on file' : 'deposit not on file'}`;
+      dep.set(k, (dep.get(k) ?? 0) + 1);
+    }
+  for (const [k, v] of [...dep].sort()) console.log(`  ${k}: ${v}`);
+  const deps = loaded.assetRows.filter((a) => a.type === 'fixed_deposit');
+  const fdOf = new Map(loaded.fdRows.map((f) => [f.asset_id, f]));
+  console.log('\n== Deposits on file: how each was booked and paid back (no amounts)');
+  for (const d of deps) {
+    const into = c.into.get(d.id) ?? [];
+    const how = into.length
+      ? [
+          ...new Set(
+            into.map((l) =>
+              l.node.startsWith('before:')
+                ? 'before the statements'
+                : l.node.startsWith('renew:')
+                  ? 'renewal'
+                  : `line (${l.basis})`,
+            ),
+          ),
+        ].join(', ')
+      : 'nothing';
+    const out = (c.outOf.get(d.id) ?? []).length;
+    const f = fdOf.get(d.id);
+    console.log(
+      `  ${name(d.id)} booked ${f?.booked_on ?? '?'} ends ${f?.ended_on ?? f?.maturity_on ?? '?'}: from ${how}; paid back to ${out} line(s)`,
+    );
+  }
+
+  // 4. money out that stops: where, by kind and the account named
+  console.log(
+    '\n== Money out that stops, by kind and the account named (count, share of all money out)',
+  );
+  const outs = [...c.nodes.values()].filter((n) => n.kind === 'line' && n.amount < 0);
+  const allOut = outs.reduce((s, n) => s - n.amount, 0);
+  const ends = new Map<string, { n: number; v: number }>();
+  for (const n of outs)
+    for (const e of n.ends) {
+      const k = `${e.kind} -> ${e.kind === 'spent' || e.kind === 'fee' || e.kind === 'tax' ? '' : name(e.assetId)}`;
+      const x = ends.get(k) ?? { n: 0, v: 0 };
+      x.n++;
+      x.v += e.amount;
+      ends.set(k, x);
+    }
+  for (const [k, x] of [...ends].sort((a, b) => b[1].v - a[1].v))
+    console.log(`  ${k}: ${x.n} lines, ${pct(x.v, allOut)}`);
+}
+
+main().catch((e) => {
+  console.error('Trail gaps failed:', (e as Error).message);
+  process.exit(1);
+});
