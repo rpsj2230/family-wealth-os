@@ -820,3 +820,28 @@ export async function saveLiquidity(_p: FormResult | null, f: FormData): Promise
   revalidatePath('/', 'layout');
   return { ok: true, message: 'Saved. The "I need money" page now follows these choices.' };
 }
+
+/**
+ * Switches one setup item off as not needed (it stops being a to-do on the dashboard and in Settings), or back on. Kept with
+ * the household's settings, so every login sees the same list.
+ */
+export async function setSetupItemOff(f: FormData): Promise<void> {
+  const key = field(f, 'key');
+  if (!/^[a-z0-9-]{1,40}$/.test(key)) return;
+  const off = field(f, 'off') === 'on';
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return;
+  const prior = await readConfig(supabase);
+  const config = configFromJson(prior);
+  const list = new Set(config.setup.off);
+  if (off) list.add(key);
+  else list.delete(key);
+  const doc = {
+    ...((prior as Record<string, unknown> | null) ?? {}),
+    setup: { off: [...list] },
+  };
+  await supabase
+    .from('household_config')
+    .upsert({ household_id: householdId, config: doc, updated_at: new Date().toISOString() });
+  revalidatePath('/', 'layout');
+}

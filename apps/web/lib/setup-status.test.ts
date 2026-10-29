@@ -115,7 +115,7 @@ describe('computeSetupStatus', () => {
       unconfirmedRuleGroups: ['deposits', 'harvest', 'liquidity'],
     }).rules!;
     expect(r.done).toBe(false);
-    expect(r.hint).toContain('3 of 11');
+    expect(r.hint).toContain('3 of 12');
     expect(r.hint).toContain('Deposits, Tax-gain harvesting and 1 more');
   });
 
@@ -171,5 +171,14 @@ describe('computeSetupStatus', () => {
   it('never carries a secret: hints only say a key exists', () => {
     const text = JSON.stringify(computeSetupStatus(full));
     expect(text).not.toMatch(/gsk_|AIza|bot\d/);
+  });
+
+  it('an item switched off as not needed is no longer a to-do and leaves the count', () => {
+    const items = computeSetupStatus({ ...empty, off: ['telegram'] });
+    const t = items.find((i) => i.key === 'telegram')!;
+    expect(t).toMatchObject({ off: true, done: true });
+    const p = setupProgress(items);
+    expect(p.total).toBe(items.length - 1);
+    expect(items.filter((i) => !i.done).some((i) => i.key === 'telegram')).toBe(false);
   });
 });

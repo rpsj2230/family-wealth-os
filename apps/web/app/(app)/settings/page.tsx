@@ -9,6 +9,7 @@ import { PageHead } from '@/components/PageHead';
 import { loadContext } from '@/lib/data';
 import { loadGmailModel } from '@/lib/gmail-statements-data';
 import { confirmedGroups } from '@/lib/settings-fields';
+import { setSetupItemOff } from './actions';
 import { SETTINGS_TABS, settingsTabOf, todoByTab } from '@/lib/settings-tabs';
 import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
 import { loadSetupStatus, setupProgress, sgToday } from '@/lib/setup-status';
@@ -63,7 +64,7 @@ export default async function SettingsPage({
         <SettingsNav current={tab} todo={todoByTab(items)} />
         <div className="setmain">
           <h2 className="settitle">{meta.label}</h2>
-          {tab === 'setup' && <SetupSection items={items} />}
+          {tab === 'setup' && <SetupSection items={items} switchOff={setSetupItemOff} />}
           {tab === 'people' && <PeopleTab db={db} />}
           {tab === 'rules' && <RulesTab db={db} />}
           {tab === 'tax' && <TaxTab db={db} />}

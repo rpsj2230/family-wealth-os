@@ -3,6 +3,7 @@ import { parseHomeRange, parseMovementKey } from '@fwos/core';
 import { redirect } from 'next/navigation';
 import { PageHead } from '@/components/PageHead';
 import { SetupChecklist } from '@/components/SetupChecklist';
+import { setSetupItemOff } from './settings/actions';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadHome } from '@/lib/home-data';
 import { loadSetupStatus } from '@/lib/setup-status';
@@ -95,7 +96,13 @@ export default async function Dashboard({
         ]}
         actions={<WhatsAppButton icon />}
       />
-      <SetupChecklist items={setup} compact max={4} title="Finish setting up" />
+      <SetupChecklist
+        items={setup}
+        compact
+        max={4}
+        title="Finish setting up"
+        switchOff={setSetupItemOff}
+      />
       <HomeView m={home} />
       {role === 'admin' && <AddMember />}
     </>

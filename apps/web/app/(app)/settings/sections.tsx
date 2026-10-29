@@ -54,14 +54,24 @@ const SectionIntro = ({ children }: { children: React.ReactNode }) => (
 
 /* ------------------------------------------------------------------ Setup */
 
-export function SetupSection({ items }: { items: SetupChecklistItem[] }) {
+export function SetupSection({
+  items,
+  switchOff,
+}: {
+  items: SetupChecklistItem[];
+  switchOff?: (f: FormData) => Promise<void>;
+}) {
   return (
     <>
       <SectionIntro>
         A short list of what the portal needs from you, with a link to each. Nothing here is
         required: every page works without it, and each item makes one part more exact.
       </SectionIntro>
-      <SetupChecklist items={items} title="What is set up" />
+      <SetupChecklist items={items} title="What is set up" {...(switchOff ? { switchOff } : {})} />
+      <p className="muted small">
+        Something you do not use (Telegram, say)? Press <strong>Not needed</strong> beside it: it
+        stops showing as a to-do here and on Home, and can be turned back on below the list.
+      </p>
       <p className="muted small">
         Secrets stay write-only: the AI keys, the Telegram token and each PAN are never shown again
         after saving; this list only says that one exists.

@@ -90,6 +90,8 @@ export interface AppConfig {
     /** days between a bank debit and the fund allotment the CAS shows (a SIP is debited a day or more before units are allotted) */
     fundMatchDays: number;
   };
+  /** the setup checklist (Settings > Setup, the dashboard): the items the household switched off as not needed */
+  setup: { off: string[] };
   inbox: {
     /** your own mailboxes that forward the banks' mail to the app: the bank is recognised by the original sender inside the forward */
     trustedForwarders: string[];
@@ -364,6 +366,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     reviewAbove: 10_000,
     fundMatchDays: 5,
   },
+  setup: { off: [] },
   inbox: { trustedForwarders: [], forwardUtcOffsetHours: 8 },
   rates: {
     staleDays: 45,
@@ -677,6 +680,15 @@ export function configFromJson(raw: unknown): AppConfig {
       fundMatchDays: Math.round(
         num(obj(r.statements).fundMatchDays, d.statements.fundMatchDays, 0, 31),
       ),
+    },
+    setup: {
+      off: (() => {
+        const raw = obj(r.setup).off;
+        const list = Array.isArray(raw)
+          ? raw.map((x) => String(x).trim()).filter((x) => /^[a-z0-9-]{1,40}$/.test(x))
+          : [];
+        return [...new Set(list)].slice(0, 50);
+      })(),
     },
     inbox: {
       trustedForwarders: (() => {

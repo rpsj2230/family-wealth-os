@@ -16,6 +16,8 @@ export interface SetupItem {
   href: string;
   /** one short sentence: what is missing, or what is set */
   hint?: string;
+  /** switched off by the household as not needed: never a to-do, and left out of the count */
+  off?: boolean;
 }
 
 export interface SetupFacts {
@@ -42,6 +44,8 @@ export interface SetupFacts {
   casImports: number;
   has26as: boolean;
   hasAis: boolean;
+  /** the items switched off as not needed (Settings > Setup) */
+  off?: string[];
 }
 
 const list = (xs: string[]) =>
@@ -53,6 +57,13 @@ const MODE_WORDS: Record<'always' | 'inactive' | 'manual', string> = {
 };
 
 export function computeSetupStatus(f: SetupFacts): SetupItem[] {
+  const off = new Set(f.off ?? []);
+  return checklist(f).map((i) =>
+    off.has(i.key) ? { ...i, done: true, off: true, hint: 'Switched off: not needed.' } : i,
+  );
+}
+
+function checklist(f: SetupFacts): SetupItem[] {
   const fy = fyOf(f.today);
   const adults = f.people.filter((p) => !p.isMinor);
   const noDob = f.people.filter((p) => !p.dob).map((p) => p.name);
@@ -301,11 +312,12 @@ export async function loadSetupStatus(
     casImports: cas?.count ?? 0,
     has26as: kinds.has('26as'),
     hasAis: kinds.has('ais'),
+    off: config.setup.off,
   });
 }
 
 /** How many items are done, for a progress bar. */
 export const setupProgress = (items: SetupItem[]) => ({
-  done: items.filter((i) => i.done).length,
-  total: items.length,
+  done: items.filter((i) => i.done && !i.off).length,
+  total: items.filter((i) => !i.off).length,
 });

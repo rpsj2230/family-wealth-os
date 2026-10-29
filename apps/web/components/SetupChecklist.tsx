@@ -9,6 +9,8 @@ export interface SetupChecklistItem {
   href: string;
   /** one short sentence: what is missing, or what is set */
   hint?: string;
+  /** switched off as not needed */
+  off?: boolean;
 }
 
 /**
@@ -21,31 +23,48 @@ export function SetupChecklist({
   compact = false,
   max = 4,
   title = 'Setup checklist',
+  switchOff,
 }: {
   items: SetupChecklistItem[];
   compact?: boolean;
   max?: number;
   title?: string;
+  /** switches an item off as not needed, or back on (a server action); without it there are no switches (the sample) */
+  switchOff?: (f: FormData) => Promise<void>;
 }) {
-  const done = items.filter((i) => i.done).length;
-  const todo = items.filter((i) => !i.done);
-  const shown = compact ? todo.slice(0, max) : items;
-  const pct = items.length === 0 ? 0 : Math.round((done / items.length) * 100);
+  // an item switched off as not needed is neither done nor to do: it is left out of the count
+  const counted = items.filter((i) => !i.off);
+  const done = counted.filter((i) => i.done).length;
+  const todo = counted.filter((i) => !i.done);
+  const shown = compact ? todo.slice(0, max) : counted;
+  const offItems = compact ? [] : items.filter((i) => i.off);
+  const total = counted.length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  const toggle = (i: SetupChecklistItem, off: boolean) =>
+    switchOff ? (
+      <form action={switchOff} className="setupcl-off">
+        <input type="hidden" name="key" value={i.key} />
+        {off && <input type="hidden" name="off" value="on" />}
+        <button type="submit" className="linkbtn small">
+          {off ? 'Not needed' : 'Turn back on'}
+        </button>
+      </form>
+    ) : null;
   return (
     <section className={`setupcl ${compact ? 'compact' : ''}`} aria-label={title}>
       <header className="setupcl-head">
         <h2>{title}</h2>
         <span className="setupcl-count">
-          {done} of {items.length} done
+          {done} of {total} done
         </span>
       </header>
       <div
         className="setupcl-bar"
         role="progressbar"
         aria-valuemin={0}
-        aria-valuemax={items.length}
+        aria-valuemax={total}
         aria-valuenow={done}
-        aria-label={`${done} of ${items.length} set up`}
+        aria-label={`${done} of ${total} set up`}
       >
         <span style={{ width: `${pct}%` }} />
       </div>
@@ -66,13 +85,32 @@ export function SetupChecklist({
                 {i.hint && <p className="setupcl-hint">{i.hint}</p>}
               </div>
               {!i.done && (
-                <Link href={i.href} className="setupcl-go" aria-label={`Open: ${i.label}`}>
-                  Open
-                </Link>
+                <span className="setupcl-actions">
+                  <Link href={i.href} className="setupcl-go" aria-label={`Open: ${i.label}`}>
+                    Open
+                  </Link>
+                  {toggle(i, true)}
+                </span>
               )}
             </li>
           ))}
         </ul>
+      )}
+      {offItems.length > 0 && (
+        <details className="setupcl-offlist">
+          <summary className="small muted">{offItems.length} switched off as not needed</summary>
+          <ul className="setupcl-list">
+            {offItems.map((i) => (
+              <li key={i.key} className="is-off">
+                <span className="setupcl-icon" aria-hidden />
+                <div className="setupcl-body">
+                  <span className="setupcl-label">{i.label}</span>
+                </div>
+                {toggle(i, false)}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {compact && todo.length > shown.length && (
         <p className="setupcl-more">
