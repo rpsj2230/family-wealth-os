@@ -39,7 +39,7 @@ import {
 import './invest.css';
 import { MONEY_WORDS as W } from '@/lib/money-words';
 
-export const FUND_TABS = ['overview', 'returns', 'transactions', 'lots', 'records'] as const;
+export const FUND_TABS = ['overview', 'returns', 'transactions', 'sip', 'lots', 'records'] as const;
 export type FundTab = (typeof FUND_TABS)[number];
 export const parseFundTab = (v: string | undefined): FundTab =>
   (FUND_TABS as readonly string[]).includes(v ?? '') ? (v as FundTab) : 'overview';
@@ -100,6 +100,7 @@ export function FundPage({
   demo,
   overview,
   records,
+  sipPlan,
   holdingMonths,
   config,
   plan,
@@ -121,6 +122,8 @@ export function FundPage({
   overview: ReactNode | ((ex: ExplainSet<'fund'>) => ReactNode);
   /** details, recorded values and the activity log */
   records: ReactNode;
+  /** the SIP's dated plan and the account it is paid from (a tab of its own) */
+  sipPlan?: ReactNode;
   holdingMonths: number | null;
   config: { ledgerPageSize: number; riskMinMonths: number; rollingMinWindows: number };
   plan?: PlanSplit | undefined;
@@ -306,6 +309,7 @@ export function FundPage({
           { key: 'overview', label: 'Overview' },
           { key: 'returns', label: 'Returns' },
           { key: 'transactions', label: 'Transactions', badge: d.ledger.length || null },
+          ...(sipPlan ? [{ key: 'sip', label: 'SIP plan' }] : []),
           { key: 'lots', label: 'Lots and gains' },
           { key: 'records', label: 'Records' },
         ]}
@@ -777,6 +781,7 @@ export function FundPage({
           <ReplacedLines rows={replaced} />
         </section>
       )}
+      {tab === 'sip' && sipPlan}
       {tab === 'lots' && lotsBody}
       {tab === 'records' && records}
     </>

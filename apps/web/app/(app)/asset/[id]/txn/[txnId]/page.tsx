@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader } from '@/components/AssetFacts';
+import { TxnActions } from '@/components/invest/TxnActions';
 import { loadTxnDetail } from '@/lib/record-data';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,7 @@ export default async function TxnPage({
         }
       />
       <AssetFacts facts={d.facts} />
+      {d.edit && <TxnActions t={d.edit} today={new Date().toISOString().slice(0, 10)} />}
       {d.neighbours.length > 0 && (
         <section className="detailsection" aria-label="Neighbouring records">
           <h2>Before and after</h2>

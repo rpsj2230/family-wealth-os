@@ -179,6 +179,17 @@ function startingValues(
   return diffFields(null, after, o).filter((c) => c.after !== null);
 }
 
+const TXN_WORD: Record<string, string> = {
+  purchase: 'Purchase',
+  sip: 'SIP instalment',
+  redeem: 'Sale',
+  switch_in: 'Switch in',
+  switch_out: 'Switch out',
+  dividend_reinvest: 'Dividend reinvested',
+  bonus: 'Bonus units',
+  other: 'Transaction',
+};
+
 export function describeAudit(row: AuditRow, o: DescribeOptions = {}): ActivityDescription {
   const t = row.table_name;
   const a = row.after;
@@ -225,6 +236,47 @@ export function describeAudit(row: AuditRow, o: DescribeOptions = {}): ActivityD
       : remove
         ? { title: 'Fund position removed', changes: [] }
         : { title: 'Fund position updated', changes: diffFields(b, a, o) };
+  if (t === 'mf_transactions') {
+    const line = (r: Record<string, unknown> | null) => {
+      const amount = Math.abs(Number(r?.amount));
+      const day = typeof r?.txn_on === 'string' ? niceDate(r.txn_on) : 'a date';
+      const kind = TXN_WORD[String(r?.kind)] ?? 'Transaction';
+      return `${kind} of ${Number.isFinite(amount) ? inr(amount) : 'an amount'} on ${day}`;
+    };
+    if (insert) return { title: `Transaction typed in: ${line(a)}`, changes: [] };
+    if (remove)
+      return {
+        title: `Transaction deleted: ${line(b)}${b?.source === 'cas' ? ' (a fund statement line)' : ''}`,
+        changes: [],
+      };
+    if (a?.superseded_on && !b?.superseded_on)
+      return { title: `Set aside, replaced by a fund statement: ${line(b)}`, changes: [] };
+    if (b?.superseded_on && !a?.superseded_on)
+      return { title: `Brought back by a fund statement: ${line(a)}`, changes: [] };
+    const changes = (
+      [
+        ['txn_on', 'Date', (v: unknown) => (typeof v === 'string' ? niceDate(v) : '–')],
+        ['kind', 'Type', (v: unknown) => TXN_WORD[String(v)] ?? String(v)],
+        ['amount', 'Amount', (v: unknown) => inr(Math.abs(Number(v)))],
+        ['units', 'Units', (v: unknown) => Math.abs(Number(v)).toLocaleString('en-IN')],
+        ['nav', 'Price per unit', (v: unknown) => (v === null ? '–' : `₹${Number(v)}`)],
+      ] as const
+    )
+      .filter(([k]) => String(b?.[k] ?? '') !== String(a?.[k] ?? ''))
+      .map(([k, label, f]) => ({ label, before: f(b?.[k] ?? null), after: f(a?.[k] ?? null) }));
+    return { title: `Transaction corrected: ${line(a)}`, changes };
+  }
+  if (t === 'mf_sip_changes') {
+    const day = (r: Record<string, unknown> | null) =>
+      typeof r?.effective_on === 'string' ? niceDate(r.effective_on) : 'a date';
+    const amount = (r: Record<string, unknown> | null) => Number(r?.monthly);
+    const what = (r: Record<string, unknown> | null) =>
+      amount(r) > 0
+        ? `SIP of ${inr(amount(r))} a month from ${day(r)}`
+        : `SIP stopped from ${day(r)}`;
+    if (remove) return { title: `Taken back: ${what(b)}`, changes: [] };
+    return { title: insert ? what(a) : `Changed: ${what(a)}`, changes: [] };
+  }
   if (t === 'receivables')
     return insert
       ? {

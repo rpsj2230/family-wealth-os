@@ -132,6 +132,15 @@ const report = await refreshMarketData(store, io, today);
 console.log(JSON.stringify(report, null, 2));
 if (report.warnings.length) console.log(`::warning::${report.warnings.length} warnings (see log)`);
 
+// a SIP's dated plan decides its amount: a pause that reaches its restart date (or a change planned for today) shows from today
+try {
+  const r = await db.rpc('sync_sip_positions', { p_asset: null });
+  if (r.error) throw new Error(r.error.message);
+  console.log(`SIP plans: ${Number(r.data ?? 0)} funds now follow a dated change`);
+} catch (e) {
+  console.log(`::warning::SIP plans could not be brought up to date: ${(e as Error).message}`);
+}
+
 // instalments assumed from each SIP since the units were counted are kept in the ledger as estimates, and follow the new prices
 try {
   const sip = await syncSipEstimates(db, { today: new Date(`${today}T00:00:00Z`) });

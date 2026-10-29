@@ -41,6 +41,8 @@ const AUDIT_TABLES = [
   'assets',
   'fixed_deposits',
   'mf_positions',
+  'mf_transactions',
+  'mf_sip_changes',
   'observations',
   'receivables',
   'receivable_payments',

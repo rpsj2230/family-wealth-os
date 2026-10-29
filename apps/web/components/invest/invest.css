@@ -1833,3 +1833,69 @@ tr.fl-datacheck td .datacheck {
 .replaced-lines th {
   overflow-wrap: anywhere;
 }
+
+/* ---- SIP plan (fund page) and correcting a fund line ---- */
+.sipplan-now {
+  font-size: 1.05rem;
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+.sipplan .sipplan-current td {
+  font-weight: 600;
+}
+.sipplan-form,
+.sipplan-pay,
+.txnactions-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: flex-end;
+  margin-top: 0.9rem;
+}
+.sipplan-form > p,
+.sipplan-pay > p,
+.txnactions-form > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.sipplan-modes {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  flex-basis: 100%;
+}
+.sipplan-modes legend {
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.sipplan-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: flex-end;
+}
+.sipplan-form label,
+.sipplan-pay label,
+.txnactions-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.sipplan-modes label.check {
+  flex-direction: row;
+  align-items: center;
+}
+.sipplan-pay select,
+.sipplan-form input,
+.txnactions-form input,
+.txnactions-form select {
+  max-width: 100%;
+}
+.txnactions .btn.danger {
+  color: var(--fail-fg, #b42318);
+}

@@ -8,6 +8,8 @@ import {
   creditEvery,
   isEstimatedTxn,
   lastNavMove,
+  mergeSavingsTxns,
+  sipDebits,
   addDaysIso,
   planLedger,
   posFundFrom,
@@ -23,7 +25,7 @@ import {
 } from '@fwos/core';
 import { HIST_FUND_REF } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { liveLinesFilter } from './columns';
+import { columnExists, liveLinesFilter } from './columns';
 import {
   loadMoneyMoves,
   loadSavingsSchedules,
@@ -80,6 +82,8 @@ interface PositionRow {
   sip_stopped: boolean;
   started_on: string | null;
   invested: number | null;
+  /** the savings account the SIP is paid from (when the column is there) */
+  sip_from_asset_id?: string | null;
 }
 
 export async function loadPortfolioData(
@@ -92,6 +96,8 @@ export async function loadPortfolioData(
   };
   // settings are read in step with the first batch, not after it
   const settingsP = loadSettings(supabase, opts.householdId);
+  // the account a SIP is paid from is a newer column: a deploy can reach the app before the database has it
+  const sipFromCol = await columnExists(supabase, 'mf_positions', 'sip_from_asset_id');
   const [owners, assets, obsRowsRead, fds, positions, institutions, offerRows, sipChangeRows] =
     await Promise.all([
       sel('owners', 'id, display_name'),
@@ -116,7 +122,7 @@ export async function loadPortfolioData(
       ),
       sel(
         'mf_positions',
-        'asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of, invested',
+        `asset_id, amfi_code, sip_monthly, sip_stopped, started_on, units, units_as_of, invested${sipFromCol ? ', sip_from_asset_id' : ''}`,
       ),
       sel('institutions', 'id, name'),
       sel(
@@ -491,7 +497,32 @@ export async function loadPortfolioData(
   const depositIds = new Set(assetRows.filter((a) => a.type === 'fixed_deposit').map((a) => a.id));
   const extras: ValuationExtras = {
     funds,
-    moves: savingsMovesOf(moves, accountIds),
+    // a SIP paid from a savings account takes each instalment out of that account's estimated balance
+    moves: mergeSavingsTxns(
+      savingsMovesOf(moves, accountIds),
+      sipDebits(
+        ((positions.data ?? []) as unknown as PositionRow[]).flatMap((p) => {
+          const fund = assetRows.find((a) => a.id === p.asset_id);
+          const plan = sip.get(p.asset_id);
+          return p.sip_from_asset_id &&
+            accountIds.has(p.sip_from_asset_id) &&
+            plan &&
+            fund &&
+            (fund.status === 'active' || fund.status === 'stopped')
+            ? [{ fundId: p.asset_id, accountId: p.sip_from_asset_id, plan }]
+            : [];
+        }),
+        moves
+          .filter((m) => m.status === 'confirmed')
+          .map((m) => ({
+            date: m.movedOn,
+            amount: m.amount,
+            fromAssetId: m.fromAssetId,
+            toAssetId: m.toAssetId,
+          })),
+        todayIso0,
+      ),
+    ),
     rates,
     placements: placementsOf(moves, depositIds),
     config: {

@@ -232,4 +232,12 @@ describe('buildTxn', () => {
     );
     expect(buildTxn({ ...ok, kind: 'gift' }, TODAY).problems).toContain('the type');
   });
+  it('a sale of every unit needs only the amount received: the units are what is held on the date', () => {
+    const r = buildTxn({ ...ok, kind: 'redeem', nav: '', units: '12', all: true }, TODAY);
+    expect(r.problems).toEqual([]);
+    expect(r.values).toMatchObject({ kind: 'redeem', units: '', all: '1' });
+    expect(buildTxn({ ...ok, kind: 'sip', all: true }, TODAY).problems).toContain(
+      'a sale or switch out (only those can be for every unit)',
+    );
+  });
 });

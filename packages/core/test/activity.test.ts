@@ -49,6 +49,53 @@ describe('diffFields', () => {
 });
 
 describe('describeAudit', () => {
+  it('reads a corrected fund line field by field, and names a deleted statement line', () => {
+    const before = {
+      txn_on: '2026-09-05',
+      kind: 'sip',
+      amount: 5000,
+      units: 50,
+      nav: 100,
+      source: 'manual',
+    };
+    const d = describeAudit({
+      table_name: 'mf_transactions',
+      action: 'UPDATE',
+      before,
+      after: { ...before, amount: 6000, units: 60 },
+    });
+    expect(d.title).toBe('Transaction corrected: SIP instalment of ₹6,000 on 5 Sep 2026');
+    expect(d.changes).toEqual([
+      { label: 'Amount', before: '₹5,000', after: '₹6,000' },
+      { label: 'Units', before: '50', after: '60' },
+    ]);
+    expect(
+      describeAudit({
+        table_name: 'mf_transactions',
+        action: 'DELETE',
+        before: { ...before, kind: 'redeem', amount: -9000, source: 'cas' },
+        after: null,
+      }).title,
+    ).toBe('Transaction deleted: Sale of ₹9,000 on 5 Sep 2026 (a fund statement line)');
+  });
+  it('reads SIP changes as the amount and the day they apply from', () => {
+    const at = (action: string, row: Record<string, unknown>) =>
+      describeAudit({
+        table_name: 'mf_sip_changes',
+        action,
+        before: action === 'DELETE' ? row : null,
+        after: action === 'DELETE' ? null : row,
+      }).title;
+    expect(at('INSERT', { effective_on: '2026-12-01', monthly: 0 })).toBe(
+      'SIP stopped from 1 Dec 2026',
+    );
+    expect(at('INSERT', { effective_on: '2027-04-01', monthly: 8000 })).toBe(
+      'SIP of ₹8,000 a month from 1 Apr 2027',
+    );
+    expect(at('DELETE', { effective_on: '2026-12-01', monthly: 0 })).toBe(
+      'Taken back: SIP stopped from 1 Dec 2026',
+    );
+  });
   it('reads a recorded balance as a sentence', () => {
     const d = describeAudit({
       table_name: 'observations',

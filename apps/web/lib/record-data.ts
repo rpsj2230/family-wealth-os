@@ -7,6 +7,7 @@ import type { ActivityItem } from '@/components/ActivityLog';
 import { loadContext } from './data';
 import { buildActivity, type AuditIn, type InboxIn } from './detail-view';
 import { loadPortfolio } from './portfolio-data';
+import type { TxnEditable } from '@/components/invest/TxnActions';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const inr = (n: number | null | undefined) =>
@@ -63,6 +64,8 @@ export interface RecordDetail {
   /** earlier / later records of the same item */
   neighbours: { label: string; href: string; text: string }[];
   activity: ActivityItem[];
+  /** a fund line that can still be corrected or deleted (not one a statement has replaced) */
+  edit?: TxnEditable | null;
 }
 
 async function base(assetId: string) {
@@ -358,5 +361,17 @@ export async function loadTxnDetail(assetId: string, txnId: string): Promise<Rec
         : []),
     ],
     activity: buildActivity({ audit: (audit.data ?? []) as AuditIn[], viewerId: userId ?? '' }),
+    edit: r.superseded_on
+      ? null
+      : {
+          assetId,
+          id: txnId,
+          date: r.txn_on as string,
+          kind: r.kind as string,
+          amount,
+          units,
+          nav: r.nav === null ? null : Number(r.nav),
+          source: (r.source as string | null) ?? 'manual',
+        },
   };
 }

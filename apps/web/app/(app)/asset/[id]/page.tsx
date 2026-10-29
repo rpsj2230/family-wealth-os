@@ -18,6 +18,8 @@ import { fundEditRows } from '@/lib/invest-ledger';
 import { parseRange, personStyles } from '@fwos/core';
 import { FundEditProvider } from '@/components/invest/FundEdit';
 import { FundPage, parseFundTab } from '@/components/invest/FundPage';
+import { SipPlan } from '@/components/invest/SipPlan';
+import { loadSipPlan } from '@/lib/sip-plan-data';
 import { addFund, addFundTxn, saveFundEdit } from '../../investments/edit-actions';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +35,10 @@ export default async function AssetPage({
   const sp = await searchParams;
   const d = await loadAssetDetail(id);
   const fundView = d.type === 'mutual_fund' ? await loadFundDetail(id, parseRange(sp.range)) : null;
+  const sipView =
+    d.type === 'mutual_fund' && fundView
+      ? await loadSipPlan((await loadContext()).supabase, id, fundView.today)
+      : null;
   const isFund = d.type === 'mutual_fund' || d.type === 'stock';
   const isBankLike =
     d.type === 'bank_account' || d.type === 'fixed_deposit' || d.type === 'third_party_held';
@@ -119,6 +125,7 @@ export default async function AssetPage({
             />
           )}
           records={records}
+          {...(sipView ? { sipPlan: <SipPlan view={sipView} today={fundView.today} /> } : {})}
         />
       </FundEditProvider>
     );

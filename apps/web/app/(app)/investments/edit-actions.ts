@@ -151,7 +151,7 @@ export async function addFund(p: AddFundPayload): Promise<EditResult & { assetId
 /** One transaction typed by hand: the same database function as the form on the Update funds tab. */
 export async function addFundTxn(values: Record<string, string>): Promise<EditResult> {
   const f = new FormData();
-  for (const k of ['asset', 'date', 'kind', 'amount', 'units', 'nav'])
+  for (const k of ['asset', 'date', 'kind', 'amount', 'units', 'nav', 'all'])
     f.set(k, String(values?.[k] ?? ''));
   const r = await addFundTransaction(null, f);
   if (r.ok) refresh(String(values.asset));

@@ -78,7 +78,8 @@ export async function addFundTransaction(
   const nav = num(f.get('nav'));
   if (amount === null || Number.isNaN(amount) || amount <= 0)
     return { ok: false, message: 'Enter the amount.' };
-  if ((units === null || Number.isNaN(units)) && (nav === null || Number.isNaN(nav)))
+  const all = String(f.get('all') ?? '') === '1' || f.get('all') === 'on';
+  if (!all && (units === null || Number.isNaN(units)) && (nav === null || Number.isNaN(nav)))
     return { ok: false, message: 'Enter the units or the price per unit.' };
   const res = await supabase.rpc('add_fund_transaction', {
     p_household: householdId,
@@ -87,12 +88,19 @@ export async function addFundTransaction(
       date: String(f.get('date') ?? ''),
       kind: String(f.get('kind') ?? ''),
       amount,
-      units,
-      nav,
+      units: all || Number.isNaN(units) ? null : units,
+      nav: nav === null || Number.isNaN(nav) ? null : nav,
+      all,
     },
   });
   if (res.error) return { ok: false, message: res.error.message };
   revalidatePath('/investments');
+  revalidatePath(`/asset/${asset}`);
   revalidatePath('/');
-  return { ok: true, message: 'Transaction added; units and amount invested updated.' };
+  return {
+    ok: true,
+    message: all
+      ? 'Sale of every unit added: the fund is closed and its SIP stopped from that day. The gain is in the fund’s sales.'
+      : 'Transaction added; units and amount invested updated.',
+  };
 }

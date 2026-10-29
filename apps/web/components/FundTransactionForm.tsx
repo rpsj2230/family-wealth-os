@@ -63,6 +63,9 @@ export function FundTransactionForm({
           Units
           <input name="units" inputMode="decimal" style={{ width: 110 }} />
         </label>
+        <label className="check" style={{ alignSelf: 'center' }}>
+          <input type="checkbox" name="all" /> Sold every unit (closes the fund, stops its SIP)
+        </label>
         <button className="btn primary" disabled={pending}>
           {pending ? 'Adding…' : 'Add'}
         </button>

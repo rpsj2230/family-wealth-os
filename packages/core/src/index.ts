@@ -93,6 +93,7 @@ export * from './cash-rates';
 export * from './figure';
 export * from './deposit-contract';
 export * from './savings-accrual';
+export * from './sip-debits';
 export * from './valuation';
 export * from './savings-rates';
 export * from './capital';

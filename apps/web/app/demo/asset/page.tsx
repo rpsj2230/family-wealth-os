@@ -19,6 +19,8 @@ import {
 import { fundEditRows } from '@/lib/invest-ledger';
 import { FundEditProvider } from '@/components/invest/FundEdit';
 import { FundPage, parseFundTab } from '@/components/invest/FundPage';
+import { SipPlan } from '@/components/invest/SipPlan';
+import { sipPlanView } from '@/lib/sip-plan';
 import type { ReplacedRow } from '@/components/invest/ReplacedLines';
 import { buildFundDetail, NAV_POINTS } from '@/lib/fund-detail-model';
 import { buildFundTax } from '@/lib/fund-tax';
@@ -366,6 +368,28 @@ export default async function DemoAsset({
                 colour={owner.colour}
               />
             )}
+            sipPlan={
+              <SipPlan
+                demo
+                today={DEMO_TODAY}
+                view={sipPlanView({
+                  assetId: fundId,
+                  startedOn: sample.row.startedOn ?? '2024-07-05',
+                  sipMonthly: sample.row.sipMonthly || 5000,
+                  sipStopped: false,
+                  changes: [
+                    { on: sample.row.startedOn ?? '2024-07-05', monthly: 5000 },
+                    { on: '2026-04-05', monthly: sample.row.sipMonthly || 8000 },
+                  ],
+                  payFrom: 'demo-acc-1',
+                  accounts: [
+                    { id: 'demo-acc-1', label: 'Sample Equity Bank · Cash-NRO-1111' },
+                    { id: 'demo-acc-2', label: 'Sample Bank · Cash-NRE-2222' },
+                  ],
+                  today: DEMO_TODAY,
+                })}
+              />
+            }
             records={
               <>
                 <AssetFacts facts={view.facts} />

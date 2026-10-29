@@ -19,6 +19,7 @@ import {
   draftOf,
   EMPTY_FUND,
   savedMessage,
+  SELL_KINDS,
   TXN_KINDS,
   typed,
   type AddFundDraft,
@@ -896,12 +897,25 @@ function TxnPanel({
             <label className="qe-f qe-wide">
               <span>Units (or leave empty to work them out from the price)</span>
               <input
-                value={d.units}
+                value={d.all && SELL_KINDS.has(d.kind) ? '' : d.units}
                 onChange={(e) => set({ units: e.target.value })}
                 inputMode="decimal"
                 autoComplete="off"
+                disabled={!!d.all && SELL_KINDS.has(d.kind)}
               />
             </label>
+            {SELL_KINDS.has(d.kind) && (
+              <label className="qe-f qe-wide check" data-testid="txn-all">
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={!!d.all}
+                    onChange={(e) => set({ all: e.target.checked })}
+                  />{' '}
+                  Sold every unit: close the fund and stop its SIP from this date
+                </span>
+              </label>
+            )}
           </div>
           <Problems list={dirty ? r.problems : []} />
         </div>

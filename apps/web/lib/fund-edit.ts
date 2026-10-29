@@ -287,7 +287,12 @@ export interface TxnDraft {
   amount: string;
   units: string;
   nav: string;
+  /** a sale of every unit held on the date: the fund is closed and its SIP stopped from that day */
+  all?: boolean;
 }
+
+/** Kinds that take units out of a fund. */
+export const SELL_KINDS = new Set(['redeem', 'switch_out']);
 
 export const TXN_KINDS: { value: string; label: string }[] = [
   { value: 'purchase', label: 'Purchase (one-off)' },
@@ -309,11 +314,15 @@ export function buildTxn(
   if (!TXN_KINDS.some((k) => k.value === d.kind)) problems.push('the type');
   const amount = typed(d.amount);
   if (amount === null || Number.isNaN(amount) || amount <= 0) problems.push('the amount');
-  const units = typed(d.units);
+  const all = !!d.all && SELL_KINDS.has(d.kind);
+  if (d.all && !SELL_KINDS.has(d.kind))
+    problems.push('a sale or switch out (only those can be for every unit)');
+  // every unit sold: the units are what is held on the date, so neither units nor a price is needed
+  const units = all ? null : typed(d.units);
   const nav = typed(d.nav);
   if (Number.isNaN(units) || (units !== null && units <= 0)) problems.push('units');
   if (Number.isNaN(nav) || (nav !== null && nav <= 0)) problems.push('the price per unit');
-  if (units === null && nav === null) problems.push('units or the price per unit');
+  if (!all && units === null && nav === null) problems.push('units or the price per unit');
   if (problems.length > 0) return { problems, values: null };
   return {
     problems,
@@ -324,6 +333,7 @@ export function buildTxn(
       amount: String(amount),
       units: units === null ? '' : String(units),
       nav: nav === null ? '' : String(nav),
+      ...(all ? { all: '1' } : {}),
     },
   };
 }
