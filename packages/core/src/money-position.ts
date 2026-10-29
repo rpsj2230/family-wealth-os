@@ -224,14 +224,16 @@ export function moneyPosition(i: MoneyPositionInput): PositionCard[] {
       { label: 'Principal', value: fd?.invested ?? 0 },
       { label: 'Interest earned so far (estimated)', value: fd ? fd.current - fd.invested : 0 },
       { label: 'Pays at maturity', value: fd?.maturity ?? 0 },
-      ...[...i.maturityWindows].sort((a, b) => a - b).map((d) => {
-        const s = soon(d);
-        return {
-          label: `Maturing in ${d} days`,
-          value: s.amount,
-          note: `${s.count} deposit${s.count === 1 ? '' : 's'}`,
-        };
-      }),
+      ...[...i.maturityWindows]
+        .sort((a, b) => a - b)
+        .map((d) => {
+          const s = soon(d);
+          return {
+            label: `Maturing in ${d} days`,
+            value: s.amount,
+            note: `${s.count} deposit${s.count === 1 ? '' : 's'}`,
+          };
+        }),
     ],
     status: 'estimated',
     asOf: i.today,
