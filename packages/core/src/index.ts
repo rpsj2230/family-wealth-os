@@ -106,6 +106,7 @@ export * from './statement-classify';
 export * from './statement-interest';
 export * from './remittance';
 export * from './money-trail';
+export * from './money-chain';
 export * from './needed-from-you';
 export * from './money-position';
 export * from './money-at-work';

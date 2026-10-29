@@ -1,4 +1,11 @@
-import { moneyTrail, parseHomeRange, type Classified, type TrailLine } from '@fwos/core';
+import {
+  DEFAULT_CONFIG,
+  moneyChain,
+  moneyTrail,
+  parseHomeRange,
+  type Classified,
+  type TrailLine,
+} from '@fwos/core';
 import type { MoneyTrailData, StoredLine } from '@fwos/data';
 import { demoModel } from '@/lib/demo-fixture';
 import { demoHomeInput } from '@/lib/demo-home';
@@ -54,15 +61,31 @@ export function demoTrail(): {
     ln(b.assetId, d(6, 30), 1_500, 'interest', null, 'Interest'),
   ];
   const openings = new Map([[b.assetId, 50_000]]);
-  const trails = moneyTrail({
+  const assets = [
+    { id: a.assetId, ownerId: a.ownerId, kind: 'account' as const },
+    { id: b.assetId, ownerId: b.ownerId, kind: 'account' as const },
+    { id: dep.assetId, ownerId: dep.ownerId, kind: 'deposit' as const },
+  ];
+  const trails = moneyTrail({ lines, assets, openings, ownershipFrom: d(4, 1) });
+  const st = DEFAULT_CONFIG.statements;
+  const chain = moneyChain({
     lines,
-    assets: [
-      { id: a.assetId, ownerId: a.ownerId, kind: 'account' },
-      { id: b.assetId, ownerId: b.ownerId, kind: 'account' },
-      { id: dep.assetId, ownerId: dep.ownerId, kind: 'deposit' },
+    assets,
+    deposits: [
+      {
+        assetId: dep.assetId,
+        ownerId: dep.ownerId,
+        principal: 500_000,
+        bookedOn: d(4, 8),
+        maturityOn: `${y + 2}-04-08`,
+        endedOn: null,
+        maturityAmount: null,
+      },
     ],
     openings,
-    ownershipFrom: d(4, 1),
+    method: st.trailRecentFirst ? 'recent' : 'mix',
+    pairDays: DEFAULT_CONFIG.estimates.transferPairDays,
+    remittanceOf: new Map([['s1', 'sample-wise']]),
   });
   // the lines as stored, with each account's running balance
   const run = new Map(openings);
@@ -131,7 +154,9 @@ export function demoTrail(): {
       uploaded_at: `${today}T00:00:00Z`,
     })),
     classified,
-    remitById: new Map(),
+    remitById: new Map([['sample-wise', { receivedOn: d(4, 2), amount: 1_000_000 }]]),
+    chain,
+    traceOptions: { smallest: st.trailSmallest, depth: st.trailDepth, budget: st.trailSteps },
   };
   return { data, labels, names, accounts: { a: a.assetId, b: b.assetId, dep: dep.assetId } };
 }

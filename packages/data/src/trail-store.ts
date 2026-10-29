@@ -1,7 +1,10 @@
 import {
   classifyLines,
   LINE_CLASS_LABEL,
+  moneyChain,
   moneyTrail,
+  type MoneyChain,
+  type TraceOptions,
   type Classified,
   type Hop,
   trailLines,
@@ -38,6 +41,9 @@ export interface MoneyTrailData {
   classified: Map<string, Classified>;
   /** the transfers from Singapore on file, by id */
   remitById: Map<string, { receivedOn: string; amount: number }>;
+  /** every rupee followed step by step (money-chain.ts), and how far a page follows it (Settings) */
+  chain: MoneyChain;
+  traceOptions: TraceOptions;
 }
 
 /**
@@ -73,7 +79,8 @@ export async function loadMoneyTrail(
     remitsP,
   ]);
   const lines = stmtLinesOf(stored.lines, loaded);
-  const classified = classifyLines(lines, classifyContext(loaded, config, stored.remittances));
+  const ctx = classifyContext(loaded, config, stored.remittances);
+  const classified = classifyLines(lines, ctx);
   const tl: TrailLine[] = trailLines(lines, classified);
 
   // transfers from Singapore into an account with no statement: the only movements known for it
@@ -115,6 +122,37 @@ export async function loadMoneyTrail(
     openings,
     ownershipFrom: config.capital.ownershipFrom,
   });
+  // the bank's own order of each account's lines within a day, from the running balance
+  const seq = new Map<string, number>();
+  const byAccount = new Map<string, StoredLine[]>();
+  for (const l of stored.lines)
+    byAccount.set(l.asset_id, [...(byAccount.get(l.asset_id) ?? []), l]);
+  for (const rows of byAccount.values())
+    for (const r of chainOrder(
+      rows.map((l) => ({
+        id: l.id,
+        date: l.txn_on,
+        amount: Number(l.amount),
+        balance: l.balance === null ? null : Number(l.balance),
+      })),
+    ))
+      seq.set(r.id, r.seq);
+  const chain = moneyChain({
+    lines: tl.map((l) => ({ ...l, seq: seq.get(l.id) ?? 0 })),
+    assets,
+    deposits: ctx.deposits,
+    openings,
+    method: config.statements.trailRecentFirst ? 'recent' : 'mix',
+    pairDays: config.estimates.transferPairDays,
+    bankOf: new Map([
+      ...ctx.accounts.map((a) => [a.assetId, a.bank ?? null] as const),
+      ...ctx.deposits.map((d) => [d.assetId, d.bank ?? null] as const),
+    ]),
+    remittanceOf: new Map([
+      ...classified.filter((c) => c.remittanceId).map((c) => [c.id, c.remittanceId!] as const),
+      ...tl.filter((l) => l.id.startsWith('remit:')).map((l) => [l.id, l.id.slice(6)] as const),
+    ]),
+  });
   const holdings = assets
     .filter((a) => !a.abroad && trails.has(a.id))
     .map(({ id, ownerId, kind }) => ({ id, ownerId, kind, statements: withLines.has(id) }));
@@ -134,6 +172,12 @@ export async function loadMoneyTrail(
     remitById: new Map(
       remits.map((r) => [r.id, { receivedOn: r.received_on, amount: Number(r.amount_inr) }]),
     ),
+    chain,
+    traceOptions: {
+      smallest: config.statements.trailSmallest,
+      depth: config.statements.trailDepth,
+      budget: config.statements.trailSteps,
+    },
   };
 }
 

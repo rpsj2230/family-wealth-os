@@ -89,6 +89,16 @@ export interface AppConfig {
     reviewAbove: number;
     /** days between a bank debit and the fund allotment the CAS shows (a SIP is debited a day or more before units are allotted) */
     fundMatchDays: number;
+    /**
+     * Money trail, step by step (money-chain.ts): money leaving an account is the latest money that came in (true), or a share of
+     * everything in it (false)
+     */
+    trailRecentFirst: boolean;
+    /** a trail folds the parts smaller than this many rupees into one "smaller parts" line */
+    trailSmallest: number;
+    /** a trail shows at most this many steps back or forward from a line, and this many steps in all */
+    trailDepth: number;
+    trailSteps: number;
   };
   /** the setup checklist (Settings > Setup, the dashboard): the items the household switched off as not needed */
   setup: { off: string[] };
@@ -380,6 +390,10 @@ export const DEFAULT_CONFIG: AppConfig = {
     ],
     reviewAbove: 10_000,
     fundMatchDays: 5,
+    trailRecentFirst: true,
+    trailSmallest: 1_000,
+    trailDepth: 40,
+    trailSteps: 300,
   },
   setup: { off: [] },
   reports: { saved: [] },
@@ -740,6 +754,10 @@ export function configFromJson(raw: unknown): AppConfig {
       fundMatchDays: Math.round(
         num(obj(r.statements).fundMatchDays, d.statements.fundMatchDays, 0, 31),
       ),
+      trailRecentFirst: bool(obj(r.statements).trailRecentFirst, d.statements.trailRecentFirst),
+      trailSmallest: num(obj(r.statements).trailSmallest, d.statements.trailSmallest, 0, 1e9),
+      trailDepth: Math.round(num(obj(r.statements).trailDepth, d.statements.trailDepth, 1, 200)),
+      trailSteps: Math.round(num(obj(r.statements).trailSteps, d.statements.trailSteps, 10, 2000)),
     },
     setup: {
       off: (() => {

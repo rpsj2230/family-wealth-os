@@ -11,10 +11,14 @@ import {
   fundValueFrom,
   fundViews,
   isHeld,
+  mainPath,
   planOf,
+  pointsOf,
   positionAsOf,
   positionGains,
   reconcileQueue,
+  startPoints,
+  traceBack,
   valueOn,
   wealthMovement,
 } from '@fwos/core';
@@ -348,6 +352,75 @@ async function main() {
       }
     for (const [k, v] of [...where].sort((a, b) => b[1].amount - a[1].amount))
       console.log(`    ${k}: ${v.n}, ${lakh(v.amount)}`);
+    // the same money followed step by step (money-chain.ts): how much of it is linked, and how, totals only
+    {
+      const c = t.chain;
+      const nodes = [...c.nodes.values()];
+      const lineNodes = nodes.filter((x) => x.kind === 'line');
+      const outs = lineNodes.filter((x) => x.amount < 0);
+      const ins = lineNodes.filter((x) => x.amount > 0);
+      const linked = (xs: typeof lineNodes, side: 'to' | 'from') =>
+        xs.filter((x) => x[side].some((l) => l.basis !== 'same_account')).length;
+      console.log(
+        `\nMoney trail step by step (${c.method === 'recent' ? 'latest money first' : 'a share of everything'}): ${lineNodes.length} lines, ${ins.length} in, ${outs.length} out.`,
+      );
+      console.log(
+        `  Lines out linked to where they went: ${linked(outs, 'to')} of ${outs.length}; lines in linked to where they came from: ${linked(ins, 'from')} of ${ins.length}.`,
+      );
+      console.log(
+        `  Matched here by amount and date: transfers ${c.guessed.transfers}, deposits booked ${c.guessed.depositBooked}, deposits paid back ${c.guessed.depositPaidBack}, renewals ${c.guessed.renewals}.`,
+      );
+      const deps = t.holdings.filter((h) => h.kind === 'deposit');
+      const booked = deps.filter((h) =>
+        (c.into.get(h.id) ?? []).some((l) => !l.node.startsWith('before:')),
+      ).length;
+      const paid = deps.filter((h) => (c.outOf.get(h.id) ?? []).length > 0).length;
+      console.log(
+        `  Deposits on file: ${deps.length}; booking found ${booked}; paid back to a line found ${paid}.`,
+      );
+      const bucket = new Map<string, number>();
+      let total = 0;
+      for (const h of t.holdings) {
+        if (h.kind !== 'account' || !h.statements) continue;
+        for (const p of pointsOf((id, a) => startPoints(c, id, a), c.now.get(h.id) ?? [])) {
+          bucket.set(p.kind, (bucket.get(p.kind) ?? 0) + p.amount);
+          total += p.amount;
+        }
+      }
+      console.log(
+        `  Accounts with statements hold ${lakh(total)} today, started as: ${[...bucket]
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `${k} ${Math.round((v / (total || 1)) * 100)}%`)
+          .join(', ')}`,
+      );
+      const ends = new Map<string, number>();
+      let out = 0;
+      for (const x of outs)
+        for (const e of x.ends) {
+          ends.set(e.kind, (ends.get(e.kind) ?? 0) + e.amount);
+          out += e.amount;
+        }
+      console.log(
+        `  Money out the trail stops at: ${lakh(out)}: ${[...ends]
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `${k} ${lakh(v)}`)
+          .join(', ')}`,
+      );
+      // how far back the money of the deposits goes: steps along the largest share
+      const depth = deps
+        .flatMap((h) => c.into.get(h.id) ?? [])
+        .map((l) => {
+          const s = traceBack(c, l.node, t.traceOptions);
+          return s ? mainPath(s).length : 0;
+        });
+      console.log(
+        `  Steps back from each line that booked a deposit (largest share): ${
+          depth.length
+            ? `median ${depth.sort((a, b) => a - b)[Math.floor(depth.length / 2)]}, most ${depth[depth.length - 1]}`
+            : 'none'
+        }`,
+      );
+    }
     // what is still needed from the household, as the tasks say it
     const needs = await loadNeeds(db, String((hh.data ?? [])[0]?.id ?? ''));
     console.log(`\nNeeded from you: ${needs.length}`);

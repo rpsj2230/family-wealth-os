@@ -32,6 +32,7 @@ export type OriginKind =
   | 'rent'
   | 'untraced_account'
   | 'untraced_deposit'
+  | 'untraced_fund'
   | 'fund_gain'
   | 'unexplained';
 
@@ -369,7 +370,7 @@ export function moneyTrail(args: {
 }
 
 /** What a credit with no traced source is, as an origin. */
-function originOf(l: TrailLine, holder: string, owner: Map<string, string>): Part {
+export function originOf(l: TrailLine, holder: string, owner: Map<string, string>): Part {
   const amount = l.amount;
   switch (l.cls) {
     case 'interest':
@@ -427,6 +428,7 @@ export const ORIGIN_LABEL: Record<OriginKind, string> = {
   rent: 'Rent and other earnings',
   untraced_account: 'From an account with no statement on file',
   untraced_deposit: 'From a deposit not on file',
+  untraced_fund: 'From a fund bought with money the statements do not show',
   fund_gain: 'Gain on a fund sold',
   unexplained: 'Not explained by the statements',
 };

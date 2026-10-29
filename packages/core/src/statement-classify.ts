@@ -168,7 +168,7 @@ const IFSC_BANK: Record<string, string> = {
   CSBK: 'csb',
   KVBL: 'karur vysya',
 };
-const bankWord = (b: string) =>
+export const bankWord = (b: string) =>
   b
     .toLowerCase()
     .replace(/[^a-z ]/g, ' ')

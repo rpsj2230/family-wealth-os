@@ -174,6 +174,10 @@ describe('settings fields', () => {
           stmtRemittanceWords: 'inward remittance',
           stmtReviewAbove: '10,000',
           stmtFundMatchDays: '5',
+          trailRecentFirst: 'on',
+          trailSmallest: '1,000',
+          trailDepth: '40',
+          trailSteps: '300',
         }),
       ),
     ).toEqual({
@@ -185,6 +189,10 @@ describe('settings fields', () => {
           remittanceWords: ['inward remittance'],
           reviewAbove: 10000,
           fundMatchDays: 5,
+          trailRecentFirst: true,
+          trailSmallest: 1000,
+          trailDepth: 40,
+          trailSteps: 300,
         },
       },
     });
