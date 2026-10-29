@@ -223,6 +223,18 @@ const CONF: Record<string, string> = {
 
 const inr = (n: number | null | undefined) =>
   n === null || n === undefined ? '–' : formatInr(Math.round(n));
+/** a small amount keeps its paise (₹0.53, not ₹1), so it agrees with the statement it came from; larger ones are whole rupees */
+const inrExact = (n: number) =>
+  Math.abs(n) < 1000 && Math.round(n * 100) % 100 !== 0
+    ? `${n < 0 ? '−' : ''}₹${Math.abs(n).toFixed(2)}`
+    : inr(n);
+const longDay = (d: string) =>
+  new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 const num = (n: number | null | undefined, d = 3) =>
   n === null || n === undefined ? '–' : n.toLocaleString('en-IN', { maximumFractionDigits: d });
 const pct = (r: number) => `${(r * 100).toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -725,14 +737,14 @@ export function buildAssetView(i: AssetViewInput): AssetView {
       const base = [...obsPoints].reverse().find((p) => p.date <= cutoff);
       kpis.push({
         label: 'Balance',
-        value: inr(cur.amount ?? last.value),
-        note: cur.asOf ? `as of ${cur.asOf}` : undefined,
+        value: inrExact(cur.amount ?? last.value),
+        note: cur.asOf ? `as of ${longDay(cur.asOf)}` : undefined,
       });
       if (base)
         kpis.push({
           label: 'Change in 30 days',
           value: signed(last.value - base.value),
-          note: `since ${base.date}`,
+          note: `since ${longDay(base.date)}`,
           tone: last.value - base.value >= 0 ? 'gain' : 'fail',
         });
       kpis.push(
@@ -869,8 +881,8 @@ export function buildAssetView(i: AssetViewInput): AssetView {
   return {
     title,
     subtitle,
-    headline: cur.amount === null ? null : inr(cur.amount),
-    headlineNote: cur.asOf ? `as of ${cur.asOf}` : null,
+    headline: cur.amount === null ? null : inrExact(cur.amount),
+    headlineNote: cur.asOf ? `as of ${longDay(cur.asOf)}` : null,
     facts,
     charts,
     tables,

@@ -13,6 +13,8 @@ export interface TxnRow {
   narration: string;
   kind: string;
   toAnswer: boolean;
+  /** the bank's order of the lines (oldest 0): it settles lines of the same day */
+  seq?: number;
 }
 
 type SortKey = 'date' | 'amount' | 'balance' | 'kind' | 'narration';
@@ -172,13 +174,14 @@ export function TransactionsTable({
     out.sort((x, y) => {
       const c =
         k === 'date'
-          ? x.date.localeCompare(y.date)
+          ? x.date.localeCompare(y.date) || (x.seq ?? 0) - (y.seq ?? 0)
           : k === 'amount'
             ? x.amount - y.amount
             : k === 'balance'
               ? (x.balance ?? -Infinity) - (y.balance ?? -Infinity)
               : x[k].localeCompare(y[k]);
-      return c * sign || x.date.localeCompare(y.date) * -1;
+      // ties: newest first, in the bank's order
+      return c * sign || y.date.localeCompare(x.date) || (y.seq ?? 0) - (x.seq ?? 0);
     });
     return out;
   }, [rows, q, range, dir, kind, onlyAsk, min, max, sort]);

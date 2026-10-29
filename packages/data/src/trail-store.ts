@@ -148,11 +148,17 @@ export interface AccountLine {
   kind: string;
   /** still waiting for an answer */
   toAnswer: boolean;
+  /** the bank's order of the account's lines, oldest 0 (lines of one day follow the running balance) */
+  seq: number;
 }
 
-/** Every statement line of one account, newest first. */
+/**
+ * Every statement line of one account, newest first. Lines of the same day keep the bank's own order, worked out from the running
+ * balance (each line's balance is the one before plus its amount), so a credit and the debit that followed it read the right way
+ * round; `seq` is that order (oldest 0).
+ */
 export function accountLines(t: MoneyTrailData, assetId: string): AccountLine[] {
-  return t.lines
+  const rows = t.lines
     .filter((l) => l.asset_id === assetId)
     .map((l) => {
       const c = t.classified.get(l.id);
@@ -164,9 +170,46 @@ export function accountLines(t: MoneyTrailData, assetId: string): AccountLine[] 
         narration: l.narration,
         kind: c ? LINE_CLASS_LABEL[c.cls] : 'Not sorted yet',
         toAnswer: !c || c.cls === 'ask_in' || c.cls === 'ask_out',
+        seq: 0,
       };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    });
+  return chainOrder(rows).reverse();
+}
+
+/** Oldest first; within a day, each next line is the one whose balance follows from the balance so far. */
+export function chainOrder<
+  T extends { id: string; date: string; amount: number; balance: number | null },
+>(rows: T[]): (T & { seq: number })[] {
+  const byDay = new Map<string, T[]>();
+  for (const r of rows) byDay.set(r.date, [...(byDay.get(r.date) ?? []), r]);
+  const out: T[] = [];
+  let bal: number | null = null;
+  for (const day of [...byDay.keys()].sort()) {
+    const left = [...byDay.get(day)!].sort((a, b) => a.id.localeCompare(b.id));
+    while (left.length) {
+      // the line that follows from the balance so far; else the one no other line of the day follows from (the day's first)
+      let i: number =
+        bal === null
+          ? -1
+          : left.findIndex(
+              (r) => r.balance !== null && Math.abs(bal! + r.amount - r.balance) < 0.01,
+            );
+      if (i < 0)
+        i = left.findIndex(
+          (r) =>
+            r.balance === null ||
+            !left.some(
+              (o) =>
+                o !== r && o.balance !== null && Math.abs(o.balance + r.amount - r.balance!) < 0.01,
+            ),
+        );
+      if (i < 0) i = 0;
+      const r: T | undefined = left.splice(i, 1)[0];
+      out.push(r!);
+      if (r!.balance !== null) bal = r!.balance;
+    }
+  }
+  return out.map((r, seq) => ({ ...r, seq }));
 }
 
 /** One statement line in full: what it is, why the rules say so, and its trail. */

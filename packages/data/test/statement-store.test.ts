@@ -36,3 +36,17 @@ describe('saving a statement', () => {
     expect(balanceOn(s, '2024-03-01')).toBeNull();
   });
 });
+
+describe('the order of one day’s lines', () => {
+  it('follows the running balance, so a credit and the debit after it read the right way round', async () => {
+    const { chainOrder } = await import('../src/trail-store');
+    const rows = [
+      { id: 'b', date: '2026-10-28', amount: -557_006, balance: 0.53 },
+      { id: 'a', date: '2026-10-28', amount: 556_750, balance: 557_006.53 },
+      { id: 'z', date: '2026-10-01', amount: 254, balance: 256.53 },
+    ];
+    expect(chainOrder(rows).map((r) => r.id)).toEqual(['z', 'a', 'b']);
+    // with no earlier day, the day's first line is the one no other line leads to
+    expect(chainOrder(rows.slice(0, 2)).map((r) => r.id)).toEqual(['a', 'b']);
+  });
+});
