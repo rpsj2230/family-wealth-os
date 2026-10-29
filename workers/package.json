@@ -19,6 +19,7 @@
     "fund-merge": "tsx src/fund-merge.ts",
     "fund-retire": "tsx src/fund-retire.ts",
     "fund-units": "tsx src/fund-units.ts",
+    "capital-opening": "tsx src/capital-opening.ts",
     "timing": "tsx src/timing.ts",
     "bank-statements": "tsx src/bank-statements.ts"
   },

@@ -1,0 +1,39 @@
+name: Capital opening day (by hand)
+# Run by hand only. Sets the day your own money and profit are measured from (the same setting as in Settings); nothing else changes.
+# "plan" writes nothing. The log shows dates only.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      date:
+        description: the opening day (YYYY-MM-DD); empty lets the app pick
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: capital-opening
+  cancel-in-progress: false
+jobs:
+  opening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      DATE: ${{ inputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers capital-opening
