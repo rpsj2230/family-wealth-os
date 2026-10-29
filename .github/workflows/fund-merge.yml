@@ -1,0 +1,49 @@
+name: Fund merge (by hand)
+# Run by hand only. Joins two records of one person's fund: everything on FROM moves to INTO and the empty FROM record is removed.
+# "plan" writes nothing. The log shows the two names and counts only, never amounts.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      person:
+        description: whose funds (first name as on file)
+        required: true
+        type: string
+      from:
+        description: the record to join in and remove (its name exactly)
+        required: true
+        type: string
+      into:
+        description: the record that stays (its name exactly)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fund-merge
+  cancel-in-progress: false
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      PERSON: ${{ inputs.person }}
+      FROM: ${{ inputs.from }}
+      INTO: ${{ inputs.into }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers fund-merge
