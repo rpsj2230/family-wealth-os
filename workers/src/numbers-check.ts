@@ -226,6 +226,7 @@ async function main() {
         position,
         moves: ledgerMovesOf(l.engine.moves),
         openingDate: cfg.capital.openingDate || null,
+        reinvestDays: cfg.harvest.reinvestDays,
       });
       const t = ledger.totals;
       console.log(

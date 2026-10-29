@@ -833,6 +833,22 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'days',
       },
       {
+        name: 'buyBackDays',
+        label: 'Buy the fund back this many working days after selling',
+        hint: 'The sale money reaches your bank first (usually one to two working days). The harvest plan dates the buy-back this many working days after the sale.',
+        kind: 'int',
+        path: ['harvest', 'buyBackDays'],
+        unit: 'days',
+      },
+      {
+        name: 'reinvestDays',
+        label: 'A buy-back within this many days of a sale is a reinvestment',
+        hint: 'A purchase of the same fund this soon after a sale puts the sale money back: your own money and the yearly return on Home are not changed by it, even when the sale and the purchase fall in different months.',
+        kind: 'int',
+        path: ['harvest', 'reinvestDays'],
+        unit: 'days',
+      },
+      {
         name: 'otherLong',
         label: 'Months before international, gold and fund-of-funds units are long-term',
         hint: 'Sets the short-term and long-term split on those funds’ pages. These funds have no yearly tax-free allowance.',

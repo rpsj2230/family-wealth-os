@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   DEFAULT_CONFIG,
   RULES,
+  harvestTable,
   harvestView,
   personStyles,
   planHarvest,
@@ -12,6 +13,7 @@ import {
 import { BottomNav, Sidebar } from '@/components/AppNav';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
+import { HarvestPlanTable } from '@/app/(app)/tax/HarvestPlanTable';
 import { Checklist, CostsNote, niceDate, PersonHarvest } from '@/app/(app)/tax/Parts';
 import { taxExplain } from '@/lib/explain-tax';
 
@@ -195,6 +197,9 @@ export default function DemoTaxHarvest() {
               { key: 'refunds', label: 'Refunds' },
               { key: 'more', label: 'How it works' },
             ]}
+          />
+          <HarvestPlanTable
+            t={harvestTable(view, { today: TODAY, rules: RULES, config: DEFAULT_CONFIG.harvest })}
           />
           {view.people.map((pv) => (
             <PersonHarvest key={pv.ownerId} pv={pv} person={styles[pv.ownerId]} ex={ex} />

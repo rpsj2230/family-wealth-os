@@ -359,3 +359,37 @@
 .tx-costsrow .tx-costs {
   min-width: 0;
 }
+
+/* ---- harvest plan: the whole family in one table ---- */
+.tx-plan {
+  min-width: 0;
+  max-width: 100%;
+}
+.tx-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+.tx-plan-head h2 {
+  margin: 0;
+}
+.tx-plan-table td,
+.tx-plan-table th {
+  white-space: nowrap;
+}
+.tx-plan-table td[data-label='Fund'] {
+  white-space: normal;
+  min-width: 12rem;
+}
+.tx-plan-table tfoot td {
+  white-space: normal;
+}
+.tx-plan-loss td {
+  background: color-mix(in srgb, var(--warn-bg, #fff7e6) 45%, transparent);
+}
+.tx-plan-notes {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+}

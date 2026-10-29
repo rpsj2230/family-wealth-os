@@ -86,7 +86,7 @@ export function SipPlan({
 
       {view.rows.length > 0 && (
         <div className="tablewrap">
-          <table className="table small" data-testid="sip-changes">
+          <table className="tbl lines small" data-testid="sip-changes">
             <thead>
               <tr>
                 <th>From</th>

@@ -28,12 +28,12 @@ test.describe('Tax harvest (public sample)', () => {
     await expect(page.getByText(/Costs to expect: stamp duty, STT, exit load/)).toBeVisible();
   });
 
-  test('keeps buying back out of the main view and shows the lots in the working', async ({
+  test('keeps buying back out of the person cards (the harvest plan table carries it) and shows the lots in the working', async ({
     page,
   }) => {
     await page.goto('/demo/tax-harvest');
-    const shown = await page.locator('main').innerText();
-    expect(shown).not.toMatch(/buy.?back|buy first|buying/i);
+    for (const card of await page.locator('.tx-person').all())
+      expect(await card.innerText()).not.toMatch(/buy.?back|buy first|buying/i);
     const first = page.locator('.tx-item').first();
     await first.getByText('Show the working').click();
     await expect(first.getByText('10 Feb 2025')).toBeVisible();

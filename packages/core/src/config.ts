@@ -200,6 +200,10 @@ export interface AppConfig {
     stampDutyPct: number;
     /** days kept clear before 31 March: an order after the cut-off or on a holiday is priced on the next working day */
     orderBufferDays: number;
+    /** working days after a sale before buying the fund again: the proceeds reach the bank first */
+    buyBackDays: number;
+    /** a purchase of the same fund this many days after a sale is a reinvestment of the proceeds, not new money (own money, XIRR) */
+    reinvestDays: number;
     /** months after which units of an international, gold or fund-of-funds fund are long-term (they have no tax-free allowance) */
     otherLongMonths: number;
   };
@@ -430,6 +434,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     sttPct: 0.00001,
     stampDutyPct: 0.00005,
     orderBufferDays: 6,
+    buyBackDays: 2,
+    reinvestDays: 10,
     otherLongMonths: 24,
   },
   ai: {
@@ -845,6 +851,8 @@ export function configFromJson(raw: unknown): AppConfig {
       sttPct: num(har.sttPct, d.harvest.sttPct, 0, 0.01),
       stampDutyPct: num(har.stampDutyPct, d.harvest.stampDutyPct, 0, 0.01),
       orderBufferDays: Math.round(num(har.orderBufferDays, d.harvest.orderBufferDays, 0, 60)),
+      buyBackDays: Math.round(num(har.buyBackDays, d.harvest.buyBackDays, 0, 15)),
+      reinvestDays: Math.round(num(har.reinvestDays, d.harvest.reinvestDays, 1, 60)),
       otherLongMonths: Math.round(num(har.otherLongMonths, d.harvest.otherLongMonths, 1, 120)),
     },
     ai: {

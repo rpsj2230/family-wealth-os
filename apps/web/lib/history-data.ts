@@ -37,6 +37,7 @@ export async function loadHistoryReview(
     position,
     moves: ledgerMovesOf(loaded.engine.moves),
     openingDate: config.capital.openingDate || null,
+    reinvestDays: config.harvest.reinvestDays,
   });
   const review = historyReview({
     ledger,

@@ -242,3 +242,86 @@ describe('wealthMovement (acceptance test 11)', () => {
     );
   });
 });
+
+describe('capitalLedger: a tax harvest (sell, then buy the same fund back) is a reinvestment', () => {
+  // 1,000 units at ₹100 bought on 1 Jan 2026; the price is ₹150 from February; all sold on 31 Mar, bought back on 2 Apr
+  const navs: { date: string; nav: number }[] = [];
+  for (let d = Date.parse('2025-12-25'); d <= Date.parse(TODAY); d += 3 * 86_400_000) {
+    const date = new Date(d).toISOString().slice(0, 10);
+    navs.push({ date, nav: date < '2026-02-01' ? 100 : 150 });
+  }
+  const harvested = (txnsExtra: { date: string; units: number; amount: number }[]) =>
+    base({
+      assetId: 'mf',
+      type: 'mutual_fund',
+      fund: {
+        txns: [
+          { date: '2026-01-01', units: 1000, amount: 100_000, estimated: false },
+          ...txnsExtra.map((t) => ({ ...t, estimated: false })),
+        ],
+        navs,
+        units: null,
+        snapshots: [],
+        // money put in and taken out, as the loader writes it from the same lines
+        flows: [
+          { date: '2026-01-01', amount: 100_000 },
+          ...txnsExtra.map((x) => ({ date: x.date, amount: x.amount })),
+        ],
+        hasStatement: true,
+        estimatedSince: null,
+      },
+    });
+  const sellAndBuy = [
+    { date: '2026-03-31', units: -1000, amount: -150_000 },
+    { date: '2026-04-02', units: 1000, amount: 150_000 },
+  ];
+  const month = (l: ReturnType<typeof capitalLedger>, from: string) =>
+    l.months.find((m) => m.from === from)!;
+
+  it('the sale before the month end and the buy-back after it are neither money taken out nor brought in', () => {
+    const l = capitalLedger({
+      position: input([harvested(sellAndBuy)]),
+      moves: [],
+      openingDate: '2025-12-31',
+    });
+    expect(Math.round(month(l, '2026-03-01').unexplained)).toBe(0);
+    expect(Math.round(month(l, '2026-04-01').unexplained)).toBe(0);
+    // own money is the ₹1,00,000 put in on 1 January, and the yearly return is the same as without the harvest
+    const plain = capitalLedger({
+      position: input([harvested([])]),
+      moves: [],
+      openingDate: '2025-12-31',
+    });
+    expect(Math.round(l.totals.ownMoney)).toBe(Math.round(plain.totals.ownMoney));
+    expect(l.totals.xirr.rate).toBeCloseTo(plain.totals.xirr.rate!, 6);
+  });
+
+  it('without the pairing the same harvest would read as money out in March and back in April', () => {
+    const l = capitalLedger({
+      position: input([harvested(sellAndBuy)]),
+      moves: [],
+      openingDate: '2025-12-31',
+      reinvestDays: 1,
+    });
+    expect(Math.round(month(l, '2026-03-01').unexplained)).toBe(-150_000);
+    expect(Math.round(month(l, '2026-04-01').unexplained)).toBe(150_000);
+  });
+
+  it('a savings balance recorded between the sale and the buy-back may hold the proceeds, so nothing is added then', () => {
+    const bank = base({
+      assetId: 'sav',
+      type: 'bank_account',
+      records: [rec('2025-12-31', 0), rec('2026-03-31', 150_000), rec('2026-04-03', 0)],
+    });
+    // sold on 28 March; the money is in the bank (and recorded) on 31 March; bought back on 2 April
+    const early = [{ ...sellAndBuy[0]!, date: '2026-03-28' }, sellAndBuy[1]!];
+    const l = capitalLedger({
+      position: input([harvested(early), bank], cfg({ savingsRate: 0 })),
+      moves: [],
+      openingDate: '2025-12-31',
+    });
+    // the proceeds sat in the bank at the month end: still no money in or out in either month
+    expect(Math.round(month(l, '2026-03-01').unexplained)).toBe(0);
+    expect(Math.round(month(l, '2026-04-01').unexplained)).toBe(0);
+  });
+});

@@ -1,5 +1,12 @@
 import Link from 'next/link';
-import { formatInr, harvestDueOn, harvestView, personStyles, planLossHarvest } from '@fwos/core';
+import {
+  formatInr,
+  harvestDueOn,
+  harvestTable,
+  harvestView,
+  personStyles,
+  planLossHarvest,
+} from '@fwos/core';
 import {
   ensureInterestRefundRecords,
   ensureRefundRecords,
@@ -17,6 +24,7 @@ import { WhyHead } from '@/components/Why';
 import { loadContext } from '@/lib/data';
 import { taxExplain } from '@/lib/explain-tax';
 import { updateRefund } from './actions';
+import { HarvestPlanTable } from './HarvestPlanTable';
 import { Checklist, CostsNote, niceDate, PersonHarvest } from './Parts';
 
 export const dynamic = 'force-dynamic';
@@ -161,6 +169,15 @@ export default async function TaxPage({
           )}
           {plan.status === 'ok' && plan.plans.length === 0 && (
             <p className="notice warn">No fund holdings found yet.</p>
+          )}
+          {view.people.length > 0 && (
+            <HarvestPlanTable
+              t={harvestTable(view, {
+                today: iso,
+                rules: settings.rules,
+                config: settings.config.harvest,
+              })}
+            />
           )}
           {view.people.map((pv) => (
             <PersonHarvest key={pv.ownerId} pv={pv} person={styles[pv.ownerId]} ex={ex} />

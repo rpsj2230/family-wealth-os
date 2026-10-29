@@ -748,6 +748,7 @@ export function buildHome(i: HomeInput): HomeModel {
     position: i.position,
     moves: i.moves ?? [],
     openingDate: cfg.capital.openingDate || null,
+    reinvestDays: cfg.harvest.reinvestDays,
   });
   const views = fundViews(i.position, {
     navStaleDays: cfg.funds.navStaleDays,

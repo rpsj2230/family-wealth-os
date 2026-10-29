@@ -48,6 +48,7 @@ import {
   valueDays,
   type Span,
 } from './period-gains';
+import { DEFAULT_CONFIG } from './config';
 import { xirr } from './xirr';
 
 /** A confirmed movement as the ledger reads it: outside money in (+) or out (−), income (+), a fee or tax (−), or a correction. */
@@ -113,12 +114,77 @@ export interface SpanFigures extends Span {
   estimated: boolean;
 }
 
+/** Money from a fund sale on its way back into the same fund (a tax harvest: sell, then buy again a few days later). */
+export interface Reinvestment {
+  ownerId: string;
+  assetId: string;
+  soldOn: string;
+  boughtOn: string;
+  amount: number;
+}
+
+/**
+ * Each sale of a fund followed, within `days`, by a purchase of the same fund: the smaller of the two amounts is the money reinvested.
+ * Only real lines count (never an estimated instalment).
+ */
+export function reinvestmentsOf(position: PositionInput, days: number): Reinvestment[] {
+  const out: Reinvestment[] = [];
+  for (const a of position.assets) {
+    const lines = (a.fund?.txns ?? []).filter((t) => !t.estimated && t.amount !== 0);
+    const buys = lines
+      .filter((t) => t.units > 0)
+      .map((t) => ({ date: t.date, left: Math.abs(t.amount) }));
+    for (const sale of lines.filter((t) => t.units < 0)) {
+      let proceeds = Math.abs(sale.amount);
+      const last = addDaysIso(sale.date, days);
+      for (const b of buys) {
+        if (proceeds <= 0) break;
+        if (b.date < sale.date || b.date > last || b.left <= 0) continue;
+        const amount = Math.min(proceeds, b.left);
+        b.left -= amount;
+        proceeds -= amount;
+        out.push({
+          ownerId: a.ownerId,
+          assetId: a.assetId,
+          soldOn: sale.date,
+          boughtOn: b.date,
+          amount,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The reinvested money still on its way on day `d` (sold on or before it, bought back after it), so a sale before a month end and its
+ * buy-back after it is neither money taken out nor money brought in. Not counted when one of the person's rupee savings balances was
+ * recorded after the sale and up to `d`: that balance may already hold the proceeds.
+ */
+export function reinvestedOn(position: PositionInput, pairs: Reinvestment[], d: string): number {
+  let total = 0;
+  for (const p of pairs) {
+    if (!(p.soldOn <= d && d < p.boughtOn)) continue;
+    const seen = position.assets.some(
+      (a) =>
+        a.ownerId === p.ownerId &&
+        a.type === 'bank_account' &&
+        a.currency === 'INR' &&
+        a.records.some((r) => r.date > p.soldOn && r.date <= d),
+    );
+    if (!seen) total += p.amount;
+  }
+  return total;
+}
+
 /** The family's figures for one stretch of time: values at both ends, earnings by kind, and the money that moved. */
 export function spanFigures(
   position: PositionInput,
   w: Span,
   moves: LedgerMove[],
   funds = fundsOf(position, [valueDays(w).open, valueDays(w).close]),
+  /** money on its way from a fund sale back into the same fund, by day (a harvest's sale and buy-back) */
+  inTransit: (d: string) => number = () => 0,
 ): SpanFigures {
   const c = position.config;
   const today = c.today;
@@ -146,9 +212,21 @@ export function spanFigures(
   const sum = (k: LedgerMove['kind']) =>
     moves.filter((m) => m.kind === k && inside(m.date)).reduce((a, m) => a + m.amount, 0);
   const income = sum('income') + sum('cost');
+  const v = valueDays(w);
   const start =
-    dep.startValue + fun.startValue + sav.startValue + foreign.startValue + rest.startValue;
-  const end = dep.endValue + fun.endValue + sav.endValue + foreign.endValue + rest.endValue;
+    dep.startValue +
+    fun.startValue +
+    sav.startValue +
+    foreign.startValue +
+    rest.startValue +
+    inTransit(v.open);
+  const end =
+    dep.endValue +
+    fun.endValue +
+    sav.endValue +
+    foreign.endValue +
+    rest.endValue +
+    inTransit(v.close);
   const engine = dep.profit + fun.profit + sav.profit + foreign.profit + rest.profit;
   const total = engine + income;
   const moved = end - start - total;
@@ -259,6 +337,8 @@ export function capitalLedger(args: {
   moves: LedgerMove[];
   /** Settings > capital: the day to measure from; empty or absent = the first day with records */
   openingDate?: string | null;
+  /** Settings > harvest: a purchase of the same fund this many days after a sale reinvests its proceeds */
+  reinvestDays?: number;
 }): CapitalLedger {
   const { position } = args;
   const today = position.config.today;
@@ -293,7 +373,9 @@ export function capitalLedger(args: {
   );
   const days = [...new Set(spans.flatMap((w) => [valueDays(w).open, valueDays(w).close]))].sort();
   const funds = fundsOf(position, days);
-  const months = spans.map((w) => spanFigures(position, w, args.moves, funds));
+  const pairs = reinvestmentsOf(position, args.reinvestDays ?? DEFAULT_CONFIG.harvest.reinvestDays);
+  const inTransit = (d: string) => (pairs.length ? reinvestedOn(position, pairs, d) : 0);
+  const months = spans.map((w) => spanFigures(position, w, args.moves, funds, inTransit));
 
   const first = months[0]!;
   const last = months[months.length - 1]!;

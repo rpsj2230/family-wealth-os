@@ -2735,3 +2735,11 @@ details.bankdet {
   position: static;
   box-shadow: none;
 }
+
+/* a wide table scrolls inside its card, never the page (inline-size containment: its width never widens the layout) */
+.tablewrap {
+  max-width: 100%;
+  overflow-x: auto;
+  contain: inline-size;
+  -webkit-overflow-scrolling: touch;
+}
