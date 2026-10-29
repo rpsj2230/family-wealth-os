@@ -37,6 +37,14 @@ export function RuleGroupForm({
                 className="mono"
                 defaultValue={String(values[f.name] ?? '')}
               />
+            ) : f.kind === 'date' ? (
+              // the browser's date picker, with its calendar button; empty is allowed where the field is optional
+              <input
+                type="date"
+                name={f.name}
+                defaultValue={String(values[f.name] ?? '')}
+                required={!f.optional}
+              />
             ) : (
               <input
                 name={f.name}

@@ -2728,3 +2728,10 @@ details.bankdet {
   place-items: center;
   color: #1faa59;
 }
+
+/* a save bar with nothing to save does not float over the list */
+.savebar.idle,
+.upd .savebar.idle {
+  position: static;
+  box-shadow: none;
+}

@@ -525,7 +525,12 @@ export function UpdateGrid({
         );
       })}
 
-      <div className="card savebar" role="region" aria-label="Save">
+      {/* floats at the bottom only while there is something to save; otherwise it stays here, at the end of the list */}
+      <div
+        className={`card savebar${changes.length === 0 && !msg ? ' idle' : ''}`}
+        role="region"
+        aria-label="Save"
+      >
         <span className={msg ? (msg.ok ? 'ok' : 'fail') : 'muted'} role="status" aria-live="polite">
           {msg
             ? msg.text
