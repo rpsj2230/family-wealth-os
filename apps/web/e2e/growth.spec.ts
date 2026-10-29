@@ -36,6 +36,7 @@ test.describe('Money at work (public sample)', () => {
     const years = page.getByTestId('gw-years');
     for (const h of [
       'Same pace, funds at their actual past return',
+      'Savings and deposits too at the funds’ actual past return',
       'Funds at the long-run return',
       '2% slower',
       '1% slower',

@@ -95,6 +95,7 @@ describe('projectGrowth: the corpus year by year', () => {
   it('the same pace (funds at their actual past return), the long-run line, 2% and 1% slower, 1% and 2% faster, and the slow money moved', () => {
     expect(p.lines.map((l) => l.key)).toEqual([
       'same',
+      'allfunds',
       'longrun',
       'slower-0.02',
       'slower-0.01',
@@ -145,6 +146,16 @@ describe('projectGrowth: the corpus year by year', () => {
     expect(line('longrun').values[20]!).toBeLessThan(line('same').values[20]!);
     const y1 = 1_000_000 * 1.021 + 2_000_000 * 1.075 + (1_000_000 * 1.1 + 120_000 * 1.05) + 200_000;
     expect(line('longrun').values[1]).toBeCloseTo(y1, 4);
+  });
+
+  it('grows savings and deposits at the funds’ actual past return too, leaving money lent as it is', () => {
+    expect(line('allfunds').label).toBe(
+      'Savings and deposits too at the funds’ actual past return (12.0%)',
+    );
+    // year 1: NRO 10L and FD 20L at 12% with no tax until sold, the fund as on the same pace, money lent stays
+    const y1 = (1_000_000 + 2_000_000) * 1.12 + (1_000_000 * 1.12 + 120_000 * 1.06) + 200_000;
+    expect(line('allfunds').values[1]).toBeCloseTo(y1, 4);
+    expect(line('allfunds').values[20]!).toBeGreaterThan(line('same').values[20]!);
   });
 
   it('shows the pace of each line, today’s rupees and the ages', () => {

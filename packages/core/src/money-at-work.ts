@@ -326,6 +326,22 @@ export function projectGrowth(input: {
       values: same.values,
     },
   ];
+  if (fundsPace !== null) {
+    // savings and deposits grown at the funds' own past return too, as if they were invested like the funds (taxed only when sold);
+    // property, retirement accounts and money lent keep their own pace
+    const allFunds = base.map((x) =>
+      x.kind === 'cash' || x.kind === 'fd' || x.kind === 'funds'
+        ? { ...x, rate: fundsPace, taxRate: 0, grows: fundsPace > 0 }
+        : x,
+    );
+    lines.push({
+      key: 'allfunds',
+      label: `Savings and deposits too at the funds’ actual past return (${pct(fundsPace)})`,
+      pace: paceOf(allFunds, 0),
+      shift: 0,
+      values: runSlots(allFunds, years, 0, stepUp).values,
+    });
+  }
   if (input.longRunFundRate !== undefined && fundsPace !== null) {
     // the same holdings, with every fund growing at the plan's long-run return instead of its own past one
     const longRun = base.map((x) =>

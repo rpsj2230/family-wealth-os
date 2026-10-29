@@ -30,6 +30,7 @@ const BUCKET: Record<WorkBucket, { label: string; tone: string }> = {
 
 const COLOURS: Record<string, string> = {
   same: 'var(--viz-1)',
+  allfunds: 'var(--viz-5)',
   longrun: 'var(--viz-other)',
   moved: 'var(--viz-6)',
 };
@@ -373,6 +374,11 @@ function ProjectionTab({
           past few years can be far above what the next 20 bring, so “Funds at the long-run return”
           grows them at your retirement plan’s {pct(longRunEquity)} instead, with everything else
           unchanged. The slower lines show what a lower pace does.
+        </li>
+        <li>
+          “Savings and deposits too at the funds’ actual past return” grows your savings, deposits
+          and funds all at that same past return, as if the cash were invested the way the funds are
+          (taxed only when sold). Property, retirement accounts and money lent keep their own pace.
         </li>
         <li>
           Slower and faster move every growing holding by the same points; money that earns nothing
