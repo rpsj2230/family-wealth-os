@@ -348,6 +348,19 @@ describe('mutual funds: units held on the day times the price', () => {
     expect(s).toMatchObject({ value: 7_000, basis: 'sheet', estimated: true });
     expect(valueOn(sheetOnly, '2026-01-01', cfg()).state).toBe('not_yet');
   });
+  it('a closed fund with no ledger counts up to its last record and not after', () => {
+    const closed = base({
+      assetId: 'f6',
+      type: 'mutual_fund',
+      status: 'closed',
+      records: [rec('2026-01-31', 10_000)],
+      fund: fund({ navs: [{ date: '2026-01-30', nav: 100 }] }),
+    });
+    expect(valueOn(closed, '2026-01-31', cfg()).state).toBe('held');
+    expect(valueOn(closed, '2026-02-15', cfg()).state).toBe('ended');
+    const noRecord = base({ assetId: 'f7', type: 'mutual_fund', status: 'closed', fund: fund() });
+    expect(valueOn(noRecord, '2026-02-15', cfg()).state).toBe('ended');
+  });
   it('lines assumed from a SIP plan make the figure an estimate', () => {
     const a2 = base({
       assetId: 'f5',

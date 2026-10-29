@@ -1000,6 +1000,12 @@ const valueFund: Valuer = (a, on, c, cur) => {
   const f = a.fund;
   const rate = null;
   if (a.status === 'gifted') return none(a, 'ended', 'gifted');
+  // a fund no longer held (closed) with no transaction ledger counts up to its last record and not after, like any closed holding;
+  // one with a ledger ends when its units are sold, below
+  if (!(f && f.txns.length > 0)) {
+    const ended = endedAfterLastRecord(a, on);
+    if (ended) return ended;
+  }
   if (f && f.txns.length > 0 && f.txns[0]!.date <= on) {
     const u = unitsOn(f, on);
     if (u.units <= 1e-6) {
