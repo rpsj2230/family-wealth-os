@@ -235,3 +235,10 @@
     white-space: normal;
   }
 }
+.ch-kpis {
+  margin: 0.5rem 0;
+}
+.ch-gaps li {
+  padding: 0.3rem 0;
+  overflow-wrap: anywhere;
+}

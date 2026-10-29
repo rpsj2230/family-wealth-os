@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  chainCoverage,
+  chainTables,
   endPoints,
   holdingSources,
   mainPath,
@@ -299,6 +301,135 @@ describe('money chain: longer transfers and deposits paid back into another acco
     ]);
     expect(t.starts).toEqual([
       expect.objectContaining({ kind: 'deposit_interest', amount: 35_000 }),
+    ]);
+  });
+});
+
+describe('money chain: money in accounts with no statement on file', () => {
+  // Z has statements; E (ESAF) has none. ₹3L goes Z → E, a ₹3L ESAF deposit is booked two days later; it ends unpaid by any line,
+  // and ₹3.2L comes back from E into Z later
+  const inZ = ln('Z', '2023-01-01', 500_000, 'outside_in');
+  const toE = ln('Z', '2023-01-05', -300_000, 'own_transfer', 'E');
+  const back = ln('Z', '2024-02-01', 320_000, 'own_transfer', 'E');
+  const chain = moneyChain({
+    lines: [inZ, toE, back],
+    assets: [acct('Z'), acct('E'), { id: 'FDE', ownerId: 'R', kind: 'deposit' }],
+    deposits: [
+      dep({
+        assetId: 'FDE',
+        bank: 'ESAF',
+        principal: 300_000,
+        bookedOn: '2023-01-07',
+        maturityOn: '2024-01-07',
+        maturityAmount: 320_000,
+      }),
+    ],
+    openings: new Map(),
+    method: 'recent',
+    pairDays: 3,
+  });
+
+  it('books the deposit from the money sent to the account with no statement', () => {
+    const src = holdingSources(chain, 'FDE');
+    expect(src.map((l) => l.node)).toEqual(['before:FDE']);
+    const t = traceBack(chain, 'before:FDE', OPTS)!;
+    expect(t.steps.map((s) => [s.node.id, s.amount, s.via, s.basis])).toEqual([
+      [toE.id, 300_000, 'away:R', 'guess'],
+    ]);
+    expect(chain.guessed.fromOutside).toBeGreaterThanOrEqual(1);
+  });
+
+  it('pays the ended deposit back outside the statements, and the money coming back into Z is that money', () => {
+    expect(chain.guessed.paidOutside).toBe(1);
+    const t = traceBack(chain, back.id, OPTS)!;
+    expect(flat(t).map((s) => s.node.id)).toEqual([
+      back.id,
+      'payback:FDE',
+      'before:FDE',
+      toE.id,
+      inZ.id,
+    ]);
+    expect(startPoints(chain, back.id).map((p) => [p.kind, Math.round(p.amount)])).toEqual([
+      ['outside', 300_000],
+      ['deposit_interest', 20_000],
+    ]);
+    expect(chain.outside.get('R') ?? []).toEqual([]);
+  });
+});
+
+describe('money chain: a pay-back of two deposits on file in one line', () => {
+  it('finds the deposits that end then and adds up to the amount with interest', () => {
+    const inZ = ln('Z', '2023-01-01', 500_000, 'outside_in');
+    const b1 = ln('Z', '2023-01-02', -200_000, 'fd_funding', 'D1');
+    const b2 = ln('Z', '2023-01-02', -300_000, 'fd_funding', 'D2');
+    const back = ln('Z', '2024-01-04', 535_000, 'fd_proceeds', null, 'TD PROCEEDS');
+    const c = moneyChain({
+      lines: [inZ, b1, b2, back],
+      assets: [
+        acct('Z'),
+        { id: 'D1', ownerId: 'R', kind: 'deposit' },
+        { id: 'D2', ownerId: 'R', kind: 'deposit' },
+      ],
+      deposits: [
+        dep({
+          assetId: 'D1',
+          principal: 200_000,
+          bookedOn: '2023-01-02',
+          maturityOn: '2024-01-02',
+        }),
+        dep({
+          assetId: 'D2',
+          principal: 300_000,
+          bookedOn: '2023-01-02',
+          maturityOn: '2024-01-02',
+        }),
+      ],
+      openings: new Map(),
+      method: 'recent',
+      pairDays: 3,
+    });
+    const t = traceBack(c, back.id, OPTS)!;
+    expect(t.steps.map((s) => [s.node.id, s.amount, s.via]).sort()).toEqual([
+      [b1.id, 200_000, 'D1'],
+      [b2.id, 300_000, 'D2'],
+    ]);
+    expect(t.starts).toEqual([
+      expect.objectContaining({ kind: 'deposit_interest', amount: 35_000 }),
+    ]);
+  });
+});
+
+describe('money chain: the whole trail at once', () => {
+  it('says how much of today’s money is traced to a real start, and lists every step for a download', () => {
+    const remit = ln('C', '2024-03-01', 1_000_000, 'own_transfer', 'SG', 'Wise');
+    const out = ln('C', '2024-03-02', -400_000, 'ask_out');
+    const zIn = ln('Z', '2024-03-05', 300_000, 'ask_in');
+    const c = moneyChain({
+      lines: [remit, out, zIn],
+      assets: [acct('C'), acct('Z'), { id: 'SG', ownerId: 'R', kind: 'account', abroad: true }],
+      deposits: [],
+      openings: new Map(),
+      method: 'recent',
+      pairDays: 3,
+      remittanceOf: new Map([[remit.id, 'W1']]),
+    });
+    const cov = chainCoverage(c, () => 'account');
+    // ₹6L from Singapore is still in C; ₹3L came into Z from nowhere the statements show
+    expect(Math.round(cov.total)).toBe(900_000);
+    expect(cov.traced).toBeCloseTo(600_000 / 900_000, 6);
+    const [steps, starts, ends] = chainTables(c, (id) => id ?? '');
+    // the ₹4L out of C is made of the Wise money that came in the day before
+    expect(steps!.rows.map((r) => [r.from, r.to, r.amount, r.how])).toEqual([
+      ['C', 'C', 400_000, 'in the same account'],
+    ]);
+    expect(starts!.rows.map((r) => [r.kind, r.amount])).toEqual([
+      ['From Singapore (Wise or DBS)', 1_000_000],
+      ['Not explained by the statements', 300_000],
+    ]);
+    expect(ends!.rows.map((r) => [r.kind, r.amount])).toEqual([
+      ['Still there', 600_000],
+      ['Not answered yet (Explain movements)', 400_000],
+      ['Still there', 300_000],
     ]);
   });
 });

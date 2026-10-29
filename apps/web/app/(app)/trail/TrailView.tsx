@@ -6,11 +6,12 @@ import {
   formatPct,
   ORIGIN_LABEL,
   type OriginKind,
+  chainCoverage,
   type Part,
   startPoints,
   type Trail,
 } from '@fwos/core';
-import { HoldingChain, type ChainContext } from '@/components/MoneyChainView';
+import { ChainCompleteness, HoldingChain, type ChainContext } from '@/components/MoneyChainView';
 import { niceDate } from '@/lib/dates';
 import './trail.css';
 
@@ -150,6 +151,17 @@ export function TrailView({
           placed in an account {remittances.placed}.
         </p>
       </section>
+
+      <ChainCompleteness
+        c={chain}
+        coverage={chainCoverage(
+          chain.chain,
+          (id) => holdings.find((h) => h.id === id)?.kind ?? null,
+        )}
+        {...(sample ? {} : { exportHref: '/trail/export' })}
+        answerHref={sample ? '/demo/reconcile' : '/reconcile?tab=statements'}
+        importHref={sample ? '/demo/import' : '/import'}
+      />
 
       <section className="card" aria-labelledby="tr-h">
         <h2 id="tr-h">Choose a holding</h2>

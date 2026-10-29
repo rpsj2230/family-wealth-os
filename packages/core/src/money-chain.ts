@@ -20,7 +20,14 @@
  *
  * Pure: no I/O.
  */
-import { originOf, type OriginKind, type TrailAsset, type TrailLine } from './money-trail';
+import {
+  ORIGIN_LABEL,
+  originOf,
+  type OriginKind,
+  type TrailAsset,
+  type TrailLine,
+} from './money-trail';
+import type { ReportTable } from './reports';
 import { bankWord, type LineClass } from './statement-classify';
 
 /** The order money leaves an account in: the latest money in goes out first, or a share of everything in it. */
@@ -66,8 +73,11 @@ export interface ChainEnd {
 export interface ChainNode {
   /** the statement line's id; `open:`, `before:` and `renew:` for the steps no line is */
   id: string;
-  /** a statement line; an account's balance before its first statement; a deposit booked before the statements; a renewal */
-  kind: 'line' | 'opening' | 'deposit_before' | 'renewal';
+  /**
+   * a statement line; an account's balance before its first statement; a deposit booked with money the statements do not show; a
+   * renewal; a deposit paid out into an account with no statement on file
+   */
+  kind: 'line' | 'opening' | 'deposit_before' | 'renewal' | 'payback';
   /** the account the line is in; the deposit, for a deposit booked before the statements and a renewal */
   assetId: string;
   date: string;
@@ -110,7 +120,18 @@ export interface MoneyChain {
   /** each account's money today: the steps whose money is still in it */
   now: Map<string, ChainLink[]>;
   /** links matched here by amount and date */
-  guessed: { transfers: number; depositBooked: number; depositPaidBack: number; renewals: number };
+  guessed: {
+    transfers: number;
+    depositBooked: number;
+    depositPaidBack: number;
+    renewals: number;
+    /** deposits booked, and money coming back, from money that went to accounts with no statement on file */
+    fromOutside: number;
+    /** deposits that ended with no line paying them back: paid into the holder's accounts with no statement on file */
+    paidOutside: number;
+  };
+  /** each person's money in accounts with no statement on file, as far as it is known: the steps it came from */
+  outside: Map<string, ChainLink[]>;
   method: ChainMethod;
 }
 
@@ -237,7 +258,14 @@ export function moneyChain(args: {
     f.to.push({ node: toId, amount, basis, ...(via ? { via } : {}) });
     t.from.push({ node: fromId, amount, basis, ...(via ? { via } : {}) });
   };
-  const guessed = { transfers: 0, depositBooked: 0, depositPaidBack: 0, renewals: 0 };
+  const guessed = {
+    transfers: 0,
+    depositBooked: 0,
+    depositPaidBack: 0,
+    renewals: 0,
+    fromOutside: 0,
+    paidOutside: 0,
+  };
 
   // ---- 1. transfers: the money out of one account and the same sum into the other, the closest in date
   const pairOf = new Map<string, string>();
@@ -484,6 +512,108 @@ export function moneyChain(args: {
     return sum(parts);
   };
 
+  /** deposits already paid back (by a line, a renewal or into an account with no statement) */
+  const paidDeps = new Set<string>([...depHasPayback]);
+  /** money a person sent to accounts with no statement on file, taken for a step: the latest first */
+  const fromAway = (person: string, amount: number, to: string) => {
+    const { parts } = take(pool(`away:${person}`), amount, 'recent');
+    for (const part of parts) link(part.node, to, part.amount, 'guess', `away:${person}`);
+    return sum(parts);
+  };
+  /**
+   * A deposit pay-back the rules did not tie to a deposit: the deposits on file of the holder (or at the account's bank) that end
+   * around that day, one to three of them, whose principal the amount covers with interest on top; paid from what booked them.
+   */
+  const payWindow = Math.max(pairDays, 7) * 4;
+  const fromDeposits = (l: TrailLine, holder: string, to: string) => {
+    const here = bankOf(l.assetId);
+    const cands = depsByDate
+      .filter((d) => {
+        if (depHasPayback.has(d.assetId) || renewed.has(d.assetId)) return false;
+        const end = d.endedOn ?? d.maturityOn;
+        if (!end || daysApart(end, l.date) > payWindow) return false;
+        const there = d.bank ? bankWord(d.bank) : '';
+        if (there && here && there !== here) return false;
+        if (d.ownerId !== holder && !(there && there === here)) return false;
+        const left = paidDeps.has(d.assetId)
+          ? sum(pool(`away:${d.ownerId}`).filter((x) => x.node === `payback:${d.assetId}`))
+          : sum(pool(d.assetId));
+        return left > TINY;
+      })
+      .sort(
+        (a, b) =>
+          daysApart(a.endedOn ?? a.maturityOn, l.date) -
+          daysApart(b.endedOn ?? b.maturityOn, l.date),
+      )
+      .slice(0, 10);
+    let best: ChainDeposit[] | null = null;
+    let bestScore = Infinity;
+    const score = (xs: ChainDeposit[]) => {
+      const lo = xs.reduce((s2, d) => s2 + d.principal, 0);
+      const exact = xs.every((d) => d.maturityAmount !== null)
+        ? Math.abs(xs.reduce((s2, d) => s2 + d.maturityAmount!, 0) - l.amount) <= 1
+        : false;
+      if (l.amount < lo - 1 || l.amount > lo * 1.6 + 1) return Infinity;
+      return (
+        (exact ? 0 : 1000) +
+        xs.length * 100 +
+        xs.reduce((s2, d) => s2 + daysApart(d.endedOn ?? d.maturityOn, l.date), 0)
+      );
+    };
+    const pick = (start: number, chosen: ChainDeposit[]) => {
+      if (chosen.length) {
+        const sc = score(chosen);
+        if (sc < bestScore) {
+          best = [...chosen];
+          bestScore = sc;
+        }
+      }
+      if (chosen.length === 3) return;
+      for (let i = start; i < cands.length; i++) pick(i + 1, [...chosen, cands[i]!]);
+    };
+    pick(0, []);
+    if (!best) return 0;
+    let got = 0;
+    for (const d of best as ChainDeposit[]) {
+      depHasPayback.add(d.assetId);
+      if (paidDeps.has(d.assetId)) {
+        // taken as paid out into an account with no statement: this line is the pay-back instead
+        const away = pool(`away:${d.ownerId}`);
+        const lot = away.find((x) => x.node === `payback:${d.assetId}`);
+        const r = nodes.get(`payback:${d.assetId}`);
+        if (lot && r && Math.abs(lot.amount - r.amount) <= TINY) {
+          // untouched since: the deposit's money moves from that step to this line
+          away.splice(away.indexOf(lot), 1);
+          for (const f of r.from) {
+            const src = nodes.get(f.node)!;
+            for (const e of src.to) if (e.node === r.id) e.node = to;
+            nodes.get(to)!.from.push({ ...f });
+          }
+          const paidPrincipal = sum(r.from);
+          nodes.delete(r.id);
+          const outs = outOf.get(d.assetId) ?? [];
+          outOf.set(
+            d.assetId,
+            outs.map((x) => (x.node === r.id ? { ...x, node: to, amount: paidPrincipal } : x)),
+          );
+          guessed.paidOutside--;
+          got += paidPrincipal;
+        } else if (lot) {
+          link(lot.node, to, lot.amount, 'guess', `away:${d.ownerId}`);
+          got += lot.amount;
+          lot.amount = 0;
+          away.splice(away.indexOf(lot), 1);
+        }
+      } else {
+        paidDeps.add(d.assetId);
+        got += payOut(d.assetId, depositPool(d.assetId), d.principal, to);
+        push(outOf, d.assetId, { node: to, amount: d.principal, via: d.assetId, basis: 'guess' });
+      }
+    }
+    guessed.depositPaidBack++;
+    return got;
+  };
+
   type Ev = { date: string; order: number; seq: number; run: () => void };
   const events: Ev[] = [];
   for (const [d2, d1] of renewalOf) {
@@ -515,6 +645,89 @@ export function moneyChain(args: {
         push(outOf, d1, { node: r.id, amount: dep2.principal, via: d1, basis: 'guess' });
         pool(d2).push({ node: r.id, amount: dep2.principal, via: d2, basis: 'guess' });
         push(into, d2, { node: r.id, amount: dep2.principal, via: d2, basis: 'guess' });
+      },
+    });
+  }
+  // a deposit on file that nothing on the statements booked: booked from its holder's money outside the statements, the latest first
+  for (const d of depsByDate) {
+    if (depHasFunding.has(d.assetId)) continue;
+    events.push({
+      date: d.bookedOn,
+      order: 0,
+      seq: 1,
+      run: () => {
+        if (nodes.has(`before:${d.assetId}`)) return;
+        const n = node({
+          id: `before:${d.assetId}`,
+          kind: 'deposit_before',
+          assetId: d.assetId,
+          date: d.bookedOn,
+          amount: d.principal,
+          cls: null,
+          narration: 'Deposit booked with money the statements on file do not show',
+        });
+        const got = fromAway(d.ownerId, d.principal, n.id);
+        if (got > TINY) guessed.fromOutside++;
+        if (d.principal - got > TINY)
+          n.starts.push({
+            kind: 'untraced_deposit',
+            amount: d.principal - got,
+            assetId: d.assetId,
+            person: d.ownerId,
+          });
+        pool(d.assetId).unshift({
+          node: n.id,
+          amount: d.principal,
+          via: d.assetId,
+          basis: 'rules',
+        });
+        push(into, d.assetId, { node: n.id, amount: d.principal, via: d.assetId, basis: 'rules' });
+      },
+    });
+  }
+  // a deposit on file that ended with no line paying it back: paid into its holder's accounts with no statement on file
+  for (const d of depsByDate) {
+    const end = d.endedOn ?? d.maturityOn;
+    if (!end || end > lastLine || renewed.has(d.assetId)) continue;
+    // on the day it ended; a line that turns out to be the pay-back takes it over (fromDeposits)
+    events.push({
+      date: end,
+      order: 2,
+      seq: 0,
+      run: () => {
+        if (paidDeps.has(d.assetId)) return;
+        const p = depositPool(d.assetId);
+        if (sum(p) <= TINY) return;
+        paidDeps.add(d.assetId);
+        const r = node({
+          id: `payback:${d.assetId}`,
+          kind: 'payback',
+          assetId: d.assetId,
+          date: end,
+          amount: 0,
+          cls: null,
+          narration: 'Paid back into an account with no statement on file',
+          holding: d.assetId,
+          holdingBasis: 'guess',
+        });
+        const got = payOut(d.assetId, p, Infinity, r.id);
+        const interest = d.maturityAmount !== null ? Math.max(0, d.maturityAmount - got) : 0;
+        if (interest > TINY)
+          r.starts.push({
+            kind: 'deposit_interest',
+            amount: interest,
+            assetId: d.assetId,
+            person: d.ownerId,
+          });
+        r.amount = got + interest;
+        push(outOf, d.assetId, { node: r.id, amount: r.amount, via: d.assetId, basis: 'guess' });
+        pool(`away:${d.ownerId}`).push({
+          node: r.id,
+          amount: r.amount,
+          via: `away:${d.ownerId}`,
+          basis: 'guess',
+        });
+        guessed.paidOutside++;
       },
     });
   }
@@ -556,7 +769,16 @@ export function moneyChain(args: {
       } else if (l.cls === 'fund_buy') n.ends.push({ kind: 'untraced_fund', amount: out });
       else if (l.cls === 'own_transfer' && l.counterpart && withLines.has(l.counterpart))
         n.ends.push({ kind: 'not_found', amount: out, assetId: l.counterpart });
-      else if (l.cls === 'own_transfer')
+      else if (l.cls === 'own_transfer' && !(l.counterpart && abroad.has(l.counterpart))) {
+        // to an account with no statement on file: the money waits there, as the person's money outside the statements
+        const person = l.person ?? (l.counterpart ? owner.get(l.counterpart) : undefined) ?? holder;
+        pool(`away:${person}`).push({
+          node: n.id,
+          amount: out,
+          via: `away:${person}`,
+          basis: 'guess',
+        });
+      } else if (l.cls === 'own_transfer')
         n.ends.push({ kind: 'untraced_account', amount: out, assetId: l.counterpart });
       else if (l.cls === 'fee') n.ends.push({ kind: 'fee', amount: out });
       else if (l.cls === 'tax' || l.cls === 'interest_tax')
@@ -581,6 +803,7 @@ export function moneyChain(args: {
           assetId: paid.dep,
           person: holder,
         });
+      paidDeps.add(paid.dep);
       push(outOf, paid.dep, { node: n.id, amount: l.amount, via: paid.dep, basis: paid.basis });
     } else if (l.cls === 'fd_proceeds') {
       // a deposit not on file booked from this account; else from another account of the same person at the same bank
@@ -596,7 +819,9 @@ export function moneyChain(args: {
             sum(pool(`held:${x}`)) > TINY,
         ),
       ].find((x) => sum(pool(`held:${x}`)) > TINY);
-      const got = from ? payOut(`held:${from}`, pool(`held:${from}`), l.amount, n.id) : 0;
+      let got = from ? payOut(`held:${from}`, pool(`held:${from}`), l.amount, n.id) : 0;
+      // else deposits on file that end around then
+      if (got <= TINY) got = fromDeposits(l, holder, n.id);
       if (got <= TINY)
         n.starts.push({
           kind: 'untraced_deposit',
@@ -631,13 +856,20 @@ export function moneyChain(args: {
       const o = remit
         ? { kind: 'singapore' as const, amount: l.amount, person: holder }
         : originOf(l, holder, owner);
-      n.starts.push({
-        kind: o.kind,
-        amount: l.amount,
-        person: o.person,
-        ...(o.assetId !== undefined ? { assetId: o.assetId } : {}),
-        ...(remit ? { remittanceId: remit } : {}),
-      });
+      // from an account with no statement on file: the money the person sent to such accounts, or deposits paid out there
+      let got = 0;
+      if (o.kind === 'untraced_account' && !(l.counterpart && abroad.has(l.counterpart))) {
+        got = fromAway(o.person, l.amount, n.id);
+        if (got > TINY) guessed.fromOutside++;
+      }
+      if (l.amount - got > TINY)
+        n.starts.push({
+          kind: o.kind,
+          amount: l.amount - got,
+          person: o.person,
+          ...(o.assetId !== undefined ? { assetId: o.assetId } : {}),
+          ...(remit ? { remittanceId: remit } : {}),
+        });
     }
     here.push({ node: n.id, amount: l.amount, basis: 'same_account' });
   }
@@ -652,7 +884,13 @@ export function moneyChain(args: {
       if (withLines.has(holding))
         push(now, holding, { node: lot.node, amount: lot.amount, basis: lot.basis });
     }
-  return { nodes, into, outOf, now, guessed, method };
+  const outside = new Map<string, ChainLink[]>();
+  for (const [holding, p] of pools)
+    if (holding.startsWith('away:'))
+      for (const lot of p)
+        if (lot.amount > TINY)
+          push(outside, holding.slice(5), { node: lot.node, amount: lot.amount, basis: lot.basis });
+  return { nodes, into, outOf, now, outside, guessed, method };
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -967,3 +1205,162 @@ export const LINK_LABEL: Record<LinkBasis, string> = {
   rules: 'named by the statement or the records',
   guess: 'matched by amount and date',
 };
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// the whole trail at once
+
+/** Where all of today's money is (accounts, deposits, funds, money outside the statements), each with where it started. */
+export interface ChainCoverage {
+  /** all the money the trail holds today */
+  total: number;
+  /** by where it started, in full */
+  starts: StartPoint[];
+  /** the share traced to a real start: Singapore, interest, earnings, money from outside, money there before the statements */
+  traced: number;
+  /** by where it is now: accounts with statements, deposits, funds, money outside the statements */
+  where: { kind: 'account' | 'deposit' | 'fund' | 'outside' | 'held'; amount: number }[];
+}
+
+/** Starts that are where money really came from (the rest are where the statements stop). */
+export const REAL_STARTS: ReadonlySet<OriginKind> = new Set<OriginKind>([
+  'singapore',
+  'interest',
+  'deposit_interest',
+  'fund_gain',
+  'rent',
+  'outside',
+  'before_records',
+]);
+
+export function chainCoverage(
+  chain: MoneyChain,
+  kindOf: (holding: string) => 'account' | 'deposit' | 'fund' | null,
+): ChainCoverage {
+  const links: ChainLink[] = [];
+  const where = new Map<ChainCoverage['where'][number]['kind'], number>();
+  for (const n of chain.nodes.values())
+    for (const l of n.left) {
+      if (l.amount <= 0.5) continue;
+      links.push({ node: n.id, amount: l.amount, basis: 'same_account' });
+      const k = l.assetId.startsWith('away:')
+        ? 'outside'
+        : l.assetId.startsWith('held:')
+          ? 'held'
+          : (kindOf(l.assetId) ?? 'account');
+      where.set(k, (where.get(k) ?? 0) + l.amount);
+    }
+  const starts = pointsOf((id, a) => startPoints(chain, id, a), links);
+  const total = links.reduce((s, l) => s + l.amount, 0);
+  const real = starts.filter((p) => REAL_STARTS.has(p.kind)).reduce((s, p) => s + p.amount, 0);
+  return {
+    total,
+    starts,
+    traced: total > 0 ? real / total : 0,
+    where: [...where]
+      .map(([kind, amount]) => ({ kind, amount }))
+      .sort((a, b) => b.amount - a.amount),
+  };
+}
+
+/**
+ * Every step of the trail as rows, for a download: each link from one step to the next with the date, the holdings, the amount,
+ * the deposit or fund it passed through and how it is known; and where each part of today's money started.
+ */
+export function chainTables(
+  chain: MoneyChain,
+  name: (holding: string | null | undefined) => string,
+): ReportTable[] {
+  const rows: Record<string, string | number | null>[] = [];
+  const nodeName = (n: ChainNode) => name(n.kind === 'line' ? n.assetId : n.assetId);
+  for (const n of [...chain.nodes.values()].sort((a, b) => a.date.localeCompare(b.date)))
+    for (const e of n.to) {
+      const t = chain.nodes.get(e.node);
+      if (!t) continue;
+      rows.push({
+        fromDate: n.date,
+        from: nodeName(n),
+        fromWords: n.narration.slice(0, 80),
+        toDate: t.date,
+        to: nodeName(t),
+        toWords: t.narration.slice(0, 80),
+        through: e.via ? name(e.via) : '',
+        amount: Math.round(e.amount),
+        how: LINK_LABEL[e.basis],
+      });
+    }
+  const starts = [...chain.nodes.values()].flatMap((n) =>
+    n.starts.map((s) => ({
+      date: n.date,
+      at: nodeName(n),
+      kind: ORIGIN_LABEL[s.kind],
+      from: s.assetId ? name(s.assetId) : '',
+      amount: Math.round(s.amount),
+      words: n.narration.slice(0, 80),
+    })),
+  );
+  const ends = [...chain.nodes.values()].flatMap((n) => [
+    ...n.left.map((l) => ({
+      date: n.date,
+      at: nodeName(n),
+      kind: 'Still there',
+      to: name(l.assetId),
+      amount: Math.round(l.amount),
+      words: n.narration.slice(0, 80),
+    })),
+    ...n.ends.map((e) => ({
+      date: n.date,
+      at: nodeName(n),
+      kind: END_LABEL[e.kind],
+      to: e.assetId ? name(e.assetId) : '',
+      amount: Math.round(e.amount),
+      words: n.narration.slice(0, 80),
+    })),
+  ]);
+  return [
+    {
+      id: 'trail-steps',
+      title: 'Every step',
+      note: 'Each row is money moving from one step to the next; “How it is known” says whether the statements, the records or a match by amount and date linked them.',
+      columns: [
+        { key: 'fromDate', label: 'From date', kind: 'date' },
+        { key: 'from', label: 'From', kind: 'text' },
+        { key: 'fromWords', label: 'Bank’s words (from)', kind: 'text' },
+        { key: 'toDate', label: 'To date', kind: 'date' },
+        { key: 'to', label: 'To', kind: 'text' },
+        { key: 'toWords', label: 'Bank’s words (to)', kind: 'text' },
+        { key: 'through', label: 'Through', kind: 'text' },
+        { key: 'amount', label: 'Amount', kind: 'money' },
+        { key: 'how', label: 'How it is known', kind: 'text' },
+      ],
+      rows,
+    },
+    {
+      id: 'trail-starts',
+      title: 'Where money started',
+      note: 'Every amount that comes from nowhere the statements follow: Singapore, interest, earnings, and where the statements stop.',
+      columns: [
+        { key: 'date', label: 'Date', kind: 'date' },
+        { key: 'at', label: 'At', kind: 'text' },
+        { key: 'kind', label: 'Started as', kind: 'text' },
+        { key: 'from', label: 'From', kind: 'text' },
+        { key: 'amount', label: 'Amount', kind: 'money' },
+        { key: 'words', label: 'Bank’s words', kind: 'text' },
+      ],
+      rows: starts.sort((a, b) => a.date.localeCompare(b.date)),
+    },
+    {
+      id: 'trail-ends',
+      title: 'Where money is now or left',
+      note: 'Every amount still in an account, a deposit, a fund or outside the statements, and every amount spent or sent where the statements stop.',
+      columns: [
+        { key: 'date', label: 'Date', kind: 'date' },
+        { key: 'at', label: 'From step', kind: 'text' },
+        { key: 'kind', label: 'Now', kind: 'text' },
+        { key: 'to', label: 'Where', kind: 'text' },
+        { key: 'amount', label: 'Amount', kind: 'money' },
+        { key: 'words', label: 'Bank’s words', kind: 'text' },
+      ],
+      rows: ends.sort((a, b) => a.date.localeCompare(b.date)),
+    },
+  ];
+}

@@ -33,6 +33,11 @@ test.describe('Money trail step by step (public sample)', () => {
     page,
   }) => {
     await page.goto('/demo/trail');
+    // how complete the trail is, for all of today's money
+    const cov = page.getByTestId('chain-coverage');
+    await expect(cov).toContainText('Traced back to where it started');
+    await expect(cov.getByTestId('chain-starts')).toContainText('From Singapore (Wise or DBS)');
+    await expect(cov.getByTestId('chain-where')).toContainText('In deposits');
     const one = page.getByTestId('tr-one');
     const chain = one.getByTestId('holding-chain');
     await expect(chain).toContainText('that booked it came from');

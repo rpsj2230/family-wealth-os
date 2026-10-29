@@ -2,6 +2,9 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
   END_LABEL,
+  formatInrCompact,
+  REAL_STARTS,
+  type ChainCoverage,
   endPoints,
   formatInr,
   formatPct,
@@ -46,6 +49,8 @@ const MOST_TREES = 12;
 
 const nameOf = (c: ChainContext, id: string | null | undefined) => {
   if (!id) return 'an account with no statement on file';
+  if (id.startsWith('away:'))
+    return `${c.names[id.slice(5)] ?? 'someone'}’s accounts with no statement on file`;
   if (id.startsWith('held:'))
     return `a deposit not on file, booked from ${c.labels[id.slice(5)] ?? 'this account'}`;
   return c.labels[id] ?? 'a holding not on file';
@@ -58,7 +63,11 @@ function stepTitle(s: TraceStep, c: ChainContext): string {
   if (n.kind === 'opening')
     return `${nameOf(c, n.assetId)}: already in the account before its first statement`;
   if (n.kind === 'deposit_before')
-    return `${nameOf(c, n.assetId)}: booked with money the statements on file do not show`;
+    return n.from.length
+      ? `${nameOf(c, n.assetId)}: booked from money sent to accounts with no statement on file`
+      : `${nameOf(c, n.assetId)}: booked with money the statements on file do not show`;
+  if (n.kind === 'payback')
+    return `${nameOf(c, n.assetId)}: paid back into an account with no statement on file`;
   if (n.kind === 'renewal')
     return `${nameOf(c, n.assetId)}: renewed from the deposit that ended that day`;
   if (s.pair) {
@@ -92,7 +101,13 @@ function stepMeta(s: TraceStep): string {
 
 /** "matched by amount and date" wherever the step is a match made here, not the bank's or the records' own link */
 function guessed(s: TraceStep) {
-  return s.pairBasis === 'guess' || s.node.holdingBasis === 'guess' || s.node.kind === 'renewal';
+  return (
+    s.pairBasis === 'guess' ||
+    s.basis === 'guess' ||
+    s.node.holdingBasis === 'guess' ||
+    s.node.kind === 'renewal' ||
+    s.node.kind === 'payback'
+  );
 }
 
 function StepRow({ s, c, followed }: { s: TraceStep; c: ChainContext; followed: number }) {
@@ -540,5 +555,122 @@ export function HoldingChain({
         name the other side.
       </p>
     </div>
+  );
+}
+
+const WHERE_LABEL: Record<ChainCoverage['where'][number]['kind'], string> = {
+  account: 'In accounts with statements',
+  deposit: 'In deposits',
+  fund: 'In funds',
+  outside: 'In accounts with no statement on file',
+  held: 'In deposits not on file',
+};
+
+/** What each place the statements stop at needs, so the trail can go further. */
+const GAP_HELP: Partial<Record<StartPoint['kind'], string>> = {
+  untraced_deposit:
+    'Deposits booked before your earliest statement, or from an account with no statement on file: older statements of the account that booked them take the trail further back.',
+  untraced_account:
+    'Money from an account with no statement on file: its statement shows where that money came from.',
+  untraced_fund: 'A fund sold that was bought with money not on the statements.',
+  unexplained:
+    'Lines not answered yet, or money out of an account beyond what the statements show coming in (a missing statement).',
+};
+
+/**
+ * How complete the trail is, for all of today's money at once: the share traced back to where it really started (Singapore,
+ * interest, earnings, money there before the statements), where the money is now, and each place the statements stop with what
+ * would take the trail further.
+ */
+export function ChainCompleteness({
+  c,
+  coverage,
+  exportHref,
+  answerHref,
+  importHref,
+}: {
+  c: ChainContext;
+  coverage: ChainCoverage;
+  exportHref?: string;
+  answerHref: string;
+  importHref: string;
+}) {
+  const gaps = new Map<StartPoint['kind'], number>();
+  for (const p of coverage.starts)
+    if (!REAL_STARTS.has(p.kind)) gaps.set(p.kind, (gaps.get(p.kind) ?? 0) + p.amount);
+  const g = c.chain.guessed;
+  return (
+    <section className="card" aria-labelledby="ch-cov" data-testid="chain-coverage">
+      <h2 id="ch-cov">How complete the trail is</h2>
+      <div className="kpis ch-kpis">
+        <article className="kpi">
+          <div className="kpi-label">Today’s money followed</div>
+          <div className="kpi-value">{formatInrCompact(coverage.total)}</div>
+        </article>
+        <article className="kpi">
+          <div className="kpi-label">Traced back to where it started</div>
+          <div className="kpi-value">{formatPct(coverage.traced, 0)}</div>
+          <div className="kpi-sub muted">Singapore, interest, earnings, money there before</div>
+        </article>
+        <article className="kpi">
+          <div className="kpi-label">Links matched by amount and date</div>
+          <div className="kpi-value">
+            {g.transfers +
+              g.depositBooked +
+              g.depositPaidBack +
+              g.renewals +
+              g.fromOutside +
+              g.paidOutside}
+          </div>
+          <div className="kpi-sub muted">marked on every step</div>
+        </article>
+      </div>
+      <h3 className="tr-h3">Where today’s money started</h3>
+      <Starts points={coverage.starts} c={c} />
+      <h3 className="tr-h3">Where it is</h3>
+      <ul className="tr-parts plain" data-testid="chain-where">
+        {coverage.where.map((w) => (
+          <li key={w.kind}>
+            <span
+              className={`tr-swatch tr-${w.kind === 'outside' ? 'untraced_account' : 'still'}`}
+              aria-hidden="true"
+            />
+            <span className="tr-what">{WHERE_LABEL[w.kind]}</span>
+            <strong>{inr(w.amount)}</strong>
+            <span className="muted small">{formatPct(w.amount / (coverage.total || 1), 0)}</span>
+          </li>
+        ))}
+      </ul>
+      {gaps.size > 0 && (
+        <>
+          <h3 className="tr-h3">Where the statements stop, and what takes the trail further</h3>
+          <ul className="plain small ch-gaps" data-testid="chain-gaps">
+            {[...gaps]
+              .sort((a, b) => b[1] - a[1])
+              .map(([k, v]) => (
+                <li key={k}>
+                  <strong>
+                    {ORIGIN_LABEL[k]}: {inr(v)} ({formatPct(v / (coverage.total || 1), 0)})
+                  </strong>{' '}
+                  {GAP_HELP[k] ?? ''}{' '}
+                  {k === 'unexplained' ? (
+                    <Link href={answerHref}>Answer the lines</Link>
+                  ) : (
+                    <Link href={importHref}>Add a statement</Link>
+                  )}
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+      {exportHref && (
+        <p className="small">
+          <a className="btn compact" href={exportHref} download>
+            Download the whole trail (Excel)
+          </a>{' '}
+          <span className="muted">every step, every start and where every amount is now</span>
+        </p>
+      )}
+    </section>
   );
 }
