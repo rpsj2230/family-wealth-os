@@ -46,6 +46,23 @@ jobs:
             from public.assets a join public.owners o on o.id = a.owner_id
             left join public.mf_positions p on p.asset_id = a.id
            where a.type = 'mutual_fund' order by o.display_name, coalesce(p.fund_name, a.nickname);
+          \echo '== fund records with no statement lines: other funds of the same person whose values match on the same dates (ratios only, no amounts)'
+          with v as (
+            select ob.asset_id, ob.as_of, ob.amount
+              from public.observations ob join public.assets a on a.id = ob.asset_id
+             where a.type = 'mutual_fund' and ob.superseded_by is null and ob.amount > 0
+          ), bare as (
+            select a.id, a.owner_id, a.nickname from public.assets a
+             where a.type = 'mutual_fund' and not exists (select 1 from public.mf_transactions t where t.asset_id = a.id)
+          )
+          select b.nickname as no_lines, o.nickname as other, count(*) as same_dates,
+                 round(avg(v2.amount / v1.amount), 2) as avg_ratio,
+                 sum(case when abs(v2.amount / v1.amount - 1) < 0.02 then 1 else 0 end) as within_2pct
+            from bare b join v v1 on v1.asset_id = b.id
+            join public.assets o on o.owner_id = b.owner_id and o.type = 'mutual_fund' and o.id <> b.id
+            join v v2 on v2.asset_id = o.id and v2.as_of = v1.as_of
+           group by 1, 2 having sum(case when abs(v2.amount / v1.amount - 1) < 0.10 then 1 else 0 end) > 0
+           order by 1, 5 desc;
           \echo '== fund statements imported, counts only'
           select outcome, count(*) from public.cas_imports group by 1 order by 1;
           SQL
