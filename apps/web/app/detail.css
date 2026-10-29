@@ -288,3 +288,8 @@ table.dtable tr.dim td {
   margin: 2px 0 0;
   overflow-wrap: anywhere;
 }
+/* what tells a deposit apart from its neighbours: amount, rate, dates, number */
+.related-note {
+  display: block;
+  overflow-wrap: anywhere;
+}

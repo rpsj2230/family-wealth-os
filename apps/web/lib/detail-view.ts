@@ -127,7 +127,17 @@ export interface AssetViewInput {
   /** the best NRE fixed deposit on offer right now, from the rates on file */
   market?: { bank: string; rate: number; tenure: string; checkedOn: string } | null;
   /** the person's other accounts at the same bank */
-  related?: { id: string; label: string; value: number | null }[];
+  related?: {
+    id: string;
+    label: string;
+    value: number | null;
+    /** what tells it apart: a deposit's amount, rate, dates and number */
+    note?: string | null;
+    /** no longer held (matured, closed, its money placed elsewhere) */
+    ended?: boolean;
+    /** why it shows no value: "Matured 20 Oct 2020", "Closed" */
+    endedNote?: string | null;
+  }[];
 }
 
 export interface Kpi {
@@ -162,7 +172,7 @@ export interface AssetView {
     /** the date of the pointer on the bar */
     today: string;
   } | null;
-  related: { label: string; href: string; value: string }[];
+  related: { label: string; href: string; value: string; note: string | null; ended: boolean }[];
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -869,7 +879,9 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     related: (i.related ?? []).map((r) => ({
       label: r.label,
       href: `/asset/${r.id}`,
-      value: r.value === null ? '–' : inr(r.value),
+      value: r.ended || r.value === null ? (r.endedNote ?? 'No value now') : inr(r.value),
+      note: r.note ?? null,
+      ended: !!r.ended,
     })),
   };
 }

@@ -217,7 +217,55 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     )
     .flatMap((sct) => sct.rows)
     .filter((r) => r.assetId !== id)
-    .map((r) => ({ id: r.assetId, label: r.code, value: r.current }));
+    .map((r) => {
+      // a deposit is told apart by its amount, rate, dates and number; one no longer held says why it has no value
+      const f = r.fd;
+      const ended =
+        r.inNetWorth === false ||
+        ['matured', 'closed', 'renewed', 'stopped'].includes(r.status) ||
+        (r.current === null && !!f);
+      const day = (d: string | null | undefined) =>
+        d
+          ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              timeZone: 'UTC',
+            })
+          : null;
+      const note = f
+        ? [
+            `₹${Math.round(f.principal).toLocaleString('en-IN')} at ${(f.rate * 100).toFixed(2)}%`,
+            `${day(f.bookedOn)} to ${day(f.maturityOn)}`,
+            f.refLast4 ? `no. …${f.refLast4}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : r.last4
+          ? `…${r.last4}`
+          : null;
+      const endedNote = !ended
+        ? null
+        : f?.endedOn
+          ? `Ended ${day(f.endedOn)}`
+          : f && f.maturityOn < new Date().toISOString().slice(0, 10)
+            ? `Matured ${day(f.maturityOn)}`
+            : r.status === 'closed'
+              ? 'Closed'
+              : 'Not held now';
+      return {
+        id: r.assetId,
+        label: r.code,
+        value: r.current,
+        note,
+        ended,
+        endedNote,
+        sortKey: f?.maturityOn ?? '',
+      };
+    })
+    // held now first, the latest maturity first within each
+    .sort((a, b) => Number(a.ended) - Number(b.ended) || b.sortKey.localeCompare(a.sortKey))
+    .map(({ sortKey: _s, ...r }) => r);
   const fundCfg =
     asset.type === 'mutual_fund'
       ? (await loadSettings(supabase as unknown as SupabaseClient)).config.funds

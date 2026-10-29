@@ -236,13 +236,38 @@ export default async function AssetPage({
         <section className="detailsection" aria-label="Other accounts at this bank">
           <h2>Other accounts of {d.person?.name ?? 'this person'} at this bank</h2>
           <ul className="related">
-            {d.view.related.map((r) => (
-              <li key={r.href}>
-                <Link href={r.href}>{r.label}</Link>
-                <span className="num">{r.value}</span>
-              </li>
-            ))}
+            {d.view.related
+              .filter((r) => !r.ended)
+              .map((r) => (
+                <li key={r.href}>
+                  <span>
+                    <Link href={r.href}>{r.label}</Link>
+                    {r.note && <span className="muted small related-note">{r.note}</span>}
+                  </span>
+                  <span className="num">{r.value}</span>
+                </li>
+              ))}
           </ul>
+          {d.view.related.some((r) => r.ended) && (
+            <details className="disclose">
+              <summary className="small muted">
+                {d.view.related.filter((r) => r.ended).length} matured or closed
+              </summary>
+              <ul className="related">
+                {d.view.related
+                  .filter((r) => r.ended)
+                  .map((r) => (
+                    <li key={r.href}>
+                      <span>
+                        <Link href={r.href}>{r.label}</Link>
+                        {r.note && <span className="muted small related-note">{r.note}</span>}
+                      </span>
+                      <span className="num muted small">{r.value}</span>
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          )}
         </section>
       )}
       <StatementLines
