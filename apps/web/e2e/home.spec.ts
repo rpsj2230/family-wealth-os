@@ -341,4 +341,55 @@ test.describe('Home (public sample)', () => {
       await context.close();
     });
   }
+  test('money position: each kind of money on its own card, with its basis, status, date and a link', async ({
+    page,
+  }) => {
+    await page.goto('/demo/dashboard');
+    const pos = page.getByTestId('hm-position');
+    await expect(pos.getByRole('heading', { name: 'Money position' })).toBeVisible();
+    for (const key of [
+      'networth',
+      'people',
+      'cash-inr',
+      'cash-all',
+      'fd',
+      'funds',
+      'liquid',
+      'lent',
+      'cover',
+      'stale',
+    ])
+      await expect(pos.getByTestId(`hm-pos-${key}`)).toBeVisible();
+    // cash in a foreign currency shows its own amount before the rupee value, with the rate and its date
+    const sgd = pos.getByTestId('hm-pos-cash-sgd');
+    await expect(sgd.getByTestId('hm-pos-cash-sgd-native')).toHaveText(/^SGD [\d,.]+$/);
+    await expect(sgd.getByText(/^₹[\d.]+ per SGD, the .+ of \d{1,2} \w{3} \d{4}$/)).toBeVisible();
+    // deposits keep principal and interest apart; every card says how sure it is and how it is worked out
+    const fd = pos.getByTestId('hm-pos-fd');
+    await expect(fd.getByText('Principal', { exact: true })).toBeVisible();
+    await expect(fd.getByText('Interest earned so far (estimated)')).toBeVisible();
+    await expect(fd.getByText('Estimated', { exact: true })).toBeVisible();
+    await fd.getByText('How it is worked out').click();
+    await expect(fd.getByText(/not counted twice/)).toBeVisible();
+    // the four kind-of-holding cards below are untouched
+    await expect(page.locator('.hm-class')).toHaveCount(4);
+  });
+
+  test('money position fits a 390 px screen in light and in dark', async ({ browser }) => {
+    for (const colorScheme of ['light', 'dark'] as const) {
+      const context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        colorScheme,
+      });
+      const page = await context.newPage();
+      await page.goto('/demo/dashboard');
+      await expect(page.getByTestId('hm-position')).toBeVisible();
+      await noSideways(page);
+      const widths = await page
+        .locator('.hm-pos')
+        .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+      expect(new Set(widths).size).toBe(1);
+      await context.close();
+    }
+  });
 });

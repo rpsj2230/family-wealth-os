@@ -11,6 +11,7 @@ import { Classes } from './Classes';
 import { Goals } from './GoalsRisks';
 import { Hero } from './Hero';
 import { Movement } from './Movement';
+import { Position } from './Position';
 import { Trend } from './Trend';
 import { Where } from './Where';
 
@@ -29,6 +30,7 @@ export function HomeView({ m, sample = false }: { m: HomeModel; sample?: boolean
   return (
     <div className="hm">
       <Hero m={m} sample={sample} ex={ex} />
+      <Position m={m} sample={sample} />
       <Movement m={m} base={base} range={m.trend.range} sample={sample} ex={ex} />
       <Classes m={m} sample={sample} ex={ex} />
       <div className="hm-grid">

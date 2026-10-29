@@ -105,3 +105,4 @@ export * from './statement-interest';
 export * from './remittance';
 export * from './money-trail';
 export * from './needed-from-you';
+export * from './money-position';

@@ -1,4 +1,6 @@
 import {
+  moneyPosition,
+  type PositionCard,
   capitalLedger,
   fundViews,
   kindOfBasis,
@@ -294,6 +296,12 @@ export interface HomeModel {
     months: number | null;
     monthlySpending: number;
   };
+  /**
+   * The money position, one card per kind of money (net worth of the family and each person, cash in rupees and in each foreign
+   * currency, deposits with principal and interest apart, funds, liquid assets, money lent, property, retirement, cover, records
+   * out of date), each with its basis, status, date and a link to the records behind it.
+   */
+  position: PositionCard[];
   attention: AttentionItem[];
   events: (UpcomingEvent & { daysLeft: number })[];
   /** how far ahead the events look, from Settings */
@@ -826,6 +834,24 @@ export function buildHome(i: HomeInput): HomeModel {
       missingMonths: missingMonths(gains.dataStarts, today, i.snapshots),
     },
     whatChanged,
+    position: moneyPosition({
+      today,
+      total: nw.total,
+      byType: nw.byType as Record<string, number>,
+      byOwner: nw.byOwner,
+      ownerName: Object.fromEntries(Object.entries(i.styles).map(([k, v]) => [k, v.name])),
+      classes: classList,
+      foreign: overview.foreign,
+      maturities: runningDeposits.map((r) => ({
+        daysLeft: Math.round(
+          (Date.parse(`${r.fd!.maturityOn}T00:00:00Z`) - todayDate.getTime()) / 86_400_000,
+        ),
+        amount: r.fd!.maturityAmount,
+      })),
+      freshness: { stale: fresh.stale, missing: fresh.missing, total: fresh.total },
+      monthlySpending: i.monthlySpending,
+      snapshots: i.snapshots.filter((s) => s.date < today),
+    }),
     liquidity: {
       ladder,
       ladderTotal: ladder[ladder.length - 1]!.cumulative,

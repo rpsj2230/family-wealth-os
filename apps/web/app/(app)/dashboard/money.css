@@ -73,7 +73,8 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-.hm-class {
+.hm-class,
+.hm-pos {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -84,10 +85,12 @@
   background: var(--soft);
   min-width: 0;
 }
-.hm-class:hover {
+.hm-class:hover,
+.hm-pos:hover {
   border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
 }
-.hm-class:has(a:focus-visible) {
+.hm-class:has(a:focus-visible),
+.hm-pos:has(a:focus-visible) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
@@ -116,7 +119,8 @@
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
-.hm-class .bv-exact {
+.hm-class .bv-exact,
+.hm-pos .bv-exact {
   margin-top: 0;
   font-size: 0.82rem;
   overflow-wrap: anywhere;
@@ -294,4 +298,135 @@
   margin: 0.5rem 0 0;
   padding-left: 1.1rem;
   overflow-wrap: anywhere;
+}
+
+/* ---- money position: one card per kind of money ---- */
+@container (min-width: 900px) {
+  .hm-pos-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (min-width: 1200px) {
+  .hm-pos-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.hm-pos-native {
+  font-size: 1.5rem;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.hm-pos-inr {
+  font-size: 1.05rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.hm-pos-none {
+  font-weight: 600;
+}
+.hm-pos-lines {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 2px;
+}
+.hm-pos-lines > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.hm-pos-lines dt {
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-width: 0;
+}
+.hm-pos-lines dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.hm-pos-lines > div.wide {
+  display: block;
+}
+.hm-pos-lines > div.wide dd {
+  text-align: left;
+  font-weight: 500;
+}
+.hm-pos-lines > div > .hm-pos-changes {
+  flex-basis: 100%;
+  margin: 0 0 4px;
+}
+/* a person's line links to their holdings: above the card-wide link */
+.hm-pos-line-link {
+  position: relative;
+  z-index: 1;
+  color: var(--primary);
+  font-weight: 600;
+}
+.hm-pos-changes {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.hm-pos-change {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.hm-pos-change-k {
+  color: var(--muted);
+  font-weight: 600;
+}
+.hm-pos-change.up strong,
+.hm-pos-change.up > span[aria-hidden] {
+  color: var(--ok-fg);
+}
+.hm-pos-change.down strong,
+.hm-pos-change.down > span[aria-hidden] {
+  color: var(--fail);
+}
+.hm-pos-foot {
+  margin: 6px 0 0;
+}
+.hm-pos-status {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.hm-pos-status.actual {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.hm-pos-status.partial,
+.hm-pos-status.unavailable {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+/* above the card-wide link, so the explanation opens instead of following the link */
+.hm-pos-basis {
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+}
+.hm-pos-basis summary {
+  cursor: pointer;
+  color: var(--primary);
+}
+.hm-pos-basis p {
+  margin: 4px 0 0;
 }
