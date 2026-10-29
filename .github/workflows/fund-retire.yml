@@ -1,0 +1,44 @@
+name: Fund retire (by hand)
+# Run by hand only. Retires fund records that repeat a holding already on file (closed, out of the fund lists; readings kept).
+# "plan" writes nothing. The log shows names and counts only, never amounts.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      person:
+        description: whose funds (first name as on file)
+        required: true
+        type: string
+      names:
+        description: the records to retire, their exact names separated by |
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fund-retire
+  cancel-in-progress: false
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      PERSON: ${{ inputs.person }}
+      NAMES: ${{ inputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers fund-retire

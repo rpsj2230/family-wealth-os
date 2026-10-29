@@ -17,6 +17,7 @@
     "wise": "tsx src/wise.ts",
     "fund-txns": "tsx src/fund-txns.ts",
     "fund-merge": "tsx src/fund-merge.ts",
+    "fund-retire": "tsx src/fund-retire.ts",
     "timing": "tsx src/timing.ts",
     "bank-statements": "tsx src/bank-statements.ts"
   },
