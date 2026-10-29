@@ -122,4 +122,10 @@ jobs:
             from public.remittances r join public.assets a on a.id = r.from_asset_id group by a.id, a.type, a.currency, a.status;
           \echo '== confirmed money moves by kind (totals)'
           select kind, status, count(*), round(sum(amount)) as total from public.money_moves group by 1, 2 order by 1, 2;
+          \echo '== earliest records on file (dates and counts only), and the capital opening date in Settings'
+          select 'fd booked' as what, min(booked_on)::text as first, count(*) filter (where booked_on < '2019-10-12') as before_2019_10_12 from public.fixed_deposits
+          union all select 'balance reading', min(as_of)::text, count(*) filter (where as_of < '2019-10-12') from public.observations where coalesce(source_ref, '') not like 'histfund:%'
+          union all select 'fund line', min(txn_on)::text, count(*) filter (where txn_on < '2019-10-12') from public.mf_transactions
+          union all select 'wise transfer', min(received_on)::text, count(*) filter (where received_on < '2019-10-12') from public.remittances;
+          select config->'capital' as capital_settings from public.household_config;
           SQL
