@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import {
   bankOverview,
+  coverCounts,
+  depositInterestThisFy,
+  depositsVsBest,
+  rateOfferFromRow,
+  runningDeposits,
+  withinReach,
   buildBankBlocks,
   depositsByBank,
   filterBlocksByOwner,
@@ -120,6 +126,19 @@ export default async function DepositsPage({
   const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
   const depBanks = depositsByBank(scoped, todayIso);
   const depLadder = maturityLadder(scoped);
+  // "Also on this page" (money words v6): this FY's interest, and each deposit against today's best offer for its term
+  const running = runningDeposits(scoped);
+  const offerRows = await supabase
+    .from('rate_offers')
+    .select(
+      'id, bank, product, account_kind, tenure_from_months, tenure_to_months, rate, conditions, source_kind, checked_on, balance_from, balance_to, tenure_days, source_note, source_url',
+    );
+  const offers = withinReach(
+    ((offerRows.data ?? []) as unknown as Record<string, unknown>[]).map(rateOfferFromRow),
+    settings.config.rates.maxAmount,
+  );
+  const fyInterest = depositInterestThisFy(running, todayIso);
+  const vsBest = depositsVsBest(running, offers, settings.config.rates.nroTaxRate);
   const growth = await loadBankGrowth(
     supabase as unknown as SupabaseClient,
     loaded,
@@ -142,7 +161,7 @@ export default async function DepositsPage({
     }),
     false,
     {
-      cover: { limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks },
+      cover: { limit: v.cover.limit, uninsured: v.cover.uninsured, ...coverCounts(v.cover) },
       toConfirm: s.confirm.length,
       banks: depBanks,
       ladder: depLadder,
@@ -182,10 +201,12 @@ export default async function DepositsPage({
       <DepositOverviewPanel
         ex={exD}
         growth={growth}
+        fyInterest={fyInterest}
+        vsBest={vsBest}
         o={overview}
         banks={depBanks}
         ladder={depLadder}
-        cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks }}
+        cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, ...coverCounts(v.cover) }}
         toConfirm={s.confirm.length}
         styles={styles}
         scope={who ? (styles[who]?.name ?? null) : null}

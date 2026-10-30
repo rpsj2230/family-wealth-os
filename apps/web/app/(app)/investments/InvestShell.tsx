@@ -2,6 +2,9 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
   CATEGORY_ORDER,
+  earnedSince,
+  fyBoundsOf,
+  fyOf,
   foldShares,
   formatInr,
   groupLines,
@@ -122,8 +125,11 @@ export function InvestShell({
   noPrice,
   actions,
   position,
+  taxFree = null,
   children,
 }: {
+  /** the yearly tax-free allowance on long-term equity gains and what each person has left of it this FY (the Tax page's figures) */
+  taxFree?: { exemption: number; people: { name: string; left: number }[] } | null;
   /** '/investments' or '/demo/investments' */
   base: string;
   demo: boolean;
@@ -304,12 +310,23 @@ export function InvestShell({
             projectionRate={pace.rate}
             projectionAssumed={pace.assumed}
             holdingMonths={view.holdingMonths}
-            extras={heroExtras(view.groups.flatMap((g) => g.funds))}
+            extras={{
+              ...heroExtras(view.groups.flatMap((g) => g.funds)),
+              taxFree,
+              bench: view.benchmark
+                ? {
+                    name: view.benchmark.name ?? 'the benchmark fund',
+                    xirr: perf.whatIf?.xirr ?? null,
+                  }
+                : null,
+              earnedFy: earnedSince(view.series, fyBoundsOf(fyOf(view.today))!.from)?.gain ?? null,
+            }}
             base={base}
             tabLinks={{
               performance: tabHref('performance'),
               transactions: tabHref('transactions'),
               breakdown: tabHref('breakdown'),
+              tax: demo ? '/demo/tax-harvest' : '/tax',
             }}
           />
           <OverviewBody

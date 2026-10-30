@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
+  bankFiguresBy,
   bankOverview,
   buildBankBlocks,
   filterBlocksByOwner,
@@ -210,6 +211,8 @@ export default async function AccountsPage({
           ex={exA}
           growth={growth}
           inflation={inflation}
+          byBank={bankFiguresBy(blocks, 'bank', todayIso)}
+          byPerson={bankFiguresBy(blocks, 'owner', todayIso, Object.fromEntries(ownerName))}
           o={overview}
           styles={styles}
           month={month}
@@ -246,6 +249,8 @@ export default async function AccountsPage({
         ex={exA}
         growth={growth}
         inflation={inflation}
+        byBank={bankFiguresBy(blocks, 'bank', todayIso)}
+        byPerson={bankFiguresBy(blocks, 'owner', todayIso, Object.fromEntries(ownerName))}
         o={overview}
         styles={styles}
         month={month}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildBankBlocks, filterBlocksByOwner } from '../src/accounts-view';
-import { bankOverview, type OverviewOptions } from '../src/bank-overview';
+import { bankFiguresBy, bankOverview, type OverviewOptions } from '../src/bank-overview';
 import { fdValueOn } from '../src/fd';
 import { formatPct } from '../src/money';
 import { buildPortfolio, type AssetRow, type FdRow, type ObservationRow } from '../src/portfolio';
@@ -367,5 +367,35 @@ describe('formatPct', () => {
     expect(formatPct(0.00002, 2)).toBe('<0.01%');
     expect(formatPct(-0.05)).toBe('-5.0%');
     expect(formatPct(Number.NaN)).toBe('–');
+  });
+});
+
+describe('bankFiguresBy: by bank and by person (money words v6)', () => {
+  it('adds up to the overview, with each bank’s profit, average rate and deposit XIRR', () => {
+    const rows = bankFiguresBy(blocks, 'bank', '2026-10-26');
+    const inBanks = ov.parts.fd.current + ov.parts.cash.current;
+    expect(rows.reduce((a, r) => a + r.current, 0)).toBeCloseTo(inBanks, 0);
+    for (const r of rows) expect(r.profit).toBeCloseTo(r.current - r.invested, 6);
+    const withFd = rows.filter((r) => r.avgRate !== null);
+    expect(withFd.length).toBeGreaterThan(0);
+    for (const r of withFd) expect(r.xirr === null || (r.xirr > 0 && r.xirr < 0.2)).toBe(true);
+    // largest first
+    for (let i = 1; i < rows.length; i++)
+      expect(rows[i - 1]!.current).toBeGreaterThanOrEqual(rows[i]!.current);
+  });
+
+  it('by person splits the same money', () => {
+    const banks = bankFiguresBy(blocks, 'bank', '2026-10-26');
+    const people = bankFiguresBy(blocks, 'owner', '2026-10-26');
+    expect(people.reduce((a, r) => a + r.current, 0)).toBeCloseTo(
+      banks.reduce((a, r) => a + r.current, 0),
+      0,
+    );
+  });
+
+  it('counts the deposits within the windows Home uses, and how many maturity values come from the bank', () => {
+    expect(ov.maturingPrincipal.d30).toBeLessThanOrEqual(ov.maturingPrincipal.d90);
+    expect(ov.maturingPrincipal.d90).toBeLessThanOrEqual(ov.maturingPrincipal.d365);
+    expect(ov.maturityFromBank).toBeLessThanOrEqual(ov.deposits);
   });
 });

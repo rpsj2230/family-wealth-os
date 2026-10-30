@@ -1,4 +1,10 @@
-import { buildFundExplain, valuationUnits, type ExplainSet, type FundTaxPanel } from '@fwos/core';
+import {
+  buildFundExplain,
+  valuationUnits,
+  type ExplainSet,
+  type FundExplainInput,
+  type FundTaxPanel,
+} from '@fwos/core';
 import type { FundDetail } from './fund-detail-model';
 import type { FundRow } from './investments';
 
@@ -14,6 +20,10 @@ export function fundExplain(a: {
   importHref: string;
   matchHref: string;
   taxHref: string;
+  /** the XIRR of your payments and of the same payments in the benchmark, on the last valuation day */
+  sameMoney?: FundExplainInput['sameMoney'];
+  /** the fund's own price change over the last year */
+  fundReturn1y?: FundExplainInput['fundReturn1y'];
 }): ExplainSet<'fund'> {
   const f = a.fund;
   const d = a.detail;
@@ -87,6 +97,18 @@ export function fundExplain(a: {
       ltcgUnits: a.tax.totals.ltcgUnits,
       holdingMonths: a.holdingMonths,
     },
+    sameMoney: a.sameMoney ?? null,
+    fundReturn1y: a.fundReturn1y ?? null,
+    longTerm: d.holding
+      ? {
+          longValue: d.holding.longValue,
+          shortValue: d.holding.shortValue,
+          longShare: d.holding.longShare,
+          allLongOn: d.holding.allLongOn,
+          basis: d.holding.basis,
+        }
+      : null,
+    longTermNote: d.holdingNote,
     links: {
       dataCheck: `${a.overviewHref}#adds-up-h`,
       import: a.importHref,

@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
+  SIP_STATUS_WORD,
   TERMS,
   addMonthsIso,
   formatInr,
   formatInrCompact,
+  formatPct,
+  pointsAhead,
   rebase,
-  type Explain,
+  sipStatus,
   type ExplainSet,
   type FundTaxPanel,
   type PlanSplit,
@@ -17,8 +20,16 @@ import { SipStrip, StatList, type Stat } from '@/components/FundViz';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { PlotChart, type PlotSeries } from '@/components/PlotChart';
 import { Tabs } from '@/components/Tabs';
-import { Why, WhyHead } from '@/components/Why';
-import { niceDate } from '@/lib/dates';
+import { WhyHead } from '@/components/Why';
+import {
+  Extra,
+  Extras,
+  HeadlinePanel,
+  Pill,
+  Tile as HlTile,
+  signedPct,
+} from '@/components/MoneyHeadline';
+import { niceDate, niceMonth } from '@/lib/dates';
 import { fundExplain } from '@/lib/explain-fund';
 import type { FundDetail, FundReturns } from '@/lib/fund-detail-model';
 import type { FundRow } from '@/lib/investments';
@@ -60,34 +71,6 @@ const planWords: Record<FundRow['plan'], string> = {
   regular: 'Regular plan',
   unknown: 'Plan not set',
 };
-
-/** One tile of the fund's headline row. */
-function Tile({
-  label,
-  value,
-  sub,
-  cls,
-  main,
-  why,
-}: {
-  label: string;
-  value: ReactNode;
-  sub?: ReactNode;
-  cls?: string | null | undefined;
-  main?: boolean;
-  why?: Explain;
-}) {
-  return (
-    <article className={`kpi ${main ? 'main' : ''}`}>
-      <div className="kpi-label">
-        {label}
-        {why && <Why explain={why} />}
-      </div>
-      <div className={`kpi-value ${cls ?? ''}`}>{value}</div>
-      {sub && <div className="kpi-sub muted">{sub}</div>}
-    </article>
-  );
-}
 
 /**
  * The read-out lines of the growth chart for one day: the overall return (profit over the money invested) and the XIRR (the same
@@ -200,6 +183,7 @@ export function FundPage({
   tax,
   taxHref,
   replaced = [],
+  sipNow = null,
 }: {
   fund: FundRow;
   detail: FundDetail;
@@ -227,6 +211,8 @@ export function FundPage({
   taxHref: string;
   /** lines a fund statement replaced: listed (collapsed) under the transactions, counted nowhere */
   replaced?: ReplacedRow[];
+  /** the dated SIP plan: the amount in force today and the next planned change, for "Paused until …" */
+  sipNow?: { now: number; next: { on: string; monthly: number } | null } | null;
 }) {
   const f = fund;
   const d = detail;
@@ -240,6 +226,25 @@ export function FundPage({
     return s ? `${base}?${s}` : base;
   };
   void plan;
+  const ret = d.returns;
+  // the same money in the benchmark: every purchase and sale replayed into it (own-returns.ts xirrTrail), its XIRR on the last day
+  const lastX = ret?.shadow?.xirr.at(-1) ?? null;
+  const sameMoney = lastX
+    ? { yours: lastX.yours, bench: lastX.bench, on: lastX.date, from: ret?.benchFrom ?? null }
+    : null;
+  const benchX = sameMoney?.bench ?? null;
+  const longShare = d.holding?.longShare ?? null;
+  const allLongOn = d.holding?.allLongOn ?? null;
+  const ahead = pointsAhead(sameMoney?.yours ?? null, sameMoney?.bench ?? null);
+  // the fund's own price over the last year (the whole price history, not only the time you held it)
+  const oneYearRow =
+    ret?.basis === 'price' ? ret.whole.versus.find((x) => x.def.key === '1y')?.yours : null;
+  const oneYear =
+    oneYearRow && oneYearRow.full
+      ? { change: oneYearRow.absolute, from: oneYearRow.from, to: oneYearRow.to }
+      : null;
+  const sip = sipStatus({ monthly: f.sipMonthly, stopped: f.sipStopped, plan: sipNow ?? null });
+  const booked = d.realised.stcg + d.realised.ltcg + d.realised.other;
   const ex = fundExplain({
     fund: f,
     detail: d,
@@ -250,10 +255,11 @@ export function FundPage({
     importHref: demo ? '/demo/import' : '/import',
     matchHref: demo ? '/demo/investments?tab=match' : '/investments?tab=match',
     taxHref,
+    sameMoney: sameMoney ? { ...sameMoney, benchName: ret?.benchName ?? null } : null,
+    fundReturn1y: oneYear,
   });
   const gain = f.value - f.invested;
   const gainPct = f.invested > 0 ? f.value / f.invested - 1 : null;
-  const ret = d.returns;
   const noStatement = !f.hasStatement;
   const estMark = f.ledger.figuresEstimated ? <Est title={LEDGER_EST_TITLE} /> : null;
   const addsUp = (
@@ -268,110 +274,161 @@ export function FundPage({
 
   const header = (
     <>
-      <section className="fundhero" aria-label="This fund at a glance">
-        <Tile
-          main
-          why={ex['fund.value']}
-          label={TERMS.currentValue.label}
-          value={
-            <>
-              {f.value ? inr(f.value) : '–'}
-              {f.value ? estMark : null}
-            </>
-          }
-          sub={
-            <>
-              {f.units !== null ? `${units(f.units)} units` : 'units not recorded'}
-              {f.nav !== null ? ` × ${price(f.nav)}` : ''}
-              {f.dayAmount !== null && (
-                <>
-                  {' · today '}
-                  <span className={tone(f.dayAmount)}>
-                    {rupees(f.dayAmount)} ({f.dayPct === null ? '' : pct(f.dayPct)})
-                  </span>
-                  <Why explain={ex['fund.today']} />
-                </>
-              )}
-            </>
-          }
-        />
-        <Tile
-          why={ex['fund.moneyIn']}
-          label={TERMS.invested.label}
-          value={
-            <>
-              {f.invested ? inr(f.invested) : '–'}
-              {f.invested ? estMark : null}
-            </>
-          }
-          sub={
-            d.avgCost === null
-              ? 'cost of the units held'
-              : `${TERMS.averageCost.label} ${price(d.avgCost)}`
-          }
-        />
-        <Tile
-          why={ex['fund.profit']}
-          label={TERMS.profit.label}
-          value={
-            <>
-              {f.invested ? rupees(gain) : '–'}
-              {f.invested ? estMark : null}
-            </>
-          }
-          cls={f.invested ? tone(gain) : null}
-          sub={gainPct === null ? 'no cost recorded' : `${pct(gainPct, 1)} overall`}
-        />
-        <Tile
-          why={ex['fund.xirr']}
-          label={TERMS.xirr.label}
-          value={
-            <>
-              {f.xirr === null ? '–' : `${pct(f.xirr, 2).replace(/^\+/, '')} a year`}
-              {f.xirr !== null ? estMark : null}
-            </>
-          }
-          cls={tone(f.xirr)}
-          sub={
-            f.xirr === null
-              ? 'needs a start date or statement'
-              : f.xirrEstimated
-                ? 'estimated from start date and SIP'
-                : 'from the transactions'
-          }
-        />
-        <Tile
-          why={ex['fund.booked']}
-          label={TERMS.booked.label}
-          value={
-            d.realised.sales === 0
-              ? 'None'
-              : rupees(d.realised.stcg + d.realised.ltcg + d.realised.other)
-          }
-          cls={
-            d.realised.sales === 0
-              ? null
-              : tone(d.realised.stcg + d.realised.ltcg + d.realised.other)
-          }
-          sub={
-            d.realised.sales === 0
-              ? f.hasStatement
-                ? 'no sale on the statement'
-                : 'needs a fund statement'
-              : `from ${d.realised.sales} sale${d.realised.sales === 1 ? '' : 's'}`
-          }
-        />
-        <Tile
-          why={ex['fund.sip']}
-          label="Monthly investment"
-          value={f.sipMonthly ? (f.sipStopped ? 'Stopped' : inr(f.sipMonthly)) : 'None'}
-          sub={
-            d.sip.nextOn && d.sip.active
-              ? `next ${niceDate(d.sip.nextOn)}${d.sip.basis === 'statement' ? '' : ' (expected; not verified by a statement)'}`
-              : planWords[f.plan]
-          }
-        />
-      </section>
+      <HeadlinePanel
+        label={TERMS.currentValue.label}
+        value={f.value}
+        why={ex['fund.value']}
+        ariaLabel="This fund at a glance"
+        testId="fund-current"
+      >
+        <div className="hl-pills">
+          <Pill
+            amount={gain}
+            pct={gainPct}
+            pctNote="overall"
+            label={TERMS.profit.label}
+            extra={
+              f.xirr === null ? undefined : ` · ${TERMS.xirr.label} ${formatPct(f.xirr, 1)} a year`
+            }
+            why={ex['fund.profit']}
+            extraWhy={ex['fund.xirr']}
+            testId="fund-profit"
+          />
+          {f.dayAmount !== null && (
+            <Pill
+              amount={f.dayAmount}
+              pct={f.dayPct}
+              label={TERMS.todayChange.label}
+              why={ex['fund.today']}
+              testId="fund-today"
+            />
+          )}
+        </div>
+        <p className="hl-asof" data-testid="fund-asof">
+          {estMark}
+          {estMark ? ' ' : ''}
+          {[
+            f.units !== null
+              ? `${units(f.units)} units${f.nav !== null ? ` × ${TERMS.nav.label} ${price(f.nav)}` : ''}`
+              : 'units not recorded',
+            f.platform,
+            planWords[f.plan],
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+        <ul className="hl-tiles" aria-label="The fund in figures">
+          <HlTile
+            label={TERMS.invested.label}
+            value={f.invested ? inr(f.invested) : '–'}
+            sub={
+              d.avgCost === null
+                ? 'cost of the units held'
+                : `${TERMS.averageCost.label} ${price(d.avgCost)}`
+            }
+            why={ex['fund.moneyIn']}
+            testId="fund-tile-invested"
+          />
+          <HlTile
+            label="Benchmark XIRR, same money"
+            value={benchX !== null ? `${formatPct(benchX, 1)} a year` : '–'}
+            sub={
+              benchX !== null
+                ? `${ret?.benchName ?? TERMS.benchmark.label}${
+                    ahead === null
+                      ? ''
+                      : ` · ${ahead >= 0 ? 'ahead' : 'behind'} by ${Math.abs(ahead).toFixed(1)} points`
+                  }`
+                : 'needs the benchmark’s prices'
+            }
+            href={href({ tab: 'returns' })}
+            why={ex['fund.benchXirr']}
+            testId="fund-tile-bench"
+          />
+          <HlTile
+            label={TERMS.booked.label}
+            value={d.realised.sales === 0 ? inr(0) : rupees(booked)}
+            sub={
+              d.realised.sales === 0
+                ? f.hasStatement
+                  ? 'no sales'
+                  : 'needs a fund statement'
+                : `from ${d.realised.sales} sale${d.realised.sales === 1 ? '' : 's'}`
+            }
+            href={href({ tab: 'lots' })}
+            why={ex['fund.booked']}
+            testId="fund-tile-booked"
+          />
+          <HlTile
+            label={TERMS.sip.label}
+            value={SIP_STATUS_WORD[sip.status]}
+            sub={
+              sip.status === 'running'
+                ? `${inr(sip.monthly ?? 0)} a month${d.sip.nextOn ? ` · next ${niceDate(d.sip.nextOn)}` : ''}`
+                : sip.status === 'paused'
+                  ? `until ${niceDate(sip.until)}`
+                  : sip.status === 'stopped'
+                    ? d.sip.lastOn
+                      ? `last instalment ${niceMonth(d.sip.lastOn)}`
+                      : `was ${inr(sip.monthly ?? 0)} a month`
+                    : 'no monthly instalment'
+            }
+            {...(sipPlan ? { href: href({ tab: 'sip' }) } : {})}
+            why={ex['fund.sip']}
+            testId="fund-tile-sip"
+          />
+          <HlTile
+            label="Long-term"
+            value={longShare !== null ? formatPct(longShare, 0) : '–'}
+            sub={
+              longShare !== null
+                ? allLongOn
+                  ? `of the value; the rest from ${niceDate(allLongOn)}`
+                  : 'all of the value'
+                : d.holding === null && f.taxClass !== 'equity'
+                  ? 'not an equity fund'
+                  : 'purchases not known'
+            }
+            href={href({ tab: 'lots' })}
+            why={ex['fund.longTerm']}
+            testId="fund-tile-longterm"
+          />
+          <HlTile
+            label={`${TERMS.fundReturn.label}, 1Y`}
+            value={oneYear ? signedPct(oneYear.change, 1) : '–'}
+            sub="the fund’s NAV, not your return"
+            href={href({ tab: 'returns' })}
+            why={ex['fund.fundReturn']}
+            testId="fund-tile-return"
+          />
+        </ul>
+        <Extras>
+          <Extra
+            label={TERMS.benchmark.label}
+            value={ret?.benchName ?? 'None set'}
+            sub={
+              benchX !== null
+                ? `same money: XIRR ${formatPct(benchX, 1)} a year`
+                : 'no benchmark prices yet'
+            }
+            href={href({ tab: 'returns' })}
+            testId="fund-x-bench"
+          />
+          <Extra
+            label="Long-term"
+            value={longShare !== null ? `${formatPct(longShare, 0)} of value` : '–'}
+            sub={
+              longShare !== null
+                ? allLongOn
+                  ? `the rest turns long-term by ${niceDate(allLongOn)}`
+                  : 'all of it is long-term'
+                : (d.holdingNote ?? 'not worked out')
+            }
+            href={href({ tab: 'lots' })}
+            testId="fund-x-longterm"
+          />
+        </Extras>
+      </HeadlinePanel>
       <div className="fundactions noprint">
         <EditFundButton id={f.assetId} name={f.name} button label="Edit this fund" />
         <AddTxnButton assetId={f.assetId} className="btn compact" label="Add a transaction" />
@@ -895,7 +952,7 @@ export function FundPage({
         {d.calendar.basis !== 'none' && (
           <section className="card wide" aria-labelledby="fc">
             <div className="cardhead">
-              <h2 id="fc">Monthly investment calendar</h2>
+              <h2 id="fc">SIP calendar</h2>
               <span className="small muted">
                 {d.sip.instalments === null
                   ? 'from the plan'

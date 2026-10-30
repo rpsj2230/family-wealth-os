@@ -26,6 +26,26 @@ const running = (r: BankRow) =>
 const counted = (r: BankRow) =>
   r.kind === 'fd' && !!r.fd && (r.inNetWorth !== undefined ? r.inNetWorth : running(r));
 
+/** The running deposits of the blocks with their bank, in the shape the Deposits extras need (deposit-extras.ts). */
+export function runningDeposits(blocks: BankBlock[]) {
+  return blocks.flatMap((b) =>
+    b.sections
+      .flatMap((s) => s.rows)
+      .filter(running)
+      .map((r) => ({
+        id: r.assetId,
+        bank: b.name,
+        principal: r.fd!.principal,
+        rate: r.fd!.rate,
+        kind: r.accountKind === 'NRE' || r.accountKind === 'NRO' ? r.accountKind : null,
+        bookedOn: r.fd!.bookedOn,
+        maturityOn: r.fd!.maturityOn,
+        maturityAmount: r.fd!.maturityAmount,
+        compounding: r.fd!.compounding,
+      })),
+  );
+}
+
 export function depositsByBank(blocks: BankBlock[], today: string): BankShare[] {
   const rows = blocks.map((b) => ({
     b,

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assembleDigest,
+  buildDigest,
   buildDigestEmail,
   emailProblems,
+  familyLines,
   goalCard,
   savingsRatesOf,
   type DigestInput,
@@ -18,7 +21,8 @@ import { previewFrames } from './digest-preview';
  */
 describe('the e-mail agrees with Home', () => {
   const home = buildHome(demoHomeInput('1Y'));
-  const input = demoDigestInput();
+  // the summary's own reading (before Home's figures are put in): it must agree with Home on its own, for when Home cannot be built
+  const input = assembleDigest(demoDigestSources());
   const w = input.wealth!;
 
   it('net worth, today and the overall profit are Home’s headline figures', () => {
@@ -203,5 +207,72 @@ describe('the sample e-mail', () => {
       expect(f.srcDoc).toBe(email.html);
       expect(f.title).toContain(email.subject);
     }
+  });
+});
+
+describe('the money words v6 lines of the e-mail and the WhatsApp text are Home’s figures', () => {
+  const home = buildHome(demoHomeInput('1Y'));
+  const input = demoDigestInput();
+  const f = input.family!;
+  const digest = buildDigest(input);
+  // the sample household's four lines (invented figures)
+  const LINES = [
+    'Net worth ₹3,73,16,279 · Today’s change +₹10,807 (+0.03%) · Earned this FY +₹18,17,755',
+    'Own money ₹3,53,76,928 · Lifetime profit +₹19,39,351 (+5.5% overall) · XIRR on own money 10.34% · Earning rate now 6.27%',
+    'Fixed deposits ₹1,63,20,616 (Profit +₹10,46,716, XIRR 7.63%) · Mutual funds ₹63,62,456 (Profit +₹20,24,235, XIRR 13.98%) · Savings ₹1,13,13,207 (1.81%)',
+    'Maturing in the next 30 days: ₹41,00,000',
+  ];
+
+  it('Lifetime profit, Own money and XIRR on own money are what buildHome returns', () => {
+    expect(home.capital.opening).not.toBeNull();
+    expect(f.own!.lifetimeProfit).toBe(home.capital.totals.profit);
+    expect(f.own!.ownMoney).toBe(home.capital.totals.ownMoney);
+    expect(f.own!.profitPct).toBe(home.capital.totals.profitPct);
+    expect(f.xirrOwn).toBe(home.growth.own.rate);
+    expect(f.xirrOwn).not.toBeNull();
+  });
+
+  it('Earning rate now, each kind’s XIRR and rate, Earned this FY and what matures in 30 days are Home’s', () => {
+    expect(f.earningRate).toBe(home.growth.all!.rate);
+    expect(f.fd!.xirr).toBe(home.growth.fd);
+    expect(f.funds!.xirr).toBe(home.growth.funds);
+    expect(f.savings!.rate).toBe(home.growth.savings!.rate);
+    expect(f.earnedFy!.amount).toBe(home.extras.earnedFy!.total);
+    expect(f.maturing30.principal).toBe(home.extras.maturing30.principal);
+    for (const k of ['fd', 'funds'] as const) {
+      const c = home.classes.find((x) => x.key === k)!;
+      expect(f[k]!.current).toBe(c.current);
+      expect(f[k]!.profit).toBe(c.profit);
+    }
+    expect(f.savings!.current).toBe(home.classes.find((x) => x.key === 'cash')!.current);
+  });
+
+  it('net worth leaves property out, as Home does (Settings: count property in net worth)', () => {
+    expect(home.extras.notCounted.amount).toBeGreaterThan(0);
+    expect(input.wealth!.total).toBe(home.total);
+    expect(input.wealth!.today).toEqual(home.change.today);
+  });
+
+  it('writes the four lines in the text part, Telegram and the WhatsApp message', () => {
+    expect(familyLines(input.wealth!.total, input.wealth!.today, f)).toEqual(LINES);
+    for (const t of [digest.text, digest.whatsapp]) {
+      const lines = t.split('\n');
+      const at = lines.indexOf(LINES[0]!);
+      expect(at).toBeGreaterThan(0);
+      expect(lines.slice(at, at + 3)).toEqual(LINES.slice(0, 3));
+      // the foreign part of the savings sits between the kinds and what matures
+      expect(lines.slice(at + 3).find((l) => l.startsWith('Maturing'))).toBe(LINES[3]);
+      expect(t).not.toMatch(/same as (on )?Home/i);
+    }
+  });
+
+  it('names the figures in the e-mail itself: Lifetime profit for the family, Profit for each kind', () => {
+    const text = digest.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    expect(text).toContain('Lifetime profit ▲ +₹19,39,351 (+5.5% overall)');
+    expect(text).toContain('XIRR on own money 10.34%');
+    expect(text).toContain('Earning rate now 6.27%');
+    expect(text).toMatch(/In FDs ₹1\.63 Cr .*Profit \+₹10\.47 L/);
+    expect(text).toContain('Maturing in the next 30 days: ₹41,00,000');
+    expect(text).not.toMatch(/same as (on )?Home|is on Home/i);
   });
 });

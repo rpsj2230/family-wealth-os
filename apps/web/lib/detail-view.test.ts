@@ -94,8 +94,11 @@ describe('buildAssetView: deposit', () => {
     expect(v.title).toBe('FD');
     expect(f('Rate')!.value).toBe('7%');
     expect(f('Maturity date')!.note).toBe('365 days left');
-    expect(f('Current value (estimate)')!.value).toMatch(/^₹10,/);
-    expect(f('Current value (estimate)')!.note).toMatch(/interest accrued/);
+    // one current value: the engine's (the first fact); the interest in the deposit follows from it, never a second value
+    expect(f('Current value')!.value).toBe('₹11,00,000');
+    expect(v.facts.filter((x) => /Current value/.test(x.label))).toHaveLength(1);
+    expect(f('Profit (interest earned)')!.value).toBe('₹1,00,000');
+    expect(f('Profit (interest earned)')!.note).toMatch(/interest held in the deposit/);
     expect(f('Interest paid')!.value).toBe('Cumulative (paid at maturity)');
     expect(f('Linked savings account')).toMatchObject({
       value: 'Cash-NRE-0266',
@@ -108,6 +111,94 @@ describe('buildAssetView: deposit', () => {
     expect(t.rows.length).toBe(3);
     expect(t.rows[0]!.cells[4]).toBe('Exempt (NRE)');
     expect(v.charts[0]!.points.length).toBeGreaterThan(10);
+  });
+});
+
+const HEADLINE: NonNullable<AssetViewInput['headline']> = {
+  nroTaxRate: 0.3,
+  rateGap: 0.02,
+  tdsRate: 0,
+  savingsRate: 0.03,
+  cover: { limit: 500_000, total: 1_100_000 },
+  depositRate: 0.075,
+};
+
+describe('buildAssetView: the dark headline of a deposit', () => {
+  it('rests on the engine’s current value, and the light tiles no longer repeat it', () => {
+    const v = buildAssetView(base({ headline: HEADLINE }));
+    expect(v.deposit).not.toBeNull();
+    expect(v.deposit!.current).toBe(1_100_000);
+    expect(v.deposit!.profit).toBe(100_000);
+    expect(v.deposit!.insured?.yes).toBe(false);
+    expect(v.deposit!.afterTax.kind).toBe('NRE');
+    expect(v.kpis.map((k) => k.label)).not.toContain('Current value');
+    expect(v.kpis.map((k) => k.label)).not.toContain('Interest still to come');
+    expect(v.savings).toBeNull();
+  });
+  it('without the headline inputs the page keeps its light tiles, with the same current value', () => {
+    const v = buildAssetView(base());
+    expect(v.deposit).toBeNull();
+    expect(v.kpis.find((k) => k.label === 'Current value')!.value).toBe('₹11,00,000');
+  });
+  it('a payout deposit: its interest paid out is booked profit, not held in it', () => {
+    const v = buildAssetView(
+      base({
+        headline: HEADLINE,
+        current: { amount: null, basis: null, ageDays: null, asOf: null },
+        fd: { ...base().fd!, payout: 'quarterly' },
+      }),
+    );
+    expect(v.deposit!.paidOut).toBeGreaterThan(0);
+    expect(v.deposit!.current).toBeLessThan(1_000_000 * (1 + 0.07 / 4));
+  });
+});
+
+describe('buildAssetView: the dark headline of a savings account', () => {
+  it('the balance, the interest not yet credited, the rate and the comparison with the deposits', () => {
+    const v = buildAssetView(
+      base({
+        headline: HEADLINE,
+        asset: { ...base().asset, type: 'bank_account', nickname: 'Cash-NRE-1100' },
+        fd: null,
+        current: { amount: 412_350, basis: 'estimated', ageDays: 11, asOf: '2026-10-15' },
+        rateInfo: { rate: 0.07, tag: 'own', note: 'your own rate' },
+        observations: [
+          {
+            id: 'o1',
+            amount: 410_000,
+            currency: 'INR',
+            fx_rate: null,
+            as_of: '2026-10-15',
+            confidence: 'verified',
+            source: 'email',
+            note: null,
+            created_at: '2026-10-15T10:00:00Z',
+            superseded_by: null,
+          },
+        ],
+        breakdown: {
+          savings: {
+            baseline: { date: '2026-10-15', amount: 410_000 },
+            interest: 2_350,
+            credited: 0,
+            accrued: 2_350,
+            moved: 0,
+          },
+          fund: null,
+          navStaleDays: null,
+        },
+      }),
+    );
+    expect(v.deposit).toBeNull();
+    const h = v.savings!;
+    expect(h.current).toBe(412_350);
+    expect(h.balance).toEqual({ amount: 410_000, date: '2026-10-15' });
+    expect(h.uncredited).toBe(2_350);
+    expect(h.rate).toBe(0.07);
+    expect(h.vsDeposits!.perYear).toBeCloseTo(412_350 * (0.07 - 0.075), 6);
+    expect(v.context.rateAssumed).toBe(false);
+    expect(v.kpis.map((k) => k.label)).not.toContain('Balance');
+    expect(v.kpis.map((k) => k.label)).not.toContain('Interest rate');
   });
 });
 

@@ -283,6 +283,9 @@ export const FIGURES = {
     'fund.tax',
     'fund.booked',
     'fund.returns',
+    'fund.benchXirr',
+    'fund.longTerm',
+    'fund.fundReturn',
   ],
   home: [
     'home.netWorth',
@@ -387,6 +390,24 @@ export const FIGURES = {
   monthly: ['monthly.status', 'monthly.freshness'],
   newmoney: ['newmoney.options', 'newmoney.better', 'newmoney.room'],
   rates: ['rates.freshness', 'rates.best'],
+  fd: [
+    'fd.value',
+    'fd.profit',
+    'fd.invested',
+    'fd.maturity',
+    'fd.toCome',
+    'fd.interestFy',
+    'fd.afterTax',
+    'fd.insured',
+  ],
+  savings: [
+    'savings.value',
+    'savings.today',
+    'savings.balance',
+    'savings.rate',
+    'savings.interestFy',
+    'savings.vsDeposits',
+  ],
 } as const;
 
 export type FigurePage = keyof typeof FIGURES;

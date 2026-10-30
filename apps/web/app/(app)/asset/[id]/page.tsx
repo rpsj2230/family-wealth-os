@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader, type Crumb } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
+import { DepositHeadlinePanel, SavingsHeadlinePanel } from '@/components/HoldingHeadline';
 import { FundDetailPanel } from '@/components/FundDetailPanel';
 import { HistoryLine } from '@/components/HistoryLine';
 import { EditButton } from '@/components/QuickEdit';
@@ -101,8 +102,6 @@ export default async function AssetPage({
           title={d.view.title}
           subtitle={d.view.subtitle}
           {...(d.person ? { person: d.person } : {})}
-          {...(d.view.headline ? { headline: d.view.headline } : {})}
-          {...(d.view.headlineNote ? { headlineNote: d.view.headlineNote } : {})}
           actions={
             <Link className="btn compact" href="/investments?tab=update">
               Update units and price
@@ -125,6 +124,7 @@ export default async function AssetPage({
           tax={fundView.tax}
           taxHref="/tax"
           replaced={fundView.replaced}
+          sipNow={sipView ? { now: sipView.now, next: sipView.next } : null}
           overview={(ex) => (
             <FundDetailPanel
               ex={ex}
@@ -142,6 +142,8 @@ export default async function AssetPage({
       </FundEditProvider>
     );
   }
+  // a deposit's and a savings account's page open with the dark headline (money words v6): it carries the current value
+  const panel = !!(d.view.deposit || d.view.savings);
   const page = (
     <>
       <DetailHeader
@@ -149,8 +151,8 @@ export default async function AssetPage({
         title={d.view.title}
         subtitle={d.view.subtitle}
         {...(d.person ? { person: d.person } : {})}
-        {...(d.view.headline ? { headline: d.view.headline } : {})}
-        {...(d.view.headlineNote ? { headlineNote: d.view.headlineNote } : {})}
+        {...(d.view.headline && !panel ? { headline: d.view.headline } : {})}
+        {...(d.view.headlineNote && !panel ? { headlineNote: d.view.headlineNote } : {})}
         actions={
           <>
             {isBankLike && <EditButton id={id} name={d.view.title} label="Edit details" button />}
@@ -179,6 +181,23 @@ export default async function AssetPage({
           </>
         }
       />
+      {d.view.deposit && (
+        <DepositHeadlinePanel
+          h={d.view.deposit}
+          bank={d.bank?.name ?? null}
+          bankMaturityAmount={d.view.context.bankMaturityAmount}
+          editHref={`/asset/${id}?edit=${id}`}
+        />
+      )}
+      {d.view.savings && (
+        <SavingsHeadlinePanel
+          h={d.view.savings}
+          rateNote={d.view.context.rateNote}
+          rateAssumed={d.view.context.rateAssumed}
+          tdsRate={d.view.context.tdsRate}
+          balances={d.view.context.balances}
+        />
+      )}
       {d.view.kpis.length > 0 && (
         <section className="kpis assetkpis" aria-label="Key figures">
           {d.view.kpis.map((k) => (
@@ -310,6 +329,7 @@ export default async function AssetPage({
       styles={d.quick.styles}
       today={d.quick.today}
       fxHint={d.quick.fxHint}
+      initialOpen={sp.edit ?? null}
     >
       {page}
     </QuickEditHost>

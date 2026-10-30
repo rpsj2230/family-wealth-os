@@ -531,3 +531,21 @@ abbr.bv-est {
 .hl .fxc * {
   color: inherit;
 }
+
+/* "By bank · by person" (money words v6): one row per bank and per person, scrolling inside the card when narrow */
+.bv-by {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.bv-bytable caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: 6px;
+}
+.bv-bytable .pos {
+  color: var(--ok-fg);
+}
+.bv-bytable .neg {
+  color: var(--fail);
+}

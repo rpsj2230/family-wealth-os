@@ -4,6 +4,7 @@
  * and never present an estimate as a verified balance.
  */
 import { buildDigestEmail } from './digest-email';
+import type { DigestFamily } from './digest-family';
 import type { DigestGoalCard } from './digest-goals';
 import type { DigestMaturity, DigestWealth } from './digest-wealth';
 import type { Change, ShareMove } from './home';
@@ -36,6 +37,11 @@ export interface DigestInput {
   } | null;
   /** net worth, the day's change, the profit so far and the four kinds of holding, as Home shows them */
   wealth?: DigestWealth | null;
+  /**
+   * The family figures of money words v6 (Earned this FY, Own money, Lifetime profit, XIRR on own money, Earning rate now, each kind's
+   * Profit and XIRR, what matures in 30 days), read off Home's model by `withHome`; absent, the summary leaves those lines out
+   */
+  family?: DigestFamily | null;
   /** the newest date a value was recorded on: "values as of" */
   asOf?: string | null;
   /** balances out of date or never recorded (Home's "late inputs") */

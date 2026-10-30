@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { parseRange, personStyles } from '@fwos/core';
-import { loadPositionInput, loadSettings, unpricedFunds } from '@fwos/data';
+import { effectiveRules, parseRange, personStyles } from '@fwos/core';
+import { loadHarvestPositions, loadPositionInput, loadSettings, unpricedFunds } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { FundTransactionForm } from '@/components/FundTransactionForm';
 import { FundUpdateGrid, type FundInput } from '@/components/FundUpdateGrid';
@@ -71,6 +71,9 @@ export default async function InvestmentsPage({
     })),
   );
   const match = tab === 'match' ? await loadMatchView(supabase) : null;
+  // "Tax-free gain left this FY" on the overview: the yearly allowance less what each person has used, as the Tax page works it out
+  const taxFree =
+    tab === 'overview' ? await loadTaxFree(supabase as unknown as SupabaseClient, view) : null;
   // the Value by period tab values the funds on every period end: the units on each day times the price, from the position engine
   const position =
     tab === 'valuation'
@@ -90,6 +93,7 @@ export default async function InvestmentsPage({
       owners={owners}
       noPrice={noPrice}
       position={position}
+      taxFree={taxFree}
       actions={{ save: saveFundEdit, addFund, addTxn: addFundTxn }}
     >
       {tab === 'update' && (
@@ -130,4 +134,23 @@ export default async function InvestmentsPage({
       )}
     </InvestShell>
   );
+}
+
+/** The yearly tax-free allowance on long-term equity gains and what each person holding funds has left of it this financial year. */
+async function loadTaxFree(
+  db: SupabaseClient,
+  view: { today: string; groups: { ownerId: string; name: string; funds: unknown[] }[] },
+) {
+  const [settings, hv] = await Promise.all([loadSettings(db), loadHarvestPositions(db)]);
+  const exemption = effectiveRules(view.today, settings.rules)?.rules.equity.ltcgExemption;
+  if (exemption === undefined) return null;
+  return {
+    exemption,
+    people: view.groups
+      .filter((g) => g.funds.length > 0)
+      .map((g) => ({
+        name: g.name,
+        left: Math.max(0, exemption - (hv.ytdRealised[g.ownerId] ?? 0)),
+      })),
+  };
 }

@@ -5,6 +5,7 @@
  */
 import {
   explain,
+  explainMissing,
   exDate,
   exInr,
   exPct,
@@ -19,6 +20,7 @@ import {
   type ExplainSet,
 } from './explain';
 import type { LedgerStatus } from './ledger-check';
+import { TERMS } from './terms';
 import type { LotsBasis } from './fund-stats';
 
 export interface FundExplainInput {
@@ -92,6 +94,30 @@ export interface FundExplainInput {
     holdingMonths: number | null;
   };
   links: { dataCheck: string; import: string; match: string; tax: string };
+  /**
+   * The same money in the benchmark: every purchase and sale of this fund made in the benchmark on the same day for the same amount, and
+   * the XIRR of both up to `on` (own-returns.ts xirrTrail). Null without the benchmark's prices.
+   */
+  sameMoney?: {
+    benchName: string | null;
+    yours: number | null;
+    bench: number | null;
+    on: string;
+    /** the benchmark's prices start after the first purchase: the comparison starts on this day */
+    from: string | null;
+  } | null;
+  /** how much of the value has been held long enough for long-term tax (fund-stats.ts holdingProfile); null when it does not apply */
+  longTerm?: {
+    longValue: number;
+    shortValue: number;
+    longShare: number | null;
+    allLongOn: string | null;
+    basis: LotsBasis;
+  } | null;
+  /** why there is no long-term share (not equity, no period in Settings, purchases not known) */
+  longTermNote?: string | null;
+  /** the fund's own return over the last year from its published prices: not the holder's return */
+  fundReturn1y?: { change: number; from: string; to: string } | null;
 }
 
 type FundIds =
@@ -104,7 +130,10 @@ type FundIds =
   | 'fund.units'
   | 'fund.tax'
   | 'fund.booked'
-  | 'fund.returns';
+  | 'fund.returns'
+  | 'fund.benchXirr'
+  | 'fund.longTerm'
+  | 'fund.fundReturn';
 
 export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
   const reconciled = i.ledgerStatus === 'complete';
@@ -237,7 +266,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     i.dayPct === null || i.dayAmount === null
       ? explain({
           id: 'fund.today',
-          title: 'Today’s move',
+          title: TERMS.todayChange.label,
           what: 'How much the fund moved between its last two published prices.',
           how: 'Not worked out: two published prices are needed.',
           inputs: [{ label: 'Two published prices', value: 'none yet', basis: 'missing' }],
@@ -247,7 +276,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
         })
       : explain({
           id: 'fund.today',
-          title: 'Today’s move',
+          title: TERMS.todayChange.label,
           exact: exSigned(i.dayAmount),
           what: 'How much the fund moved between its last two published prices.',
           how: `Units × (latest price − previous price) = ${exSigned(i.dayAmount)}, which is ${exSignedPct(i.dayPct, 2)} of the price on ${exDate(i.dayFrom)}.`,
@@ -321,7 +350,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
 
   const sip = explain({
     id: 'fund.sip',
-    title: 'Monthly investment',
+    title: TERMS.sip.label,
     exact: i.sipMonthly ? exInr(i.sipMonthly) : undefined,
     what: 'The amount going into this fund each month through a SIP, and when the next instalment is due.',
     how: i.sipMonthly
@@ -453,7 +482,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     r.sales === 0
       ? explain({
           id: 'fund.booked',
-          title: 'Profit booked by selling',
+          title: TERMS.booked.label,
           what: 'The profit or loss already booked by units sold from this fund.',
           how: i.hasStatement
             ? 'No sale is on the statement.'
@@ -475,7 +504,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
         })
       : explain({
           id: 'fund.booked',
-          title: 'Profit booked by selling',
+          title: TERMS.booked.label,
           exact: exSigned(r.stcg + r.ltcg + r.other),
           what: 'The profit or loss already booked by units sold from this fund.',
           how: `For each sale: money received − what those units cost (oldest first). Short-term ${exSigned(r.stcg)} + long-term ${exSigned(r.ltcg)} + other ${exSigned(r.other)} = ${exSigned(r.stcg + r.ltcg + r.other)} over ${exPlural(r.sales, 'sale')}, ${exInr(r.proceeds)} received.`,
@@ -561,7 +590,115 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
         fix: { label: 'Match to follow its price', href: i.links.match },
       });
 
-  void exPct;
+  const sm = i.sameMoney ?? null;
+  const gap = sm && sm.yours !== null && sm.bench !== null ? (sm.yours - sm.bench) * 100 : null;
+  const benchXirr =
+    sm && sm.bench !== null
+      ? explain({
+          id: 'fund.benchXirr',
+          title: 'Benchmark XIRR, same money',
+          exact: `${exPct(sm.bench, 1)} a year`,
+          what: `What your money would have earned a year in ${sm.benchName ?? 'the benchmark'} if every purchase and sale of this fund had been made in it instead, on the same day for the same amount.`,
+          how: `Each payment into and out of ${i.name} is replayed into the benchmark at its price on that day. The XIRR of those payments with the benchmark’s value on ${exDate(sm.on)} is ${exPct(sm.bench, 1)} a year; the same payments in this fund give ${sm.yours === null ? 'no XIRR' : `${exPct(sm.yours, 1)} a year`}${gap === null ? '' : `, so this fund is ${gap >= 0 ? 'ahead' : 'behind'} by ${Math.abs(gap).toFixed(1)} points`}.`,
+          inputs: [
+            {
+              label: 'Your dated payments',
+              value: exPlural(i.flowCount, 'payment'),
+              basis: i.flowsEstimated ? 'estimated' : 'statement',
+              from: i.flowsFrom,
+              to: i.flowsTo,
+            },
+            {
+              label: 'Benchmark prices',
+              value: sm.benchName ?? 'the benchmark',
+              basis: 'statement',
+              from: sm.from,
+              to: sm.on,
+              note: 'the price of a fund that follows the index, a stand-in for the index',
+            },
+          ],
+          level: i.flowsEstimated ? 'estimated' : sm.from ? 'partly_estimated' : 'complete',
+          completeness: i.flowsEstimated
+            ? 'Estimated: with no fund statement the payments are worked out from the start date and the SIP.'
+            : sm.from
+              ? `The benchmark’s prices start on ${exDate(sm.from)}, after your first purchase: it starts then with your holding’s value on that day.`
+              : 'Every payment is from the statement and the benchmark has a price for each day.',
+          notes: [
+            'Points are the difference of the two yearly rates: 13.7% against 11.2% is 2.5 points ahead.',
+          ],
+          fix: i.flowsEstimated
+            ? { label: 'Import a fund statement', href: i.links.import }
+            : undefined,
+        })
+      : explainMissing(
+          'fund.benchXirr',
+          'Benchmark XIRR, same money',
+          'What your money would have earned a year in the fund’s benchmark, with every purchase and sale made in it instead.',
+          'the benchmark’s prices and this fund’s dated payments.',
+          { label: 'Match to follow its price', href: i.links.match },
+        );
+
+  const lt = i.longTerm ?? null;
+  const longTerm =
+    lt && lt.longShare !== null
+      ? explain({
+          id: 'fund.longTerm',
+          title: TERMS.longTermShare.label,
+          exact: exPct(lt.longShare, 0),
+          what: TERMS.longTermShare.hint,
+          how: `${ratioHow({ label: 'held long-term', amount: lt.longValue }, { label: 'current value', amount: lt.longValue + lt.shortValue }, 0, false)}. Each purchase still held turns long-term ${i.tax.holdingMonths ?? 12} months after it was bought (the tax rules in Settings)${lt.allLongOn ? `; the last one turns on ${exDate(lt.allLongOn)}, and then all of it is long-term` : '; all of it is long-term already'}.`,
+          inputs: [
+            {
+              label: 'Purchases still held',
+              value:
+                lt.basis === 'statement' ? 'from statement lines' : 'rebuilt from the SIP plan',
+              basis: lt.basis === 'statement' ? 'statement' : 'estimated',
+            },
+          ],
+          level: lt.basis === 'statement' && reconciled ? 'complete' : 'partly_estimated',
+          completeness:
+            lt.basis === 'statement' && reconciled
+              ? 'Every purchase is on a statement that adds up to the units.'
+              : 'The purchases are estimated or the history does not add up, so the split is an estimate.',
+          notes: ['This is not tax advice: the rules are the ones in Settings.'],
+          fix: { label: 'Open the Tax page', href: i.links.tax },
+        })
+      : explainMissing(
+          'fund.longTerm',
+          TERMS.longTermShare.label,
+          TERMS.longTermShare.hint,
+          i.longTermNote ?? 'the purchases still held, for an equity fund.',
+        );
+
+  const fr = i.fundReturn1y ?? null;
+  const fundReturn = fr
+    ? explain({
+        id: 'fund.fundReturn',
+        title: `${TERMS.fundReturn.label}, 1Y`,
+        exact: exSignedPct(fr.change, 1),
+        what: TERMS.fundReturn.hint,
+        how: `Price on ${exDate(fr.to)} ÷ price on ${exDate(fr.from)} − 1 = ${exSignedPct(fr.change, 1)}. It ignores when and how much you invested; your own return is the XIRR in the profit pill.`,
+        inputs: [
+          {
+            label: 'Published prices',
+            value: exRange(fr.from, fr.to),
+            basis: 'statement',
+            from: fr.from,
+            to: fr.to,
+          },
+        ],
+        level: 'complete',
+        completeness: 'Read from the fund’s published prices.',
+        notes: [],
+      })
+    : explainMissing(
+        'fund.fundReturn',
+        `${TERMS.fundReturn.label}, 1Y`,
+        TERMS.fundReturn.hint,
+        'a year of the fund’s published prices.',
+        { label: 'Match to follow its price', href: i.links.match },
+      );
+
   const out: Record<FundIds, Explain> = {
     'fund.value': value,
     'fund.moneyIn': moneyIn,
@@ -573,6 +710,9 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     'fund.tax': tax,
     'fund.booked': booked,
     'fund.returns': returns,
+    'fund.benchXirr': benchXirr,
+    'fund.longTerm': longTerm,
+    'fund.fundReturn': fundReturn,
   };
   return out;
 }

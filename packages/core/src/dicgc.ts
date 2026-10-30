@@ -84,6 +84,21 @@ export function dicgcPosition(deposits: DepositForCover[], limit: number) {
 }
 
 /**
+ * How much of a cover position is over the limit, counted the way a person reads it: holdings are the rows of the cover (one bank
+ * and one name each), so "23 of 27 bank-and-name holdings over ₹5 L"; banks counts the banks with at least one such holding.
+ */
+export function coverCounts(pos: {
+  rows: { bankId: string; uninsured: number }[];
+}): { holdings: number; holdingsOver: number; banksOver: number } {
+  const over = pos.rows.filter((r) => r.uninsured > 0);
+  return {
+    holdings: pos.rows.length,
+    holdingsOver: over.length,
+    banksOver: new Set(over.map((r) => r.bankId)).size,
+  };
+}
+
+/**
  * The ownership name an account is held in, as written. Cover is counted per bank and per name: "single:A" for one holder,
  * "joint:A+B" for joint holders in that order (A & B and B & A are different names, each insured separately), and "joint:A+?"
  * when the account is joint but the second holder is not recorded yet.

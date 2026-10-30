@@ -52,8 +52,26 @@ test.describe('Investments (public sample)', () => {
       const pill = await hero.locator('.hpill').first().boundingBox();
       expect(pill!.height).toBeLessThan(90);
       await expect(hero.getByRole('heading', { name: 'Also on this page' })).toBeVisible();
-      for (const id of ['inv-x-regular', 'inv-x-platforms', 'inv-x-benchmarks'])
+      for (const id of ['inv-x-longterm', 'inv-x-regular', 'inv-x-taxfree', 'inv-x-benchmarks'])
         await expect(hero.getByTestId(id)).toBeVisible();
+      // the approved cells: Invested, Profit, XIRR, Booked profit, Total profit, Earned this FY
+      for (const label of [
+        'Invested',
+        'Profit',
+        'XIRR',
+        'Booked profit',
+        'Total profit',
+        'Earned this FY',
+      ])
+        await expect(hero.locator('.invhero-grid dt', { hasText: label }).first()).toBeVisible();
+      await expect(hero.getByTestId('inv-x-taxfree')).toContainText(
+        /₹[\d.,]+ (L|K)?.*a person, for harvesting/,
+      );
+      await expect(hero.getByTestId('inv-x-benchmarks')).toContainText(
+        /(Ahead|Behind) by [\d.]+ points|needs the benchmark prices/,
+      );
+      // where the funds are held is on the date line, not repeated in the extras
+      await expect(hero.locator('.hero-asof')).toContainText(/\d+ funds? · .+ · as of/);
       // each figure once: the long-term share is a cell of the panel, not repeated in the extras
       await expect(hero.getByText('Long-term share', { exact: true })).toHaveCount(1);
       await noSideways(page);

@@ -8,18 +8,22 @@ import {
   describeAudit,
   fdInterestForFy,
   contractOfStored,
+  depositHeadline,
   depositOn,
   heldValueOf,
   maturityAmountOf,
+  savingsHeadline,
   PAYOUTS,
   fyBounds,
   formatInr,
   openingFlow,
   returnsFor,
   sourceTag,
+  type DepositHeadline,
   type FdForFiling,
   type FundSplit,
   type SavingsDetail,
+  type SavingsHeadline,
 } from '@fwos/core';
 import { fifoLots, type CasTxn } from '@fwos/ingest';
 import type { ActivityItem } from '@/components/ActivityLog';
@@ -127,6 +131,24 @@ export interface AssetViewInput {
   rateInfo?: { rate: number; tag: 'own' | 'market' | 'assumed'; note: string } | null;
   /** the best NRE fixed deposit on offer right now, from the rates on file */
   market?: { bank: string; rate: number; tenure: string; checkedOn: string } | null;
+  /**
+   * What the dark headline of a deposit's or a savings account's page needs beyond the rows, all from Settings or worked out by the
+   * same rules as the overview pages. Absent: no headline (the page shows its light tiles only).
+   */
+  headline?: {
+    /** Settings: tax on NRO interest */
+    nroTaxRate: number;
+    /** Settings: estimates.observedRateGap, the gap the valuation engine allows between the stated rate and the bank's amount */
+    rateGap: number;
+    /** Settings: tax taken at source on savings interest */
+    tdsRate: number;
+    /** Settings: the savings rate assumed when an account has none */
+    savingsRate: number;
+    /** this bank and name in the deposit-insurance position, and the limit from Settings; null outside the scheme */
+    cover: { limit: number; total: number } | null;
+    /** the running deposits' interest rate, weighted by principal; null with none */
+    depositRate: number | null;
+  } | null;
   /** the person's other accounts at the same bank */
   related?: {
     id: string;
@@ -174,6 +196,20 @@ export interface AssetView {
     today: string;
   } | null;
   related: { label: string; href: string; value: string; note: string | null; ended: boolean }[];
+  /** the dark headline of a fixed deposit's page (money words v6); null for anything else */
+  deposit: DepositHeadline | null;
+  /** the dark headline of a savings account's page; null for anything else */
+  savings: SavingsHeadline | null;
+  /** what the "?" of those headlines say beyond the figures */
+  context: {
+    bankMaturityAmount: number | null;
+    rateNote: string | null;
+    /** no rate is on file for the account: the one in Settings is assumed */
+    rateAssumed: boolean;
+    tdsRate: number;
+    /** balances on file */
+    balances: number;
+  };
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -594,14 +630,31 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     .sort((x, y) => x.as_of.localeCompare(y.as_of))
     .map((o) => ({ date: o.as_of, value: inrOf(o) }));
 
+  let deposit: DepositHeadline | null = null;
+  let savings: SavingsHeadline | null = null;
+  const hl = i.headline ?? null;
   if (i.fd) {
     const fd = i.fd;
-    // the shared contract (deposit-contract.ts): the rate that reaches the bank's maturity amount, interest paid out kept apart
-    const contract = contractOfStored(fd);
+    const gap = hl?.rateGap ?? DEFAULT_CONFIG.estimates.observedRateGap;
+    // the shared contract (deposit-contract.ts) at the rate the valuation engine uses (Settings' rate gap) and with its payout, so the
+    // page's figures are the engine's: one current value everywhere
+    const contract = contractOfStored(fd, gap);
     const now = depositOn(contract, i.today);
-    const atMaturity = maturityAmountOf(fd);
+    const atMaturity = maturityAmountOf(fd, gap);
     const payout = fd.payout ?? 'cumulative';
     const left = daysBetween(i.today, fd.maturity_on);
+    if (hl && now.state !== 'not_yet')
+      deposit = depositHeadline({
+        today: i.today,
+        deposit: fd,
+        current: cur.amount,
+        accountKind: a.account_kind,
+        nroTaxRate: hl.nroTaxRate,
+        rateGap: gap,
+        cover: hl.cover,
+      });
+    // what the deposit holds now: the engine's current value (the first fact), never a second figure worked out here
+    const held = cur.amount ?? now.held;
     facts.push(
       {
         label: 'Rate',
@@ -632,9 +685,9 @@ export function buildAssetView(i: AssetViewInput): AssetView {
       },
       now.state === 'running'
         ? {
-            label: 'Current value (estimate)',
-            value: inr(now.held),
-            note: `${inr(now.accrued)} interest accrued and held in the deposit${now.paidOut > 0 ? `; ${inr(now.paidOut)} already paid out` : ''}`,
+            label: TERMS.profitInterest.label,
+            value: inr(held - fd.principal),
+            note: `${TERMS.currentValue.label} − ${TERMS.investedPrincipal.label.toLowerCase()}: interest held in the deposit${now.paidOut > 0 ? `; ${inr(now.paidOut)} already paid out (${TERMS.booked.label.toLowerCase()})` : ''}`,
           }
         : {
             label: now.state === 'not_yet' ? 'Not started yet' : 'Matured',
@@ -694,26 +747,34 @@ export function buildAssetView(i: AssetViewInput): AssetView {
           : `Matured ${-left} day${left === -1 ? '' : 's'} ago`,
     };
     const yieldYr = Math.pow((fd.principal + now.termInterest) / fd.principal, 365.25 / total) - 1;
-    const worth = now.state === 'running' ? now.held : (now.proceeds ?? 0);
-    kpis.push(
-      {
-        label: now.state === 'running' ? 'Current value' : 'Proceeds',
-        value: inr(worth),
-        note: `${TERMS.profitInterest.label} ${inr(Math.max(0, now.earned - now.paidOut))}${now.paidOut > 0 ? ` · ${TERMS.booked.label} ${inr(now.paidOut)} (paid out)` : ''}`,
-        tone: 'gain',
-      },
-      {
-        label: 'Interest still to come',
-        value: inr(Math.max(0, now.termInterest - now.earned)),
-        note: `until ${fd.maturity_on}`,
-      },
-      {
-        label: TERMS.totalInterest.label,
-        value: inr(now.termInterest),
-        note: `${pct(contract.rate)} a year on ${inr(fd.principal)}`,
-      },
-      { label: 'Effective yield', value: pct(yieldYr), note: 'a year, including compounding' },
-    );
+    // the dark headline carries the current value, the interest still to come and the total interest; without it, the light tiles do
+    if (!deposit) {
+      const worth = now.state === 'running' ? held : (now.proceeds ?? 0);
+      const inside = now.state === 'running' ? held - fd.principal : 0;
+      kpis.push(
+        {
+          label: now.state === 'running' ? TERMS.currentValue.label : 'Proceeds',
+          value: inr(worth),
+          note: `${TERMS.profitInterest.label} ${inr(Math.max(0, inside))}${now.paidOut > 0 ? ` · ${TERMS.booked.label} ${inr(now.paidOut)} (paid out)` : ''}`,
+          tone: 'gain',
+        },
+        {
+          label: TERMS.interestToCome.label,
+          value: inr(Math.max(0, now.termInterest - inside - now.paidOut)),
+          note: `until ${fd.maturity_on}`,
+        },
+        {
+          label: TERMS.totalInterest.label,
+          value: inr(now.termInterest),
+          note: `${pct(contract.rate)} a year on ${inr(fd.principal)}`,
+        },
+      );
+    }
+    kpis.push({
+      label: 'Effective yield',
+      value: pct(yieldYr),
+      note: 'a year, including compounding',
+    });
     if (i.market)
       kpis.push({
         label: 'Best NRE deposit now',
@@ -736,11 +797,29 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         .toISOString()
         .slice(0, 10);
       const base = [...obsPoints].reverse().find((p) => p.date <= cutoff);
-      kpis.push({
-        label: 'Balance',
-        value: inrExact(cur.amount ?? last.value),
-        note: cur.asOf ? `as of ${longDay(cur.asOf)}` : undefined,
-      });
+      if (hl && a.currency === 'INR')
+        savings = savingsHeadline({
+          today: i.today,
+          current: cur.amount,
+          detail: i.breakdown?.savings ?? null,
+          account: {
+            assetId: a.id,
+            currency: a.currency,
+            rate: i.rateInfo?.rate ?? hl.savingsRate,
+            tdsRate: hl.tdsRate,
+            balances: obsPoints.map((p) => ({ date: p.date, amount: p.value })),
+          },
+          accountKind: a.account_kind,
+          nroTaxRate: hl.nroTaxRate,
+          depositRate: hl.depositRate,
+        });
+      // the dark headline carries the balance and the interest rate; without it, the light tiles do
+      if (!savings)
+        kpis.push({
+          label: TERMS.balance.label,
+          value: inrExact(cur.amount ?? last.value),
+          note: cur.asOf ? `as of ${longDay(cur.asOf)}` : undefined,
+        });
       if (base)
         kpis.push({
           label: 'Change in 30 days',
@@ -756,9 +835,9 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         },
         { label: 'Highest, last year', value: inr(Math.max(...vals)) },
       );
-      if (i.rateInfo)
+      if (i.rateInfo && !savings)
         kpis.push({
-          label: 'Interest rate',
+          label: TERMS.interestRate.label,
           value: `${i.rateInfo.tag === 'assumed' ? '~' : ''}${pct(i.rateInfo.rate)}`,
           note: i.rateInfo.note,
         });
@@ -896,6 +975,15 @@ export function buildAssetView(i: AssetViewInput): AssetView {
       note: r.note ?? null,
       ended: !!r.ended,
     })),
+    deposit,
+    savings,
+    context: {
+      bankMaturityAmount: i.fd?.bank_maturity_amount ?? null,
+      rateNote: i.rateInfo?.note ?? null,
+      rateAssumed: !i.rateInfo || i.rateInfo.tag === 'assumed',
+      tdsRate: hl?.tdsRate ?? 0,
+      balances: obsPoints.length,
+    },
   };
 }
 

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { parseRange, personStyles } from '@fwos/core';
+import { RULES, effectiveRules, parseRange, personStyles } from '@fwos/core';
 import { InvestShell, parseTab, PERSON_TABS } from '@/app/(app)/investments/InvestShell';
 import { MatchTab } from '@/app/(app)/investments/Parts';
 import { DemoShell } from '@/components/DemoShell';
@@ -18,6 +18,9 @@ export const metadata: Metadata = {
 };
 
 const TODAY = DEMO_TODAY;
+/** allowance already used this year in the sample, the same as the sample Tax page */
+const SAMPLE_USED: Record<string, number> = { p1: 20_000 };
+const SAMPLE_EXEMPTION = effectiveRules(TODAY, RULES)?.rules.equity.ltcgExemption ?? 0;
 const PEOPLE = DEMO_PEOPLE;
 const FUNDS = demoView(null, 'all').groups.flatMap((g) => g.funds);
 
@@ -113,6 +116,20 @@ export default async function DemoInvestments({
         owners={PEOPLE}
         noPrice={noPrice}
         position={tab === 'valuation' ? fundsPosition(full) : undefined}
+        taxFree={
+          tab === 'overview'
+            ? {
+                exemption: SAMPLE_EXEMPTION,
+                // the sample Tax page's figure: ₹20,000 of the allowance already used by the first person this year
+                people: view.groups
+                  .filter((g) => g.funds.length > 0)
+                  .map((g) => ({
+                    name: g.name,
+                    left: Math.max(0, SAMPLE_EXEMPTION - (SAMPLE_USED[g.ownerId] ?? 0)),
+                  })),
+              }
+            : null
+        }
       >
         {tab === 'update' && (
           <>

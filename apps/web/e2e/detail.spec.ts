@@ -12,7 +12,11 @@ test('sample deposit: facts, value chart, interest by year and the activity log'
 }) => {
   await page.goto('/demo/asset');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  // one current value: the dark headline and the facts show the same figure, and no second "current value" is worked out
+  const headline = (await page.getByTestId('fd-current').innerText()).trim();
   const facts = page.getByRole('region', { name: 'Key facts' });
+  await expect(facts).toContainText(headline);
+  await expect(facts).not.toContainText('Current value (estimate)');
   await expect(facts).toContainText('7.25%');
   await expect(facts).toContainText('Maturity value');
   await expect(facts.getByRole('link', { name: /Cash-NRE-1100/ })).toHaveAttribute(
@@ -34,10 +38,11 @@ test('sample fund: headline, figures, graphs and every tab', async ({ page }) =>
   await page.goto('/demo/asset?kind=fund');
   const hero = page.getByRole('region', { name: 'This fund at a glance' });
   await expect(hero).toContainText('Current value');
-  await expect(hero).toContainText(/XIRR\s*(-?\d+\.\d\d% a year|–)/);
+  await expect(hero).toContainText(/XIRR -?\d+\.\d% a year/);
   await expect(hero).toContainText('Profit');
   await expect(hero).toContainText('Booked profit');
   await expect(hero).not.toContainText('Compound growth');
+  await expect(hero).not.toContainText('Monthly investment');
   // overview: the figures and the graphs
   await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText('Average cost');
   await expect(
@@ -171,6 +176,92 @@ test('sample fund: the range switch changes the graphs', async ({ page }) => {
   await expect(page).toHaveURL(/range=6m/);
   await expect(page.getByRole('img', { name: /last 6 months/ }).first()).toBeVisible();
   await noSideways(page);
+});
+
+test.describe('the dark headline of a holding’s page at 390 px (money words v6)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test.describe(colorScheme, () => {
+      test.use({ colorScheme });
+
+      test('a fixed deposit: current value, profit with XIRR, and the six tiles', async ({
+        page,
+      }) => {
+        await page.goto('/demo/asset');
+        const panel = page.getByRole('region', { name: 'This deposit at a glance' });
+        await expect(panel).toContainText('Current value');
+        await expect(page.getByTestId('fd-profit')).toContainText(
+          /\+₹[\d,]+ \(\+\d+\.\d% overall\) Profit \(interest earned\) · XIRR \d+\.\d\d% a year/,
+        );
+        await expect(page.getByTestId('fd-asof')).toContainText(
+          'est. · 7.25% a year, interest added quarterly · NRE (tax-free)',
+        );
+        for (const label of [
+          'Invested (principal)',
+          'Maturity value',
+          'Interest still to come',
+          'Interest earned this FY',
+          'Rate after tax',
+          'Insured',
+        ])
+          await expect(panel).toContainText(label);
+        await expect(page.getByTestId('fd-tile-invested')).toContainText('opened 12 Mar 2025');
+        await expect(page.getByTestId('fd-tile-maturity')).toContainText(
+          /12 Mar 2028 · in \d+ days/,
+        );
+        await expect(page.getByTestId('fd-tile-tocome')).toContainText(/earned so far/);
+        await expect(page.getByTestId('fd-tile-aftertax')).toContainText('NRE: tax-free');
+        // the light key facts stay below the panel
+        await expect(page.getByRole('region', { name: 'Key facts' })).toBeVisible();
+        await noSideways(page);
+      });
+
+      test('a savings account: current value, today’s change, balance, rate, interest and deposits', async ({
+        page,
+      }) => {
+        await page.goto('/demo/asset?kind=savings');
+        const panel = page.getByRole('region', { name: 'This account at a glance' });
+        await expect(panel).toContainText('Current value');
+        await expect(page.getByTestId('sv-today')).toContainText('Today’s change');
+        await expect(page.getByTestId('sv-asof')).toContainText(
+          /est\. · Balance ₹4,10,000 on 15 Oct 2026 \+ ₹[\d,]+ interest not yet credited/,
+        );
+        await expect(page.getByTestId('sv-tile-balance')).toContainText('bank figure, 15 Oct 2026');
+        await expect(page.getByTestId('sv-tile-rate')).toContainText('after tax: NRE tax-free');
+        await expect(page.getByTestId('sv-tile-fy')).toContainText('Interest earned this FY');
+        await expect(page.getByTestId('sv-tile-deposits')).toContainText(
+          /a year.*average deposit rate/s,
+        );
+        await expect(page.getByRole('region', { name: 'Key facts' })).toBeVisible();
+        await noSideways(page);
+      });
+
+      test('a fund: current value, profit and today’s change, and its tiles', async ({ page }) => {
+        await page.goto('/demo/asset?kind=fund');
+        const panel = page.getByRole('region', { name: 'This fund at a glance' });
+        await expect(page.getByTestId('fund-profit')).toContainText(/overall\) Profit/);
+        await expect(page.getByTestId('fund-asof')).toContainText(/units × NAV ₹[\d,.]+/);
+        for (const label of [
+          'Invested',
+          'Benchmark XIRR, same money',
+          'Booked profit',
+          'SIP status',
+          'Long-term',
+          'Fund return, 1Y',
+          'Also on this page',
+        ])
+          await expect(panel).toContainText(label);
+        await expect(page.getByTestId('fund-tile-invested')).toContainText('Average cost');
+        await expect(page.getByTestId('fund-tile-return')).toContainText(
+          'the fund’s NAV, not your return',
+        );
+        await expect(page.getByTestId('fund-tile-sip')).toContainText(
+          /Running|Paused|Stopped|None/,
+        );
+        await noSideways(page);
+      });
+    });
+  }
 });
 
 test('the detail pages need a sign-in', async ({ request }) => {

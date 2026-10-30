@@ -39,6 +39,18 @@ test.describe('Deposits: the overview (public sample)', () => {
       await expect(p.getByText(label, { exact: false }).first()).toBeVisible();
     }
     await expect(p.locator('.hl-asof')).toContainText('· est.');
+    await expect(p.locator('.hl-asof')).toContainText('maturity amounts from the bank for');
+    // one pill as approved: Profit (interest earned) with its overall return and the XIRR
+    await expect(p.getByTestId('dv-profit')).toContainText(
+      /\([+−][\d.]+% overall\) Profit \(interest earned\).*XIRR [\d.]+% a year/,
+    );
+    await expect(p.getByTestId('dv-tile-soon')).toContainText(
+      /30 days · ₹[\d.]+ (L|Cr|K)? ?in 90 days · .* in a year/,
+    );
+    for (const id of ['dv-x-insured', 'dv-x-fy', 'dv-x-best'])
+      await expect(p.getByTestId(id)).toBeVisible();
+    await expect(p.getByTestId('dv-x-fy')).toContainText('for your tax return');
+    await expect(p.getByTestId('dv-x-best')).toContainText(/today's best|Rates page/);
     await expect(p.locator('.hl-pill.up .sr-only').first()).toHaveText(/Up/);
     expect(await p.getByTestId('dv-banks').locator('li').count()).toBeGreaterThan(0);
     expect(await p.getByTestId('dv-ladder').locator('li').count()).toBeGreaterThan(0);

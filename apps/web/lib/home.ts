@@ -1,5 +1,6 @@
 import {
   cashYearly,
+  coverCounts,
   depositsXirr,
   LADDER_DAYS,
   earningRateNow,
@@ -874,11 +875,16 @@ export function buildHome(i: HomeInput): HomeModel {
     available30: { total: cashNow + due30.principal, cash: cashNow, deposits: due30.principal },
     maturing30: { count: due30.count, principal: due30.principal },
     maturing90: { count: due90.count, principal: due90.principal },
-    aboveInsured: {
-      amount: i.cover.uninsured,
-      banks: Object.values(i.cover.byBank).filter((b) => b.uninsured > 0).length,
-      limit: cover.limit,
-    },
+    aboveInsured: (() => {
+      const c = coverCounts(i.cover);
+      return {
+        amount: i.cover.uninsured,
+        banks: c.banksOver,
+        limit: cover.limit,
+        holdings: c.holdings,
+        holdingsOver: c.holdingsOver,
+      };
+    })(),
     nre: typeAmount('NRE'),
     nro: typeAmount('NRO'),
     notCounted: (() => {

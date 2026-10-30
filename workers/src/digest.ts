@@ -5,10 +5,11 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
-import { DEFAULT_APP_URL, buildDigest } from '@fwos/core';
+import { DEFAULT_APP_URL, buildDigest, withHome } from '@fwos/core';
 import {
   buildDigestInput,
   buildHandbookDoc,
+  householdClient,
   ensureHarvestTasks,
   loadNeeds,
   syncNeededTasks,
@@ -28,6 +29,10 @@ import {
   type Claim,
   type DigestStore,
 } from '@fwos/ingest';
+// Home's own loader and model, so the summary's money figures are Home's to the rupee (net worth, today's change, earned this FY,
+// own money, lifetime profit, the XIRRs, the earning rate now, what matures in 30 days). It reads through a client that sees only
+// the one household, as Row Level Security does for a signed-in member.
+import { loadHome } from '../../apps/web/lib/home-data';
 
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SMTP_USER, SMTP_APP_PASSWORD, APP_URL } =
   process.env;
@@ -189,7 +194,22 @@ const store: DigestStore = {
         (s.data as { include_retirement?: boolean | null } | null)?.include_retirement ?? true,
       includeGoals: (s.data as { include_goals?: boolean | null } | null)?.include_goals ?? true,
     });
-    const g = buildDigest(input);
+    let home: Awaited<ReturnType<typeof loadHome>> = null;
+    try {
+      home = await loadHome(
+        householdClient(db, householdId) as unknown as Parameters<typeof loadHome>[0],
+        '1Y',
+      );
+      // totals only: whether Home's net worth is the one the summary read itself
+      console.log(
+        home
+          ? `Summary figures from Home's model; net worth agrees with the summary's own reading: ${Math.abs(home.total - input.netWorth.total) < 1 ? 'yes' : 'NO'}.`
+          : 'Home has nothing recorded yet; the summary goes without the family figures.',
+      );
+    } catch (e) {
+      console.warn(`Home's figures not added to the summary: ${(e as Error).message}`);
+    }
+    const g = buildDigest(withHome(input, home));
     return { subject: g.subject, text: g.text, html: g.html };
   },
 };

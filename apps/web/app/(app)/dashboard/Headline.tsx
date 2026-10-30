@@ -272,7 +272,7 @@ export function HomeHeadline({
             value={x.aboveInsured.amount > 0 ? formatInrCompact(x.aboveInsured.amount) : 'None'}
             sub={
               x.aboveInsured.amount > 0
-                ? `in ${x.aboveInsured.banks} bank${x.aboveInsured.banks === 1 ? '' : 's'} · over ${formatInrCompact(x.aboveInsured.limit)} per bank and name`
+                ? `${x.aboveInsured.holdingsOver} of ${x.aboveInsured.holdings} bank-and-name holdings over ${formatInrCompact(x.aboveInsured.limit)}`
                 : `all within ${formatInrCompact(x.aboveInsured.limit)} per bank and name`
             }
             warn={x.aboveInsured.amount > 0}
