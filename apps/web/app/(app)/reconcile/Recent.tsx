@@ -5,6 +5,87 @@ import { niceDate } from '@/lib/dates';
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
 
 type FormAction = (f: FormData) => Promise<void>;
+
+/** A bank statement line between two balances, as the bank wrote it, with what the rules make of it. */
+export interface StatementLineView {
+  id: string;
+  date: string;
+  amount: number;
+  narration: string;
+  /** what the line is (Between your own accounts, Spending, To answer…) */
+  what: string;
+  /** why the rules say so */
+  why: string;
+}
+
+/**
+ * What the bank's statement shows between the two balances: each line as the bank wrote it, and what it was taken for, with the
+ * lines' sum against the difference. Without lines for those dates, says what would show them.
+ */
+function StatementLines({
+  lines,
+  assetId,
+  difference,
+  sample,
+}: {
+  lines: StatementLineView[] | undefined;
+  assetId: string;
+  difference: number;
+  sample: boolean;
+}) {
+  if (!lines) return null;
+  if (lines.length === 0)
+    return (
+      <p className="muted small rc-nolines">
+        No statement lines on file for these dates. The bank’s statement for them (Import) shows
+        what moved; until then, choose what it most likely was.
+      </p>
+    );
+  const sum = lines.reduce((s, l) => s + l.amount, 0);
+  return (
+    <details className="rc-lines" open={lines.length <= 8}>
+      <summary className="small">
+        What the statement shows: {lines.length} line{lines.length === 1 ? '' : 's'}, {signed(sum)}{' '}
+        in all
+      </summary>
+      <div className="rc-lines-wrap">
+        <table className="tbl small">
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col" className="num">
+                Amount
+              </th>
+              <th scope="col">As the bank wrote it</th>
+              <th scope="col">Taken for</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.id}>
+                <td>
+                  {sample ? (
+                    niceDate(l.date)
+                  ) : (
+                    <Link href={`/asset/${assetId}/line/${l.id}`}>{niceDate(l.date)}</Link>
+                  )}
+                </td>
+                <td className="num">{signed(l.amount)}</td>
+                <td className="rc-narr">{l.narration}</td>
+                <td title={l.why}>{l.what}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">
+        The lines add up to {signed(sum)}; the difference to explain is {signed(difference)}. A line
+        still “to answer” is answered on the Bank statements tab, and its money is then placed for
+        good.
+      </p>
+    </details>
+  );
+}
 interface Holding {
   id: string;
   nickname: string;
@@ -31,6 +112,7 @@ export function Recent({
   tolerance,
   act,
   sample = false,
+  linesFor = {},
 }: {
   q: ReconcileQueue;
   accounts: Holding[];
@@ -42,6 +124,8 @@ export function Recent({
   tolerance: number;
   act: { confirmProceeds: FormAction; explainBalance: FormAction; recordFunding: FormAction };
   sample?: boolean;
+  /** each changed balance's statement lines between its two balances, by its key */
+  linesFor?: Record<string, StatementLineView[]>;
 }) {
   const owner = (id: string) => ownerName[id] ?? '';
   const named = (id: string | undefined, fallback: string) => (id && labels[id]) || fallback;
@@ -159,6 +243,12 @@ export function Recent({
                     {formatInr(Math.round(b.expected))} expected from {formatInr(b.from.amount)} on{' '}
                     {niceDate(b.from.date)}
                   </div>
+                  <StatementLines
+                    lines={linesFor[b.key]}
+                    assetId={b.assetId}
+                    difference={b.difference}
+                    sample={sample}
+                  />
                 </div>
                 <form action={act.explainBalance} className="rc-form">
                   <input type="hidden" name="account" value={b.assetId} />

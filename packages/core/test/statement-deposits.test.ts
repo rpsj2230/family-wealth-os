@@ -171,3 +171,51 @@ describe('records on file that already stand for deposits on the statements', ()
     expect(matches.some((m) => m.recordId === 'other' || m.recordId === 'earlier')).toBe(false);
   });
 });
+
+describe('a deposit whose lines print no number, or a different one when paid back', () => {
+  const found = depositsFromStatements(
+    [
+      line('jana', '2024-09-06', -200_000, 'TD. GENERIC PAYIN DEBIT'),
+      line('jana', '2024-09-06', -100_000, 'TD. GENERIC PAYIN DEBIT'),
+      line('eq', '2026-01-03', -300_000, 'INITIAL PAYIN FD…8674 /1 SAMPLE'),
+    ],
+    [
+      line('jana', '2026-09-06', 230_000, 'PRINC AND INT AUTO REDEEM SAMPLE'),
+      line('jana', '2026-09-06', 115_000, 'PRINC AND INT AUTO REDEEM SAMPLE'),
+      // not on an anniversary of any booking: left alone
+      line('jana', '2026-05-20', 120_000, 'PRINC AND INT AUTO REDEEM SAMPLE'),
+      line('eq', '2026-02-03', 301_000, 'FD REDEEM AMOUNT -…8763 /1 - SAMPLE'),
+    ],
+    new Map(),
+  );
+  it('pairs them on the deposit’s anniversary, each pay-back with the booking it grew from', () => {
+    expect(found.map((d) => [d.accountId, d.principal, d.paidBack, d.bookedOn, d.endedOn])).toEqual(
+      [
+        ['jana', 200_000, 230_000, '2024-09-06', '2026-09-06'],
+        ['jana', 100_000, 115_000, '2024-09-06', '2026-09-06'],
+        ['eq', 300_000, 301_000, '2026-01-03', '2026-02-03'],
+      ],
+    );
+    expect(found[2]!.last4).toBe('8674');
+  });
+});
+
+describe('a deposit closed early, off its anniversary', () => {
+  it('pairs with the only booking that could have grown into it, and never guesses between two', () => {
+    const one = depositsFromStatements(
+      [line('rbl', '2025-05-12', -500_000, 'FD BOOKING SAMPLE')],
+      [line('rbl', '2026-02-25', 518_000, 'CLOSURE PROCEEDS SAMPLE')],
+      new Map(),
+    );
+    expect(one.map((d) => [d.bookedOn, d.endedOn])).toEqual([['2025-05-12', '2026-02-25']]);
+    const two = depositsFromStatements(
+      [
+        line('rbl', '2025-05-12', -500_000, 'FD BOOKING SAMPLE'),
+        line('rbl', '2025-06-01', -500_000, 'FD BOOKING SAMPLE'),
+      ],
+      [line('rbl', '2026-02-25', 518_000, 'CLOSURE PROCEEDS SAMPLE')],
+      new Map(),
+    );
+    expect(two).toEqual([]);
+  });
+});

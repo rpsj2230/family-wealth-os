@@ -67,3 +67,25 @@
 .rc-scroll table {
   min-width: 36rem;
 }
+
+/* the statement lines between two balances */
+.rc-lines {
+  margin-top: 8px;
+}
+.rc-lines > summary {
+  cursor: pointer;
+}
+.rc-lines-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.rc-lines table {
+  min-width: 0;
+}
+.rc-narr {
+  overflow-wrap: anywhere;
+  min-width: 12em;
+}
+.rc-nolines {
+  margin-top: 6px;
+}

@@ -21,7 +21,7 @@ export interface DepositLine {
 export interface StatementDeposit {
   /** the savings account the deposit was booked from and paid back to */
   accountId: string;
-  /** the deposit number's last four digits, as the narrations print it */
+  /** the deposit number's last four digits, as the narrations print it ('' when they print none) */
   last4: string;
   bookedOn: string;
   endedOn: string;
@@ -124,6 +124,93 @@ export function depositsFromStatements(
       rate: Math.min(Math.round(rate * 1e6) / 1e6, 0.5),
       bookingLineId: booking.id,
       paybackLineIds: [...together, ...paid].map((o) => o.id),
+    });
+  }
+  // 2. lines whose numbers find no partner (Jana prints none; Equitas and IndusInd print one number when booking and another when
+  // paying back): a pay-back pairs with a booking on the same account on the deposit's anniversary (the same day of a later month,
+  // three days either way) when what came back is 97% to 160% of what was booked; equal deposits pair largest with largest
+  const anniversary = (from: string, to: string) => {
+    const a = new Date(`${from}T00:00:00Z`);
+    const b = new Date(`${to}T00:00:00Z`);
+    const months =
+      (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + b.getUTCMonth() - a.getUTCMonth();
+    if (months < 1) return Infinity;
+    const due = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + months, a.getUTCDate()));
+    return Math.abs(b.getTime() - due.getTime()) / 86_400_000;
+  };
+  const openBacks = sortedBacks
+    .filter((b) => !used.has(b.id) && b.amount > 0)
+    .sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
+  for (const back of openBacks) {
+    if (used.has(back.id)) continue;
+    const booking = bookings
+      .filter(
+        (b) =>
+          !used.has(b.id) &&
+          b.amount < 0 &&
+          b.assetId === back.assetId &&
+          b.date < back.date &&
+          back.amount >= -b.amount * 0.97 &&
+          back.amount <= -b.amount * 1.6 &&
+          anniversary(b.date, back.date) <= 3,
+      )
+      .sort(
+        (a, b) =>
+          anniversary(a.date, back.date) - anniversary(b.date, back.date) ||
+          // the booking whose growth into this pay-back is the smallest sensible one: equal deposits pair by size
+          back.amount / -a.amount - back.amount / -b.amount,
+      )[0];
+    if (!booking) continue;
+    used.add(back.id);
+    used.add(booking.id);
+    const principal = Math.round(-booking.amount * 100) / 100;
+    const years = Math.max(yearsBetween(booking.date, back.date), 1 / 365);
+    const rate =
+      back.amount > principal ? 4 * ((back.amount / principal) ** (1 / (4 * years)) - 1) : 0;
+    out.push({
+      accountId: back.assetId,
+      last4: depositNumbers(booking.narration, accountLast4.get(booking.assetId) ?? null)[0] ?? '',
+      bookedOn: booking.date,
+      endedOn: back.date,
+      principal,
+      paidBack: back.amount,
+      rate: Math.min(Math.round(rate * 1e6) / 1e6, 0.5),
+      bookingLineId: booking.id,
+      paybackLineIds: [back.id],
+    });
+  }
+  // 3. a deposit closed early, off its anniversary: when exactly one booking left on the account could have grown into the pay-back
+  // (97% to 160% of it, within five years), they are the same deposit. With two or more such bookings it stays unpaired.
+  for (const back of sortedBacks) {
+    if (used.has(back.id) || back.amount <= 0) continue;
+    const fits = bookings.filter(
+      (b) =>
+        !used.has(b.id) &&
+        b.amount < 0 &&
+        b.assetId === back.assetId &&
+        b.date < back.date &&
+        yearsBetween(b.date, back.date) <= 5 &&
+        back.amount >= -b.amount * 0.97 &&
+        back.amount <= -b.amount * 1.6,
+    );
+    if (fits.length !== 1) continue;
+    const booking = fits[0]!;
+    used.add(back.id);
+    used.add(booking.id);
+    const principal = Math.round(-booking.amount * 100) / 100;
+    const years = Math.max(yearsBetween(booking.date, back.date), 1 / 365);
+    const rate =
+      back.amount > principal ? 4 * ((back.amount / principal) ** (1 / (4 * years)) - 1) : 0;
+    out.push({
+      accountId: back.assetId,
+      last4: depositNumbers(booking.narration, accountLast4.get(booking.assetId) ?? null)[0] ?? '',
+      bookedOn: booking.date,
+      endedOn: back.date,
+      principal,
+      paidBack: back.amount,
+      rate: Math.min(Math.round(rate * 1e6) / 1e6, 0.5),
+      bookingLineId: booking.id,
+      paybackLineIds: [back.id],
     });
   }
   return out.sort((a, b) => a.bookedOn.localeCompare(b.bookedOn) || a.last4.localeCompare(b.last4));

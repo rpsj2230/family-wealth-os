@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { interestCheck, positionInputFrom, reconcileQueue } from '@fwos/core';
+import { interestCheck, LINE_CLASS_LABEL, positionInputFrom, reconcileQueue } from '@fwos/core';
 import { capitalStart, loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
@@ -15,7 +15,7 @@ import { confirmProceeds, explainBalance, recordFunding } from './actions';
 import { History } from './History';
 import { Interest, type InterestAnswer } from './Interest';
 import { Statements, type CoveredMove } from './Statements';
-import { Recent } from './Recent';
+import { Recent, type StatementLineView } from './Recent';
 import './reconcile.css';
 
 export const dynamic = 'force-dynamic';
@@ -93,6 +93,31 @@ export default async function Reconcile({
     .sort((x, y) => x.label.localeCompare(y.label));
   const interest = tab === 'interest' ? await interestTab() : null;
   const statements = tab === 'statements' ? await statementsTab() : null;
+  const recentLines = tab === 'recent' && q.balances.length ? await linesForBalances() : {};
+
+  /**
+   * Recent: for each balance that changed more than expected, the account's own statement lines between the two balances, with
+   * what the rules make of each, so the difference can be explained from what the bank wrote.
+   */
+  async function linesForBalances(): Promise<Record<string, StatementLineView[]>> {
+    const stored = await loadStatements(supabase as unknown as SupabaseClient);
+    const picture = statementPicture(stored, loaded, config, positionFor(loaded, config, true));
+    const cls = new Map(picture.classified.map((c) => [c.id, c]));
+    const out: Record<string, StatementLineView[]> = {};
+    for (const b of q.balances)
+      out[b.key] = picture.lines
+        .filter((l) => l.assetId === b.assetId && l.date > b.from.date && l.date <= b.to.date)
+        .sort((x, y) => x.date.localeCompare(y.date))
+        .map((l) => ({
+          id: l.id,
+          date: l.date,
+          amount: l.amount,
+          narration: l.narration,
+          what: LINE_CLASS_LABEL[cls.get(l.id)?.cls ?? 'ask_in'],
+          why: cls.get(l.id)?.reason ?? '',
+        }));
+    return out;
+  }
 
   /** Bank statements: every line sorted, and the answers given by hand that the statements now cover. */
   async function statementsTab() {
@@ -228,6 +253,7 @@ export default async function Reconcile({
           today={today}
           tolerance={config.estimates.unexplainedTolerance}
           act={{ confirmProceeds, explainBalance, recordFunding }}
+          linesFor={recentLines}
         />
       )}
     </>

@@ -369,3 +369,32 @@ describe('an account of yours held in someone else’s name', () => {
     expect(cs[2]!.cls).toBe('ask_out');
   });
 });
+
+describe('several deposits booked one day and kept as one record', () => {
+  const kept: ClassifyContext = {
+    ...ctx,
+    accounts: [{ assetId: 'yes', ownerId: 'r', last4: '0037', bank: 'Yes Bank' }],
+    deposits: [
+      {
+        assetId: 'fd4',
+        ownerId: 'r',
+        bank: 'Yes Bank',
+        principal: 400_000,
+        bookedOn: '2021-11-01',
+        maturityOn: '2026-11-01',
+        endedOn: null,
+        maturityAmount: null,
+      },
+    ],
+    fundTxns: [],
+  };
+  it('links each of the bookings that add up to its principal', () => {
+    const cs = classifyLines(
+      [1, 2, 3, 4].map((i) => line('yes', '2021-11-01', -100_000, `NET-NEW FD-SAMPLE-…070${i}`)),
+      kept,
+    );
+    expect(cs.map((c) => [c.cls, c.counterpart])).toEqual(
+      Array.from({ length: 4 }, () => ['fd_funding', 'fd4']),
+    );
+  });
+});

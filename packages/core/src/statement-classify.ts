@@ -426,6 +426,35 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     else set(l, 'fd_proceeds', 'A deposit of yours matured or was closed then', fd.assetId);
   }
 
+  // 6b. several deposits booked the same day and kept as one record (a monthly sheet's "₹4 L at Yes Bank" for four ₹1 L deposits):
+  // the bookings on one account that day that add up to the record's principal are all its funding
+  const depositLine = (l: StmtLine) => DEPOSIT_WORDS.test(l.narration) || FD_OPEN.test(l.narration);
+  for (const d of ctx.deposits) {
+    if (usedFd.has(`${d.assetId}|out`)) continue;
+    const there = d.bank ? bankWord(d.bank) : '';
+    const groups = new Map<string, StmtLine[]>();
+    for (const l of sorted) {
+      const a = acct.get(l.assetId);
+      if (!open(l) || l.amount >= 0 || !depositLine(l) || !a || a.ownerId !== d.ownerId) continue;
+      if (there && a.bank && bankWord(a.bank) !== there) continue;
+      if (daysApart(l.date, d.bookedOn) > ctx.pairDays) continue;
+      const k = `${l.assetId}|${l.date}`;
+      groups.set(k, [...(groups.get(k) ?? []), l]);
+    }
+    const g = [...groups.values()].find(
+      (ls) => ls.length > 1 && near(d.principal, -ls.reduce((t, l) => t + l.amount, 0)),
+    );
+    if (!g) continue;
+    usedFd.add(`${d.assetId}|out`);
+    for (const l of g)
+      set(
+        l,
+        'fd_funding',
+        `One of ${g.length} deposits booked that day, kept as one record`,
+        d.assetId,
+      );
+  }
+
   // 7. fund purchases and sales in the CAS
   const fundsBy = new Map<string, number[]>();
   ctx.fundTxns.forEach((t, k) => {

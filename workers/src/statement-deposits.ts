@@ -97,7 +97,8 @@ async function main() {
     estimated: !!(f.start_estimated || f.ended_estimated),
   }));
   const { matches, rest } = matchDepositRecords(found, records);
-  const nums = (ds: { last4: string }[]) => ds.map((d) => `…${d.last4}`).join(' ');
+  const nums = (ds: { last4: string; bookedOn: string }[]) =>
+    ds.map((d) => (d.last4 ? `…${d.last4}` : `of ${d.bookedOn}`)).join(' ');
   console.log(`\n== Records on file that are these deposits: ${matches.length}`);
   for (const m of matches) {
     const f = fdRow.get(m.recordId)!;
@@ -134,11 +135,11 @@ async function main() {
       type: 'fixed_deposit',
       ownerName: loaded.ownerName.get(acct.owner_id) ?? '',
       bank: bankOf(d.accountId),
-      nickname: `FD …${d.last4}`,
-      label: `FD …${d.last4} (from the statements)`,
+      nickname: d.last4 ? `FD …${d.last4}` : `FD of ${d.bookedOn}`,
+      label: `${d.last4 ? `FD …${d.last4}` : `FD of ${d.bookedOn}`} (from the statements)`,
       accountKind: (acct.account_kind as 'NRE' | 'NRO' | null) ?? null,
       joint: !!acct.is_joint,
-      last4: d.last4,
+      last4: d.last4 || null,
       currency: 'INR',
       holderName: acct.holder_name ?? null,
       status: 'matured',
@@ -162,7 +163,7 @@ async function main() {
     must(
       await db
         .from('fixed_deposits')
-        .update({ ended_estimated: false, fd_ref_last4: d.last4 })
+        .update({ ended_estimated: false, fd_ref_last4: d.last4 || null })
         .eq('asset_id', (r as { id: string }).id)
         .eq('household_id', hh)
         .select('asset_id'),
@@ -177,7 +178,7 @@ async function main() {
       const d = m.deposits[0]!;
       const f = fdRow.get(m.recordId)!;
       const change: Record<string, unknown> = {
-        fd_ref_last4: d.last4,
+        fd_ref_last4: d.last4 || null,
         ended_on: d.endedOn,
         ended_estimated: false,
         bank_maturity_amount: d.paidBack,
