@@ -148,8 +148,8 @@ const sameSum = (a: number, b: number) => Math.abs(a - b) <= Math.max(1, b * 0.0
  * Which deposits found on the statements a record on file already stands for. A monthly sheet often kept several deposits booked
  * together as one row ("₹5 L at IDFC" for five ₹1 L deposits), and a diary note dated a deposit by the note, not the bank. A record
  * is its statement deposits when they are the same person at the same bank and their principals add up to its principal: booked
- * within three days and paid back within ten days of its dates, or, for a record whose dates were guessed, running at some time in
- * its period. Deposits booked and paid back together are tried as one group first, then each alone.
+ * within three days and paid back within ten days of its dates, or, for a record whose dates were guessed (a diary note dates it
+ * by the note), running on the day it was written down: the deposit booked after that day is the next one, not this. Deposits booked and paid back together are tried as one group first, then each alone.
  */
 export function matchDepositRecords<D extends StatementDeposit & { key: string }>(
   found: D[],
@@ -165,7 +165,7 @@ export function matchDepositRecords<D extends StatementDeposit & { key: string }
           !used.has(d) &&
           d.key === r.key &&
           (loose
-            ? d.bookedOn <= addDaysIso(r.endedOn, 30) && d.endedOn >= addDaysIso(r.bookedOn, -30)
+            ? d.bookedOn <= addDaysIso(r.bookedOn, 3) && d.endedOn >= r.bookedOn
             : daysBetween(d.bookedOn, r.bookedOn) <= 3 && daysBetween(d.endedOn, r.endedOn) <= 10),
       );
       if (!cands.length) continue;

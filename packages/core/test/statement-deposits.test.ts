@@ -136,6 +136,15 @@ describe('records on file that already stand for deposits on the statements', ()
       endedOn: '2020-10-20',
       estimated: true,
     },
+    // a guessed record that ended before the statement deposits began is not them (they are the next deposits)
+    {
+      id: 'earlier',
+      key: 'r|idfc',
+      principal: 500_000,
+      bookedOn: '2021-09-12',
+      endedOn: '2022-09-10',
+      estimated: true,
+    },
     // another person's record at the same bank and dates is never theirs
     {
       id: 'other',
@@ -159,6 +168,6 @@ describe('records on file that already stand for deposits on the statements', ()
   });
   it('leaves the deposits no record stands for to be added', () => {
     expect(rest.map((d) => d.last4)).toEqual(['1943', '1954', '1987', '2006', '2040']);
-    expect(matches.some((m) => m.recordId === 'other')).toBe(false);
+    expect(matches.some((m) => m.recordId === 'other' || m.recordId === 'earlier')).toBe(false);
   });
 });
