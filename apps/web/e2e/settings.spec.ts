@@ -157,7 +157,10 @@ test.describe('Settings (public sample)', () => {
     await expect(page.getByRole('radio', { name: /Only when I release it/ })).toBeVisible();
     await expect(page.getByLabel('Call these people first: name, row 1')).toHaveValue('Ravi Menon');
     await expect(page.getByText(/Still empty:/)).toBeVisible();
-    const add = page.getByRole('button', { name: 'Add a person' }).first();
+    // the contacts form's own button (the inactivity alert card has one too)
+    const add = page
+      .locator('form', { has: page.getByLabel('Call these people first: name, row 1') })
+      .getByRole('button', { name: 'Add a person' });
     await add.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await add.click();
     await expect(page.getByLabel('Call these people first: name, row 2')).toBeVisible();

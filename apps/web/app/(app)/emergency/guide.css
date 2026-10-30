@@ -82,6 +82,7 @@
 }
 .hb-switch {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   min-height: 44px;
@@ -271,6 +272,8 @@
 }
 .hb-tick label {
   display: flex;
+  /* the site-wide label rule stacks its contents; a tick sits beside its text */
+  flex-direction: row;
   align-items: flex-start;
   gap: 12px;
   min-height: 48px;
