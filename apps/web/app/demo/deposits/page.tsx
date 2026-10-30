@@ -9,6 +9,7 @@ import {
   maturityLadder,
 } from '@fwos/core';
 import { DepositOverviewPanel } from '@/app/(app)/deposits/Overview';
+import { demoBankGrowth } from '@/lib/bank-growth-data';
 import {
   CoverTab,
   MaturitiesTab,
@@ -98,6 +99,12 @@ export default async function DemoDeposits({
   const todayIso = DEMO_TODAY.toISOString().slice(0, 10);
   const depBanks = depositsByBank(scoped, todayIso);
   const depLadder = maturityLadder(scoped);
+  const growth = demoBankGrowth({
+    owner: who && tab !== 'cover' ? who : null,
+    rows: scoped.flatMap((b) => b.sections.flatMap((sct) => sct.rows)),
+    fdNow: overview.parts.fd.current,
+    cashNow: 0,
+  });
   const exD = depositsExplain(
     overview,
     bankBase({
@@ -113,6 +120,7 @@ export default async function DemoDeposits({
       toConfirm: s.confirm.length,
       banks: depBanks,
       ladder: depLadder,
+      growth,
     },
   );
   return (
@@ -141,6 +149,7 @@ export default async function DemoDeposits({
       />
       <DepositOverviewPanel
         ex={exD}
+        growth={growth}
         o={overview}
         banks={depBanks}
         ladder={depLadder}

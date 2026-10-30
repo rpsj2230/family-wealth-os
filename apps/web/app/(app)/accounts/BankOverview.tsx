@@ -2,9 +2,11 @@ import Link from 'next/link';
 import { TypeLegend } from '@/app/(app)/accounts/TypeLegend';
 import type { ReactNode } from 'react';
 import {
+  TERMS,
   formatInr,
   formatInrCompact,
   formatPct,
+  type BankGrowth,
   type BankOverview as Overview,
   type Explain,
   type ExplainSet,
@@ -13,13 +15,17 @@ import {
 import './bankoverview.css';
 import { Est } from '@/components/Est';
 import { ForeignCashLines } from '@/components/ForeignCash';
+import { GrowthStrip } from '@/components/GrowthStrip';
 import { PersonBadge } from '@/components/Person';
 import { Why, WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
-import { MONEY_WORDS as W } from '@/lib/money-words';
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 export const whole = (n: number) => formatInr(Math.round(n));
+/** A signed amount, short: "+₹14.20 L", "−₹2,300". */
+export const signedShort = (n: number) => `${n < 0 ? '−' : '+'}${formatInrCompact(Math.abs(n))}`;
+/** A signed return, one decimal: "+7.8%". Only returns and changes carry a sign. */
+export const signedPct = (r: number) => `${r < 0 ? '−' : '+'}${formatPct(Math.abs(r), 1)}`;
 
 /** A coloured, signed figure: an arrow and a word as well as the colour, so a loss never reads as a gain by colour alone. */
 export function Delta({
@@ -139,9 +145,15 @@ export function BankOverviewPanel({
   scope = null,
   sample = false,
   ex,
+  growth = null,
+  inflation = null,
 }: {
   /** the "?" explainers of the figures below */
   ex: ExplainSet<'accounts'>;
+  /** how the money in banks is growing (core bank-growth.ts); null draws the page without the rates */
+  growth?: BankGrowth | null;
+  /** the retirement plan's inflation, the mark on the growth strip */
+  inflation?: number | null;
   o: Overview;
   styles: Record<string, PersonStyle>;
   month: string;
@@ -164,7 +176,9 @@ export function BankOverviewPanel({
       <div className="bv-top">
         <div className="bv-hero">
           <WhyHead why={ex['accounts.total']}>
-            <h2 className="bv-eyebrow">In banks today{scope ? ` · ${scope}` : ''}</h2>
+            <h2 className="bv-eyebrow">
+              {TERMS.currentValue.label} in banks{scope ? ` · ${scope}` : ''}
+            </h2>
           </WhyHead>
           <div className="bv-big" data-testid="bv-current">
             {formatInrCompact(o.current)}
@@ -173,36 +187,43 @@ export function BankOverviewPanel({
           <p className="bv-count">
             {empty
               ? 'Nothing is recorded yet.'
-              : `${plural(o.accounts, 'account')} and ${plural(o.deposits, 'deposit')}${o.banks > 0 ? ` in ${o.banks} ${bankWord}` : ''}`}
-          </p>
-          <p className="bv-view small muted" data-testid="bv-view-current">
-            <strong>Amount invested now:</strong> what today’s deposits and balances cost, including
-            interest reinvested from earlier deposits, against their value today. Your own money
-            (never including interest) and the total profit on it are on{' '}
-            <Link href={sample ? '/demo/dashboard' : '/'}>Home</Link>.
+              : `${plural(o.accounts, 'account')} and ${plural(o.deposits, 'deposit')}${o.banks > 0 ? ` in ${o.banks} ${bankWord}` : ''} · est. · deposits ${formatPct(w.fd?.share ?? 0, 0)} · savings and cash ${formatPct(w.cash?.share ?? 0, 0)}`}
           </p>
           <div className="bv-deltas">
             <Delta
-              label={W.profitOnInvested}
-              amount={o.profit}
-              pct={o.profitPct}
-              note="value today less the amount invested now"
-              why={ex['accounts.profit']}
-            />
-            <Delta
-              label="Earned today"
+              label={TERMS.todayChange.label}
               amount={o.today.change}
               pct={o.today.changePct}
               note="since yesterday, at each rate; % of yesterday’s value"
               estimate
               why={ex['accounts.today']}
             />
+            {growth?.interestFy ? (
+              <Delta
+                label={`${TERMS.interestEarned.label} this FY`}
+                amount={growth.interestFy.total}
+                pct={null}
+                note={`since ${niceDate(growth.fyStart)}: deposits ${formatInrCompact(growth.interestFy.deposits)} · savings ${formatInrCompact(growth.interestFy.savings)}`}
+                estimate
+                why={ex['accounts.interestFy']}
+              />
+            ) : (
+              <Delta
+                label={TERMS.profit.label}
+                amount={o.profit}
+                pct={o.profitPct}
+                note="current value less invested"
+                why={ex['accounts.profit']}
+              />
+            )}
           </div>
         </div>
 
         <div className="bv-journey">
           <WhyHead why={ex['accounts.journey']}>
-            <h3 className="bv-h">From amount invested now to maturity</h3>
+            <h3 className="bv-h">
+              {TERMS.invested.label} → {TERMS.currentValue.label} → {TERMS.maturityValue.label}
+            </h3>
           </WhyHead>
           {pctDone === null ? (
             <p className="muted small">
@@ -213,34 +234,63 @@ export function BankOverviewPanel({
               <div
                 className="bv-track"
                 role="img"
-                aria-label={`${formatPct(pctDone, 0)} of the interest has been earned: ${whole(o.interest.earned)} of ${whole(o.interest.total)}`}
+                aria-label={`${formatPct(pctDone, 0)} of the total interest earned so far: ${whole(o.interest.earned)} of ${whole(o.interest.total)}`}
               >
                 <span className="bv-fill" style={{ width: `${pctDone * 100}%` }} />
                 <span className="bv-dot" style={{ left: `${pctDone * 100}%` }} />
               </div>
               <dl className="bv-ends">
                 <div>
-                  <dt>{W.investedNow}</dt>
+                  <dt>{TERMS.invested.label}</dt>
                   <dd>{formatInrCompact(o.invested)}</dd>
                 </div>
                 <div className="mid">
-                  <dt>{W.valueToday}</dt>
+                  <dt>{TERMS.currentValue.label}</dt>
                   <dd>{formatInrCompact(o.current)}</dd>
                 </div>
                 <div className="end">
-                  <dt>{W.atMaturity}</dt>
+                  <dt>{TERMS.maturityValue.label}</dt>
                   <dd>{formatInrCompact(o.maturity)}</dd>
                 </div>
               </dl>
               <p className="bv-jnote">
-                <strong>{formatPct(pctDone, 0)}</strong> of the interest is earned:{' '}
-                {formatInrCompact(o.interest.earned)} so far, {formatInrCompact(o.interest.toEarn)}{' '}
-                still to come.
+                <strong>{formatPct(pctDone, 0)}</strong> of the total interest earned so far:{' '}
+                {formatInrCompact(o.interest.earned)} earned, {formatInrCompact(o.interest.toEarn)}{' '}
+                {TERMS.interestToCome.label.toLowerCase()}.
               </p>
             </>
           )}
         </div>
       </div>
+
+      {growth && (
+        <GrowthStrip
+          title="How is my bank money growing?"
+          testId="bv-growth"
+          inflation={inflation}
+          items={[
+            {
+              key: 'all',
+              label: 'All bank money',
+              rate: growth.banks?.rate ?? null,
+              main: true,
+              why: ex['accounts.growth'],
+            },
+            {
+              key: 'fd',
+              label: 'Fixed deposits',
+              rate: growth.fd?.rate ?? null,
+              why: ex['accounts.fdXirr'],
+            },
+            {
+              key: 'savings',
+              label: 'Savings',
+              rate: growth.savings?.rate ?? null,
+              why: ex['accounts.savingsRate'],
+            },
+          ]}
+        />
+      )}
 
       <div className="bv-where">
         <WhyHead why={ex['accounts.where']}>
@@ -271,12 +321,12 @@ export function BankOverviewPanel({
 
       <dl className="bv-grid" aria-label="More figures">
         <Stat
-          label="Fixed deposits today"
+          label="Fixed deposits"
           value={formatInrCompact(o.parts.fd.current)}
           sub={
             o.deposits === 0
               ? 'no deposit'
-              : `${formatInrCompact(o.parts.fd.invested)} invested · ${formatInrCompact(o.parts.fd.maturity)} at maturity${o.fdRate !== null ? ` · ${formatPct(o.fdRate, 2)} a year on average` : ''}`
+              : `${TERMS.invested.label} ${formatInrCompact(o.parts.fd.invested)} · ${TERMS.profit.label} ${signedShort(o.parts.fd.current - o.parts.fd.invested)}${o.parts.fd.invested > 0 ? ` (${signedPct((o.parts.fd.current - o.parts.fd.invested) / o.parts.fd.invested)})` : ''}${growth?.fd ? ` · ${TERMS.xirr.label} ${formatPct(growth.fd.rate, 2)}` : ''}`
           }
           href={to('/deposits')}
           why={ex['accounts.deposits']}
@@ -286,8 +336,9 @@ export function BankOverviewPanel({
           value={formatInrCompact(o.parts.cash.current)}
           sub={
             <>
-              {plural(o.parts.cash.count, 'account')} · {formatInrCompact(o.parts.cash.invested)}{' '}
-              last recorded
+              {growth?.interestFy
+                ? `${TERMS.interestEarned.label} this FY ${signedShort(growth.interestFy.savings)}${growth.savings ? ` · ${formatPct(growth.savings.rate, 2)} a year` : ''}`
+                : `${plural(o.parts.cash.count, 'account')} · ${TERMS.balance.label.toLowerCase()} ${formatInrCompact(o.parts.cash.invested)}`}
               <ForeignCashLines items={o.foreign} testid="bv-cash-fx" />
             </>
           }
@@ -295,43 +346,48 @@ export function BankOverviewPanel({
           why={ex['accounts.cash']}
         />
         <Stat
-          label="Interest still to earn"
-          value={formatInrCompact(o.interest.toEarn)}
-          sub="until every deposit matures"
-          why={ex['accounts.toEarn']}
-        />
-        <Stat
-          label="Next maturity"
-          value={o.next ? formatInrCompact(o.next.amount) : '–'}
+          label={TERMS.averageRate.label}
+          value={
+            typeof growth?.rates.all === 'number' ? `${formatPct(growth.rates.all, 2)} a year` : '–'
+          }
           sub={
-            o.next
-              ? `${niceDate(o.next.date)} · ${o.next.days === 0 ? 'today' : `in ${plural(o.next.days, 'day')}`} · ${o.next.bank}${o.next.count > 1 ? ` and ${o.next.count - 1} more` : ''}`
+            typeof growth?.rates.all === 'number'
+              ? [
+                  'deposits',
+                  growth.rates.nre ? `NRE ${formatPct(growth.rates.nre.rate, 2)} (tax-free)` : null,
+                  growth.rates.nro
+                    ? `NRO ${formatPct(growth.rates.nro.rate, 2)} (≈ ${formatPct(growth.rates.nro.afterTax, 1)} after tax)`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               : 'no deposit is running'
           }
+          href={to('/rates')}
+          why={ex['accounts.avgRate']}
+        />
+        <Stat
+          label={TERMS.maturityValue.label}
+          value={formatInrCompact(o.parts.fd.maturity)}
+          sub={`${TERMS.interestToCome.label} ${formatInrCompact(o.interest.toEarn)}`}
           href={to('/deposits?tab=maturities')}
-          why={ex['accounts.next']}
+          why={ex['accounts.toEarn']}
         />
         <Stat
           label={`Maturing in ${plural(o.soon.days, 'day')}`}
           value={o.soon.count === 0 ? 'None' : formatInrCompact(o.soon.amount)}
-          sub={o.soon.count === 0 ? 'nothing falls due soon' : plural(o.soon.count, 'deposit')}
+          sub={
+            o.soon.count === 0
+              ? 'nothing falls due soon'
+              : `${plural(o.soon.count, 'deposit')}${o.next ? ` · next ${niceDate(o.next.date)}, ${o.next.bank}` : ''}`
+          }
           tone={o.soon.count > 0 ? 'warn' : undefined}
           href={to('/deposits?tab=maturities')}
           why={ex['accounts.soon']}
         />
-        <Stat
-          label="Largest bank"
-          value={o.topBank ? formatPct(o.topBank.share, 0) : '–'}
-          sub={
-            o.topBank
-              ? `${o.topBank.name} holds ${formatInrCompact(o.topBank.amount)} of the money in banks`
-              : 'no bank yet'
-          }
-          why={ex['accounts.largestBank']}
-        />
         {o.cover && (
           <Stat
-            label="Above the insured limit"
+            label={TERMS.aboveInsured.label}
             value={o.cover.uninsured > 0 ? formatInrCompact(o.cover.uninsured) : 'None'}
             sub={
               o.cover.uninsured > 0
@@ -343,6 +399,24 @@ export function BankOverviewPanel({
             why={ex['accounts.cover']}
           />
         )}
+        {typeof growth?.savingsGap === 'number' && growth.savingsGap > 0 && (
+          <Stat
+            label="Savings vs deposits"
+            value={`−${formatInrCompact(growth.savingsGap)} a year`}
+            sub={`${formatInrCompact(o.parts.cash.current)} in savings earns less than at your ${formatPct(growth.rates.all!, 2)} average deposit rate`}
+            href={to('/growth')}
+          />
+        )}
+        <Stat
+          label="Largest bank"
+          value={o.topBank ? formatPct(o.topBank.share, 0) : '–'}
+          sub={
+            o.topBank
+              ? `${o.topBank.name} holds ${formatInrCompact(o.topBank.amount)} of the money in banks`
+              : 'no bank yet'
+          }
+          why={ex['accounts.largestBank']}
+        />
         <Stat
           label={`Updated in ${month}`}
           value={
@@ -425,12 +499,13 @@ export function BankOverviewPanel({
           <li>
             Invested is the amount of each deposit plus the last balance recorded for each savings
             account and holding. Maturity value is what each deposit pays on its date, with savings
-            and holdings at today’s value.
+            and holdings at today’s value. The deposits’ XIRR runs from each booking date to today;
+            savings show the rate earned: the interest since 1 April as a yearly rate.
           </li>
           <li>
-            Earned today is an estimate: a deposit earns the difference between its value today and
-            yesterday on its own terms, and a savings account earns its balance at its rate for one
-            day. Money held by others and foreign-currency balances earn nothing here, and their
+            Today’s change is an estimate: a deposit earns the difference between its value today
+            and yesterday on its own terms, and a savings account earns its balance at its rate for
+            one day. Money held by others and foreign-currency balances earn nothing here, and their
             exchange-rate movement is not counted as profit.
           </li>
           <li>

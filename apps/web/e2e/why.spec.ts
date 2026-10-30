@@ -158,7 +158,7 @@ test.describe('the "?" explainer (public sample)', () => {
       ['/demo/dashboard', 'home.profitSoFar', /÷ own money/],
       ['/demo/dashboard', 'home.movement', /at the start/],
       ['/demo/dashboard', 'home.classFunds', /÷ ₹[\d,]+ net worth/],
-      ['/demo/accounts', 'accounts.profit', /÷/],
+      ['/demo/accounts', 'accounts.interestFy', /Deposits ₹[\d,]+ \+ savings ₹[\d,]+ =/],
       ['/demo/deposits', 'deposits.journey', /÷/],
       ['/demo/cash', 'cash.interestYear', /tax at source/],
       ['/demo/reports', 'reports.fdRate', /weighted|Σ/],

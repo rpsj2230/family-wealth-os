@@ -16,22 +16,26 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     await page.goto('/demo/accounts');
     const p = panel(page);
     await expect(p).toBeVisible();
-    await expect(p.getByRole('heading', { name: /In banks today/, level: 2 })).toBeVisible();
+    await expect(
+      p.getByRole('heading', { name: /Current value in banks/, level: 2 }),
+    ).toBeVisible();
     // the big figure is in lakh/crore form with the full amount in Indian grouping beneath it
     await expect(p.getByTestId('bv-current')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     await expect(p).toContainText(/₹\d{1,2},\d\d,\d\d,\d{3}/);
     for (const label of [
-      'Amount invested now',
-      'Value today',
-      'Value at maturity',
-      'Profit on amount invested now',
-      'Earned today',
+      'Invested',
+      'Current value',
+      'Maturity value',
+      'Today’s change',
+      'Interest earned this FY',
+      'How is my bank money growing?',
+      'All bank money',
       'Where the money sits',
       'Savings and cash',
       'Fixed deposits',
       'Other holdings',
-      'Interest still to earn',
-      'Next maturity',
+      'Interest still to come',
+      'Average interest rate',
       'Largest bank',
       'Above the insured limit',
       'Whose money',
@@ -40,7 +44,7 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
       await expect(p.getByText(label, { exact: false }).first()).toBeVisible();
     }
     // today's earning says it is an estimate; profit is marked with an arrow and a word for a screen reader
-    await expect(p.getByText('est.', { exact: true })).toBeVisible();
+    await expect(p.getByText('est.', { exact: true }).first()).toBeVisible();
     await expect(p.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
     // the window for "maturing in" comes from Settings (30 days by default), it is not written into the page
     await expect(p.getByText(/Maturing in 30 days/)).toBeVisible();
@@ -48,7 +52,7 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     await expect(
       p.getByRole('img', { name: /Where the money sits: Savings and cash \d+%/ }),
     ).toBeVisible();
-    await expect(p.getByRole('img', { name: /of the interest has been earned/ })).toBeVisible();
+    await expect(p.getByRole('img', { name: /of the total interest earned so far/ })).toBeVisible();
     // the existing "needs you" signal is kept
     await expect(p.getByText(/Updated in October/)).toBeVisible();
     await expect(p.getByText(/need you/)).toBeVisible();
@@ -92,25 +96,31 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     await noSideways(page);
   });
 
-  test('says it is the current-holdings view and points to the lifetime profit on Home', async ({
+  test('shows how the money in banks is growing: all bank money, deposits XIRR and savings rate earned', async ({
     page,
   }) => {
     await page.goto('/demo/accounts');
-    const v = panel(page).getByTestId('bv-view-current');
-    await expect(v).toContainText('Amount invested now:');
-    await expect(v.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/demo/dashboard');
+    for (const key of ['all', 'fd', 'savings'])
+      await expect(page.getByTestId(`bv-growth-${key}`)).toContainText(/\d+\.\d\d%|–/);
+    // the deposits card says invested, profit with its overall return, and XIRR
+    await expect(panel(page)).toContainText(
+      /Invested ₹[\d.]+ (Cr|L) · Profit [+−]₹[\d.,]+ ?(Cr|L)? \([+−][\d.]+%\) · XIRR \d+\.\d\d%/,
+    );
+    await page.locator('[data-why="accounts.growth"]').first().click();
+    await expect(page.getByTestId('why-panel')).toContainText('Earning rate now');
+    await page.keyboard.press('Escape');
   });
 
   test('is also at the top of Manage', async ({ page }) => {
     await page.goto('/demo/accounts?tab=manage');
-    await expect(panel(page)).toContainText('Profit on amount invested now');
+    await expect(panel(page)).toContainText('Interest earned this FY');
     await expect(page.getByRole('heading', { name: 'Edit many accounts at once' })).toBeVisible();
     await noSideways(page);
   });
 
   test('the secondary figures link to where they are explained', async ({ page }) => {
     await page.goto('/demo/accounts');
-    await expect(panel(page).getByRole('link', { name: 'Next maturity' })).toHaveAttribute(
+    await expect(panel(page).getByRole('link', { name: 'Maturity value' })).toHaveAttribute(
       'href',
       '/demo/deposits?tab=maturities',
     );

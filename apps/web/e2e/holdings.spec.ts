@@ -37,8 +37,8 @@ test.describe('Accounts (public sample)', () => {
     await page.goto('/demo/accounts');
     await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
     const kpis = page.getByRole('region', { name: 'Money in banks' });
-    await expect(kpis).toContainText('In banks today');
-    await expect(kpis).toContainText('Fixed deposits today');
+    await expect(kpis).toContainText('Current value in banks');
+    await expect(kpis).toContainText('Fixed deposits');
     await expect(kpis).toContainText('Updated in');
     await expect(page.locator('details.bankdet').first()).toBeVisible();
     await expect(page.getByText(/Foreign-currency accounts/)).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('Deposits (public sample)', () => {
     await page.goto('/demo/deposits');
     await expect(page.getByRole('heading', { name: 'Deposits', level: 1 })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Fixed deposits overview' })).toContainText(
-      'Fixed deposits today',
+      'Current value of fixed deposits',
     );
     await expect(page.getByRole('heading', { name: 'All fixed deposits' })).toBeVisible();
     await noSideways(page);

@@ -19,6 +19,8 @@ import {
   type ExplainLevel,
   type ExplainSet,
 } from './explain';
+import type { BankGrowth } from './bank-growth';
+import { TERMS } from './terms';
 import type { BankOverview } from './bank-overview';
 import { maturedRuleText } from './deposit-state';
 import { foreignExplain } from './foreign-cash';
@@ -44,6 +46,8 @@ export interface BankFacts {
     avgRate: number | null;
     largest: { code: string; bank: string; amount: number } | null;
   } | null;
+  /** how the money in banks is growing (bank-growth.ts); null or absent when it could not be worked out */
+  growth?: BankGrowth | null;
   links: {
     monthly: string;
     accounts: string;
@@ -82,7 +86,12 @@ export type BankKind =
   | 'interestYear'
   | 'earns'
   | 'stale'
-  | 'grand';
+  | 'grand'
+  | 'growth'
+  | 'fdXirr'
+  | 'savingsRate'
+  | 'interestFy'
+  | 'avgRate';
 
 type Page = 'accounts' | 'deposits' | 'cash';
 
@@ -796,6 +805,12 @@ export function bankFigure(
     }
     case 'earns':
       return bankFigure('interestYear', id, page, o, f);
+    case 'growth':
+    case 'fdXirr':
+    case 'savingsRate':
+    case 'interestFy':
+    case 'avgRate':
+      return growthFigure(kind, id, o, f);
     case 'grand':
       return explain({
         id,
@@ -814,6 +829,176 @@ export function bankFigure(
   }
 }
 
+/** The growth figures of the bank pages: Earning rate now of bank money, the deposits' XIRR, the savings' rate earned, the interest
+ * earned this financial year and the average deposit rate. */
+function growthFigure(
+  kind: 'growth' | 'fdXirr' | 'savingsRate' | 'interestFy' | 'avgRate',
+  id: string,
+  o: BankOverview,
+  f: BankFacts,
+): Explain {
+  const g = f.growth ?? null;
+  const yr = (r: number | null | undefined) =>
+    r === null || r === undefined ? '–' : `${exPct(r, 2)} a year`;
+  const none = (title: string, what: string) =>
+    explain({
+      id,
+      title,
+      what,
+      how: 'Shows once the records reach this financial year.',
+      inputs: [],
+      level: 'missing',
+      completeness: 'Not worked out yet.',
+      notes: [],
+    });
+  switch (kind) {
+    case 'growth':
+      if (!g?.banks) return none(TERMS.earningRate.label, TERMS.earningRate.hint);
+      return explain({
+        id,
+        title: `${TERMS.earningRate.label}: money in banks`,
+        exact: yr(g.banks.rate),
+        what: 'What the money in banks earns a year at today’s rates: deposits at their XIRR, savings at the rate earned this year, weighted by how much is in each.',
+        how: `Deposits ${exInr(o.parts.fd.current)} × ${yr(g.fd?.rate)} + savings ${exInr(o.parts.cash.current)} × ${yr(g.savings?.rate)} = ${exInr(g.banks.perYear)} a year ÷ ${exInr(o.parts.fd.current + o.parts.cash.current)} = ${yr(g.banks.rate)}.`,
+        inputs: [
+          {
+            label: 'Fixed deposits',
+            value: exInr(o.parts.fd.current),
+            basis: 'calculated',
+            to: f.today,
+          },
+          {
+            label: 'Savings and cash',
+            value: exInr(o.parts.cash.current),
+            basis: 'estimated',
+            to: f.today,
+          },
+        ],
+        level: 'partly_estimated',
+        completeness: 'The same rates as Home shows for deposits and savings.',
+        notes: [],
+      });
+    case 'fdXirr':
+      if (!g?.fd) return none(`${TERMS.xirr.label}: fixed deposits`, TERMS.xirr.hint);
+      return explain({
+        id,
+        title: `${TERMS.xirr.label}: fixed deposits`,
+        exact: yr(g.fd.rate),
+        what: `${TERMS.xirr.hint} Each running deposit from its booking date to today’s value.`,
+        how: `Each principal out on its booking day, today’s value of all of them (${exInr(o.parts.fd.current)}) back: ${yr(g.fd.rate)}. With interest added every quarter this is a little above the rates written on the deposits.`,
+        inputs: [
+          {
+            label: 'Running deposits',
+            value: exInr(o.parts.fd.invested),
+            basis: 'calculated',
+            from: f.fd.firstBooked,
+            to: f.today,
+            count: { n: o.parts.fd.count, noun: 'deposits' },
+          },
+        ],
+        level: 'complete',
+        completeness: 'Worked out from each deposit’s own terms.',
+        notes: [],
+        fix: { label: 'Open Deposits', href: f.links.deposits },
+      });
+    case 'savingsRate':
+      if (!g?.savings) return none(`${TERMS.rateEarned.label}: savings`, TERMS.rateEarned.hint);
+      return explain({
+        id,
+        title: `${TERMS.rateEarned.label}: savings`,
+        exact: yr(g.savings.rate),
+        what: TERMS.rateEarned.hint,
+        how: `Interest earned since ${exDate(g.fyStart)} ${exInr(g.interestFy?.savings ?? 0)} on today’s balance ${exInr(o.parts.cash.current)}, made yearly: ${yr(g.savings.rate)}.`,
+        inputs: [
+          {
+            label: 'Savings and cash today',
+            value: exInr(o.parts.cash.current),
+            basis: 'estimated',
+            to: f.today,
+          },
+        ],
+        level: 'estimated',
+        completeness:
+          'Savings are not an XIRR: money moves in and out daily, so the rate earned is the useful figure.',
+        notes: [],
+        fix: { label: 'See the rates list', href: f.links.rates },
+      });
+    case 'interestFy':
+      if (!g?.interestFy)
+        return none(`${TERMS.interestEarned.label} this FY`, TERMS.interestEarned.hint);
+      return explain({
+        id,
+        title: `${TERMS.interestEarned.label} this FY`,
+        exact: exInr(g.interestFy.total),
+        what: `${TERMS.interestEarned.hint} Since ${exDate(g.fyStart)}.`,
+        how: `Deposits ${exInr(g.interestFy.deposits)} + savings ${exInr(g.interestFy.savings)} = ${exInr(g.interestFy.total)}.`,
+        inputs: [
+          {
+            label: 'Deposits',
+            value: exInr(g.interestFy.deposits),
+            basis: 'calculated',
+            from: g.fyStart,
+            to: f.today,
+          },
+          {
+            label: 'Savings',
+            value: exInr(g.interestFy.savings),
+            basis: 'estimated',
+            from: g.fyStart,
+            to: f.today,
+          },
+        ],
+        level: 'partly_estimated',
+        completeness: 'The same figures as Home’s Earned this FY for deposits and savings.',
+        notes: ['NRE interest is tax-free; NRO interest is taxed in India.'],
+      });
+    case 'avgRate': {
+      const r = g?.rates;
+      if (!r || r.all === null) return none(TERMS.averageRate.label, TERMS.averageRate.hint);
+      return explain({
+        id,
+        title: TERMS.averageRate.label,
+        exact: yr(r.all),
+        what: TERMS.averageRate.hint,
+        how: `Σ(principal × rate) ÷ Σ principal over the running deposits = ${yr(r.all)}.${r.nre ? ` NRE ${yr(r.nre.rate)} on ${exInr(r.nre.principal)} (tax-free).` : ''}${r.nro ? ` NRO ${yr(r.nro.rate)} on ${exInr(r.nro.principal)}, ${yr(r.nro.afterTax)} after tax.` : ''}`,
+        inputs: [
+          ...(r.nre
+            ? [
+                {
+                  label: 'NRE deposits',
+                  value: `${exInr(r.nre.principal)} · ${yr(r.nre.rate)}`,
+                  basis: 'recorded' as const,
+                  count: { n: r.nre.count, noun: 'deposits' },
+                },
+              ]
+            : []),
+          ...(r.nro
+            ? [
+                {
+                  label: 'NRO deposits',
+                  value: `${exInr(r.nro.principal)} · ${yr(r.nro.rate)}`,
+                  basis: 'recorded' as const,
+                  count: { n: r.nro.count, noun: 'deposits' },
+                },
+              ]
+            : []),
+        ],
+        level: 'complete',
+        completeness: 'From the rate written on each deposit.',
+        notes: [
+          TERMS.rateAfterTax.hint,
+          ...(g?.savingsGap
+            ? [
+                `At this rate the savings would earn ${exInr(g.savingsGap)} more a year than they earn now.`,
+              ]
+            : []),
+        ],
+        fix: { label: 'See the rates list', href: f.links.rates },
+      });
+    }
+  }
+}
+
 type FigPage = 'accounts' | 'deposits' | 'cash';
 const MAPS: { [P in FigPage]: Record<string, BankKind> } = {
   accounts: {
@@ -825,8 +1010,12 @@ const MAPS: { [P in FigPage]: Record<string, BankKind> } = {
     'accounts.deposits': 'fdPart',
     'accounts.cash': 'cashPart',
     'accounts.toEarn': 'toEarn',
-    'accounts.next': 'next',
     'accounts.soon': 'soon',
+    'accounts.growth': 'growth',
+    'accounts.fdXirr': 'fdXirr',
+    'accounts.savingsRate': 'savingsRate',
+    'accounts.interestFy': 'interestFy',
+    'accounts.avgRate': 'avgRate',
     'accounts.largestBank': 'largestBank',
     'accounts.cover': 'cover',
     'accounts.updated': 'updated',
@@ -847,6 +1036,9 @@ const MAPS: { [P in FigPage]: Record<string, BankKind> } = {
     'deposits.next': 'next',
     'deposits.soon': 'soon',
     'deposits.toConfirm': 'toConfirm',
+    'deposits.xirr': 'fdXirr',
+    'deposits.interestFy': 'interestFy',
+    'deposits.avgRate': 'avgRate',
     'deposits.largest': 'largestBank',
     'deposits.cover': 'cover',
     'deposits.people': 'people',

@@ -1,22 +1,31 @@
 import Link from 'next/link';
 import { TypeLegend } from '@/app/(app)/accounts/TypeLegend';
 import {
+  TERMS,
   formatInr,
   formatInrCompact,
   formatPct,
+  type BankGrowth,
   type BankOverview as Overview,
   type BankShare,
   type ExplainSet,
   type MaturityYear,
   type PersonStyle,
 } from '@fwos/core';
-import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
+import {
+  Delta,
+  SplitBar,
+  Stat,
+  plural,
+  signedPct,
+  signedShort,
+  whole,
+} from '@/app/(app)/accounts/BankOverview';
 import '@/app/(app)/accounts/bankoverview.css';
 import './overview.css';
 import { PersonBadge } from '@/components/Person';
 import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
-import { MONEY_WORDS as W } from '@/lib/money-words';
 
 /**
  * The overview at the top of Deposits: what the fixed deposits are worth, what was put in, what they pay at maturity, the profit and
@@ -33,8 +42,11 @@ export function DepositOverviewPanel({
   scope = null,
   sample = false,
   ex,
+  growth = null,
 }: {
   ex: ExplainSet<'deposits'>;
+  /** the deposits' XIRR, interest this FY and average rates (core bank-growth.ts); null draws the page without them */
+  growth?: BankGrowth | null;
   o: Overview;
   banks: BankShare[];
   ladder: MaturityYear[];
@@ -52,13 +64,19 @@ export function DepositOverviewPanel({
   const typeNames = Object.fromEntries(Object.entries(styles).map(([id, st]) => [id, st.name]));
   const biggest = Math.max(1, ...ladder.map((s) => s.amount));
   const topShare = Math.max(0.0001, banks[0]?.share ?? 0);
+  const r = growth?.rates;
+  const kinds = [r?.nre ? `${r.nre.count} NRE` : null, r?.nro ? `${r.nro.count} NRO` : null]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <section className="card bv dv" aria-label="Fixed deposits overview">
       <div className="bv-top">
         <div className="bv-hero">
           <WhyHead why={ex['deposits.total']}>
-            <h2 className="bv-eyebrow">Fixed deposits today{scope ? ` · ${scope}` : ''}</h2>
+            <h2 className="bv-eyebrow">
+              {TERMS.currentValue.label} of fixed deposits{scope ? ` · ${scope}` : ''}
+            </h2>
           </WhyHead>
           <div className="bv-big" data-testid="dv-current">
             {formatInrCompact(o.current)}
@@ -67,24 +85,18 @@ export function DepositOverviewPanel({
           <p className="bv-count">
             {empty
               ? 'No deposit is running.'
-              : `${plural(o.deposits, 'deposit')} in ${plural(banks.length, 'bank')}${o.fdRate !== null ? ` · ${formatPct(o.fdRate, 2)} a year on average` : ''}`}
-          </p>
-          <p className="bv-view small muted" data-testid="bv-view-current">
-            <strong>Amount invested now:</strong> the principal of today’s deposits (it includes
-            interest reinvested from earlier deposits), against their value today. Your own money
-            (never including interest) and the total profit on it are on{' '}
-            <Link href={sample ? '/demo/dashboard' : '/'}>Home</Link>.
+              : `${plural(o.deposits, 'running deposit')}${kinds ? ` (${kinds})` : ''} in ${plural(banks.length, 'bank')} · est.`}
           </p>
           <div className="bv-deltas">
             <Delta
-              label={W.profitOnInvested}
+              label={TERMS.profitInterest.label}
               amount={o.profit}
               pct={o.profitPct}
-              note="interest earned so far on the principal"
+              note={`current value less invested; % overall${growth?.fd ? ` · ${TERMS.xirr.label} ${formatPct(growth.fd.rate, 2)} a year` : ''}`}
               why={ex['deposits.profit']}
             />
             <Delta
-              label="Earned today"
+              label={TERMS.todayChange.label}
               amount={o.today.change}
               pct={o.today.changePct}
               note="since yesterday, at each rate; % of yesterday’s value"
@@ -96,7 +108,9 @@ export function DepositOverviewPanel({
 
         <div className="bv-journey">
           <WhyHead why={ex['deposits.journey']}>
-            <h3 className="bv-h">From amount invested now to maturity</h3>
+            <h3 className="bv-h">
+              {TERMS.invested.label} → {TERMS.currentValue.label} → {TERMS.maturityValue.label}
+            </h3>
           </WhyHead>
           {pctDone === null ? (
             <p className="muted small">
@@ -107,29 +121,29 @@ export function DepositOverviewPanel({
               <div
                 className="bv-track"
                 role="img"
-                aria-label={`${formatPct(pctDone, 0)} of the interest has been earned: ${whole(o.interest.earned)} of ${whole(o.interest.total)}`}
+                aria-label={`${formatPct(pctDone, 0)} of the total interest earned so far: ${whole(o.interest.earned)} of ${whole(o.interest.total)}`}
               >
                 <span className="bv-fill" style={{ width: `${pctDone * 100}%` }} />
                 <span className="bv-dot" style={{ left: `${pctDone * 100}%` }} />
               </div>
               <dl className="bv-ends">
                 <div>
-                  <dt>{W.investedNow}</dt>
+                  <dt>{TERMS.invested.label}</dt>
                   <dd>{formatInrCompact(o.invested)}</dd>
                 </div>
                 <div className="mid">
-                  <dt>{W.valueToday}</dt>
+                  <dt>{TERMS.currentValue.label}</dt>
                   <dd>{formatInrCompact(o.current)}</dd>
                 </div>
                 <div className="end">
-                  <dt>{W.atMaturity}</dt>
+                  <dt>{TERMS.maturityValue.label}</dt>
                   <dd>{formatInrCompact(o.maturity)}</dd>
                 </div>
               </dl>
               <p className="bv-jnote">
-                <strong>{formatPct(pctDone, 0)}</strong> of the interest is earned:{' '}
-                {formatInrCompact(o.interest.earned)} so far, {formatInrCompact(o.interest.toEarn)}{' '}
-                still to come.
+                <strong>{formatPct(pctDone, 0)}</strong> of the total interest earned so far:{' '}
+                {formatInrCompact(o.interest.earned)} earned, {formatInrCompact(o.interest.toEarn)}{' '}
+                {TERMS.interestToCome.label.toLowerCase()}.
               </p>
             </>
           )}
@@ -159,7 +173,7 @@ export function DepositOverviewPanel({
                     <span style={{ width: `${(b.share / topShare) * 100}%` }} />
                   </div>
                   <div className="dv-sub">
-                    {plural(b.count, 'deposit')} · {formatInrCompact(b.invested)} put in
+                    {plural(b.count, 'deposit')} · {formatInrCompact(b.invested)} invested
                     {b.avgRate !== null ? ` · ${formatPct(b.avgRate, 2)}` : ''}
                     {b.next
                       ? ` · next ${niceDate(b.next.date)} (${formatInrCompact(b.next.amount)})`
@@ -195,22 +209,50 @@ export function DepositOverviewPanel({
 
       <dl className="bv-grid" aria-label="More figures">
         <Stat
-          label={W.principalNow}
+          label={TERMS.investedPrincipal.label}
           value={formatInrCompact(o.invested)}
-          sub={`${plural(o.deposits, 'running deposit')} · principal only`}
+          sub={`${plural(o.deposits, 'running deposit')} · ${TERMS.profit.label} ${signedShort(o.profit)}${o.profitPct !== null ? ` (${signedPct(o.profitPct)} overall)` : ''}`}
           why={ex['deposits.invested']}
         />
         <Stat
-          label="Maturity value"
+          label={TERMS.maturityValue.label}
           value={formatInrCompact(o.maturity)}
-          sub={`${formatInrCompact(o.interest.total)} total interest over the life of the deposits`}
+          sub={`${TERMS.totalInterest.label} ${formatInrCompact(o.interest.total)}${o.interest.journey !== null ? ` · ${formatPct(o.interest.journey, 0)} earned so far` : ''}`}
           why={ex['deposits.maturity']}
         />
         <Stat
-          label="Interest still to earn"
+          label={TERMS.interestToCome.label}
           value={formatInrCompact(o.interest.toEarn)}
           sub="until every deposit matures"
           why={ex['deposits.toEarn']}
+        />
+        <Stat
+          label={`${TERMS.interestEarned.label} this FY`}
+          value={growth?.interestFy ? signedShort(growth.interestFy.deposits) : '–'}
+          sub={r?.nro ? 'NRO part taxable · NRE tax-free' : 'since 1 April'}
+          why={ex['deposits.interestFy']}
+        />
+        <Stat
+          label={TERMS.averageRate.label}
+          value={typeof r?.all === 'number' ? `${formatPct(r.all, 2)} a year` : '–'}
+          sub={
+            [
+              r?.nre ? `NRE ${formatPct(r.nre.rate, 2)}` : null,
+              r?.nro
+                ? `NRO ${formatPct(r.nro.rate, 2)} (≈ ${formatPct(r.nro.afterTax, 1)} after tax)`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'no deposit is running'
+          }
+          href={to('/rates')}
+          why={ex['deposits.avgRate']}
+        />
+        <Stat
+          label={TERMS.xirr.label}
+          value={growth?.fd ? `${formatPct(growth.fd.rate, 2)} a year` : '–'}
+          sub="from each booking date to today"
+          why={ex['deposits.xirr']}
         />
         <Stat
           label="Next maturity"
@@ -250,7 +292,7 @@ export function DepositOverviewPanel({
           why={ex['deposits.largest']}
         />
         <Stat
-          label="Above the insured limit"
+          label={TERMS.aboveInsured.label}
           value={cover.uninsured > 0 ? formatInrCompact(cover.uninsured) : 'None'}
           sub={
             cover.uninsured > 0
@@ -322,12 +364,14 @@ export function DepositOverviewPanel({
         <summary>How these figures are worked out</summary>
         <ul className="list small muted">
           <li>
-            Invested is the amount of each running deposit. Current value is what each is worth
-            today on its own rate and terms; maturity value is what it pays on its date. Profit so
-            far is current value less invested.
+            Invested (principal) is the amount each running deposit was booked with; a deposit
+            renewed with its interest counts at its new amount, so earlier interest can be inside
+            it. Current value is what each is worth today on its own rate and terms; maturity value
+            is what it pays on its date. Profit (interest earned) is current value less invested;
+            interest already paid out to your account is booked profit and is not in it.
           </li>
           <li>
-            Earned today is an estimate: the difference between each deposit’s value today and
+            Today’s change is an estimate: the difference between each deposit’s value today and
             yesterday on its own terms. A deposit past its date, or waiting for you to confirm where
             the money went, is left out.
           </li>

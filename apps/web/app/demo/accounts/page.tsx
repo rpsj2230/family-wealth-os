@@ -20,6 +20,7 @@ import { PersonFilter } from '@/components/Person';
 import { Tabs } from '@/components/Tabs';
 import { foreignLines } from '@/lib/accounts-summary';
 import { DEMO_TODAY, demoModel } from '@/lib/demo-fixture';
+import { DEMO_INFLATION, demoBankGrowth } from '@/lib/bank-growth-data';
 import { accountsExplain, bankBase } from '@/lib/explain-money';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { quickModel } from '@/lib/quick-edit';
@@ -53,6 +54,12 @@ export default async function DemoAccounts({
     insuranceLimit: DEFAULT_CONFIG.deposits.insuranceLimit,
     fx,
   });
+  const growth = demoBankGrowth({
+    owner: who,
+    rows: shown.flatMap((b) => b.sections.flatMap((sct) => sct.rows)),
+    fdNow: overview.parts.fd.current,
+    cashNow: overview.parts.cash.current,
+  });
   const exA = accountsExplain(
     overview,
     bankBase({
@@ -63,6 +70,7 @@ export default async function DemoAccounts({
       tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
     }),
     true,
+    growth,
   );
   const totals = Object.fromEntries(
     Object.entries(portfolio.netWorth.byOwner).map(([id, v]) => [id, formatInrCompact(v)]),
@@ -113,6 +121,8 @@ export default async function DemoAccounts({
         />
         <BankOverviewPanel
           ex={exA}
+          growth={growth}
+          inflation={DEMO_INFLATION}
           o={overview}
           styles={styles}
           month="October"

@@ -27,6 +27,7 @@ import { loadFxHint, loadJointHolders } from '@/lib/quick-edit-data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
 import { loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadBankGrowth, loadInflation } from '@/lib/bank-growth-data';
 import { accountsExplain, bankBase } from '@/lib/explain-money';
 import { BankOverviewPanel } from './BankOverview';
 import { ForeignCard, ManageCards } from './Parts';
@@ -48,21 +49,25 @@ export default async function AccountsPage({
     : 'banks';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [
-    { today, assetRows, obsRows, fdRows, ownerName, portfolio, marketDates, hideMaturedAfterDays },
-    inst,
-    settings,
-    offers,
-    jointHolders,
-    fxHint,
-  ] = await Promise.all([
+  const [loaded, inst, settings, offers, jointHolders, fxHint, inflation] = await Promise.all([
     loadPortfolio(supabase),
     supabase.from('institutions').select('id, name, notes, deposit_insured'),
     loadSettings(supabase as unknown as SupabaseClient),
     loadOffers(supabase),
     loadJointHolders(supabase as unknown as SupabaseClient),
     loadFxHint(supabase as unknown as SupabaseClient),
+    loadInflation(supabase as unknown as SupabaseClient),
   ]);
+  const {
+    today,
+    assetRows,
+    obsRows,
+    fdRows,
+    ownerName,
+    portfolio,
+    marketDates,
+    hideMaturedAfterDays,
+  } = loaded;
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
   const who = p && styles[p] ? p : null;
   const names = Object.fromEntries(
@@ -106,6 +111,17 @@ export default async function AccountsPage({
     jointHolders,
     fx: marketDates.fx,
   });
+  const growth = await loadBankGrowth(
+    supabase as unknown as SupabaseClient,
+    loaded,
+    settings.config,
+    {
+      owner: who,
+      rows: blocks.flatMap((b) => b.sections.flatMap((sct) => sct.rows)),
+      fdNow: overview.parts.fd.current,
+      cashNow: overview.parts.cash.current,
+    },
+  );
   const exA = accountsExplain(
     overview,
     bankBase({
@@ -117,6 +133,7 @@ export default async function AccountsPage({
       tdsRate: settings.config.estimates.interestTdsRate,
     }),
     false,
+    growth,
   );
   const quick = quickModel({
     blocks: all,
@@ -191,6 +208,8 @@ export default async function AccountsPage({
         {head}
         <BankOverviewPanel
           ex={exA}
+          growth={growth}
+          inflation={inflation}
           o={overview}
           styles={styles}
           month={month}
@@ -225,6 +244,8 @@ export default async function AccountsPage({
       {head}
       <BankOverviewPanel
         ex={exA}
+        growth={growth}
+        inflation={inflation}
         o={overview}
         styles={styles}
         month={month}

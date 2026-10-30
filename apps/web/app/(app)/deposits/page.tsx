@@ -21,6 +21,7 @@ import { buildDeposits, type DepositAsset } from '@/lib/deposits';
 import { groupByMonth, summariseDeposits } from '@/lib/deposits-summary';
 import { bankBase, depositsExplain } from '@/lib/explain-money';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
+import { loadBankGrowth } from '@/lib/bank-growth-data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { saveForeignBanks } from './actions';
 import { DepositOverviewPanel } from './Overview';
@@ -42,12 +43,7 @@ export default async function DepositsPage({
     : 'deposits';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [
-    { today, assetRows, obsRows, fdRows, portfolio, ownerName, hideMaturedAfterDays },
-    assets,
-    banks,
-    settings,
-  ] = await Promise.all([
+  const [loaded, assets, banks, settings] = await Promise.all([
     loadPortfolio(supabase),
     supabase
       .from('assets')
@@ -57,6 +53,7 @@ export default async function DepositsPage({
     supabase.from('institutions').select('id, name, deposit_insured'),
     loadSettings(supabase as unknown as SupabaseClient),
   ]);
+  const { today, assetRows, obsRows, fdRows, portfolio, ownerName, hideMaturedAfterDays } = loaded;
   const depositAssets: DepositAsset[] = (assets.data ?? []).map((a) => ({
     id: a.id as string,
     ownerId: a.owner_id as string,
@@ -123,6 +120,17 @@ export default async function DepositsPage({
   const overBanks = Object.values(v.cover.byBank).filter((b) => b.uninsured > 0).length;
   const depBanks = depositsByBank(scoped, todayIso);
   const depLadder = maturityLadder(scoped);
+  const growth = await loadBankGrowth(
+    supabase as unknown as SupabaseClient,
+    loaded,
+    settings.config,
+    {
+      owner: who && tab !== 'cover' ? who : null,
+      rows: scoped.flatMap((b) => b.sections.flatMap((sct) => sct.rows)),
+      fdNow: overview.parts.fd.current,
+      cashNow: 0,
+    },
+  );
   const exD = depositsExplain(
     overview,
     bankBase({
@@ -138,6 +146,7 @@ export default async function DepositsPage({
       toConfirm: s.confirm.length,
       banks: depBanks,
       ladder: depLadder,
+      growth,
     },
   );
 
@@ -172,6 +181,7 @@ export default async function DepositsPage({
       />
       <DepositOverviewPanel
         ex={exD}
+        growth={growth}
         o={overview}
         banks={depBanks}
         ladder={depLadder}

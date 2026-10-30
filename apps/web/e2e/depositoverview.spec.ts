@@ -16,17 +16,22 @@ test.describe('Deposits: the overview (public sample)', () => {
     await page.goto('/demo/deposits');
     const p = panel(page);
     await expect(p).toBeVisible();
-    await expect(p.getByRole('heading', { name: /Fixed deposits today/, level: 2 })).toBeVisible();
+    await expect(
+      p.getByRole('heading', { name: /Current value of fixed deposits/, level: 2 }),
+    ).toBeVisible();
     await expect(p.getByTestId('dv-current')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     for (const label of [
-      'Amount invested now',
-      'Value today',
-      'Value at maturity',
-      'Profit on amount invested now',
-      'Earned today',
+      'Invested (principal)',
+      'Current value',
+      'Maturity value',
+      'Profit (interest earned)',
+      'Today’s change',
       'Which bank holds how much',
       'What matures, year by year',
-      'Interest still to earn',
+      'Interest still to come',
+      'Interest earned this FY',
+      'Average interest rate',
+      'XIRR',
       'Next maturity',
       'Largest bank',
       'Above the insured limit',

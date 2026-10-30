@@ -4,6 +4,7 @@ import {
   buildDepositsExplain,
   type BankBlock,
   type BankFacts,
+  type BankGrowth,
   type BankOverview,
   type BankShare,
   type CashBankShare,
@@ -77,12 +78,18 @@ export function bankLinks(sample: boolean): BankFacts['links'] {
 const noFacts: Pick<BankFacts, 'banks' | 'ladder' | 'cash'> = { banks: [], ladder: [], cash: null };
 
 /** The explainers of the Accounts overview and its grand total. */
-export function accountsExplain(o: BankOverview, base: BankBase, sample: boolean) {
+export function accountsExplain(
+  o: BankOverview,
+  base: BankBase,
+  sample: boolean,
+  growth: BankGrowth | null = null,
+) {
   return buildAccountsExplain(o, {
     ...base,
     ...noFacts,
     cover: o.cover,
     toConfirm: o.toConfirm,
+    growth,
     links: bankLinks(sample),
   });
 }
@@ -97,11 +104,13 @@ export function depositsExplain(
     toConfirm: number;
     banks: BankShare[];
     ladder: MaturityYear[];
+    growth?: BankGrowth | null;
   },
 ) {
   return buildDepositsExplain(o, {
     ...base,
     cash: null,
+    growth: extra.growth ?? null,
     cover: extra.cover,
     toConfirm: extra.toConfirm,
     banks: extra.banks.map((b) => ({
