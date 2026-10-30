@@ -1,6 +1,10 @@
 import {
   cashYearly,
   depositsXirr,
+  LADDER_DAYS,
+  earningRateNow,
+  maturingWithin,
+  savingsRateEarned,
   type ClassYearly,
   moneyPosition,
   type PositionCard,
@@ -138,6 +142,8 @@ export interface HomeInput {
   position: PositionInput;
   /** monthly household spending from the retirement plan; 0 until entered */
   monthlySpending: number;
+  /** the inflation rate of the retirement plan (0.055 = 5.5%), drawn as a mark on the growth strip; null hides the mark */
+  inflation?: number | null;
   recent: HomeRecent[];
   newestRecorded: string | null;
   /** confirmed money movements as the family ledger reads them (capital.ts) */
@@ -230,6 +236,34 @@ export interface HomeMoney {
   estimated: boolean;
 }
 
+export interface HomeGrowth {
+  all: { rate: number; perYear: number } | null;
+  banks: { rate: number; perYear: number } | null;
+  fd: number | null;
+  funds: number | null;
+  savings: ClassYearly | null;
+  own: { rate: number | null; since: string | null };
+  inflation: number | null;
+}
+
+export interface HomeExtras {
+  /** profit made since 1 April, own transfers left out, by kind; null before the ledger reaches this year */
+  earnedFy: {
+    total: number;
+    pct: number | null;
+    deposits: number;
+    funds: number;
+    savings: number;
+    other: number;
+  } | null;
+  available30: { total: number; cash: number; deposits: number };
+  maturing30: { count: number; principal: number };
+  maturing90: { count: number; principal: number };
+  aboveInsured: { amount: number; banks: number; limit: number };
+  nre: number;
+  nro: number;
+}
+
 export interface HomeModel {
   today: string;
   styles: Record<string, PersonStyle>;
@@ -241,6 +275,14 @@ export interface HomeModel {
   classes: ClassCard[];
   /** the yearly return of each kind: XIRR for deposits and funds, the rate cash earns; none for the rest */
   yearly: Partial<Record<ClassCard['key'], ClassYearly | null>>;
+  /**
+   * How is my money growing? Each kind's yearly rate (XIRR for deposits and funds, the rate savings earned this financial year), all
+   * the money together at today's rates (Earning rate now; the money in banks alone for Accounts), XIRR on own money since records
+   * began, and the retirement plan's inflation to compare against.
+   */
+  growth: HomeGrowth;
+  /** the useful extras under the headline: what this year earned by kind, what can be reached soon, what matures, insurance, NRE/NRO */
+  extras: HomeExtras;
   /** profit earned in the last N days, this month, quarter and financial year, last financial year and since the start */
   periods: PeriodGains;
   /** the line under the period tiles about funds with no transaction ledger: their gains are approximate until a statement is imported */
@@ -789,8 +831,88 @@ export function buildHome(i: HomeInput): HomeModel {
     })(),
   };
 
+  // --- How is my money growing? and the extras
+  const fyMove = wealthMovement(ledger, 'fy', today);
+  const yearlyFd = depositsXirr(
+    runningDeposits.map((r) => ({
+      principal: r.fd!.principal,
+      bookedOn: r.fd!.bookedOn,
+      value: r.current ?? 0,
+    })),
+    today,
+  );
+  const yearlyFunds: ClassYearly | null =
+    fundSnapshot && fundSnapshot.totals.xirr !== null
+      ? {
+          rate: fundSnapshot.totals.xirr,
+          kind: 'xirr',
+          estimated: !!fundSnapshot.totals.xirrEstimated,
+          basis: 'money-weighted, from the funds’ purchases and sales',
+        }
+      : null;
+  const cashNow = overview.parts.cash.current;
+  const savingsEarned = fyMove.figures
+    ? savingsRateEarned(fyMove.figures.earnings.savings, cashNow, fyMove.from, today)
+    : null;
+  const classValue = (k: ClassCard['key']) => classList.find((c) => c.key === k)?.current ?? 0;
+  const fdPart = { key: 'fd', value: classValue('fd'), rate: yearlyFd?.rate ?? null };
+  const cashPart = { key: 'cash', value: classValue('cash'), rate: savingsEarned?.rate ?? null };
+  const allRate = earningRateNow([
+    fdPart,
+    { key: 'funds', value: classValue('funds'), rate: yearlyFunds?.rate ?? null },
+    cashPart,
+    { key: 'others', value: classValue('others'), rate: 0 },
+  ]);
+  const bankRate = earningRateNow([fdPart, cashPart]);
+  const depositTerms = runningDeposits.map((r) => ({
+    principal: r.fd!.principal,
+    maturityOn: r.fd!.maturityOn,
+    maturityAmount: r.fd!.maturityAmount,
+  }));
+  const due30 = maturingWithin(depositTerms, today, LADDER_DAYS.d30);
+  const due90 = maturingWithin(depositTerms, today, LADDER_DAYS.d90);
+  const typeAmount = (k: string) => overview.accountTypes.find((t) => t.key === k)?.amount ?? 0;
+  const growthNow: HomeGrowth = {
+    all: allRate ? { rate: allRate.rate, perYear: allRate.perYear } : null,
+    banks: bankRate ? { rate: bankRate.rate, perYear: bankRate.perYear } : null,
+    fd: yearlyFd?.rate ?? null,
+    funds: yearlyFunds?.rate ?? null,
+    savings: savingsEarned,
+    own: { rate: ledger.totals.xirr.rate, since: ledger.opening?.date ?? null },
+    inflation: i.inflation ?? null,
+  };
+  const extras: HomeExtras = {
+    earnedFy: fyMove.figures
+      ? {
+          total: fyMove.figures.earnings.total,
+          pct:
+            fyMove.figures.start > 0 ? fyMove.figures.earnings.total / fyMove.figures.start : null,
+          deposits: fyMove.figures.earnings.deposits,
+          funds: fyMove.figures.earnings.funds,
+          savings: fyMove.figures.earnings.savings,
+          other:
+            fyMove.figures.earnings.total -
+            fyMove.figures.earnings.deposits -
+            fyMove.figures.earnings.funds -
+            fyMove.figures.earnings.savings,
+        }
+      : null,
+    available30: { total: cashNow + due30.principal, cash: cashNow, deposits: due30.principal },
+    maturing30: { count: due30.count, principal: due30.principal },
+    maturing90: { count: due90.count, principal: due90.principal },
+    aboveInsured: {
+      amount: i.cover.uninsured,
+      banks: Object.values(i.cover.byBank).filter((b) => b.uninsured > 0).length,
+      limit: cover.limit,
+    },
+    nre: typeAmount('NRE'),
+    nro: typeAmount('NRO'),
+  };
+
   return {
     capital,
+    growth: growthNow,
+    extras,
     today,
     styles: i.styles,
     total: nw.total,
@@ -806,24 +928,10 @@ export function buildHome(i: HomeInput): HomeModel {
     },
     classes: classList,
     yearly: {
-      fd: depositsXirr(
-        runningDeposits.map((r) => ({
-          principal: r.fd!.principal,
-          bookedOn: r.fd!.bookedOn,
-          value: r.current ?? 0,
-        })),
-        today,
-      ),
-      funds:
-        fundSnapshot && fundSnapshot.totals.xirr !== null
-          ? {
-              rate: fundSnapshot.totals.xirr,
-              kind: 'xirr',
-              estimated: !!fundSnapshot.totals.xirrEstimated,
-              basis: 'money-weighted, from the funds’ purchases and sales',
-            }
-          : null,
-      cash: cashYearly(overview.parts.cash.current, overview.today.savings),
+      fd: yearlyFd,
+      funds: yearlyFunds,
+      // the rate savings earned this financial year; the rate on file when the year has no figures yet
+      cash: savingsEarned ?? cashYearly(cashNow, overview.today.savings),
       others: null,
     },
     periods,

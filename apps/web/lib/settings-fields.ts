@@ -399,6 +399,13 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         optional: true,
       },
       {
+        name: 'countProperty',
+        label: 'Count property in net worth',
+        hint: 'Off (the usual): property is shown on its own page but left out of net worth, own money, lifetime profit and every yearly return. Money you lent stays in. After changing this, rebuild the history (Import > History) so past months match.',
+        kind: 'check',
+        path: ['capital', 'countProperty'],
+      },
+      {
         name: 'reviewMinimum',
         label: 'Earlier months are listed for review when their unexplained money is over',
         hint: 'Explain movements > Earlier months lists the months whose money moved in or out with nothing to say what it was, largest first. Smaller months are left out of the list (they still count as your own money).',

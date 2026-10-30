@@ -154,8 +154,12 @@ export function positionInputFrom(args: {
   rates?: Record<string, RateStep[]>;
 }): PositionInput {
   const config = positionConfig(args.config, args.today, args.fx);
+  // property is left out of every figure (net worth, own money, lifetime profit) unless Settings counts it
+  const assets = args.config.capital.countProperty
+    ? args.assets
+    : args.assets.filter((a) => a.type !== 'property');
   return {
-    assets: attachProceeds(positionAssetsFrom(args), config, args.placements),
+    assets: attachProceeds(positionAssetsFrom({ ...args, assets }), config, args.placements),
     config,
     ...(args.portfolio ? { current: currentValues(args.portfolio) } : {}),
   };

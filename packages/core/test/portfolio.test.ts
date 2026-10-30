@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPortfolio,
+  DEFAULT_ASSUMPTIONS,
   latestObservations,
   type AssetRow,
   type FdRow,
@@ -244,8 +245,24 @@ describe('buildPortfolio', () => {
       [],
       today,
     );
-    expect(p.netWorth.total).toBe(2_800_000);
+    // property is valued and shown, but left out of net worth unless Settings counts it
+    expect(p.netWorth.total).toBe(300_000);
+    expect(p.valued.find((v) => v.assetId === 'pr')!.estimate!.estimatedAmount).toBe(2_500_000);
+    expect(p.netWorth.excluded).toContainEqual(
+      expect.objectContaining({ assetId: 'pr', reason: 'not_counted_setting', amount: 2_500_000 }),
+    );
     expect(p.lines.mf!.basis).toBe('carried_forward');
+    const counted = buildPortfolio(
+      [asset({ id: 'mf', type: 'mutual_fund' }), asset({ id: 'pr', type: 'property' })],
+      [
+        obs({ id: 'a', asset_id: 'mf', amount: 300_000, kind: 'valuation' }),
+        obs({ id: 'b', asset_id: 'pr', amount: 2_500_000, kind: 'valuation', as_of: '2023-12-15' }),
+      ],
+      [],
+      today,
+      { ...DEFAULT_ASSUMPTIONS, notCounted: [] },
+    );
+    expect(counted.netWorth.total).toBe(2_800_000);
   });
 });
 

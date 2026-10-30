@@ -26,6 +26,8 @@ export interface ValuedAsset {
   name: string;
   /** null = no usable valuation yet. Such assets are reported as missing, never counted as zero. */
   estimate: CurrentValueEstimate | null;
+  /** valued and shown, but left out of net worth by a setting (property, when Settings says not to count it) */
+  notCounted?: 'setting';
   /** how the central engine reached the value (valuation.ts), for the "how it is worked out" table of a detail page */
   detail?: {
     savings: SavingsDetail | null;
@@ -36,6 +38,7 @@ export interface ValuedAsset {
 export type ExclusionReason =
   | 'status_not_counted' // matured/renewed/closed/unconfirmed
   | 'insurance_cover_not_wealth' // pure insurance policies never count
+  | 'not_counted_setting' // property, when Settings says not to count it
   | 'no_valuation';
 
 export interface NetWorthResult {
@@ -72,7 +75,9 @@ const COUNTED_STATUS = new Set(['active', 'stopped']);
 
 /** Whether a holding is part of net worth today: a kind that is wealth, in a counted status, with a value. */
 export function isCounted(a: ValuedAsset): boolean {
-  return LIQUIDITY[a.type] !== null && COUNTED_STATUS.has(a.status) && a.estimate !== null;
+  return (
+    LIQUIDITY[a.type] !== null && COUNTED_STATUS.has(a.status) && a.estimate !== null && !a.notCounted
+  );
 }
 
 /**
@@ -105,6 +110,15 @@ export function aggregateNetWorth(assets: ValuedAsset[]): NetWorthResult {
         name: a.name,
         reason: 'insurance_cover_not_wealth',
         amount: null,
+      });
+      continue;
+    }
+    if (a.notCounted) {
+      excluded.push({
+        assetId: a.assetId,
+        name: a.name,
+        reason: 'not_counted_setting',
+        amount: a.estimate?.estimatedAmount ?? null,
       });
       continue;
     }

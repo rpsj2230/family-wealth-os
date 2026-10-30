@@ -80,6 +80,8 @@ export interface AppConfig {
      * before it is theirs (ISO date). Empty: nothing is counted yet.
      */
     ownershipFrom: string;
+    /** count property (a house, land) in net worth, own money and every return; off: it is shown on its own line, not counted */
+    countProperty: boolean;
   };
   /** bank statements read line by line (statement-classify.ts) */
   statements: {
@@ -384,7 +386,13 @@ export const DEFAULT_CONFIG: AppConfig = {
     unexplainedTolerance: 500,
     transferPairDays: 3,
   },
-  capital: { openingDate: '', reviewMinimum: 25_000, reviewPairMonths: 2, ownershipFrom: '' },
+  capital: {
+    openingDate: '',
+    reviewMinimum: 25_000,
+    reviewPairMonths: 2,
+    ownershipFrom: '',
+    countProperty: false,
+  },
   statements: {
     rentWords: [],
     remittanceWords: [
@@ -790,6 +798,10 @@ export function configFromJson(raw: unknown): AppConfig {
         const v = obj(r.capital).ownershipFrom;
         return v === '' || v === null || v === undefined ? '' : isoDate(v, d.capital.ownershipFrom);
       })(),
+      countProperty:
+        typeof obj(r.capital).countProperty === 'boolean'
+          ? (obj(r.capital).countProperty as boolean)
+          : d.capital.countProperty,
     },
     statements: {
       rentWords: words(obj(r.statements).rentWords, d.statements.rentWords),

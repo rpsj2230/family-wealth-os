@@ -266,6 +266,7 @@ export async function loadHome(
       .length,
     position,
     monthlySpending: planned.monthlySpendingToday,
+    inflation: planned.assumptions.inflation,
     recent,
     newestRecorded: obsRows.reduce<string | null>(
       (m, o) => (!m || o.as_of > m ? o.as_of : m),

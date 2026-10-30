@@ -51,3 +51,62 @@ export function cashYearly(balance: number, interestPerDay: number): ClassYearly
       'the rate the balances earn, at the rates on file (not an XIRR: deposits and withdrawals are not all recorded)',
   };
 }
+
+/**
+ * The rate savings earned this financial year: the interest earned since the financial year began (credited or still building up),
+ * as a yearly rate on today's balance. Null on the year's first day or with no balance.
+ */
+export function savingsRateEarned(
+  interest: number,
+  balance: number,
+  fyStart: string,
+  today: string,
+): ClassYearly | null {
+  const days = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${fyStart}T00:00:00Z`)) / 86_400_000;
+  if (!(balance > 0) || !(days > 0) || !Number.isFinite(interest)) return null;
+  return {
+    rate: (interest / balance) * (365 / days),
+    kind: 'rate',
+    estimated: true,
+    basis: `interest earned in the ${Math.round(days)} days since ${fyStart}, as a yearly rate on today's balance`,
+  };
+}
+
+export interface EarningPart {
+  key: string;
+  value: number;
+  /** the part's yearly rate; null when it cannot be worked out */
+  rate: number | null;
+}
+
+/**
+ * Earning rate now: what all the money earns a year at today's rates, each part weighted by its current value (deposits and funds at
+ * their XIRR, savings at the rate earned, money lent at 0%). Null when a part holding money has no rate, so the figure is never
+ * flattered by leaving a part out.
+ */
+export function earningRateNow(
+  parts: EarningPart[],
+): { rate: number; total: number; perYear: number } | null {
+  const held = parts.filter((p) => p.value > 0);
+  const total = held.reduce((a, p) => a + p.value, 0);
+  if (!(total > 0) || held.some((p) => p.rate === null)) return null;
+  const perYear = held.reduce((a, p) => a + p.value * p.rate!, 0);
+  return { rate: perYear / total, total, perYear };
+}
+
+/** Deposits maturing from tomorrow to `days` days from today: how many, their principal and what they pay. */
+export function maturingWithin(
+  deposits: { principal: number; maturityOn: string | null; maturityAmount: number | null }[],
+  today: string,
+  days: number,
+): { count: number; principal: number; maturity: number } {
+  const end = new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const due = deposits.filter((d) => d.maturityOn && d.maturityOn > today && d.maturityOn <= end);
+  return {
+    count: due.length,
+    principal: due.reduce((a, d) => a + d.principal, 0),
+    maturity: due.reduce((a, d) => a + (d.maturityAmount ?? d.principal), 0),
+  };
+}

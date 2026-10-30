@@ -121,3 +121,4 @@ export * from './xlsx-write';
 export * from './report-centre';
 export * from './report-phrase';
 export * from './class-yearly';
+export * from './terms';

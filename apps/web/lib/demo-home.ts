@@ -4,6 +4,7 @@
  * the signed-in page uses. Nothing here is real. Everything is deterministic, so the sample looks the same on every visit.
  */
 import {
+  DEFAULT_SETTINGS,
   DEFAULT_CONFIG,
   buildPortfolio,
   positionInputFrom,
@@ -294,6 +295,7 @@ export function demoHomeInput(range: HomeRange): HomeInput {
       portfolio,
     }),
     monthlySpending: 180_000,
+    inflation: DEFAULT_SETTINGS.assumptions.inflation,
     recent,
     newestRecorded: observations.reduce<string | null>(
       (best, o) => (!best || o.as_of > best ? o.as_of : best),

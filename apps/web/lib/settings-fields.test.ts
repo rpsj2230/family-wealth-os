@@ -185,6 +185,7 @@ describe('settings fields', () => {
           includeSip: true,
         },
         capital: {
+          countProperty: false,
           openingDate: '',
           reviewMinimum: 25000,
           reviewPairMonths: 2,

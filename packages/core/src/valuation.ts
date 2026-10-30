@@ -256,6 +256,7 @@ export function portfolioFromPosition(
       status,
       name: h.name,
       estimate,
+      ...(defaults.notCounted?.includes(h.type) ? { notCounted: 'setting' as const } : {}),
       ...(h.savings || h.fundSplit
         ? { detail: { savings: h.savings ?? null, fund: h.fundSplit ?? null } }
         : {}),

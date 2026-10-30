@@ -85,6 +85,8 @@ export interface FdRow {
 }
 
 export interface PortfolioDefaults {
+  /** kinds of holding that are valued and shown but not counted in net worth (Settings: property, unless counted) */
+  notCounted?: AssetType[];
   /** assumed annual rate on savings balances until you set one per account */
   savingsRate: number;
   tdsRate: number;
@@ -103,6 +105,7 @@ export interface PortfolioDefaults {
 export const DEFAULT_ASSUMPTIONS: PortfolioDefaults = {
   savingsRate: DEFAULT_CONFIG.estimates.savingsRate,
   tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
+  notCounted: DEFAULT_CONFIG.capital.countProperty ? [] : ['property'],
 };
 
 export interface AssetStatusLine {

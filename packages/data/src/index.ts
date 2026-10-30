@@ -311,6 +311,7 @@ export async function loadPortfolioData(
     includeSip: config.estimates.includeSip,
     freshnessDays: config.estimates.freshnessDays,
     fdRateGap: config.estimates.observedRateGap,
+    notCounted: config.capital.countProperty ? [] : ['property'],
   };
   const marketDates: LoadedPortfolio['marketDates'] = { navLatest: null, fx: {} };
   const fundDay: LoadedPortfolio['fundDay'] = {};
