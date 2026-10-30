@@ -5,6 +5,7 @@
  * nothing. Run by hand (Actions > Trail gaps).
  */
 import { createClient } from '@supabase/supabase-js';
+import { chainCoverage, REAL_STARTS, ORIGIN_LABEL } from '@fwos/core';
 import { loadMoneyTrail, loadPortfolioData } from '@fwos/data';
 
 const need = (n: string) => {
@@ -42,6 +43,41 @@ async function main() {
   );
   const name = (id: string | null | undefined) =>
     !id ? '(none named)' : (label.get(id) ?? '(not on file)');
+
+  // 0. what the trail page's "How complete the trail is" shows: the share of today's money traced to a real start, and the rest
+  // by where it stops, with the holdings and steps behind the largest gaps (shares only)
+  const kindOf = (id: string) => t.holdings.find((h) => h.id === id)?.kind ?? null;
+  const cov = chainCoverage(c, kindOf);
+  console.log(
+    `\n== How complete the trail is (as the page shows it): traced ${pct(cov.traced * cov.total, cov.total)}`,
+  );
+  const byKind = new Map<string, number>();
+  for (const p of cov.starts) byKind.set(p.kind, (byKind.get(p.kind) ?? 0) + p.amount);
+  for (const [k, v] of [...byKind].sort((a, b) => b[1] - a[1]))
+    console.log(
+      `  ${REAL_STARTS.has(k as never) ? 'traced' : 'GAP   '} ${ORIGIN_LABEL[k as keyof typeof ORIGIN_LABEL] ?? k}: ${pct(v, cov.total)}`,
+    );
+  console.log(
+    '  where today’s money is: ' +
+      cov.where.map((w) => `${w.kind} ${pct(w.amount, cov.total)}`).join(', '),
+  );
+  const gaps = cov.starts
+    .filter((p) => !REAL_STARTS.has(p.kind))
+    .sort((a, b) => b.amount - a.amount);
+  console.log('  largest gap starts (step, holding, share of all money held):');
+  for (const p of gaps.slice(0, 25)) {
+    const n = c.nodes.get(p.node);
+    console.log(
+      `    ${p.kind} ${n?.date ?? p.date} ${name(n?.assetId ?? p.assetId ?? null)}${
+        n && n.kind === 'line'
+          ? ` "${String((n as { narration?: string }).narration ?? '')
+              .toLowerCase()
+              .replace(/\d/g, '#')
+              .slice(0, 50)}"`
+          : ''
+      }: ${pct(p.amount, cov.total)}`,
+    );
+  }
 
   // 1. every bank account: statements on file, Wise transfers into it, lines in and out
   console.log('\n== Bank accounts: statements and Wise transfers (counts and dates only)');
