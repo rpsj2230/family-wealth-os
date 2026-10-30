@@ -128,4 +128,16 @@ jobs:
           union all select 'fund line', min(txn_on)::text, count(*) filter (where txn_on < '2019-10-12') from public.mf_transactions
           union all select 'wise transfer', min(received_on)::text, count(*) filter (where received_on < '2019-10-12') from public.remittances;
           select config->'capital' as capital_settings from public.household_config;
+          \echo '== funds with no scheme matched (no amounts): record, folio last 4, ISIN on file, where it came from, statement lines, folio links, other records with the same folio'
+          select o.display_name as owner, a.nickname, p.fund_name, p.folio_last4, p.isin, a.status, p.provenance, p.cas_as_of,
+                 (select count(*) from public.mf_transactions t where t.asset_id = a.id) as lines,
+                 (select string_agg(distinct t.source, ',') from public.mf_transactions t where t.asset_id = a.id) as line_sources,
+                 (select string_agg(l.folio_last4 || ':' || l.scheme_key, '; ') from public.fund_folio_links l where l.asset_id = a.id) as folio_links,
+                 (select string_agg(a2.nickname || ' [' || coalesce(p2.amfi_code, '-') || ' ' || coalesce(p2.isin, '-') || ' ' || a2.status || ']', '; ')
+                    from public.mf_positions p2 join public.assets a2 on a2.id = p2.asset_id
+                   where a2.owner_id = a.owner_id and p2.folio_last4 = p.folio_last4 and a2.id <> a.id) as same_folio
+            from public.mf_positions p join public.assets a on a.id = p.asset_id join public.owners o on o.id = a.owner_id
+           where p.amfi_code is null and a.status <> 'merged';
+          \echo '== Motilal Oswal Midcap schemes in the official list'
+          select code, name, plan, option, isin_growth, isin_reinvest from public.amfi_schemes where name ilike '%motilal%mid%cap%' order by code;
           SQL
