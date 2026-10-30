@@ -17,12 +17,14 @@ import {
   settingsFromJson,
   summariseGoals,
   withPeople,
+  classifyLines,
   type DigestInput,
   type DigestSources,
   type RateOffer,
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
+import { classifyContext, loadStatements, stmtLinesOf } from './statement-store';
 import { pageAll } from './paging';
 import { loadPositionInput } from './position';
 import { loadSettings } from './settings';
@@ -385,7 +387,8 @@ export async function buildDigestInput(
       };
   }
 
-  return assembleDigest({
+  const newLines = await recentLinesToAnswer(db, opts.householdId, l, cfg, opts.date);
+  const input = assembleDigest({
     date: opts.date,
     householdName: opts.householdName,
     appUrl: opts.appUrl,
@@ -428,4 +431,62 @@ export async function buildDigestInput(
     monthly,
     ...(position ? { position } : {}),
   });
+  return newLines.length ? { ...input, newLines } : input;
 }
+
+/**
+ * The bank statement lines of the last Settings days that no rule or pairing explains, newest first, for the summary: an alert line
+ * from this morning shows here the same day. Older ones are counted under "Needed from you" only.
+ */
+async function recentLinesToAnswer(
+  db: SupabaseClient,
+  householdId: string | undefined,
+  loaded: Awaited<ReturnType<typeof loadPortfolioData>>,
+  cfg: Awaited<ReturnType<typeof loadSettings>>['config'],
+  date: string,
+): Promise<NonNullable<DigestInput['newLines']>> {
+  if (!householdId || cfg.digest.newLinesMax === 0) return [];
+  try {
+    const stored = await loadStatements(db, householdId);
+    const from = new Date(Date.parse(`${date}T00:00:00Z`) - cfg.digest.newLinesDays * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const recent = stored.lines.filter((x) => x.txn_on >= from);
+    if (!recent.length) return [];
+    const ask = new Set(
+      classifyLines(
+        stmtLinesOf(stored.lines, loaded),
+        classifyContext(loaded, cfg, stored.remittances, stored.rules),
+      )
+        .filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out')
+        .map((c) => c.id),
+    );
+    const acct = new Map(loaded.assetRows.map((a) => [a.id, a]));
+    return recent
+      .filter((x) => ask.has(x.id))
+      .sort((a, b) => b.txn_on.localeCompare(a.txn_on))
+      .slice(0, cfg.digest.newLinesMax)
+      .map((x) => {
+        const a = acct.get(x.asset_id);
+        const bank = a?.institution_id ? (loaded.institutionName?.get(a.institution_id) ?? '') : '';
+        return {
+          date: x.txn_on,
+          account:
+            `${bank}${a?.identifier_last4 ? ` …${a.identifier_last4}` : ''}`.trim() || 'an account',
+          amount: Number(x.amount),
+          words: lineWords(x.narration),
+        };
+      });
+  } catch {
+    // the summary goes out without the list rather than not at all
+    return [];
+  }
+}
+
+/** The narration without the bank's alert prefix, cut short, for one line of the summary. */
+const lineWords = (n: string) =>
+  n
+    .replace(/^ALERT (?:DEBIT|CREDIT)\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 70);

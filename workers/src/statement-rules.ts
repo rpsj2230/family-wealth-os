@@ -12,7 +12,14 @@
  * forgiven (a gift). Prints names, counts and dates; amounts only as each loan's totals.
  */
 import { personNamed, ruleMatches, type StatementRule } from '@fwos/core';
-import { loadMoneyTrail, loadPortfolioData, rebuildStatementMoves } from '@fwos/data';
+import {
+  LOAN_FORGIVEN,
+  LOAN_REPAID_OUTSIDE,
+  loadMoneyTrail,
+  loadPortfolioData,
+  rebuildStatementMoves,
+  syncStatementLoans,
+} from '@fwos/data';
 import { connectDb, householdId, must, need } from './shared';
 
 interface RuleInput {
@@ -31,7 +38,6 @@ interface RuleInput {
 }
 
 const lakh = (n: number) => `₹${(n / 100_000).toFixed(2)} L`;
-const STATEMENT_LOAN = /^From the bank statements/;
 
 async function main() {
   const write = process.env.MODE === 'apply';
@@ -85,7 +91,7 @@ async function main() {
     };
   };
 
-  let t = await loadMoneyTrail(db, hh, loaded);
+  const t = await loadMoneyTrail(db, hh, loaded);
   const existing = must(
     await db.from('statement_rules').select('name, action').eq('household_id', hh),
     'rules',
@@ -134,12 +140,12 @@ async function main() {
   }
   for (const id of repaidTargets) {
     const a = loaded.assetRows.find((x) => x.id === id);
-    if (a && !/paid back outside these statements/.test(a.notes ?? ''))
+    if (a && !(a.notes ?? '').includes(LOAN_REPAID_OUTSIDE))
       must(
         await db
           .from('assets')
           .update({
-            notes: `${a.notes ?? ''} The rest was paid back outside these statements.`.trim(),
+            notes: `${a.notes ?? ''} ${LOAN_REPAID_OUTSIDE}`.trim(),
           })
           .eq('id', id)
           .eq('household_id', hh)
@@ -167,7 +173,7 @@ async function main() {
           nickname: `Loan to ${r.name}`,
           status: 'active',
           currency: 'INR',
-          notes: `From the bank statements, by your rule for ${r.name}.${r.interest ? ' Pays interest.' : ''}${r.note ? ` ${r.note}` : ''}`,
+          notes: `From the bank statements, by your rule for ${r.name}.${r.interest ? ' Pays interest.' : ''}${r.waive ? ` ${LOAN_FORGIVEN}` : ''}${r.note ? ` ${r.note}` : ''}`,
         })
         .select('id')
         .single(),
@@ -211,124 +217,12 @@ async function main() {
 
   // every loan the statements built, brought up to date with the lines now linked to it
   loaded = await loadPortfolioData(db, { householdId: hh });
-  t = await loadMoneyTrail(db, hh, loaded);
-  const loans = loaded.assetRows.filter(
-    (a) => a.type === 'receivable' && a.status !== 'merged' && STATEMENT_LOAN.test(a.notes ?? ''),
-  );
-  for (const loan of loans) {
-    const linked = t.lines
-      .filter((l) => {
-        const c = t.classified.get(l.id);
-        return c?.cls === 'own_transfer' && c.counterpart === loan.id;
-      })
-      .sort((a, b) => a.txn_on.localeCompare(b.txn_on));
-    if (!linked.length) continue;
-    const lent = -linked.filter((l) => l.amount < 0).reduce((s, l) => s + l.amount, 0);
-    const back = linked.filter((l) => l.amount > 0);
-    const steps: { date: string; owed: number }[] = [];
-    let owed = 0;
-    for (const l of linked) {
-      owed = Math.max(0, Math.round((owed - l.amount) * 100) / 100);
-      const last = steps[steps.length - 1];
-      if (last && last.date === l.txn_on) last.owed = owed;
-      else steps.push({ date: l.txn_on, owed });
-    }
-    // paid back in full outside the statements (said so when it was recorded), or forgiven: nothing owed after the last line
-    const outside = /paid back outside these statements/.test(loan.notes ?? '');
-    const forgive = waived.has(loan.id);
-    if ((outside || forgive) && owed > 1) steps[steps.length - 1]!.owed = 0;
-    const final = steps[steps.length - 1]!.owed;
-    console.log(
-      `  ${loan.nickname}: lent ${lakh(lent)}, paid back ${lakh(back.reduce((s, l) => s + l.amount, 0))} in ${back.length}, still owed ${lakh(final)}${forgive && owed > 1 ? ` (${lakh(owed)} forgiven)` : ''}`,
-    );
-    must(
-      await db
-        .from('receivables')
-        .update({
-          lent: Math.max(1, Math.round(lent * 100) / 100),
-          lent_on: linked.find((l) => l.amount < 0)?.txn_on ?? null,
-        })
-        .eq('asset_id', loan.id)
-        .eq('household_id', hh)
-        .select('asset_id'),
-      'loan',
-    );
-    must(
-      await db
-        .from('receivable_payments')
-        .delete()
-        .eq('asset_id', loan.id)
-        .eq('household_id', hh)
-        .like('note', 'From the bank statement%')
-        .select('id'),
-      'old repayments',
-    );
-    if (back.length)
-      must(
-        await db
-          .from('receivable_payments')
-          .insert(
-            back.map((l) => ({
-              household_id: hh,
-              asset_id: loan.id,
-              amount: l.amount,
-              paid_on: l.txn_on,
-              note: 'From the bank statement',
-            })),
-          )
-          .select('id'),
-        'repayments',
-      );
-    // the amounts owed: earlier ones from the statements are superseded by these
-    const old = must(
-      await db
-        .from('observations')
-        .select('id')
-        .eq('asset_id', loan.id)
-        .eq('source', 'statement')
-        .is('superseded_by', null),
-      'amounts owed',
-    ) as { id: string }[];
-    const made = must(
-      await db
-        .from('observations')
-        .insert(
-          steps.map((s) => ({
-            household_id: hh,
-            asset_id: loan.id,
-            kind: 'valuation',
-            amount: s.owed,
-            currency: 'INR',
-            as_of: s.date,
-            source: 'statement',
-            source_ref: `loan:${loan.id}:${s.date}:v2`,
-            confidence: 'verified',
-            note:
-              forgive && s === steps[steps.length - 1] && owed > 1
-                ? 'The rest was forgiven (a gift)'
-                : 'Still owed, from the bank statements',
-          })),
-        )
-        .select('id'),
-      'amounts owed',
-    ) as { id: string }[];
-    for (const o of old)
-      await db
-        .from('observations')
-        .update({ superseded_by: made[made.length - 1]!.id })
-        .eq('id', o.id);
-    const status = final <= Math.max(1, lent * 0.01) ? 'closed' : 'active';
-    if (status !== loan.status)
-      must(
-        await db
-          .from('assets')
-          .update({ status })
-          .eq('id', loan.id)
-          .eq('household_id', hh)
-          .select('id'),
-        'loan status',
-      );
-  }
+  const sync = await syncStatementLoans(db, hh, {
+    loaded,
+    waived,
+    log: (l) => console.log(l),
+  });
+  console.log(`Loans from the statements: ${sync.loans}, brought up to date ${sync.updated}.`);
   const rb = await rebuildStatementMoves(db, hh);
   console.log(
     `Movements from statements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}`,

@@ -153,6 +153,13 @@ function legacyNeeds(i: DigestInput): NeedsItem[] {
       tone: t.daysLeft < 0 ? 'bad' : 'warn',
     });
   }
+  // what came in or went out lately that no rule explains: one answer each, and a rule keeps the next one from being asked
+  for (const l of i.newLines ?? [])
+    out.push({
+      text: `What was this? ${niceDate(l.date)}, ${l.account}: ${l.amount < 0 ? 'out' : 'in'} ${inrExact(Math.abs(l.amount))}${l.words ? ` (“${l.words}”)` : ''}.`,
+      href: '/reconcile?tab=statements',
+      tone: 'warn',
+    });
   for (const idea of (i.rateIdeas ?? []).slice(0, 2))
     out.push({ text: `Better rate: ${idea}`, href: '/rates', tone: 'info' });
   for (const t of (i.taxIdeas ?? []).slice(0, 3)) out.push({ text: t, href: '/tax', tone: 'warn' });

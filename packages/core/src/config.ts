@@ -256,6 +256,10 @@ export interface AppConfig {
     changesMax: number;
     /** possible market paths run for the retirement success chance in the e-mail; 0 leaves the chance out */
     monteCarloRuns: number;
+    /** a bank statement line to answer that is this many days old or newer is listed one by one (older ones only counted) */
+    newLinesDays: number;
+    /** the most such lines listed */
+    newLinesMax: number;
   };
   /** how the mutual-fund statistics and graphs are cut */
   funds: {
@@ -497,7 +501,14 @@ export const DEFAULT_CONFIG: AppConfig = {
     ],
   },
   home: { changeDays: 30, upcomingDays: 120, bankShareWatch: 0.4 },
-  digest: { aheadMargin: 0.1, needsYouMax: 5, changesMax: 3, monteCarloRuns: 2000 },
+  digest: {
+    aheadMargin: 0.1,
+    needsYouMax: 5,
+    changesMax: 3,
+    monteCarloRuns: 2000,
+    newLinesDays: 7,
+    newLinesMax: 5,
+  },
   funds: {
     historyFrom: '2021-01-01',
     unitTolerance: 0.001,
@@ -1001,6 +1012,8 @@ export function configFromJson(raw: unknown): AppConfig {
       needsYouMax: Math.round(num(dig.needsYouMax, d.digest.needsYouMax, 1, 10)),
       changesMax: Math.round(num(dig.changesMax, d.digest.changesMax, 1, 8)),
       monteCarloRuns: Math.round(num(dig.monteCarloRuns, d.digest.monteCarloRuns, 0, 5000)),
+      newLinesDays: Math.round(num(dig.newLinesDays, d.digest.newLinesDays, 1, 60)),
+      newLinesMax: Math.round(num(dig.newLinesMax, d.digest.newLinesMax, 0, 20)),
     },
     funds: {
       historyFrom: isoDate(fun.historyFrom, d.funds.historyFrom),

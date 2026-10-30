@@ -19,7 +19,10 @@ import {
   planInterestRefunds,
   loadHarvestPositions,
   loadSettings,
+  pairStatementDeposits,
   planHarvest,
+  rebuildStatementMoves,
+  syncStatementLoans,
 } from '@fwos/data';
 import {
   parseChatIds,
@@ -157,6 +160,20 @@ const store: DigestStore = {
       if (r + ir > 0) console.log(`Updated ${r + ir} expected tax-refund record(s).`);
     } catch (e) {
       console.warn(`Tax-harvest reminders skipped: ${(e as Error).message}`);
+    }
+    // what follows by itself from the statement lines the mail brought: the deposits a booking and its pay-back show, and every
+    // loan the statements built brought up to date; then the lines are sorted again (counts only in the log)
+    try {
+      const dep = await pairStatementDeposits(db, householdId, { write: true });
+      const loans = await syncStatementLoans(db, householdId);
+      if (dep.added + dep.numbered + dep.kept + loans.updated > 0) {
+        const rb = await rebuildStatementMoves(db, householdId);
+        console.log(
+          `Statements: ${dep.added} deposits added, ${dep.numbered} given their number, ${dep.kept} kept as history; ${loans.updated} of ${loans.loans} loans brought up to date; lines to answer ${rb.toAnswer}.`,
+        );
+      }
+    } catch (e) {
+      console.warn(`Statement pairing skipped: ${(e as Error).message}`);
     }
     // what is still needed from you (statements, answers, a setting), kept as tasks before the summary reads them
     try {

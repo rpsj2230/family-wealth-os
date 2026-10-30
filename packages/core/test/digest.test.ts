@@ -50,6 +50,27 @@ describe('rate ideas', () => {
   });
 });
 
+describe('new bank lines to explain', () => {
+  it('asks about each recent line no rule explains, with a link to answer it', () => {
+    const g = buildDigest(
+      base({
+        newLines: [
+          {
+            date: '2026-10-25',
+            account: 'Sample Bank …1234',
+            amount: -25_000,
+            words: 'UPI SAMPLE FRIEND',
+          },
+        ],
+      }),
+    );
+    expect(g.text).toContain('What was this?');
+    expect(g.text).toContain('Sample Bank …1234: out ₹25,000');
+    expect(g.text).toContain('UPI SAMPLE FRIEND');
+    expect(g.html).toContain('/reconcile?tab=statements');
+  });
+});
+
 describe('task reminders', () => {
   const t = (tasksDue: { title: string; dueOn: string }[]) =>
     base({
