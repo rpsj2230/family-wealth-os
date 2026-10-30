@@ -68,6 +68,7 @@ export function FundEditProvider({
   actions,
   linkBase,
   initialOpen,
+  nominees,
   children,
 }: {
   rows: FundEditRow[];
@@ -79,12 +80,21 @@ export function FundEditProvider({
   /** where the Match tab lives, and whether this is the public sample (its fund pages have another address) */
   linkBase: { match: string; demo: boolean };
   initialOpen?: string | null;
+  /** nominee notes by fund (loadNominees); give them to offer the nominee in the panel */
+  nominees?: Record<string, string> | undefined;
   children: ReactNode;
 }) {
-  const [stored, setStored] = useState<Record<string, FundEditRow>>(() =>
-    Object.fromEntries(rows.map((r) => [r.id, r])),
+  const withNominee = useCallback(
+    (r: FundEditRow): FundEditRow => (nominees ? { ...r, nominee: nominees[r.id] ?? '' } : r),
+    [nominees],
   );
-  useEffect(() => setStored(Object.fromEntries(rows.map((r) => [r.id, r]))), [rows]);
+  const [stored, setStored] = useState<Record<string, FundEditRow>>(() =>
+    Object.fromEntries(rows.map((r) => [r.id, withNominee(r)])),
+  );
+  useEffect(
+    () => setStored(Object.fromEntries(rows.map((r) => [r.id, withNominee(r)]))),
+    [rows, withNominee],
+  );
   const [panel, setPanel] = useState<
     { kind: 'edit'; id: string } | { kind: 'fund' } | { kind: 'txn'; id: string | null } | null
   >(
@@ -389,6 +399,9 @@ function EditPanel({
           : was.plan,
         exitLoadPct: p.exitLoadPct !== undefined ? p.exitLoadPct : was.exitLoadPct,
         exitLoadDays: p.exitLoadDays !== undefined ? p.exitLoadDays : was.exitLoadDays,
+        ...(was.nominee !== undefined
+          ? { nominee: p.nominee !== undefined ? (p.nominee ?? '') : was.nominee }
+          : {}),
       });
       setD((x) => ({ ...x, value: '' }));
     });
@@ -533,6 +546,21 @@ function EditPanel({
                 </select>
               )}
             </label>
+            {d.nominee !== undefined && (
+              <label className="qe-f qe-wide">
+                <span>Nominee</span>
+                <input
+                  value={d.nominee}
+                  onChange={(e) => set({ nominee: e.target.value })}
+                  maxLength={200}
+                  autoComplete="off"
+                  placeholder="Who is registered on the folio, e.g. Ragini, 100%"
+                />
+                <small className="muted">
+                  Shown in the family handbook. Leave empty if you do not know.
+                </small>
+              </label>
+            )}
             <div className="qe-f qe-wide qe-joint">
               <label className="check">
                 <input

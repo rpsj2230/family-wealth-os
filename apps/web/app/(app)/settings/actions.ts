@@ -8,6 +8,14 @@ import {
   LIQUIDITY_KINDS,
   parseContactLines,
   profileFromJson,
+  alertSettingsProblem,
+  DEFAULT_APP_URL,
+  familyAlert,
+  isEmail,
+  isWhatsAppKey,
+  MAX_ALERT_CONTACTS,
+  normalisePhone,
+  type StoredAlertContact,
 } from '@fwos/core';
 import {
   answeredBy,
@@ -30,10 +38,14 @@ import {
   productsOfKinds,
   recordAiTest,
   saveRatesRead,
+  inactivityReady,
+  loadAlertFacts,
+  loadInactivityRow,
 } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { CONFIG_GROUPS, mergeGroup, parseGroup, withConfirmed } from '@/lib/settings-fields';
+import { resetMailer, sendSiteMail } from '@/lib/reset-mail';
 
 const EMAIL = /^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/;
 
@@ -691,17 +703,19 @@ export async function saveEmergencyAccess(_p: FormResult | null, f: FormData): P
   const { supabase, householdId } = await loadContext();
   if (!householdId) return { ok: false, message: 'Create your household first.' };
   const mode = ['always', 'inactive', 'manual'].find((m) => m === f.get('mode')) ?? 'always';
+  // the days field is here only until the inactivity alert's database update is applied; then the alert's form sets the days
+  const hasDays = f.has('days');
   const asked = numeric(f, 'days');
-  if (mode === 'inactive' && (asked === null || asked < 7 || asked > 365))
+  if (hasDays && mode === 'inactive' && (asked === null || asked < 7 || asked > 365))
     return { ok: false, message: 'Days of absence: a whole number from 7 to 365.' };
   const days = Math.min(365, Math.max(7, Math.round(asked ?? 30)));
   const intent = field(f, 'intent');
   const row: Record<string, unknown> = {
     household_id: householdId,
     mode,
-    inactive_days: days,
     updated_at: new Date().toISOString(),
   };
+  if (hasDays) row.inactive_days = days;
   if (intent === 'release') row.released = true;
   if (intent === 'lock') row.released = false;
   const { error } = await supabase
@@ -844,4 +858,155 @@ export async function setSetupItemOff(f: FormData): Promise<void> {
     .from('household_config')
     .upsert({ household_id: householdId, config: doc, updated_at: new Date().toISOString() });
   revalidatePath('/', 'layout');
+}
+
+/* ------------------------------------------------------ The inactivity alert (Settings > Emergency and access) */
+
+/** One person as the form sends them: `key` keeps, replaces or clears the saved WhatsApp key without the page ever seeing it. */
+interface ContactIn {
+  id?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  key?: { keep: true } | { set: string } | { clear: true };
+}
+
+const NOT_READY =
+  'Run the database update first (20261030000100_emergency_guide.sql): until then the alert cannot be saved.';
+
+/** The five numbers and the people to tell, in order. Saved WhatsApp keys are kept unless replaced or cleared. */
+export async function saveInactivityAlert(_p: FormResult | null, f: FormData): Promise<FormResult> {
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.' };
+  const db = supabase as unknown as SupabaseClient;
+  if (!(await inactivityReady(db))) return { ok: false, message: NOT_READY };
+  const v = {
+    warnDays: numeric(f, 'warnDays'),
+    alertDays: numeric(f, 'alertDays'),
+    warnEveryDays: numeric(f, 'warnEveryDays'),
+    reminders: numeric(f, 'reminders'),
+    remindEveryDays: numeric(f, 'remindEveryDays'),
+  };
+  const problem = alertSettingsProblem(v);
+  if (problem) return { ok: false, message: `Not saved. ${problem}` };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(f.get('contacts') ?? '[]'));
+  } catch {
+    return {
+      ok: false,
+      message: 'Not saved: the list of people could not be read. Reload the page.',
+    };
+  }
+  const rows = (Array.isArray(raw) ? raw : []) as ContactIn[];
+  const typed = rows.filter(
+    (r) => (r.name ?? '').trim() || (r.email ?? '').trim() || (r.phone ?? '').trim(),
+  );
+  if (typed.length > MAX_ALERT_CONTACTS)
+    return { ok: false, message: `Not saved: at most ${MAX_ALERT_CONTACTS} people.` };
+  const saved = await loadInactivityRow(db, householdId).catch(() => null);
+  const keyOf = new Map((saved?.contacts ?? []).map((c) => [c.id, c.whatsappKey]));
+  const out: StoredAlertContact[] = [];
+  for (const [i, r] of typed.entries()) {
+    const n = `Person ${i + 1}`;
+    const name = (r.name ?? '').trim().slice(0, 80);
+    if (!name) return { ok: false, message: `Not saved: ${n} needs a name.` };
+    const email = (r.email ?? '').trim().toLowerCase();
+    if (email && !isEmail(email))
+      return { ok: false, message: `Not saved: the e-mail of ${name} is not an e-mail address.` };
+    const phone = normalisePhone(r.phone ?? '');
+    if ((r.phone ?? '').trim() && !phone)
+      return {
+        ok: false,
+        message: `Not saved: write the WhatsApp number of ${name} with its country code, e.g. +65 9123 4567.`,
+      };
+    if (!email && !phone)
+      return {
+        ok: false,
+        message: `Not saved: ${name} needs an e-mail address or a WhatsApp number.`,
+      };
+    let key = '';
+    if (r.key && 'set' in r.key) {
+      key = String(r.key.set ?? '').trim();
+      if (!isWhatsAppKey(key))
+        return {
+          ok: false,
+          message: `Not saved: the WhatsApp key of ${name} should be the letters and digits CallMeBot sent.`,
+        };
+    } else if (r.key && 'keep' in r.key && r.id) key = keyOf.get(r.id) ?? '';
+    out.push({
+      id: (r.id && /^[\w-]{1,40}$/.test(r.id) ? r.id : '') || crypto.randomUUID().slice(0, 8),
+      name,
+      email,
+      phone,
+      whatsappKey: phone ? key : '',
+    });
+  }
+  const { error } = await supabase.from('emergency_access').upsert(
+    {
+      household_id: householdId,
+      inactive_days: v.alertDays,
+      warn_days: v.warnDays,
+      warn_every_days: v.warnEveryDays,
+      reminders: v.reminders,
+      remind_every_days: v.remindEveryDays,
+      alert_contacts: out,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'household_id' },
+  );
+  if (error) return { ok: false, message: 'That could not be saved.' };
+  revalidatePath('/settings');
+  revalidatePath('/emergency');
+  return {
+    ok: true,
+    message:
+      out.length === 0
+        ? 'Saved. With nobody on the list, the alert is off.'
+        : 'Saved. WhatsApp keys are stored on the server and are not shown again.',
+  };
+}
+
+export interface AlertTestResult extends FormResult {
+  /** what the first person would receive, marked TEST, shown under the button */
+  preview: { subject: string; text: string } | null;
+}
+
+/** "Send a test": the first person's message, marked TEST, to the signed-in member only. Never to anyone on the list. */
+export async function sendInactivityTest(): Promise<AlertTestResult> {
+  const { supabase, householdId, email } = await loadContext();
+  if (!householdId) return { ok: false, message: 'Create your household first.', preview: null };
+  const db = supabase as unknown as SupabaseClient;
+  if (!(await inactivityReady(db))) return { ok: false, message: NOT_READY, preview: null };
+  const row = await loadInactivityRow(db, householdId).catch(() => null);
+  const facts = await loadAlertFacts(db, householdId);
+  const m = familyAlert(
+    {
+      ...facts,
+      appUrl: process.env.APP_URL || DEFAULT_APP_URL,
+      mode: row?.mode ?? 'always',
+      released: row?.released ?? false,
+      daysAbsent: row?.inactiveDays ?? 30,
+    },
+    { test: true, recipientName: row?.contacts[0]?.name ?? 'Ragini', confirmToken: 'TEST' },
+  );
+  const preview = { subject: m.subject, text: m.text };
+  if (!resetMailer())
+    return {
+      ok: false,
+      message:
+        'The site cannot send e-mail: its Gmail settings (SMTP_USER, SMTP_APP_PASSWORD) are only in GitHub for the daily job. Below is exactly what would be sent.',
+      preview,
+    };
+  if (!email) return { ok: false, message: 'Your login has no e-mail address.', preview };
+  try {
+    await sendSiteMail(email, { subject: m.subject, text: m.text, html: m.html });
+  } catch {
+    return { ok: false, message: 'The test could not be sent. Below is what it says.', preview };
+  }
+  return {
+    ok: true,
+    message: 'Sent to you only, marked TEST. Nobody on the list received anything.',
+    preview,
+  };
 }

@@ -2,7 +2,7 @@ import type { Handbook } from '@fwos/core';
 import { buildHandbookDoc, loadHandbookTicks } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadAccess, loadContext } from '@/lib/data';
-import { tickMap } from '@/lib/handbook-view';
+import { sameJson, tickMap } from '@/lib/handbook-view';
 import { HandbookGuide } from './HandbookGuide';
 import { HandbookView } from './HandbookView';
 import { refreshHandbook, tickStep } from './actions';
@@ -38,15 +38,19 @@ export default async function EmergencyPage() {
   let row = (
     await supabase.from('emergency_documents').select('content, generated_at').maybeSingle()
   ).data as { content: Handbook; generated_at: string } | null;
-  // a member opening the page always sees a fresh handbook (and one in the current layout); the viewer sees the stored one
-  if (
-    isMember &&
-    (!row || !row.content.guide || Date.now() - Date.parse(row.generated_at) > 6 * 3_600_000)
-  ) {
+  // a member opening the page always sees a fresh handbook, so a nominee or helpline just filled in shows at once; the stored copy
+  // (what the read-only family login reads) is rewritten when anything in it changed, or at least every six hours
+  if (isMember) {
     try {
       const doc = await buildHandbookDoc(supabase as unknown as SupabaseClient);
-      await supabase.rpc('save_emergency_document', { p_household: householdId, p_content: doc });
-      row = { content: doc, generated_at: new Date().toISOString() };
+      const changed =
+        !row ||
+        !sameJson(row.content, doc) ||
+        Date.now() - Date.parse(row.generated_at) > 6 * 3_600_000;
+      if (changed) {
+        await supabase.rpc('save_emergency_document', { p_household: householdId, p_content: doc });
+        row = { content: doc, generated_at: new Date().toISOString() };
+      }
     } catch {
       /* show the stored one */
     }

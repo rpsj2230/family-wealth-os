@@ -20,6 +20,8 @@ export interface QuickRow extends EditRow {
   recordedOn: string | null;
   /** savings: the rate typed for this account, in percent; empty means the bank's published rate or the assumption in Settings */
   savingsRate: string;
+  /** who is registered as nominee ('' when nobody wrote it down); absent where the page did not load it, and then not offered */
+  nominee?: string;
 }
 
 /** What the person has typed in the panel beyond the row itself. */
@@ -29,6 +31,8 @@ export interface QuickDraft {
   /** rupees per unit of a foreign currency, only for a foreign-currency account */
   fx: string;
   savingsRate: string;
+  /** the nominee as typed; absent when the panel does not offer it */
+  nominee?: string;
 }
 
 export type QuickField =
@@ -135,6 +139,8 @@ export function quickRows(
   fds: FdRow[],
   ownerNames: Record<string, string>,
   jointHolders: Record<string, string> = {},
+  /** nominee notes by asset; without them the panel does not offer the nominee */
+  nominees?: Record<string, string>,
 ): QuickRow[] {
   const bankRows = new Map(
     blocks.flatMap((b) => b.sections.flatMap((s) => s.rows)).map((r) => [r.assetId, r]),
@@ -155,6 +161,7 @@ export function quickRows(
           a?.interest_rate !== null && a?.interest_rate !== undefined
             ? String(Math.round(a.interest_rate * 1e6) / 1e4)
             : '',
+        ...(nominees && r.kind !== 'held' ? { nominee: nominees[r.id] ?? '' } : {}),
       };
     }),
   );
@@ -190,6 +197,8 @@ export interface QuickSave {
   problems: string[];
   /** what will change, in plain words: "name, interest rate, balance" */
   changes: string[];
+  /** a new nominee note (null clears it); absent when it did not change */
+  nominee?: string | null;
 }
 
 /** Compares the panel with what was stored: what to send, what is wrong, and what the person changed. */
@@ -233,11 +242,20 @@ export function buildQuickSave(
       changes.push('interest rate');
     }
   }
+  let nominee: string | null | undefined;
+  if (draft.nominee !== undefined && draft.nominee.trim() !== (was.nominee ?? '').trim()) {
+    if (draft.nominee.trim().length > 200) problems.push('the nominee is longer than 200 letters');
+    else {
+      nominee = draft.nominee.trim() || null;
+      changes.push('nominee');
+    }
+  }
   return {
     details,
     monthly: touched ? monthly : null,
     problems,
     changes: [...new Set(changes)],
+    ...(nominee !== undefined ? { nominee } : {}),
   };
 }
 
@@ -249,13 +267,22 @@ export function quickModel(input: {
   ownerNames: Record<string, string>;
   institutions: { id: string; name: string }[];
   jointHolders?: Record<string, string>;
+  /** nominee notes by asset (loadNominees); give them to offer the nominee in the panel */
+  nominees?: Record<string, string>;
 }): {
   rows: QuickRow[];
   owners: { id: string; name: string }[];
   institutions: { id: string; name: string }[];
 } {
   return {
-    rows: quickRows(input.blocks, input.assets, input.fds, input.ownerNames, input.jointHolders),
+    rows: quickRows(
+      input.blocks,
+      input.assets,
+      input.fds,
+      input.ownerNames,
+      input.jointHolders,
+      input.nominees,
+    ),
     owners: Object.entries(input.ownerNames).map(([id, name]) => ({ id, name })),
     institutions: [...input.institutions].sort((a, b) => a.name.localeCompare(b.name)),
   };

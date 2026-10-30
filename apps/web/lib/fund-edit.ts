@@ -33,6 +33,8 @@ export interface FundEditRow {
   exitLoadDays: number | null;
   amfiCode: string | null;
   hasStatement: boolean;
+  /** who is registered as nominee ('' when nobody wrote it down); absent where it was not loaded, and then not offered */
+  nominee?: string;
 }
 
 /** What the panel's boxes hold: text, as typed. */
@@ -50,6 +52,8 @@ export interface FundDraft {
   plan: string;
   exitPct: string;
   exitDays: string;
+  /** absent when the panel does not offer the nominee */
+  nominee?: string;
 }
 
 const plain = (n: number, digits = 4) => String(Number(n.toFixed(digits)));
@@ -68,6 +72,7 @@ export function draftOf(r: FundEditRow): FundDraft {
     plan: r.plan,
     exitPct: r.exitLoadPct === null ? '' : plain(r.exitLoadPct * 100, 3),
     exitDays: r.exitLoadDays === null ? '' : String(r.exitLoadDays),
+    ...(r.nominee !== undefined ? { nominee: r.nominee } : {}),
   };
 }
 
@@ -88,6 +93,8 @@ export interface FundSavePayload {
   exitLoadPct?: number | null;
   exitLoadDays?: number | null;
   goalId?: string;
+  /** who is registered as nominee (null clears it) */
+  nominee?: string | null;
 }
 
 export interface FundSave {
@@ -196,6 +203,14 @@ export function buildFundSave(was: FundEditRow, d: FundDraft, today: string): Fu
       p.exitLoadPct = frac;
       p.exitLoadDays = days;
       changes.push('exit load');
+    }
+  }
+
+  if (d.nominee !== undefined && d.nominee.trim() !== (was.nominee ?? '').trim()) {
+    if (d.nominee.trim().length > 200) problems.push('the nominee is longer than 200 letters');
+    else {
+      p.nominee = d.nominee.trim() || null;
+      changes.push('nominee');
     }
   }
 

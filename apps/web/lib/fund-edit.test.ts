@@ -42,6 +42,22 @@ describe('typed', () => {
 });
 
 describe('buildFundSave', () => {
+  it('saves the nominee only when it changed, offers it only when it was loaded, and an empty box clears it', () => {
+    expect(draftOf(row).nominee).toBeUndefined();
+    const withN = { ...row, nominee: 'Ragini' };
+    expect(buildFundSave(withN, draftOf(withN), TODAY).payload).toBeNull();
+    const r = buildFundSave(withN, { ...draftOf(withN), nominee: ' Kiran ' }, TODAY);
+    expect(r.changes).toEqual(['nominee']);
+    expect(r.payload).toEqual({ assetId: 'a', nominee: 'Kiran' });
+    expect(buildFundSave(withN, { ...draftOf(withN), nominee: '' }, TODAY).payload).toEqual({
+      assetId: 'a',
+      nominee: null,
+    });
+    expect(
+      buildFundSave(withN, { ...draftOf(withN), nominee: 'x'.repeat(201) }, TODAY).problems,
+    ).toEqual(['the nominee is longer than 200 letters']);
+  });
+
   it('has no changes when nothing was touched', () => {
     const r = buildFundSave(row, draftOf(row), TODAY);
     expect(r.changes).toEqual([]);

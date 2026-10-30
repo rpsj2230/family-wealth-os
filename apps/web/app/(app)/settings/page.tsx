@@ -1,9 +1,28 @@
 import { Suspense } from 'react';
-import { configFromJson, DEFAULT_CONFIG, fyOf, profileFromJson, RULES } from '@fwos/core';
+import {
+  alertContactView,
+  configFromJson,
+  DEFAULT_CONFIG,
+  DEFAULT_REMIND_EVERY,
+  DEFAULT_REMINDERS,
+  DEFAULT_WARN_DAYS,
+  DEFAULT_WARN_EVERY,
+  fyOf,
+  lastChain,
+  profileFromJson,
+  RULES,
+} from '@fwos/core';
 import { isAiProvider, isDocKind, type AiProvider } from '@fwos/ingest';
 import type { AiKeyRow } from '@/lib/ai-key-view';
 import type { TaxRuleRow } from '@fwos/core';
-import { loadSettings } from '@fwos/data';
+import {
+  countFamilyLogins,
+  inactivityReady,
+  loadAlertLog,
+  loadInactivityRow,
+  loadSettings,
+} from '@fwos/data';
+import type { InactivityAlertProps } from './InactivityAlertForm';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { loadContext } from '@/lib/data';
@@ -70,7 +89,7 @@ export default async function SettingsPage({
           {tab === 'tax' && <TaxTab db={db} />}
           {tab === 'notifications' && <NotificationsTab db={db} />}
           {tab === 'connections' && <ConnectionsTab db={db} />}
-          {tab === 'access' && <AccessTab db={db} />}
+          {tab === 'access' && <AccessTab db={db} householdId={householdId} />}
         </div>
       </div>
     </>
@@ -249,20 +268,49 @@ async function ConnectionsTab({ db }: { db: SupabaseClient }) {
   );
 }
 
-async function AccessTab({ db }: { db: SupabaseClient }) {
-  const [profile, access] = await Promise.all([
+async function AccessTab({ db, householdId }: { db: SupabaseClient; householdId: string }) {
+  const [profile, access, ready, members] = await Promise.all([
     db.from('emergency_profile').select('content').maybeSingle(),
     db.from('emergency_access').select('mode, inactive_days, released').maybeSingle(),
+    inactivityReady(db),
+    db
+      .from('household_members')
+      .select('user_id')
+      .eq('household_id', householdId)
+      .in('role', ['admin', 'member']),
   ]);
   const a = access.data as { mode: string; inactive_days: number; released: boolean } | null;
+  const days = a?.inactive_days ?? 30;
+  // the newer columns are read only once the database update is there; the WhatsApp keys never leave the server
+  const row = ready ? await loadInactivityRow(db, householdId).catch(() => null) : null;
+  const log = ready ? await loadAlertLog(db, householdId).catch(() => []) : [];
+  const contacts = (row?.contacts ?? []).map(alertContactView);
+  const alert: InactivityAlertProps = {
+    ready,
+    values: {
+      warnDays: row?.warnDays ?? DEFAULT_WARN_DAYS,
+      alertDays: row?.inactiveDays ?? days,
+      warnEveryDays: row?.warnEveryDays ?? DEFAULT_WARN_EVERY,
+      reminders: row?.reminders ?? DEFAULT_REMINDERS,
+      remindEveryDays: row?.remindEveryDays ?? DEFAULT_REMIND_EVERY,
+    },
+    contacts,
+    familyLogins: await countFamilyLogins(db, householdId),
+    members: Math.max(1, (members.data ?? []).length),
+    last: lastChain(
+      log,
+      contacts.map((c) => c.name),
+    ),
+  };
   return (
     <AccessSection
       profile={profileFromJson((profile.data as { content: unknown } | null)?.content)}
       access={{
         mode: a?.mode === 'inactive' || a?.mode === 'manual' ? a.mode : 'always',
-        days: a?.inactive_days ?? 30,
+        days,
         released: !!a?.released,
       }}
+      alert={alert}
     />
   );
 }

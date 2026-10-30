@@ -2,40 +2,47 @@
  * The inactivity alert in the daily job (docs/USER-GUIDE.md, "If you stop using the portal"). For every household with an
  * emergency_access row it asks core `inactivityStep` for today's one step and carries it out:
  *
- * - warn: one e-mail to the members with an "I'm fine — postpone" link (its hash is stored first, with warned_at).
- * - tell: one message to one person on the list (e-mail when they have an address, WhatsApp when they activated it), with their
- *   "I have received this" link; the first message to each person is recorded in emergency_alert_log before it is sent, each
- *   reminder adds one to `sends`. The members get a copy of each person's first message.
+ * - warn: an e-mail to the members with an "I'm fine — postpone" link, from warn_days every warn_every_days until the first
+ *   trusted person is told. warned_at is the last warning; the link's hash is stored with it.
+ * - tell: one message to one trusted person (an e-mail when they have an address, WhatsApp when they activated it), with their
+ *   "I have received this" link. The first message to each person is recorded in emergency_alert_log before it is sent, each
+ *   reminder adds one to `sends`. Every such message also goes to the members as a separate copy, headed "Copy for the household:
+ *   sent to <name> (reminder 2 of 3)" and without the confirmation link (a member pressing it must not count as the person).
+ *   A member who is also that trusted person gets the person's own e-mail only.
  * - confirmed: a short note to the members, then the chain is closed (alerted_at).
  * - exhausted: the chain is closed and the log says "nobody confirmed".
  *
- * Recording comes before sending and is conditional, so a second run on the same day finds the step done and sends nothing. A message
- * that could not be delivered still counts as that person's message (they are reminded as usual), so a broken address never
- * stops the chain; only the owner's warning is taken back on failure and tried again next run.
+ * Links: tokens are derived (alert-tokens.ts), so every warning and reminder of one absence carries a working link and only hashes
+ * are stored. Recording comes before sending and is conditional, so a second run on the same day finds the step done and sends
+ * nothing. A message to a trusted person that could not be delivered still counts as theirs (they are reminded as usual), so a
+ * broken address never stops the chain; only the owner's warning is taken back on failure and tried again next run.
  *
  * The log carries counts only ("inactivity: chain step=remind pos=1 sends=2"): never a name, an address, a number, a key, a token,
  * or a provider's error text (which can repeat an address). With `dryRun` it decides and logs, and records and sends nothing.
  */
 import {
-  daysAbsent,
   confirmedNote,
+  daysAbsent,
   familyAlert,
   inactivityStep,
   inactivityWarning,
   runDateAfter,
+  runDaysBetween,
   type ChainEntry,
+  type FamilyAlert,
   type FamilyAlertInput,
   type InactivityMode,
   type InactivityStep,
   type StoredAlertContact,
 } from '@fwos/core';
-import { chainToken, hashToken, newToken } from './alert-tokens';
+import { alertLinkKey, alertToken, hashToken } from './alert-tokens';
 
 export interface InactivityRunRow {
   householdId: string;
   mode: InactivityMode;
   inactiveDays: number;
   warnDays: number;
+  warnEveryDays: number;
   reminders: number;
   remindEveryDays: number;
   released: boolean;
@@ -56,10 +63,19 @@ export interface InactivityStore {
   chain(householdId: string): Promise<ChainEntry[]>;
   memberEmails(householdId: string): Promise<string[]>;
   facts(householdId: string): Promise<InactivityFacts>;
-  /** warned_at = at and the postpone link's hash, only while warned_at is empty and the last visit is still `seen` */
-  claimWarn(householdId: string, seen: string, at: string, postponeHash: string): Promise<boolean>;
-  /** takes the warning back (it could not be sent), so the next run tries again */
-  unclaimWarn(householdId: string, at: string): Promise<void>;
+  /**
+   * warned_at = at and the postpone link's hash, only while warned_at is still `prevWarnedAt` (null: empty) and the last visit is
+   * still `seen`. False when another run or a member's visit came first.
+   */
+  claimWarn(
+    householdId: string,
+    seen: string,
+    prevWarnedAt: string | null,
+    at: string,
+    postponeHash: string,
+  ): Promise<boolean>;
+  /** puts warned_at back to `prevWarnedAt` (the warning could not be sent), so the next run tries again */
+  unclaimWarn(householdId: string, at: string, prevWarnedAt: string | null): Promise<void>;
   /** the first message to a person: a new log entry (sends 1); false when it exists already */
   startPerson(
     householdId: string,
@@ -85,16 +101,17 @@ export interface InactivityMailer {
   send(m: { to: string[]; subject: string; text: string; html: string }): Promise<unknown>;
 }
 
-/** One channel to one person (e-mail, WhatsApp; Telegram or SMS can be added later). */
+/** One way to reach a trusted person: e-mail, WhatsApp; Telegram or SMS can be added later with the same shape. */
 export interface AlertChannel {
-  /** "email", "whatsapp", … (used in counts only) */
+  /** "email", "whatsapp", … */
   readonly name: string;
   /** whether this person can be reached this way */
   reaches(c: StoredAlertContact): boolean;
-  send(c: StoredAlertContact, m: ReturnType<typeof familyAlert>): Promise<boolean>;
+  /** true when the provider accepted the message; never throws */
+  send(c: StoredAlertContact, m: FamilyAlert): Promise<boolean>;
 }
 
-/** E-mail through the job's mailer: every person who has an address. */
+/** E-mail through the job's mailer, to every person who has an address. */
 export function emailChannel(mailer: InactivityMailer): AlertChannel {
   return {
     name: 'email',
@@ -110,7 +127,7 @@ export function emailChannel(mailer: InactivityMailer): AlertChannel {
   };
 }
 
-/** WhatsApp through a sender (CallMeBot): every person with a number and a key. */
+/** WhatsApp through a sender (CallMeBot), to every person with a number and a key. Only the trusted person, never the members. */
 export function whatsappChannel(sender: {
   send(to: { phone: string; key: string }, text: string): Promise<{ ok: boolean }>;
 }): AlertChannel {
@@ -126,10 +143,10 @@ export function whatsappChannel(sender: {
 
 export interface InactivityOutcome {
   householdId: string;
-  step: InactivityStep['kind'] | 'first' | 'remind' | 'error';
-  /** position in the list (tell, confirmed) */
+  step: 'none' | 'warn' | 'first' | 'remind' | 'confirmed' | 'exhausted' | 'error';
+  /** position in the list (first, remind, confirmed) */
   pos?: number;
-  /** messages accepted by a provider on this run */
+  /** messages accepted by a provider on this run (one per address or number) */
   sends: number;
   /** messages that could not be sent */
   failed: number;
@@ -137,15 +154,16 @@ export interface InactivityOutcome {
 }
 
 const EMAIL = /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/;
-const clean = (es: string[]) => [
+/** Valid addresses, lower case, each once; members without an address are skipped. */
+export const cleanEmails = (es: readonly string[]): string[] => [
   ...new Set(es.map((e) => e.trim().toLowerCase()).filter((e) => EMAIL.test(e))),
 ];
 
 export interface InactivityOptions {
   now: string;
   appUrl: string;
-  /** the secret the confirmation links are derived from (at least 16 characters) */
-  linkSecret: string;
+  /** a server secret the job already has (the service-role key); the link key is derived from it */
+  serverSecret: string;
   dryRun?: boolean;
   log?: (line: string) => void;
 }
@@ -156,17 +174,16 @@ export async function runInactivity(
   opts: InactivityOptions,
 ): Promise<InactivityOutcome[]> {
   const log = opts.log ?? (() => {});
+  const key = alertLinkKey(opts.serverSecret);
   const out: InactivityOutcome[] = [];
   for (const row of await store.rows()) {
-    const o = await runOne(store, deps, opts, row).catch(
-      (): InactivityOutcome => ({
-        householdId: row.householdId,
-        step: 'error',
-        sends: 0,
-        failed: 0,
-        note: 'error',
-      }),
-    );
+    const o = await runOne(store, deps, opts, key, row).catch((): InactivityOutcome => ({
+      householdId: row.householdId,
+      step: 'error',
+      sends: 0,
+      failed: 0,
+      note: 'error',
+    }));
     out.push(o);
     log(lineOf(o));
   }
@@ -196,15 +213,17 @@ async function runOne(
   store: InactivityStore,
   deps: { mailer: InactivityMailer; channels: AlertChannel[] },
   opts: InactivityOptions,
+  key: Buffer,
   row: InactivityRunRow,
 ): Promise<InactivityOutcome> {
   const h = row.householdId;
   const seen = row.lastMemberSeen;
   const log = row.contacts.length > 0 ? await store.chain(h) : [];
-  const step = inactivityStep(
+  const step: InactivityStep = inactivityStep(
     {
       lastMemberSeen: seen,
       warnDays: row.warnDays,
+      warnEveryDays: row.warnEveryDays,
       alertDays: row.inactiveDays,
       reminders: row.reminders,
       remindEveryDays: row.remindEveryDays,
@@ -221,14 +240,18 @@ async function runOne(
 
   if (step.kind === 'warn') {
     if (opts.dryRun) return { ...base, step: 'warn', note: 'dry_run' };
-    const members = clean(await store.memberEmails(h));
+    const members = cleanEmails(await store.memberEmails(h));
     if (members.length === 0) return { ...base, step: 'warn', failed: 1, note: 'not_sent' };
-    const token = newToken();
-    if (!(await store.claimWarn(h, seen, opts.now, hashToken(token))))
+    const token = alertToken(key, 'postpone', h, seen, -1);
+    const prev = row.warnedAt;
+    // a warning from an earlier absence counts as none: the claim compares with what is stored
+    if (!(await store.claimWarn(h, seen, prev, opts.now, hashToken(token))))
       return { ...base, step: 'warn', note: 'already_done' };
+    const alertDate = runDateAfter(seen, row.inactiveDays);
     const m = inactivityWarning({
       daysAbsent: days,
-      alertDate: runDateAfter(seen, row.inactiveDays),
+      daysLeft: runDaysBetween(opts.now.slice(0, 10), alertDate),
+      alertDate,
       contactNames: row.contacts.map((c) => c.name),
       reminders: row.reminders,
       remindEveryDays: row.remindEveryDays,
@@ -239,7 +262,7 @@ async function runOne(
       await deps.mailer.send({ to: members, ...m });
       return { ...base, step: 'warn', sends: members.length, note: 'done' };
     } catch {
-      await store.unclaimWarn(h, opts.now);
+      await store.unclaimWarn(h, opts.now, prev);
       return { ...base, step: 'warn', failed: 1, note: 'not_sent' };
     }
   }
@@ -252,7 +275,7 @@ async function runOne(
 
   if (step.kind === 'confirmed') {
     if (opts.dryRun) return { ...base, step: 'confirmed', pos: step.pos, note: 'dry_run' };
-    const members = clean(await store.memberEmails(h));
+    const members = cleanEmails(await store.memberEmails(h));
     const name = row.contacts[step.pos]?.name ?? 'Someone on your list';
     let sends = 0;
     if (members.length > 0) {
@@ -276,7 +299,7 @@ async function runOne(
   const person = row.contacts[step.pos];
   if (!person) return { ...base, step: kind, pos: step.pos, note: 'not_sent' };
   if (opts.dryRun) return { ...base, step: kind, pos: step.pos, note: 'dry_run' };
-  const token = chainToken(opts.linkSecret, h, seen, step.pos);
+  const token = alertToken(key, 'confirm', h, seen, step.pos);
   const recorded =
     step.send === 1
       ? await store.startPerson(h, seen, step.pos, hashToken(token), opts.now)
@@ -289,11 +312,11 @@ async function runOne(
     released: row.released,
     daysAbsent: days,
   };
+  const shape = { send: step.send, reminders: row.reminders };
   const msg = familyAlert(input, {
+    ...shape,
     recipientName: person.name,
     confirmToken: token,
-    send: step.send,
-    reminders: row.reminders,
     emailToo: !!person.email,
   });
   let sends = 0;
@@ -304,17 +327,20 @@ async function runOne(
     else failed++;
   }
   if (ways.length === 0) failed++;
-  // the members' copy of each person's first message (never with the person's link: a member's press must not count as theirs)
-  if (step.send === 1) {
-    const copyTo = clean(await store.memberEmails(h)).filter((e) => e !== person.email);
-    if (copyTo.length > 0) {
-      const copy = familyAlert(input, { copyOf: person.name, send: 1, reminders: row.reminders });
-      try {
-        await deps.mailer.send({ to: copyTo, subject: copy.subject, text: copy.text, html: copy.html });
-        sends += copyTo.length;
-      } catch {
-        failed++;
-      }
+  // every message to a trusted person also goes to the members, as a copy without the confirmation link
+  const copyTo = cleanEmails(await store.memberEmails(h)).filter((e) => e !== person.email);
+  if (copyTo.length > 0) {
+    const copy = familyAlert(input, { ...shape, copyOf: person.name });
+    try {
+      await deps.mailer.send({
+        to: copyTo,
+        subject: copy.subject,
+        text: copy.text,
+        html: copy.html,
+      });
+      sends += copyTo.length;
+    } catch {
+      failed++;
     }
   }
   return { ...base, step: kind, pos: step.pos, sends, failed, note: 'done' };

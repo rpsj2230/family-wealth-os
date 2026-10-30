@@ -7,6 +7,7 @@ import {
   handbookPages,
   incompleteNote,
   readPrefs,
+  sameJson,
   telHref,
   tickMap,
   tickWho,
@@ -226,5 +227,16 @@ describe('the guide on the page', () => {
     expect(readPrefs(null)).toEqual({ lang: 'en', plain: false, large: false });
     expect(readPrefs('not json')).toEqual({ lang: 'en', plain: false, large: false });
     expect(readPrefs('{"lang":"fr"}').lang).toBe('en');
+  });
+});
+
+describe('sameJson', () => {
+  it('ignores the order of keys, not the values', () => {
+    expect(
+      sameJson({ a: 1, b: { c: [1, { d: 2, e: 3 }] } }, { b: { c: [1, { e: 3, d: 2 }] }, a: 1 }),
+    ).toBe(true);
+    expect(sameJson({ a: 1, x: undefined }, { a: 1 })).toBe(true);
+    expect(sameJson({ a: [1, 2] }, { a: [2, 1] })).toBe(false);
+    expect(sameJson({ a: 1 }, { a: '1' })).toBe(false);
   });
 });

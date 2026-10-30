@@ -2,7 +2,8 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseEnv } from './lib/supabase/env';
 
-const PUBLIC_PATHS = ['/login', '/api/health', '/demo'];
+// /confirm and /postpone: the links in the inactivity alert, for people who cannot sign in (they show nothing from the household)
+const PUBLIC_PATHS = ['/login', '/api/health', '/demo', '/confirm', '/postpone'];
 
 /**
  * Runs before every page: refreshes the Supabase session cookie and sends signed-out visitors to /login.

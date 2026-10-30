@@ -15,7 +15,7 @@ import {
 import type { ActivityItem } from '@/components/ActivityLog';
 import type { DetailTableData } from '@/components/DetailTable';
 import type { Fact } from '@/components/AssetFacts';
-import { loadSettings, pageAll, liveLinesFilter } from '@fwos/data';
+import { liveLinesFilter, loadNominees, loadSettings, pageAll } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext, type Ctx } from './data';
 import {
@@ -447,9 +447,10 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     type: asset.type,
     quick: await (async () => {
       if (!['bank_account', 'fixed_deposit', 'third_party_held'].includes(asset.type)) return null;
-      const [jointHolders, fxHint] = await Promise.all([
+      const [jointHolders, fxHint, nominees] = await Promise.all([
         loadJointHolders(supabase as unknown as SupabaseClient),
         loadFxHint(supabase as unknown as SupabaseClient),
+        loadNominees(supabase as unknown as SupabaseClient),
       ]);
       const model = quickModel({
         blocks,
@@ -458,6 +459,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
         ownerNames: Object.fromEntries(ownerList.map((o) => [o.id, o.name])),
         institutions: instRows.map((i) => ({ id: i.id, name: i.name })),
         jointHolders,
+        nominees,
       });
       return {
         model: { ...model, rows: model.rows.filter((x) => x.id === id) },

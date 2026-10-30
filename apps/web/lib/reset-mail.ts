@@ -34,3 +34,19 @@ export async function sendResetMail(to: string, link: string): Promise<void> {
       `<p>If it was not you, ignore this e-mail: your password stays as it is.</p>`,
   });
 }
+
+/** One e-mail from the household's Gmail, when the site has its two settings (Settings > Access, "Send a test"). */
+export async function sendSiteMail(
+  to: string,
+  m: { subject: string; text: string; html: string },
+): Promise<void> {
+  const s = resetMailer();
+  if (!s) throw new Error('no mailer');
+  const transport = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: s.user, pass: s.pass },
+  });
+  await transport.sendMail({ from: `Family Wealth OS <${s.user}>`, to, ...m });
+}

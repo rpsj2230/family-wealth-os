@@ -22,6 +22,9 @@ export * from './ai-test';
 export * from './taxfiles';
 export * from './rates-sync';
 export * from './telegram';
+export * from './whatsapp';
+export * from './alert-tokens';
+export * from './inactivity-run';
 export * from './ai-models';
 export * from './rate-check';
 export {

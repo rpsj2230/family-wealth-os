@@ -164,6 +164,41 @@ test.describe('Settings (public sample)', () => {
     expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
 
+  test('inactivity alert: numbers with a preview, people in order, write-only WhatsApp key, a test to me only', async ({
+    page,
+  }) => {
+    await page.goto('/demo/settings?tab=access');
+    const card = page.getByTestId('inactivity-alert');
+    await expect(
+      page.getByRole('heading', { name: 'If you stop using the portal: the inactivity alert' }),
+    ).toBeVisible();
+    await expect(card.getByTestId('alert-preview')).toHaveText(
+      'With these: you are reminded daily from day 20; Ragini is told after 30 days; Amit after 38 days if Ragini has not confirmed. Each person is reminded 3 times, 2 days apart.',
+    );
+    await expect(card.getByText(/get an e-mail copy of every message/)).toBeVisible();
+    // the saved key is never shown back: only that it is saved, with Replace
+    await expect(card.getByText('WhatsApp key saved')).toBeVisible();
+    await expect(
+      card.getByRole('button', { name: 'Replace the WhatsApp key of person 1' }),
+    ).toBeVisible();
+    await expect(card.getByText('WhatsApp not activated for Amit', { exact: false })).toBeVisible();
+    // order: move Amit up and the preview follows
+    await card.getByRole('button', { name: 'Move person 2 up' }).click();
+    await expect(card.getByLabel('Person 1: name')).toHaveValue('Amit');
+    await expect(card.getByTestId('alert-preview')).toContainText('Amit is told after 30 days');
+    // a warning day on or after the alert day is refused in plain words
+    await card.getByLabel('Warn me from day').fill('30');
+    await expect(card.getByTestId('alert-preview')).toHaveText(
+      'Warn me from day: it must be before day 30, when the first person is told.',
+    );
+    await expect(card.getByRole('button', { name: 'Save the alert' })).toBeDisabled();
+    await card.getByLabel('Warn me from day').fill('20');
+    await card.getByRole('button', { name: 'Send a test to me' }).click();
+    await expect(page.getByTestId('alert-test')).toContainText('[TEST]');
+    await expect(page.getByTestId('alert-test')).toContainText('nothing is sent');
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+
   test('tax rules: this year first, other years folded away', async ({ page }) => {
     await page.goto('/demo/settings?tab=tax');
     await expect(page.getByText('This year')).toBeVisible();
@@ -175,51 +210,7 @@ test.describe('Settings (public sample)', () => {
   });
 });
 
-test.describe('Family handbook (public sample)', () => {
-  test('puts what to do and who to call on the first page, with phone links', async ({ page }) => {
-    await page.goto('/demo/emergency');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('family handbook');
-    await expect(page.getByRole('heading', { name: '1. What to do first' })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: '2. Who to call, in this order' }),
-    ).toBeVisible();
-    await expect(page.getByRole('heading', { name: '3. Where things are' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '+65 9000 0000' })).toHaveAttribute(
-      'href',
-      'tel:+6590000000',
-    );
-    await expect(page.getByText('Fireproof box in the study').first()).toBeVisible();
-    await expect(page.getByText('Not written down yet').first()).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: 'Everything else, for reference' }),
-    ).toBeVisible();
-    expect(await overflow(page)).toBeLessThanOrEqual(0);
-  });
-
-  test('says plainly when nobody has been written down, and the owner sees what to add', async ({
-    page,
-  }) => {
-    await page.goto('/demo/emergency?empty=1&owner=1');
-    await expect(page.getByText('No one has been written down yet.')).toBeVisible();
-    await expect(page.getByText(/Still missing: no one to call first/)).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: 'Settings > Emergency and access' }),
-    ).toHaveAttribute('href', '/settings?tab=access');
-    await page.goto('/demo/emergency?empty=1');
-    await expect(page.getByText(/Still missing/)).toHaveCount(0);
-  });
-
-  test('prints as a clean page: controls and navigation are hidden', async ({ page }) => {
-    await page.goto('/demo/emergency?owner=1');
-    await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeVisible();
-    await page.emulateMedia({ media: 'print' });
-    await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeHidden();
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeHidden();
-    await expect(
-      page.getByRole('heading', { name: '2. Who to call, in this order' }),
-    ).toBeVisible();
-  });
-});
+// the family handbook's public sample has its own spec: handbook.spec.ts
 
 test.describe('More menu (public sample)', () => {
   test('groups everything that is not in the bottom bar and shows what is left to set up', async ({

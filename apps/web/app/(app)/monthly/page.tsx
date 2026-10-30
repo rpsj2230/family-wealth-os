@@ -22,7 +22,7 @@ import { quickModel } from '@/lib/quick-edit';
 import { loadJointHolders } from '@/lib/quick-edit-data';
 import { loadSheetSyncInfo } from '@/lib/sheet-sync-data';
 import { SheetSyncButton } from '@/components/SheetSync';
-import { loadSettings } from '@fwos/data';
+import { loadNominees, loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { MonthlyGrid } from './MonthlyGrid';
 import { loadOtherRows } from './other-data';
@@ -89,6 +89,7 @@ export default async function MonthlyPage({
     inst,
     fx,
     jointHolders,
+    nominees,
   ] = await Promise.all([
     loadPortfolio(supabase),
     supabase.from('institutions').select('id, name'),
@@ -98,6 +99,7 @@ export default async function MonthlyPage({
       .order('rate_date', { ascending: false })
       .limit(20),
     loadJointHolders(supabase as unknown as SupabaseClient),
+    loadNominees(supabase as unknown as SupabaseClient),
   ]);
   const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
@@ -136,6 +138,7 @@ export default async function MonthlyPage({
     ownerNames: Object.fromEntries(ownerName),
     institutions: (inst.data ?? []).map((i) => ({ id: i.id as string, name: i.name as string })),
     jointHolders,
+    nominees,
   });
 
   return (

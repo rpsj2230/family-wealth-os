@@ -10,6 +10,7 @@ import { loadContext } from '@/lib/data';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
+import { loadNominees } from '@fwos/data';
 import { loadJointHolders } from '@/lib/quick-edit-data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { slugify } from '@/lib/slug';
@@ -32,6 +33,7 @@ export default async function BankUpdatePage({
     inst,
     fx,
     jointHolders,
+    nominees,
   ] = await Promise.all([
     loadPortfolio(supabase),
     supabase.from('institutions').select('id, name'),
@@ -41,6 +43,7 @@ export default async function BankUpdatePage({
       .order('rate_date', { ascending: false })
       .limit(20),
     loadJointHolders(supabase as unknown as SupabaseClient),
+    loadNominees(supabase as unknown as SupabaseClient),
   ]);
   const iso = today.toISOString().slice(0, 10);
   const styles = personStyles([...ownerName.entries()].map(([id, name]) => ({ id, name })));
@@ -72,6 +75,7 @@ export default async function BankUpdatePage({
     ownerNames: Object.fromEntries(ownerName),
     institutions: (inst.data ?? []).map((i) => ({ id: i.id as string, name: i.name as string })),
     jointHolders,
+    nominees,
   });
   return (
     <QuickEditHost model={quick} styles={styles} today={iso} fxHint={fxHint}>

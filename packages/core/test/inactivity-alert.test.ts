@@ -573,8 +573,20 @@ describe('familyAlert', () => {
   it('marks the members copy and the test', () => {
     const c = familyAlert(input, { copyOf: 'Ragini' });
     expect(c.subject).toMatch(/^Copy: /);
-    expect(c.text).toMatch(/^A copy for the household: the message below went to Ragini today\./);
-    expect(familyAlert(input, { copyOf: 'Ragini', send: 2 }).text).toContain('today (reminder 1)');
+    expect(c.text).toMatch(
+      /^Copy for the household: sent to Ragini\. It is the same message without/,
+    );
+    const r = familyAlert(input, {
+      copyOf: 'Ragini',
+      send: 3,
+      reminders: 3,
+      confirmToken: 'tokXYZ',
+    });
+    expect(r.text).toMatch(/^Copy for the household: sent to Ragini \(reminder 2 of 3\)\./);
+    expect(r.subject).toBe("Copy: Reminder: Asha's family portal: how to open the family handbook");
+    // never the person's link, even if one is passed
+    expect(r.text + r.html + r.chat).not.toContain('/confirm/');
+    expect(familyAlert(input, { copyOf: 'Ragini', send: 2 }).text).toContain('(reminder 1)');
     const t = familyAlert(input, { test: true, confirmToken: 'test' });
     expect(t.subject).toMatch(/^\[TEST\] /);
     expect(t.text).toMatch(/^TEST: this is a test sent only to you/);

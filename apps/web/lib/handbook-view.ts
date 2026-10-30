@@ -175,3 +175,19 @@ export function readPrefs(raw: string | null): ReadingPrefs {
     return DEFAULT_PREFS;
   }
 }
+
+/** The same JSON whatever the order of keys (the database keeps object keys in its own order). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(norm)
+      : v && typeof v === 'object'
+        ? Object.fromEntries(
+            Object.keys(v as Record<string, unknown>)
+              .filter((k) => (v as Record<string, unknown>)[k] !== undefined)
+              .sort()
+              .map((k) => [k, norm((v as Record<string, unknown>)[k])]),
+          )
+        : v;
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}

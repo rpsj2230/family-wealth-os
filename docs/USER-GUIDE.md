@@ -343,9 +343,42 @@ The subject reads `Family Wealth Summary · 27 Oct 2026 · Net worth ₹4.82 Cr 
 
 **Preview today's e-mail** (Settings > Notifications, or `/settings/notifications/preview`) shows today's message built now from your own figures, on a phone and on a laptop, without sending anything. A sample with invented figures is at `/demo/digest`. To get a real test in your own inbox, see `docs/runbooks/daily-summary.md` ("digest test"). **Share** gives a short version for WhatsApp, with the same numbers as the Telegram message.
 
-## Family emergency guide
+## Family handbook
 
-**Emergency** lists, per institution, who holds the account, the nominee, what the family does first and where documents are. A print view is included. A separate read-only role for trusted people exists in the database and can never see balances.
+**Family handbook** (`/emergency`) is the page your family opens if something happens to you. It is written from your records and the
+emergency information in Settings, and reads top to bottom:
+
+1. **Start here**: your own message to the family, one large **Call … first** button (the first person under "Who to call"), and one
+   line on roughly what there is ("About ₹3.40 Cr in 8 banks, 20 funds and 3 insurance policies — details below").
+2. **Who to call**, in order, with a button that dials each number; then your advisers.
+3. **The first days, step by step**: a first week, first 30 days and first 90 days, each a short list of steps.
+4. **Where things are**: the will, documents, locker, passwords, devices, e-mail, the backup key.
+5. **Banks, funds and insurance**: one card per bank, fund house and insurer, with what is held there and roughly how much (by
+   person; account numbers show the last four digits only), **who the nominee is** ("Not recorded" when nobody wrote it down), the
+   **helpline** with a button that dials it, and **How to claim**: the papers to collect (death certificate, claim or transmission
+   form, nominee's ID and KYC, passbook or policy document…). General guidance; each place gives its own exact list.
+6. **Other things we own**: property, money held by others, money owed to you, SIPs and deposits that keep moving by themselves.
+7. **Who is who**, and **For the children**: a gentle part with who looks after them and that it is okay to feel sad.
+
+**Ticks.** Every step and every paper on a card can be ticked ("Bank informed", "Death certificate collected"). Ticks are shared:
+everyone who can open the handbook (members, and the read-only family login once it is open) sees them, with "2 of 7 done" per group
+and who ticked each one and when. On the public sample (`/demo/emergency`) ticks stay in that browser only.
+
+**Reading options** (remembered on each phone or computer): **English / हिन्दी**, **Simple words** (shorter, plainer steps) and
+**Larger text**. Names, numbers, bank names and your own message are never translated. **Print or save as PDF** gives a clean copy
+with ☐ boxes to tick by hand.
+
+**What is still missing** (only members see it): a bar "Handbook 70% complete" and a list such as "3 accounts and deposits have no
+nominee recorded", "1 bank has no helpline", "Where is the will? Not written down yet", each with **Fill in** to the right place:
+
+- the **Nominee** of an account or deposit: press **Edit** on its line (Accounts, Monthly update or its own page); of a fund: **Edit**
+  on the fund (Investments); of a policy: Lent, policies, property → Policies → *Update dates, nominee and documents*;
+- a bank's **Helpline**: Accounts → the bank → *Add a note* / *Edit note*;
+- contacts, the will and the other places: Settings → Emergency and access.
+
+Every change is in the activity log like other edits. A member opening the page always sees it rewritten from today's records; the
+copy the family login reads is saved then, every day by the worker, and with **Update now**. It describes and never moves money; it is
+general guidance, not legal or tax advice.
 
 ## Backups
 

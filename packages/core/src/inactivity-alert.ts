@@ -450,7 +450,8 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
   const what =
     `${Owner} kept the family's money records (bank accounts, deposits, investments, insurance) in a private portal, ` +
     'and wrote a family handbook there that tells you what to do, step by step.';
-  const confirm = o.confirmToken ? confirmUrl(i.appUrl, o.confirmToken) : '';
+  // a copy for the members never carries the person's link: a member's press must not count as theirs
+  const confirm = o.confirmToken && !o.copyOf ? confirmUrl(i.appUrl, o.confirmToken) : '';
   const ask = confirm
     ? `Please let the portal know you have received this: ${confirm} (press "I have received this" on that page). Until someone does, it reminds you and then tells the next person ${owner} chose.`
     : '';
@@ -475,7 +476,7 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
   const head = o.test
     ? 'TEST: this is a test sent only to you. Nobody else received it. Below is exactly what the first person on your list will receive.'
     : o.copyOf
-      ? `A copy for the household: the message below went to ${o.copyOf} today${reminder ? ` (reminder ${send - 1})` : ''}. Signing in stops any more messages.`
+      ? `Copy for the household: sent to ${o.copyOf}${reminder ? ` (reminder ${send - 1}${o.reminders ? ` of ${o.reminders}` : ''})` : ''}. It is the same message without the "I have received this" link, which only ${o.copyOf} can press. Signing in stops any more messages.`
       : '';
   const steps = [
     `1. Open the portal: ${url}`,
