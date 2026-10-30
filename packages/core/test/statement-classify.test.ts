@@ -260,3 +260,46 @@ describe('wording of deposits paid back, and a fund in another person’s name',
     expect(cs[2]).toMatchObject({ cls: 'fund_buy', counterpart: 'kidfund' });
   });
 });
+
+describe('several transfers of one sum on one day', () => {
+  // five accounts at four banks; three ₹5 L transfers on the same day. Read in date order alone, the first debit would take the
+  // first credit; the IFSC codes in the narrations say which credit is whose.
+  const banks: ClassifyContext = {
+    ...ctx,
+    accounts: [
+      { assetId: 'esaf', ownerId: 'r', last4: '9969', bank: 'ESAF Small Finance Bank' },
+      { assetId: 'yes', ownerId: 'r', last4: '0037', bank: 'Yes Bank' },
+      { assetId: 'rbl', ownerId: 'r', last4: null, bank: 'RBL Bank' },
+      { assetId: 'eq', ownerId: 'r', last4: '3294', bank: 'Equitas Small Finance Bank' },
+    ],
+    deposits: [],
+    fundTxns: [],
+  };
+  const d = '2025-05-11';
+  const ls = [
+    line('rbl', d, -500_000, 'NEFT/N1/RUPASH PRATAP SINGH JADON/YESB…0474'),
+    line('eq', d, -500_000, 'RTGS DR-RATN0000152-SAMPLE'),
+    line('yes', d, 500_000, 'RTGS CR-ESMF0001336-RUPASH PRATAP SINGH JADON'),
+    line('yes', d, 500_000, 'NEFT CR-RATN0000152-RUPASH PRATAP SINGH JADON'),
+    line('esaf', d, -500_000, 'RTGS/ESMFR1/YESB0000474/RUPASH PRATAP SINGH JADON'),
+    line('rbl', d, 500_000, 'RTGS/…/ESFB…/SAMPLE'),
+  ];
+  const cs = classifyLines(ls, banks);
+  const of = (id: string) => cs.find((c) => c.id === id)!;
+  it('pairs each debit with the credit whose bank codes agree', () => {
+    // ESAF → Yes (the Yes credit names ESMF), RBL → Yes (the Yes credit names RATN), Equitas → RBL (each names the other)
+    expect([of(ls[4]!.id).counterpart, of(ls[2]!.id).counterpart]).toEqual(['yes', 'esaf']);
+    expect([of(ls[0]!.id).counterpart, of(ls[3]!.id).counterpart]).toEqual(['yes', 'rbl']);
+    expect([of(ls[1]!.id).counterpart, of(ls[5]!.id).counterpart]).toEqual(['rbl', 'eq']);
+  });
+  it('never pairs lines whose codes name another bank', () => {
+    const only = classifyLines(
+      [
+        line('esaf', d, -500_000, 'RTGS/ESMFR1/YESB0000474/SAMPLE'),
+        line('rbl', d, 500_000, 'RTGS CR-HDFC0000001-SAMPLE'),
+      ],
+      banks,
+    );
+    expect(only.map((c) => c.cls)).toEqual(['ask_out', 'ask_in']);
+  });
+});

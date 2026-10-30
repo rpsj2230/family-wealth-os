@@ -287,25 +287,49 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     }
   }
 
-  // 5. transfers between your own accounts: the closest line of the opposite sign and the same sum in another account
+  // 5. transfers between your own accounts: the closest line of the opposite sign and the same sum in another account. On a day
+  // with several transfers of one sum (five of ₹5 L between six banks), the bank codes the narrations print decide: "RTGS Cr-ESMF…"
+  // came from ESAF, "RTGS/…/YESB…" went to Yes Bank. Pairs whose codes agree are made first; a pair whose codes name another
+  // bank is never made.
   const credits = new Map<number, StmtLine[]>();
   for (const m of sorted)
     if (m.amount > 0) {
       const k = Math.round(m.amount * 100);
       credits.set(k, [...(credits.get(k) ?? []), m]);
     }
-  for (const l of sorted) {
-    if (!open(l) || l.amount >= 0) continue;
-    let best: StmtLine | null = null;
-    for (const m of credits.get(Math.round(-l.amount * 100)) ?? []) {
-      if (!open(m) || m.assetId === l.assetId || daysApart(m.date, l.date) > ctx.pairDays) continue;
-      if (!best || daysApart(m.date, l.date) < daysApart(best.date, l.date)) best = m;
+  const bankAt = new Map(ctx.accounts.map((a) => [a.assetId, bankWord(a.bank ?? '')]));
+  // the other banks a narration names by IFSC code (its own bank's code left out)
+  const named = (l: StmtLine) => {
+    const own = bankAt.get(l.assetId) ?? '';
+    return [...l.narration.toUpperCase().matchAll(/\b([A-Z]{4})(?:0|…)/g)]
+      .map((m) => IFSC_BANK[m[1]!])
+      .filter((b): b is string => !!b && !(own && own.startsWith(b)));
+  };
+  const names = (l: StmtLine, other: StmtLine) => {
+    const bank = bankAt.get(other.assetId) ?? '';
+    return !!bank && named(l).some((b) => bank.startsWith(b));
+  };
+  const clashes = (l: StmtLine, other: StmtLine) => {
+    const bank = bankAt.get(other.assetId) ?? '';
+    const n = named(l);
+    return !!bank && n.length > 0 && !n.some((b) => bank.startsWith(b));
+  };
+  for (const hinted of [true, false])
+    for (const l of sorted) {
+      if (!open(l) || l.amount >= 0) continue;
+      let best: StmtLine | null = null;
+      for (const m of credits.get(Math.round(-l.amount * 100)) ?? []) {
+        if (!open(m) || m.assetId === l.assetId || daysApart(m.date, l.date) > ctx.pairDays)
+          continue;
+        if (clashes(l, m) || clashes(m, l)) continue;
+        if (hinted && !names(l, m) && !names(m, l)) continue;
+        if (!best || daysApart(m.date, l.date) < daysApart(best.date, l.date)) best = m;
+      }
+      if (best) {
+        set(l, 'own_transfer', 'The same sum arrived in another of your accounts', best.assetId);
+        set(best, 'own_transfer', 'The same sum left another of your accounts', l.assetId);
+      }
     }
-    if (best) {
-      set(l, 'own_transfer', 'The same sum arrived in another of your accounts', best.assetId);
-      set(best, 'own_transfer', 'The same sum left another of your accounts', l.assetId);
-    }
-  }
 
   // 6. deposits booked from the account, and paid back into it
   const usedFd = new Set<string>();
