@@ -7,6 +7,7 @@
  * numbers' last four digits and ratios, never an amount.
  */
 import {
+  depositNumbers,
   depositsFromStatements,
   matchDepositRecords,
   type DepositLine,
@@ -74,6 +75,16 @@ async function main() {
   console.log(
     `Deposit lines no deposit on file explains: ${bookings.length} bookings, ${paybacks.length} pay-backs. Deposits found: ${found.length}`,
   );
+  // the lines left unpaired, with the deposit numbers they print: why a booking and its pay-back did not find each other
+  if (process.env.SHOW_UNPAIRED === 'true') {
+    const pairedIds = new Set(found.flatMap((d) => [d.bookingLineId, ...d.paybackLineIds]));
+    for (const l of [...bookings, ...paybacks]
+      .filter((x) => !pairedIds.has(x.id))
+      .sort((a, b) => a.assetId.localeCompare(b.assetId) || a.date.localeCompare(b.date)))
+      console.log(
+        `  ${l.amount < 0 ? 'booked' : 'paid back'} ${l.date} ${name(l.assetId)} numbers [${depositNumbers(l.narration, last4.get(l.assetId) ?? null).join(' ')}] "${l.narration.toLowerCase().replace(/\d/g, '#').slice(0, 60)}"`,
+      );
+  }
 
   // the deposits on file they may already be (merged records are not loaded)
   const fdRow = new Map(loaded.fdRows.map((f) => [f.asset_id, f]));

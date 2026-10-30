@@ -11,6 +11,11 @@ on:
         default: plan
         type: choice
         options: [plan, apply]
+      show_unpaired:
+        description: list the deposit lines left unpaired, with the numbers they print
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -24,6 +29,7 @@ jobs:
       SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       MODE: ${{ inputs.mode }}
+      SHOW_UNPAIRED: ${{ inputs.show_unpaired }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
