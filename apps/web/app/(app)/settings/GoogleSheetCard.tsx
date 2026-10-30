@@ -48,7 +48,7 @@ export function GoogleSheetCard({
         the Monthly update page.
       </p>
 
-      <dl className="gs-facts">
+      <dl className="gsheet-facts">
         <dt>Spreadsheet</dt>
         <dd>
           {info.sheetUrl ? (
@@ -112,7 +112,7 @@ export function GoogleSheetCard({
         )}
       </div>
 
-      <details className="gs-steps" open={!info.connected}>
+      <details className="gsheet-steps" open={!info.connected}>
         <summary>
           <strong>How to connect (about ten minutes, free)</strong>
         </summary>
@@ -181,7 +181,7 @@ export function GoogleSheetCard({
               <textarea
                 ref={keyBox}
                 name="key"
-                className="gs-key"
+                className="gsheet-key"
                 autoComplete="off"
                 spellCheck={false}
                 placeholder={info.keySet ? '••••••••' : '{ "type": "service_account", … }'}

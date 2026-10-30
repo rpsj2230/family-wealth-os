@@ -106,35 +106,36 @@
 }
 
 /* the Settings card */
-.gs-status {
+.gsheet-status {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
   margin: 0 0 10px;
 }
-.gs-facts {
+.gsheet-facts {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 2px 12px;
   margin: 0 0 12px;
   font-size: 0.9rem;
 }
-.gs-facts dt {
+.gsheet-facts dt {
   color: var(--muted);
 }
-.gs-facts dd {
+.gsheet-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.gs-key {
+.gsheet-key {
   width: 100%;
   min-height: 5.5em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
-  /* the key is never shown back, and while it is typed or pasted it is not shown plainly either */
+  /* the key is never shown back, and while it is typed or pasted it is not shown plainly either. The Google Sheet card's classes
+     start "gsheet-": "gs-" belongs to the growth strip, and a shared name masked its "% a year" note on every page */
   -webkit-text-security: disc;
 }
-.gs-steps {
+.gsheet-steps {
   margin: 10px 0 14px;
 }
 @media (max-width: 520px) {
