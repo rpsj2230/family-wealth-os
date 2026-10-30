@@ -14,6 +14,8 @@ import {
   normalisePhone,
   peopleList,
   runDateAfter,
+  runDaysBetween,
+  alertSchedulePreview,
   unreachable,
   whatsAppNotActivated,
   type ChainEntry,
@@ -30,6 +32,7 @@ const run = (d: number, minutes = 0) =>
 const state = (o: Partial<InactivityState> = {}): InactivityState => ({
   lastMemberSeen: SEEN,
   warnDays: 20,
+  warnEveryDays: 1,
   alertDays: 30,
   reminders: 3,
   remindEveryDays: 2,
@@ -101,11 +104,29 @@ describe('inactivityStep', () => {
     expect(inactivityStep(state({ now: run(20, -15) }), [])).toMatchObject({ why: 'active' });
   });
 
-  it('warns the members once after warnDays', () => {
+  it('warns the members from warnDays, again every warnEveryDays, until the first person is told', () => {
     expect(inactivityStep(state({ now: run(20) }), [])).toEqual({ kind: 'warn' });
-    expect(inactivityStep(state({ now: run(22), warnedAt: run(20) }), [])).toMatchObject({
-      why: 'active',
+    expect(inactivityStep(state({ now: run(20, 60), warnedAt: run(20) }), [])).toEqual({
+      kind: 'none',
+      why: 'waiting',
     });
+    expect(inactivityStep(state({ now: run(21, -4), warnedAt: run(20) }), [])).toEqual({
+      kind: 'warn',
+    });
+    expect(
+      inactivityStep(state({ warnEveryDays: 3, now: run(22), warnedAt: run(20) }), []),
+    ).toMatchObject({ why: 'waiting' });
+    expect(
+      inactivityStep(state({ warnEveryDays: 3, now: run(23), warnedAt: run(20) }), []),
+    ).toEqual({ kind: 'warn' });
+    // a warning from an earlier absence does not count
+    expect(inactivityStep(state({ now: run(20), warnedAt: '2026-09-01T00:00:00Z' }), [])).toEqual({
+      kind: 'warn',
+    });
+    // once the chain has begun, no more warnings
+    expect(
+      inactivityStep(state({ now: run(31), warnedAt: run(29) }), [entry(0, 1, run(30))]),
+    ).toMatchObject({ why: 'waiting' });
   });
 
   it('never warns when the warning would not come before the first person is told', () => {
@@ -220,7 +241,7 @@ describe('inactivityStep', () => {
   it('day by day: one step per run, never two messages to anyone on one run, nobody skipped', () => {
     const { steps, s } = simulate(70);
     expect(steps).toEqual([
-      '20:warn',
+      ...[20, 21, 22, 23, 24, 25, 26, 27, 28, 29].map((d) => `${d}:warn`),
       '30:tell:0/1',
       '32:tell:0/2',
       '34:tell:0/3',
@@ -292,6 +313,9 @@ describe('dates, counts and names', () => {
     expect(peopleList(['Ragini', 'Ravi'])).toBe('Ragini and Ravi');
     expect(peopleList(['Ragini', '', 'Ravi', 'Meera'])).toBe('Ragini, Ravi and Meera');
   });
+  it('counts days between run dates', () => {
+    expect(runDaysBetween('2026-10-27', '2026-11-01')).toBe(5);
+  });
   it('works out the days from one person to the next', () => {
     expect(escalationDays(3, 2)).toBe(8);
     expect(escalationDays(0, 1)).toBe(1);
@@ -299,22 +323,59 @@ describe('dates, counts and names', () => {
 });
 
 describe('alertSettingsProblem', () => {
-  const ok = { warnDays: 20, reminders: 3, remindEveryDays: 2 };
+  const ok = { warnDays: 20, alertDays: 30, warnEveryDays: 1, reminders: 3, remindEveryDays: 2 };
   it('accepts sensible numbers', () => {
-    expect(alertSettingsProblem(ok, 30)).toBeNull();
-    expect(alertSettingsProblem({ warnDays: 3, reminders: 0, remindEveryDays: 14 }, 30)).toBeNull();
+    expect(alertSettingsProblem(ok)).toBeNull();
+    expect(
+      alertSettingsProblem({
+        warnDays: 3,
+        alertDays: 7,
+        warnEveryDays: 14,
+        reminders: 0,
+        remindEveryDays: 14,
+      }),
+    ).toBeNull();
   });
-  it('refuses a warning outside 3 to 365, fractional, or not before the first message', () => {
-    expect(alertSettingsProblem({ ...ok, warnDays: null }, 30)).toMatch(/3 to 365/);
-    expect(alertSettingsProblem({ ...ok, warnDays: 2 }, 30)).toMatch(/3 to 365/);
-    expect(alertSettingsProblem({ ...ok, warnDays: 4.5 }, 30)).toMatch(/whole number/);
-    expect(alertSettingsProblem({ ...ok, warnDays: 30 }, 30)).toMatch(/fewer than the 30 days/);
+  it('refuses an alert day outside 7 to 365', () => {
+    expect(alertSettingsProblem({ ...ok, alertDays: 6 })).toMatch(/7 to 365/);
+    expect(alertSettingsProblem({ ...ok, alertDays: null })).toMatch(/7 to 365/);
+  });
+  it('refuses a warning outside 3 to 365, fractional, or not before the alert day', () => {
+    expect(alertSettingsProblem({ ...ok, warnDays: null })).toMatch(/3 to 365/);
+    expect(alertSettingsProblem({ ...ok, warnDays: 2 })).toMatch(/3 to 365/);
+    expect(alertSettingsProblem({ ...ok, warnDays: 4.5 })).toMatch(/whole number/);
+    expect(alertSettingsProblem({ ...ok, warnDays: 30 })).toMatch(/before day 30/);
+  });
+  it('refuses a warning interval outside 1 to 14', () => {
+    expect(alertSettingsProblem({ ...ok, warnEveryDays: 0 })).toMatch(/Warn me every/);
+    expect(alertSettingsProblem({ ...ok, warnEveryDays: 15 })).toMatch(/Warn me every/);
   });
   it('refuses reminders outside 0 to 10 and intervals outside 1 to 14', () => {
-    expect(alertSettingsProblem({ ...ok, reminders: 11 }, 30)).toMatch(/Reminders/);
-    expect(alertSettingsProblem({ ...ok, reminders: null }, 30)).toMatch(/Reminders/);
-    expect(alertSettingsProblem({ ...ok, remindEveryDays: 0 }, 30)).toMatch(/between reminders/);
-    expect(alertSettingsProblem({ ...ok, remindEveryDays: 15 }, 30)).toMatch(/between reminders/);
+    expect(alertSettingsProblem({ ...ok, reminders: 11 })).toMatch(/Reminders/);
+    expect(alertSettingsProblem({ ...ok, reminders: null })).toMatch(/Reminders/);
+    expect(alertSettingsProblem({ ...ok, remindEveryDays: 0 })).toMatch(/between reminders/);
+    expect(alertSettingsProblem({ ...ok, remindEveryDays: 15 })).toMatch(/between reminders/);
+  });
+});
+
+describe('alertSchedulePreview', () => {
+  const v = { warnDays: 20, alertDays: 30, warnEveryDays: 1, reminders: 3, remindEveryDays: 2 };
+  it('says in one line who is told when', () => {
+    expect(alertSchedulePreview(v, ['Ragini', 'Amit', 'Meera'])).toBe(
+      'With these: you are reminded daily from day 20; Ragini is told after 30 days; Amit after 38 days if Ragini has not confirmed; Meera after 46 days if nobody has confirmed. Each person is reminded 3 times, 2 days apart.',
+    );
+  });
+  it('covers other intervals, one reminder, none, and an empty list', () => {
+    expect(
+      alertSchedulePreview({ ...v, warnEveryDays: 3, reminders: 1, remindEveryDays: 1 }, [
+        'Ragini',
+      ]),
+    ).toBe(
+      'With these: you are reminded every 3 days from day 20; Ragini is told after 30 days. Each person is reminded once, a day apart.',
+    );
+    expect(alertSchedulePreview({ ...v, reminders: 0 }, [])).toBe(
+      'With these: you are reminded daily from day 20; the first person on your list is told after 30 days. Nobody is reminded: each person gets one message.',
+    );
   });
 });
 
@@ -372,7 +433,8 @@ describe('alert contacts', () => {
 
 describe('inactivityWarning', () => {
   const input = {
-    daysAbsent: 21,
+    daysAbsent: 26,
+    daysLeft: 4,
     alertDate: '2026-11-01',
     contactNames: ['Ragini', 'Ravi'],
     reminders: 3,
@@ -382,9 +444,11 @@ describe('inactivityWarning', () => {
   };
   it('asks, says when the first person is told, and carries the postpone link', () => {
     const w = inactivityWarning(input);
-    expect(w.subject).toBe('Are you all right? Sign in to the family portal to postpone');
+    expect(w.subject).toBe(
+      'Are you all right? Sign in to the family portal to postpone (4 days left)',
+    );
     expect(w.text).toContain(
-      'Are you all right?\n\nNobody has used the family portal for 21 days. Sign in to postpone — otherwise on 1 Nov 2026 Ragini will be told how to open the family handbook.',
+      'Are you all right?\n\nNobody has used the family portal for 26 days. Sign in to postpone — otherwise in 4 days, on 1 Nov 2026, Ragini will be told how to open the family handbook.',
     );
     expect(w.text).toContain("I'm fine — postpone: https://portal.example.com/postpone/tok_abc");
     expect(w.text).toContain('Or sign in: https://portal.example.com/login');
@@ -392,6 +456,14 @@ describe('inactivityWarning', () => {
       'If Ragini does not confirm receiving it, Ragini is reminded 3 times, 2 days apart, and 8 days after the first message Ravi is told the same way',
     );
     expect(w.html).toContain('href="https://portal.example.com/postpone/tok_abc"');
+  });
+  it('counts down to the last day', () => {
+    expect(inactivityWarning({ ...input, daysLeft: 1 }).text).toContain(
+      'otherwise tomorrow, on 1 Nov 2026,',
+    );
+    expect(inactivityWarning({ ...input, daysLeft: 1 }).subject).toMatch(/\(1 day left\)$/);
+    expect(inactivityWarning({ ...input, daysLeft: 0 }).text).toContain('otherwise today, on');
+    expect(inactivityWarning({ ...input, daysLeft: 0 }).subject).toMatch(/\(today\)$/);
   });
   it('covers one reminder a day, no reminders, one person, no names, and escapes HTML', () => {
     expect(inactivityWarning({ ...input, reminders: 1, remindEveryDays: 1 }).text).toContain(

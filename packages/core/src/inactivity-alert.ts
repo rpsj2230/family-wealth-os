@@ -1,6 +1,7 @@
 /**
  * The inactivity alert (docs/USER-GUIDE.md, "If you stop using the portal"). When nobody from the household has used the portal for
- * `warnDays`, the members get one e-mail: "Are you all right? Sign in to postpone", with an "I'm fine — postpone" link. At
+ * `warnDays`, the members get an e-mail every `warnEveryDays` until the first trusted person is told: "Are you all right? Sign in to
+ * postpone", with an "I'm fine — postpone" link and how many days are left. At
  * `alertDays` (the same number of days after which the read-only family login may open the handbook) the people the owner chose are
  * told, one at a time in the owner's order: the first person gets a message with an "I have received this" link; without a
  * confirmation they are reminded `reminders` times, `remindEveryDays` apart, and then the next person is told the same way. The chain
@@ -24,6 +25,11 @@ export const DEFAULT_REMINDERS = 3;
 export const REMIND_EVERY_MIN = 1;
 export const REMIND_EVERY_MAX = 14;
 export const DEFAULT_REMIND_EVERY = 2;
+export const WARN_EVERY_MIN = 1;
+export const WARN_EVERY_MAX = 14;
+export const DEFAULT_WARN_EVERY = 1;
+export const ALERT_DAYS_MIN = 7;
+export const ALERT_DAYS_MAX = 365;
 
 const DAY = 86_400_000;
 /** The daily job starts at 00:30 UTC (.github/workflows/digest.yml), 08:30 in Singapore. */
@@ -127,10 +133,13 @@ export interface InactivityState {
   /** when a member last used the portal (ISO timestamp) */
   lastMemberSeen: string;
   warnDays: number;
+  /** days between the owner's warnings (1 = every day) */
+  warnEveryDays: number;
   /** emergency_access.inactive_days: the first person is told then, the day the handbook opens to the family login */
   alertDays: number;
   reminders: number;
   remindEveryDays: number;
+  /** the last warning to the members in this absence */
   warnedAt: string | null;
   /** when this absence's chain was closed (a confirmation noted, or the list used up); null while it runs */
   alertedAt: string | null;
@@ -183,12 +192,14 @@ export function inactivityStep(s: InactivityState, log: readonly ChainEntry[]): 
   if (chain.length === 0) {
     // more than alertDays: exactly when the handbook opens to the family login in "inactive" mode (emergency_open)
     if (gone > s.alertDays * DAY) return { kind: 'tell', pos: 0, send: 1 };
-    if (
-      s.warnDays < s.alertDays &&
-      gone > s.warnDays * DAY &&
-      !current(s.warnedAt, s.lastMemberSeen)
-    )
-      return { kind: 'warn' };
+    // from warnDays on, a warning every warnEveryDays until the chain begins
+    if (s.warnDays < s.alertDays && gone > s.warnDays * DAY) {
+      if (!current(s.warnedAt, s.lastMemberSeen)) return { kind: 'warn' };
+      const every = Math.max(1, s.warnEveryDays) * DAY - GRACE;
+      return now - Date.parse(s.warnedAt!) >= every
+        ? { kind: 'warn' }
+        : { kind: 'none', why: 'waiting' };
+    }
     return { kind: 'none', why: 'active' };
   }
   const last = chain[chain.length - 1]!;
@@ -200,6 +211,10 @@ export function inactivityStep(s: InactivityState, log: readonly ChainEntry[]): 
   if (last.pos + 1 < s.contacts) return { kind: 'tell', pos: last.pos + 1, send: 1 };
   return { kind: 'exhausted' };
 }
+
+/** Whole days from one run date (YYYY-MM-DD) to another. */
+export const runDaysBetween = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY);
 
 /** The date (YYYY-MM-DD, UTC, the same day in Singapore) of the first daily run after `days` full days from `from`. */
 export function runDateAfter(from: string, days: number): string {
@@ -224,20 +239,65 @@ export const escalationDays = (reminders: number, remindEveryDays: number): numb
 const whole = (n: number | null, lo: number, hi: number) =>
   n !== null && Number.isInteger(n) && n >= lo && n <= hi;
 
+export interface AlertSettings {
+  warnDays: number | null;
+  alertDays: number | null;
+  warnEveryDays: number | null;
+  reminders: number | null;
+  remindEveryDays: number | null;
+}
+
 /** Settings > Access: the numbers of the alert, as a message, or null when they are fine. */
-export function alertSettingsProblem(
-  v: { warnDays: number | null; reminders: number | null; remindEveryDays: number | null },
-  alertDays: number,
-): string | null {
+export function alertSettingsProblem(v: AlertSettings): string | null {
+  if (!whole(v.alertDays, ALERT_DAYS_MIN, ALERT_DAYS_MAX))
+    return `Tell the first person after: a whole number of days from ${ALERT_DAYS_MIN} to ${ALERT_DAYS_MAX}.`;
   if (!whole(v.warnDays, WARN_DAYS_MIN, WARN_DAYS_MAX))
-    return `Warn me after: a whole number of days from ${WARN_DAYS_MIN} to ${WARN_DAYS_MAX}.`;
-  if (v.warnDays! >= alertDays)
-    return `Warn me after: it must be fewer than the ${alertDays} days after which the first person is told.`;
+    return `Warn me from day: a whole number from ${WARN_DAYS_MIN} to ${WARN_DAYS_MAX}.`;
+  if (v.warnDays! >= v.alertDays!)
+    return `Warn me from day: it must be before day ${v.alertDays}, when the first person is told.`;
+  if (!whole(v.warnEveryDays, WARN_EVERY_MIN, WARN_EVERY_MAX))
+    return `Warn me every: a whole number of days from ${WARN_EVERY_MIN} to ${WARN_EVERY_MAX}.`;
   if (!whole(v.reminders, 0, REMINDERS_MAX))
     return `Reminders: a whole number from 0 to ${REMINDERS_MAX}.`;
   if (!whole(v.remindEveryDays, REMIND_EVERY_MIN, REMIND_EVERY_MAX))
     return `Days between reminders: a whole number from ${REMIND_EVERY_MIN} to ${REMIND_EVERY_MAX}.`;
   return null;
+}
+
+const everyDays = (n: number) => (n <= 1 ? 'daily' : `every ${n} days`);
+
+/**
+ * The one-line preview under the numbers: "With these: you are reminded daily from day 20; Ragini is told after 30 days; Amit after
+ * 38 days if Ragini has not confirmed; Meera after 46 days if nobody has."
+ */
+export function alertSchedulePreview(
+  v: {
+    warnDays: number;
+    alertDays: number;
+    warnEveryDays: number;
+    reminders: number;
+    remindEveryDays: number;
+  },
+  names: readonly string[],
+): string {
+  const gap = escalationDays(v.reminders, v.remindEveryDays);
+  const who = names.filter(Boolean);
+  const first = who[0] ?? 'the first person on your list';
+  const parts = [
+    `you are reminded ${everyDays(v.warnEveryDays)} from day ${v.warnDays}`,
+    `${first} is told after ${v.alertDays} days`,
+    ...who
+      .slice(1)
+      .map(
+        (n, i) =>
+          `${n} after ${v.alertDays + (i + 1) * gap} days if ${i === 0 ? `${first} has not` : 'nobody has'} confirmed`,
+      ),
+  ];
+  const reminded =
+    v.reminders > 0
+      ? ` Each person is reminded ${v.reminders === 1 ? 'once' : `${v.reminders} times`}, ${v.remindEveryDays === 1 ? 'a day' : `${v.remindEveryDays} days`} apart.`
+      : ' Nobody is reminded: each person gets one message.';
+  return `With these: ${parts.join('; ')}.${reminded}`;
 }
 
 export interface InactivityMail {
@@ -267,6 +327,8 @@ const button = (u: string, label: string) =>
 
 export interface WarningInput {
   daysAbsent: number;
+  /** whole days until the first person is told (from today's run to the alert's run) */
+  daysLeft: number;
   /** YYYY-MM-DD: when the first person is told */
   alertDate: string;
   /** the people in order; the first is told first */
@@ -278,13 +340,14 @@ export interface WarningInput {
   postponeToken: string;
 }
 
-/** The e-mail to the members after `warnDays`. */
+/** The e-mail to the members from `warnDays`, every `warnEveryDays`, until the first person is told. */
 export function inactivityWarning(i: WarningInput): InactivityMail {
   const first = i.contactNames[0] || 'the first person on your list';
   const lead = 'Are you all right?';
   const body =
-    `Nobody has used the family portal for ${i.daysAbsent} days. Sign in to postpone — otherwise on ` +
-    `${niceDate(i.alertDate)} ${first} will be told how to open the family handbook.`;
+    `Nobody has used the family portal for ${i.daysAbsent} days. Sign in to postpone — otherwise ` +
+    `${i.daysLeft <= 0 ? 'today' : i.daysLeft === 1 ? 'tomorrow' : `in ${i.daysLeft} days`}, on ${niceDate(i.alertDate)}, ` +
+    `${first} will be told how to open the family handbook.`;
   const gap = escalationDays(i.reminders, i.remindEveryDays);
   const reminded =
     i.reminders > 0
@@ -301,7 +364,7 @@ export function inactivityWarning(i: WarningInput): InactivityMail {
   const foot =
     'You receive this because you are a member of the household. The days and the people are in Settings > Emergency and access.';
   return {
-    subject: 'Are you all right? Sign in to the family portal to postpone',
+    subject: `Are you all right? Sign in to the family portal to postpone (${i.daysLeft <= 1 ? (i.daysLeft <= 0 ? 'today' : '1 day left') : `${i.daysLeft} days left`})`,
     text: [
       lead,
       '',

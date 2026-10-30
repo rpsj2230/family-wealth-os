@@ -95,7 +95,15 @@ function Tick({
   );
 }
 
-function Count({ keys, ticks, say }: { keys: string[]; ticks: Record<string, TickState>; say: Say }) {
+function Count({
+  keys,
+  ticks,
+  say,
+}: {
+  keys: string[];
+  ticks: Record<string, TickState>;
+  say: Say;
+}) {
   const done = keys.filter((k) => ticks[k]).length;
   return (
     <span className={`hb-count${done === keys.length && keys.length > 0 ? ' all' : ''}`}>
@@ -186,8 +194,7 @@ function Card({
             {h.detail && <div className="hb-detail">{say(h.detail)}</div>}
             {h.note && <div className="hb-detail">{h.note}</div>}
             <div className={`hb-nominee${h.nominee ? '' : ' missing'}`}>
-              <span>{say('card.nominee')}:</span>{' '}
-              {h.nominee ?? <em>{say('card.notRecorded')}</em>}
+              <span>{say('card.nominee')}:</span> {h.nominee ?? <em>{say('card.notRecorded')}</em>}
             </div>
           </li>
         ))}
@@ -205,9 +212,7 @@ function Card({
             <span>{card.helpline}</span>
           )
         ) : (
-          <span className="hb-muted">
-            {say(`card.helplineMissing.${card.kind}` as HbKey)}
-          </span>
+          <span className="hb-muted">{say(`card.helplineMissing.${card.kind}` as HbKey)}</span>
         )}
       </div>
       <p className="hb-cardnote">{say(CARD_NOTE[card.kind])}</p>
@@ -694,9 +699,7 @@ export function HandbookGuide({
             </li>
           ))}
         </ul>
-        {guide.people.some((x) => x.isMinor) && (
-          <p className="hb-cardnote">{say('note.minors')}</p>
-        )}
+        {guide.people.some((x) => x.isMinor) && <p className="hb-cardnote">{say('note.minors')}</p>}
       </section>
 
       <section className="card hb-sec2 hb-kids" id="children" aria-labelledby="hb-kids-h">
@@ -743,7 +746,11 @@ export function HandbookGuide({
                   {c.relation && <span className="hb-rel">{c.relation}</span>}
                 </span>
                 {c.tel && (
-                  <a className="hb-dial" href={c.tel} aria-label={say(hbT('ui.dial', { name: c.name }))}>
+                  <a
+                    className="hb-dial"
+                    href={c.tel}
+                    aria-label={say(hbT('ui.dial', { name: c.name }))}
+                  >
                     <Phone aria-hidden size={16} />
                     {c.phone}
                   </a>
@@ -758,4 +765,3 @@ export function HandbookGuide({
     </div>
   );
 }
-

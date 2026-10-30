@@ -1,0 +1,726 @@
+/* The family handbook as a guide: calm, warm, large tap targets. Light and dark follow the app's tokens; the start card is the dark
+   headline panel (headline.css). Works at 390px without sideways scroll and prints as a clean document (ticks as ☐ / ☑). */
+
+.hb2 {
+  --hb-warm: #b45309;
+  --hb-calm: #0f766e;
+  --hb-calm-soft: #e6f4f1;
+  --hb-kid-sun: #f2c14e;
+  --hb-kid-roof: #c2410c;
+  --hb-kid-wall: #fdf3e7;
+  --hb-kid-heart: #e0567a;
+  --hb-kid-ground: #94a3b8;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .hb2 {
+    --hb-warm: #fbbf77;
+    --hb-calm: #5eead4;
+    --hb-calm-soft: #10302c;
+    --hb-kid-wall: #2a2238;
+    --hb-kid-roof: #f59e6b;
+    --hb-kid-ground: #64748b;
+  }
+}
+:root[data-theme='dark'] .hb2 {
+  --hb-warm: #fbbf77;
+  --hb-calm: #5eead4;
+  --hb-calm-soft: #10302c;
+  --hb-kid-wall: #2a2238;
+  --hb-kid-roof: #f59e6b;
+  --hb-kid-ground: #64748b;
+}
+
+.hb2 .hb-muted {
+  color: var(--muted);
+}
+.hb2 .num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* larger text: everything inside the handbook grows together */
+.hb2.hb-large {
+  font-size: 1.18rem;
+}
+.hb2.hb-large .hb-ticks label,
+.hb2.hb-large .hb-hold,
+.hb2.hb-large .hb-dl dd {
+  font-size: 1.12em;
+}
+
+/* reading options */
+.hb-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 4px 0 14px;
+}
+.hb-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--card);
+}
+.hb-seg button {
+  min-height: 40px;
+  min-width: 84px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.hb-seg button[aria-pressed='true'] {
+  background: var(--primary);
+  color: var(--primary-fg);
+  font-weight: 600;
+}
+.hb-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.hb-switch input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--primary);
+}
+
+/* start here: the dark headline panel */
+.hb-start.hl {
+  padding: 22px 22px 20px;
+  margin-bottom: 14px;
+}
+.hb-msg {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  margin: 10px 0 16px;
+  max-width: 44rem;
+  white-space: pre-line;
+}
+.hb-callbig {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 22px;
+  border-radius: 16px;
+  background: #fff;
+  color: #2b2370 !important;
+  font-weight: 700;
+  font-size: 1.25rem;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  max-width: 100%;
+}
+.hb-callbig:hover,
+.hb-callbig:focus-visible {
+  outline: 3px solid #7ef0b4;
+  outline-offset: 3px;
+}
+.hb-callbig > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hb-callbig-n {
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.hb-callbig.plain {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff !important;
+  box-shadow: none;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.hb-have {
+  margin: 16px 0 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+/* what is missing (members only) */
+.hb-meter h2 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+.hb-bar {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--soft);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.hb-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--hb-calm);
+  border-radius: 999px;
+}
+.hb-gaps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hb-gaps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.hb-gaps .btn {
+  flex: none;
+}
+
+.hb-nav {
+  margin: 14px 0;
+}
+
+/* sections */
+.hb-sec2 {
+  margin-top: 18px;
+  scroll-margin-top: 16px;
+}
+.hb-sec2 > h2 {
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+}
+.hb-sec2 h3 {
+  font-size: 1.08rem;
+  margin: 16px 0 8px;
+}
+.hb-sample {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--hb-calm-soft);
+  color: var(--hb-calm);
+}
+
+/* timeline */
+.hb-phases {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+@media (min-width: 900px) {
+  .hb-phases {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.hb-phase {
+  padding: 16px;
+  min-width: 0;
+}
+.hb-phase-h {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+.hb-phase-h h3 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+.hb-phase-n {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: var(--hb-calm-soft);
+  color: var(--hb-calm);
+  flex: none;
+}
+.hb-count {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.hb-count.all {
+  color: var(--ok-fg);
+  font-weight: 600;
+}
+.hb-ticks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.hb-tick label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  line-height: 1.45;
+}
+.hb-tick label:hover {
+  background: var(--soft);
+}
+.hb-tick input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 1px 0 0;
+  accent-color: var(--hb-calm);
+}
+.hb-tick.done .hb-tick-text {
+  color: var(--muted);
+}
+.hb-tick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hb-by {
+  font-size: 0.8rem;
+  color: var(--hb-calm);
+}
+.hb-pbox {
+  display: none;
+}
+
+/* institution cards */
+.hb-group > h3 {
+  font-size: 1.05rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 18px 0 10px;
+}
+.hb-cards {
+  display: grid;
+  gap: 14px;
+}
+@media (min-width: 900px) {
+  .hb-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.hb-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--bank, var(--primary));
+  border-radius: var(--radius);
+  padding: 16px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hb-card h4 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.hb-card h5 {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.hb-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hb-badge {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  background: var(--bank, var(--primary));
+}
+.hb-card-sum {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.hb-hold {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hb-hold > li {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--soft);
+  min-width: 0;
+}
+.hb-hold-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.hb-owner {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.hb-what {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-weight: 600;
+}
+.hb-amt {
+  margin-left: auto;
+  font-weight: 600;
+}
+.hb-detail {
+  font-size: 0.86rem;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.hb-nominee {
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+.hb-nominee > span {
+  color: var(--muted);
+}
+.hb-nominee.missing em {
+  color: var(--hb-warm);
+}
+.hb-help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.hb-help-l {
+  font-weight: 600;
+}
+.hb-dial {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: var(--primary-fg);
+  font-weight: 700;
+  text-decoration: none;
+}
+.hb-cardnote {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.hb-claim {
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
+.hb-claim-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+
+/* other things, people */
+.hb-other + .hb-other {
+  margin-top: 6px;
+}
+.hb-olist,
+.hb-plist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hb-olist li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.hb-olist li:first-child {
+  border-top: 0;
+}
+.hb-ol {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.hb-or {
+  font-weight: 600;
+}
+.hb-os {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.hb-plist li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.hb-plist li:first-child {
+  border-top: 0;
+}
+
+/* for the children */
+.hb-kids {
+  background: linear-gradient(180deg, var(--hb-calm-soft), var(--card) 60%);
+}
+.hb-kids-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.hb-kids-top h2 {
+  margin: 0;
+}
+.hb-kids-hello {
+  margin: 4px 0 0;
+  font-size: 1.1rem;
+}
+.hb-kids-art {
+  width: 140px;
+  height: auto;
+  flex: none;
+}
+.hb-kids-art .sun {
+  fill: var(--hb-kid-sun);
+}
+.hb-kids-art .wall {
+  fill: var(--hb-kid-wall);
+  stroke: var(--hb-kid-roof);
+  stroke-width: 3;
+}
+.hb-kids-art .roof {
+  fill: none;
+  stroke: var(--hb-kid-roof);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hb-kids-art .heart {
+  fill: var(--hb-kid-heart);
+}
+.hb-kids-art .ground {
+  stroke: var(--hb-kid-ground);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.hb-kids-art .dot {
+  fill: var(--hb-calm);
+  opacity: 0.5;
+}
+.hb-kids-note {
+  font-size: 1.15rem;
+  line-height: 1.55;
+  margin: 14px 0;
+}
+.hb-kids-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .hb-kids-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.hb-kids-list li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  line-height: 1.45;
+}
+.hb-kids-list svg {
+  flex: none;
+  color: var(--hb-calm);
+  margin-top: 2px;
+}
+.hb-kids-care {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hb-carers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.hb-carers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.hb-carers .hb-who {
+  flex: 1 1 8rem;
+}
+.hb-carer-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: var(--hb-calm-soft);
+  color: var(--hb-calm);
+  flex: none;
+}
+
+@media (max-width: 520px) {
+  .hb-start.hl {
+    padding: 18px 16px;
+  }
+  .hb-callbig {
+    width: 100%;
+    font-size: 1.12rem;
+    padding: 12px 16px;
+  }
+  .hb-card,
+  .hb-phase {
+    padding: 14px 12px;
+  }
+}
+
+@media print {
+  .hb2 {
+    font-size: 11.5pt;
+    color: #000;
+  }
+  .hb2.hb-large {
+    font-size: 13pt;
+  }
+  .hb-tools,
+  .hb-meter,
+  .hb-nav,
+  .hb-sample,
+  .hb-tick input {
+    display: none !important;
+  }
+  .hb-start.hl {
+    background: none;
+    color: #000;
+    border: 2px solid #000;
+    --hl-soft: #333;
+    break-inside: avoid;
+  }
+  .hb-callbig,
+  .hb-callbig.plain {
+    background: none;
+    color: #000 !important;
+    border: 2px solid #000;
+    box-shadow: none;
+  }
+  .hb-pbox {
+    display: inline-block;
+    flex: none;
+    width: 1.2em;
+    font-size: 1.15em;
+    line-height: 1.2;
+  }
+  .hb-tick label {
+    min-height: 0;
+    padding: 3px 0;
+  }
+  .hb-tick.done .hb-tick-text {
+    color: #000;
+  }
+  .hb-phase,
+  .hb-card,
+  .hb-hold > li,
+  .hb-tick,
+  .hb-kids-list li,
+  .hb-carers li,
+  .hb-olist li {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+  .hb-card {
+    border-color: #999;
+    border-top-color: #000;
+  }
+  .hb-cards,
+  .hb-phases {
+    display: block;
+  }
+  .hb-card + .hb-card,
+  .hb-phase + .hb-phase {
+    margin-top: 10px;
+  }
+  .hb-badge {
+    background: none;
+    color: #000;
+    border: 1px solid #000;
+  }
+  .hb-dial,
+  .hb-phone {
+    background: none;
+    color: #000;
+    border: 1px solid #000;
+  }
+  .hb-hold > li,
+  .hb-kids,
+  .hb-kids-list li,
+  .hb-carers li {
+    background: none;
+  }
+  .hb-gaps li {
+    background: none;
+  }
+  #cards,
+  #children {
+    break-before: page;
+  }
+}
