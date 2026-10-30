@@ -38,6 +38,11 @@ export interface PlotMarker {
   /** read out on hover and by screen readers */
   label: string;
 }
+/** A line of words for the read-out from its date until the next note (a running figure such as the return so far). */
+export interface PlotNote {
+  date: string;
+  text: string;
+}
 export interface PlotRef {
   value: number;
   label: string;
@@ -96,6 +101,7 @@ export function PlotChart({
   empty = 'The graph appears once there are at least two dated values.',
   legendMarkers = [],
   note,
+  tipNotes = [],
 }: {
   series: PlotSeries[];
   markers?: PlotMarker[];
@@ -105,6 +111,8 @@ export function PlotChart({
   empty?: string | undefined;
   legendMarkers?: { label: string; shape: 'dot' | 'up' | 'down'; colour: string }[];
   note?: string | undefined;
+  /** extra lines for the read-out: the latest note on or before the date under the pointer */
+  tipNotes?: PlotNote[];
 }) {
   const id = useId();
   const box = useRef<HTMLElement>(null);
@@ -210,6 +218,8 @@ export function PlotChart({
   const tipRows =
     hd === null ? [] : m.lines.map((s) => ({ s, v: valueAt(s, hd) })).filter((r) => r.v !== null);
   const tipMarkers = hd === null ? [] : markers.filter((mk) => mk.date === hd);
+  const tipNote =
+    hd === null ? null : ([...tipNotes].reverse().find((n) => n.date <= hd)?.text ?? null);
   const tipLeft = hd === null ? 0 : Math.min(Math.max(X(hd) - 90, 0), Math.max(0, w - 190));
 
   const tableDates = (() => {
@@ -362,6 +372,7 @@ export function PlotChart({
               <b>{fmtFull(unit, v!)}</b>
             </div>
           ))}
+          {tipNote && <div className="tipnote">{tipNote}</div>}
           {tipMarkers.map((mk, i) => (
             <div className="tipnote" key={i}>
               {mk.label}
@@ -372,7 +383,7 @@ export function PlotChart({
       <span id={`${id}-d`} className="sr-only" aria-live="polite">
         {hd === null
           ? ''
-          : `${longDate(hd)}: ${tipRows.map(({ s, v }) => `${s.name} ${fmtFull(unit, v!)}`).join(', ')}`}
+          : `${longDate(hd)}: ${tipRows.map(({ s, v }) => `${s.name} ${fmtFull(unit, v!)}`).join(', ')}${tipNote ? `. ${tipNote}` : ''}`}
       </span>
       <ul className="vizlegend">
         {m.lines.map((s) => (

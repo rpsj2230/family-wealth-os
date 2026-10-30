@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
+  addMonthsIso,
   formatInr,
   formatInrCompact,
   rebase,
@@ -86,6 +87,26 @@ function Tile({
       {sub && <div className="kpi-sub muted">{sub}</div>}
     </article>
   );
+}
+
+/**
+ * The read-out lines of the growth chart for one day: the overall return (profit over the money invested) and the XIRR (the same
+ * profit as a rate a year, counting how long each rupee was in), yours and the benchmark's on the same money.
+ */
+function xirrWords(
+  x: { yours: number | null; bench: number | null },
+  since: string | null,
+  date: string,
+  value: number | undefined,
+  invested: number | undefined,
+): string {
+  if (x.yours === null) return '';
+  const short = since !== null && addMonthsIso(since, 12) > date;
+  const overall =
+    value !== undefined && invested !== undefined && invested > 0
+      ? `Overall ${pct(value / invested - 1, 1)} (${rupees(value - invested)}) · `
+      : '';
+  return `${overall}XIRR ${pct(x.yours, 1)} a year${x.bench !== null ? ` · benchmark XIRR ${pct(x.bench, 1)}` : ''}${short ? ' (under a year)' : ''}`;
 }
 
 /** The holder's own money over each period: the value at the start, money in and out, the value now, the profit and the return. */
@@ -430,6 +451,13 @@ export function FundPage({
       const sh = ret.shadow;
       const benchNow = sh && sh.bench.length > 0 ? sh.bench[sh.bench.length - 1]! : null;
       const valueNow = sh ? sh.value[sh.value.length - 1]! : null;
+      const lastX = sh && sh.xirr.length > 0 ? sh.xirr[sh.xirr.length - 1]! : null;
+      const valueOn = new Map((sh?.value ?? []).map((p) => [p.date, p.value]));
+      // the money invested on a day: the last step of the invested line on or before it
+      const investedOn = (d: string) =>
+        [...(sh?.invested ?? [])].reverse().find((p) => p.date <= d)?.value;
+      const shortSpan =
+        ret.since !== null && lastX !== null && addMonthsIso(ret.since, 12) > lastX.date;
       returnsBody = (
         <>
           {ret.since !== null && (
@@ -469,10 +497,10 @@ export function FundPage({
                 unit="inr"
                 caption={`${f.name}: your value against the money you put in${benchNow ? ' and the same money in the benchmark' : ''}`}
                 series={[
-                  { key: 'value', name: 'Your value', colour, area: true, points: sh.value },
+                  { key: 'value', name: 'Current value', colour, area: true, points: sh.value },
                   {
                     key: 'in',
-                    name: 'Money you put in',
+                    name: 'Invested',
                     colour: 'var(--viz-line)',
                     step: true,
                     points: sh.invested,
@@ -481,7 +509,7 @@ export function FundPage({
                     ? [
                         {
                           key: 'bench',
-                          name: `Same money in ${ret.benchName ?? 'the benchmark'}`,
+                          name: 'Benchmark',
                           colour: 'var(--viz-3)',
                           dashed: true,
                           points: sh.bench,
@@ -489,11 +517,24 @@ export function FundPage({
                       ]
                     : []),
                 ]}
-                note={
+                tipNotes={sh.xirr.map((x) => ({
+                  date: x.date,
+                  text: xirrWords(x, ret.since, x.date, valueOn.get(x.date), investedOn(x.date)),
+                }))}
+                note={[
+                  'Current value: what your units are worth on the day. Invested: the money you put in, less any taken out.',
+                  sh.bench.length >= 2
+                    ? `Benchmark: ${ret.benchName ?? 'the benchmark'}, with every purchase and sale of yours made in it on the same day for the same amount.`
+                    : '',
+                  lastX && lastX.yours !== null
+                    ? `Your XIRR in this fund: ${pct(lastX.yours, 1)} a year${lastX.bench !== null ? `; the benchmark on the same money: ${pct(lastX.bench, 1)}` : ''}${shortSpan ? ' (under a year, so a yearly rate can swing a lot)' : ''}.`
+                    : '',
                   benchNow && valueNow
-                    ? `Had every purchase and sale of yours gone into ${ret.benchName ?? 'the benchmark'} (an index fund that follows the Nifty 50) on the same day, it would be worth ${inr(benchNow.value)} on ${niceDate(benchNow.date)}, against ${inr(valueNow.value)} in this fund.`
-                    : undefined
-                }
+                    ? `On ${niceDate(benchNow.date)} the benchmark would be worth ${inr(benchNow.value)}, against ${inr(valueNow.value)} in this fund.`
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
               />
             </section>
           )}

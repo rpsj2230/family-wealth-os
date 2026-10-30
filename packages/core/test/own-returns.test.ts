@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { heldLine, ownPeriods, shadowLine } from '../src/own-returns';
+import { heldLine, ownPeriods, shadowLine, xirrTrail } from '../src/own-returns';
 import { PERF_PERIODS } from '../src/return-profile';
 
 const TODAY = '2026-10-30';
@@ -131,5 +131,35 @@ describe('heldLine', () => {
       '2019-01-31',
     ]);
     expect(heldLine(line, null)).toBe(line);
+  });
+});
+
+describe('xirrTrail', () => {
+  it('gives the XIRR to each date for the holding and the benchmark, from the first purchase', () => {
+    const flows = [{ date: '2025-01-01', amount: 1000 }];
+    const t = xirrTrail(
+      flows,
+      [
+        { date: '2024-12-31', value: 0 },
+        { date: '2025-01-01', value: 1000 },
+        { date: '2026-01-01', value: 1100 },
+      ],
+      [{ date: '2026-01-01', value: 1050 }],
+    );
+    expect(t).toHaveLength(1);
+    expect(t[0]!.date).toBe('2026-01-01');
+    expect(t[0]!.yours).toBeCloseTo(0.1, 3);
+    expect(t[0]!.bench).toBeCloseTo(0.05, 3);
+  });
+  it('counts a later purchase only from its own day', () => {
+    const t = xirrTrail(
+      [
+        { date: '2025-01-01', amount: 1000 },
+        { date: '2026-01-01', amount: 1000 },
+      ],
+      [{ date: '2026-01-01', value: 2100 }],
+    );
+    expect(t[0]!.yours).toBeCloseTo(0.1, 3);
+    expect(t[0]!.bench).toBeNull();
   });
 });

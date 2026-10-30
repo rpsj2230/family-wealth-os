@@ -107,7 +107,10 @@ test('sample fund: returns start with your first purchase and show your own mone
   await expect(own.getByRole('rowheader', { name: /Since you started/ })).toBeVisible();
   await expect(own.getByRole('columnheader', { name: 'Your return' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'How your money grew' })).toBeVisible();
-  await expect(page.getByText(/Had every purchase and sale of yours gone into/)).toBeVisible();
+  await expect(
+    page.getByText(/Benchmark: .*with every purchase and sale of yours made in it/),
+  ).toBeVisible();
+  await expect(page.getByText(/Your XIRR in this fund: .*% a year/)).toBeVisible();
   await expect(page.getByText(/while your money has been in it/)).toBeVisible();
   // the month grid covers only the months since the first purchase; the whole history has at least as many
   const months = page.getByRole('table', { name: /Return in each month/ }).locator('[aria-label]');

@@ -24,6 +24,8 @@ import {
   ownPeriods,
   PERF_PERIODS,
   shadowLine,
+  xirrTrail,
+  type XirrPoint,
   type OwnPeriodRow,
   FUND_RANGE_WORDS,
   holdingProfile,
@@ -97,7 +99,13 @@ export interface FundReturns extends ReturnView {
   /** the holder's own money over each period: value at the start, money in and out, profit, money-weighted return */
   own: OwnPeriodRow[];
   /** the holder's value and money put in on each valuation day, and what the same purchases would be worth in the benchmark */
-  shadow: { value: IndexPoint[]; invested: IndexPoint[]; bench: IndexPoint[] } | null;
+  shadow: {
+    value: IndexPoint[];
+    invested: IndexPoint[];
+    bench: IndexPoint[];
+    /** the XIRR up to each valuation day: yours, and the benchmark's on the same money */
+    xirr: XirrPoint[];
+  } | null;
 }
 
 export interface FundDetail {
@@ -252,6 +260,7 @@ export function buildFundDetail(args: {
                 .filter((p) => p.invested !== null)
                 .map((p) => ({ date: p.date, value: p.invested as number })),
               bench: benchMine,
+              xirr: xirrTrail(f.flows, valuePts, benchMine),
             }
           : null,
     };

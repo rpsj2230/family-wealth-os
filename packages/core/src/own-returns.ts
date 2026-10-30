@@ -152,3 +152,43 @@ export function heldLine(line: IndexPoint[], firstOn: string | null): IndexPoint
 }
 
 const byDate = (a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date);
+
+export interface XirrPoint {
+  date: string;
+  /** the holder's return a year (XIRR) from the first purchase to this date, counting every purchase and sale up to it */
+  yours: number | null;
+  /** the same for the same purchases and sales in the benchmark (from `shadowLine`) */
+  bench: number | null;
+}
+
+/**
+ * The holder's XIRR up to each valuation day, and the benchmark's on the same money: for each date, the purchases and sales up to it
+ * (money put in counts as paid out) and the value on that day (counts as received). Dates before the first purchase, or on its day,
+ * have nothing to say and are left out.
+ */
+export function xirrTrail(
+  flows: Flow[],
+  values: IndexPoint[],
+  bench: IndexPoint[] = [],
+): XirrPoint[] {
+  const ordered = [...flows].filter((f) => f.amount !== 0).sort(byDate);
+  const first = ordered[0]?.date;
+  if (!first) return [];
+  const benchOn = new Map(bench.map((p) => [p.date, p.value]));
+  const rate = (date: string, end: number | undefined) => {
+    if (end === undefined || !(end >= 0)) return null;
+    const cf = ordered
+      .filter((f) => f.date <= date)
+      .map((f) => ({ date: new Date(ms(f.date)), amount: -f.amount }));
+    cf.push({ date: new Date(ms(date)), amount: end });
+    return xirr(cf).rate;
+  };
+  return [...values]
+    .sort(byDate)
+    .filter((p) => p.date > first)
+    .map((p) => ({
+      date: p.date,
+      yours: rate(p.date, p.value),
+      bench: rate(p.date, benchOn.get(p.date)),
+    }));
+}
