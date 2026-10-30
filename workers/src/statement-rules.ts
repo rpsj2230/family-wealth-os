@@ -16,6 +16,10 @@ import { loadMoneyTrail, loadPortfolioData, rebuildStatementMoves } from '@fwos/
 import { connectDb, householdId, must, need } from './shared';
 
 interface RuleInput {
+  /** paid back in full (some of it outside the statements): nothing is owed after the last line */
+  repaidInFull?: boolean;
+  /** only update the loan named by the target; save no rule */
+  noRule?: boolean;
   name: string;
   match?: 'name' | 'words';
   action: StatementRule['action'];
@@ -87,6 +91,7 @@ async function main() {
     'rules',
   ) as { name: string; action: string }[];
   const toSave: (RuleInput & { assetId: string | null })[] = [];
+  const repaidTargets = new Set<string>();
   for (const r of inputs) {
     const target = resolve(r);
     const probe: StatementRule = {
@@ -110,12 +115,37 @@ async function main() {
       `- "${r.name}" (${r.match ?? 'name'}, ${r.direction ?? 'any'}) → ${r.action}${target.why ? ` ${target.why}` : ''}: ${hits.length} lines (${out.length} out ${lakh(-out.reduce((s, l) => s + l.amount, 0))}, ${into.length} in ${lakh(into.reduce((s, l) => s + l.amount, 0))})${hits.length ? `, ${hits[0]!.txn_on} to ${hits[hits.length - 1]!.txn_on}` : ''}${dup ? ' — already a rule; left as it is' : ''}`,
     );
     const needsTarget = (r.action === 'own' || r.action === 'loan') && r.target !== 'new';
-    if (dup || (needsTarget && !target.assetId)) continue;
+    if (r.repaidInFull && target.assetId) repaidTargets.add(target.assetId);
+    if (r.noRule || dup || (needsTarget && !target.assetId)) continue;
     toSave.push({ ...r, assetId: target.assetId });
   }
+  // lines of one amount after a day (FIND "200000@2023-11-01"): to find a repayment that does not name the person
+  const [findAmount, findAfter] = (process.env.FIND ?? '').split('@');
+  if (Number(findAmount) > 0)
+    for (const l of t.lines.filter(
+      (x) => Math.abs(Math.abs(x.amount) - Number(findAmount)) < 1 && x.txn_on >= (findAfter ?? ''),
+    ))
+      console.log(
+        `  found ${l.txn_on} ${l.amount > 0 ? 'in ' : 'out'} ${label(l.asset_id)} [${t.classified.get(l.id)?.cls}] "${l.narration.toLowerCase().replace(/\d/g, '#').slice(0, 60)}"`,
+      );
   if (!write) {
     console.log(`\nPlan only: ${toSave.length} rules would be saved. Run again with mode "apply".`);
     return;
+  }
+  for (const id of repaidTargets) {
+    const a = loaded.assetRows.find((x) => x.id === id);
+    if (a && !/paid back outside these statements/.test(a.notes ?? ''))
+      must(
+        await db
+          .from('assets')
+          .update({
+            notes: `${a.notes ?? ''} The rest was paid back outside these statements.`.trim(),
+          })
+          .eq('id', id)
+          .eq('household_id', hh)
+          .select('id'),
+        'loan note',
+      );
   }
 
   // new loan records first, so their rules can point at them

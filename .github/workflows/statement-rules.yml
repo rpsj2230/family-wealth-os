@@ -14,6 +14,11 @@ on:
         description: the rules, as a JSON list (see workers/src/statement-rules.ts)
         required: true
         type: string
+      find:
+        description: 'optional: list lines of one amount on or after a day, amount@YYYY-MM-DD'
+        required: false
+        default: ''
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -28,6 +33,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       MODE: ${{ inputs.mode }}
       RULES: ${{ inputs.rules }}
+      FIND: ${{ inputs.find }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
