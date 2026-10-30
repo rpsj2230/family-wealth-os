@@ -543,7 +543,7 @@ export const DEFAULT_CONFIG: AppConfig = {
       'axis large cap = BSE 100 TRI = 134014',
       'axis bluechip = BSE 100 TRI = 134014',
       'franklin build india = BSE India Infrastructure TRI = 153081',
-      'hdfc balanced advantage = NIFTY 50 Hybrid Composite Debt 50:50 (Nifty 50 and 8-13 yr G-Sec, half each) = 120716*0.5 + 139496*0.5',
+      'hdfc balanced advantage = NIFTY 50 Hybrid Composite Debt 50:50 (Nifty 50 and 8-13 yr G-Sec, half each) = 120716*0.5 + 133307*0.5',
       'kind:small = Nifty Smallcap 250 TRI = 147623',
       'kind:mid = Nifty Midcap 150 TRI = 146271',
       'kind:flexi = Nifty 500 TRI = 147625',

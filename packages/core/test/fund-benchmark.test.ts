@@ -31,7 +31,7 @@ describe('fundBenchmark', () => {
     const b = fundBenchmark(['HDFC Balanced Advantage Growth Direct Plan'], 'hybrid', rules)!;
     expect(b.legs).toEqual([
       { code: '120716', weight: 0.5 },
-      { code: '139496', weight: 0.5 },
+      { code: '133307', weight: 0.5 },
     ]);
   });
   it('falls back to the rule for the kind of fund, then to the rule for every other fund', () => {
@@ -47,7 +47,7 @@ describe('fundBenchmark', () => {
   });
   it('lists every code the rules use', () => {
     expect(benchmarkCodes(rules).sort()).toEqual(
-      ['120716', '134014', '139496', '146271', '147623', '147625', '153081'].sort(),
+      ['120716', '133307', '134014', '146271', '147623', '147625', '153081'].sort(),
     );
   });
 });
