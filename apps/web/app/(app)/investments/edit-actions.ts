@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { loadContext } from '@/lib/data';
 import type { AddFundPayload, FundSavePayload } from '@/lib/fund-edit';
 import { saveAccountDetails } from '../accounts/edit/actions';
+import { saveNominee } from '../accounts/actions';
 import { tagFundGoal } from './actions';
 import { addFundTransaction } from './update/actions';
 
@@ -102,6 +103,11 @@ export async function saveFundEdit(p: FundSavePayload): Promise<EditResult> {
     const r = await saveAccountDetails([row]);
     if (!r.ok) return bad(r.message);
     done.push('name');
+  }
+  if (p.nominee !== undefined) {
+    const r = await saveNominee(p.assetId, p.nominee);
+    if (!r.ok) return bad(done.length > 0 ? `Saved, but not the nominee: ${r.message}` : r.message);
+    done.push('nominee');
   }
   if (p.goalId !== undefined) {
     const r = await tagFundGoal(p.assetId, p.goalId);

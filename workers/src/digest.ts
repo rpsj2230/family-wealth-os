@@ -33,6 +33,7 @@ import {
 // own money, lifetime profit, the XIRRs, the earning rate now, what matures in 30 days). It reads through a client that sees only
 // the one household, as Row Level Security does for a signed-in member.
 import { loadHome } from '../../apps/web/lib/home-data';
+import { runInactivityAlert } from './inactivity';
 
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SMTP_USER, SMTP_APP_PASSWORD, APP_URL } =
   process.env;
@@ -248,6 +249,23 @@ if (['1', 'true'].includes(String(process.env.DIGEST_TEST ?? '').toLowerCase()))
   console.log(JSON.stringify({ date, test: true, results: sent }, null, 2));
   if (sent.length === 0) console.log('No household has switched the daily summary on yet.');
   process.exit(sent.some((r) => r.outcome === 'failed' || r.outcome === 'no_recipients') ? 1 : 0);
+}
+// the inactivity alert (Settings > Emergency and access): before the summary, so a failing summary never holds it up; it reaches
+// every household with an access row, not only those that switched the summary on
+try {
+  await runInactivityAlert({
+    db,
+    mailer,
+    memberEmails: (h) => store.memberEmails(h),
+    appUrl,
+    serverSecret: SUPABASE_SERVICE_ROLE_KEY,
+    dryRun: ['DRY_RUN', 'INACTIVITY_DRY_RUN'].some((k) =>
+      ['1', 'true'].includes(String(process.env[k] ?? '').toLowerCase()),
+    ),
+  });
+} catch {
+  // never the error text: it could name a table row or an address
+  console.warn('::warning::inactivity: the alert step failed; it runs again tomorrow');
 }
 const results = await runDigests(store, mailer, date);
 console.log(JSON.stringify({ date, results }, null, 2));

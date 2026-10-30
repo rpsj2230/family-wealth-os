@@ -49,6 +49,7 @@ I keep working on everything that does not depend on these items. Anything below
 
 - [ ] **A8. Daily summary email setup** [P8.2] (optional but recommended)
   1. Use a Gmail account for sending (yours is fine). Turn on 2-Step Verification, then create an **App password** (Google Account → Security → App passwords). 2. In GitHub add two secrets: `SMTP_USER` (the Gmail address) and `SMTP_APP_PASSWORD` (the 16-character app password; never paste it in chat). 3. In the app: **More → Settings and daily summary**, tick *Send the daily summary*, add extra recipients if you want. 4. Test: GitHub → Actions → *Daily summary email* → Run workflow. Tick **Digest test** to get one e-mail marked [Test] that does not use up today's summary (see `docs/runbooks/daily-summary.md`); leave it unticked to send the real one. You should get the email within a minute.
+  The **inactivity alert** (Settings → Emergency and access) is sent by the same daily job with the same secrets (`SUPABASE_SERVICE_ROLE_KEY`, `SMTP_USER`, `SMTP_APP_PASSWORD`): **no new secret**. Its links are derived from the service-role key. Optional: add `SMTP_USER` and `SMTP_APP_PASSWORD` to Vercel too, so *Send a test to me* can e-mail you (without them it shows the text instead). WhatsApp needs no secret here: each person activates CallMeBot once and you paste their key in Settings.
 
 ## B. Answers I need for the data migration (from `docs/phase1/05-open-questions-and-missing-fields.md`)
 

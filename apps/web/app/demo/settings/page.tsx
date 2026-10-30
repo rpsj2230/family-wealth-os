@@ -246,6 +246,36 @@ export default async function DemoSettings({
                 willLocation: 'Fireproof box in the study; a copy with the lawyer.',
               }}
               access={{ mode: 'inactive', days: 30, released: false }}
+              alert={{
+                ready: true,
+                demo: true,
+                values: {
+                  warnDays: 20,
+                  alertDays: 30,
+                  warnEveryDays: 1,
+                  reminders: 3,
+                  remindEveryDays: 2,
+                },
+                contacts: [
+                  {
+                    id: 's1',
+                    name: 'Ragini',
+                    email: 'ragini@example.com',
+                    phone: '+6590000001',
+                    keySaved: true,
+                  },
+                  {
+                    id: 's2',
+                    name: 'Amit',
+                    email: 'amit@example.com',
+                    phone: '+919800000002',
+                    keySaved: false,
+                  },
+                ],
+                familyLogins: 1,
+                members: 2,
+                last: null,
+              }}
             />
           )}
         </div>

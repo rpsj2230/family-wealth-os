@@ -9,10 +9,13 @@ export function AccessForm({
   mode,
   days,
   released,
+  daysSetBelow = false,
 }: {
   mode: 'always' | 'inactive' | 'manual';
   days: number;
   released: boolean;
+  /** the inactivity alert's form below sets the days (once its database update is applied) */
+  daysSetBelow?: boolean;
 }) {
   const { res, act, pending } = useForm(saveEmergencyAccess);
   return (
@@ -32,14 +35,24 @@ export function AccessForm({
           <input type="radio" name="mode" value="inactive" defaultChecked={mode === 'inactive'} />
           <span>
             <b>Only after nobody from the household has signed in for</b>{' '}
-            <input
-              className="mini"
-              name="days"
-              inputMode="numeric"
-              defaultValue={days}
-              aria-label="Days without a sign-in"
-            />{' '}
+            {daysSetBelow ? (
+              <b>{days}</b>
+            ) : (
+              <input
+                className="mini"
+                name="days"
+                inputMode="numeric"
+                defaultValue={days}
+                aria-label="Days without a sign-in"
+              />
+            )}{' '}
             days
+            {daysSetBelow && (
+              <span className="fld-hint">
+                The same day the first trusted person is told; change it under “If you stop using
+                the portal” below.
+              </span>
+            )}
             <span className="fld-hint">It opens by itself if something happens to all of you.</span>
           </span>
         </label>

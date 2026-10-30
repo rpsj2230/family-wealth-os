@@ -9,6 +9,10 @@ on:
         description: 'Digest test: send one [Test] e-mail to the people who can sign in, without using up today’s summary'
         type: boolean
         default: false
+      inactivity_dry_run:
+        description: 'Inactivity alert: only log what it would send (nothing is sent or recorded)'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -25,6 +29,7 @@ jobs:
       SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
       APP_URL: https://family-wealth-os-nine.vercel.app
       DIGEST_TEST: ${{ inputs.test }}
+      INACTIVITY_DRY_RUN: ${{ inputs.inactivity_dry_run }}
     steps:
       - uses: actions/checkout@v4
       - name: Check required secrets

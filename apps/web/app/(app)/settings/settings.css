@@ -531,3 +531,61 @@ ol.aikeys {
 .aikeys-said p {
   margin: 0;
 }
+
+/* The inactivity alert: the people told in order, each with a write-only WhatsApp key */
+.inactivity-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.inactivity-how {
+  margin: 0 0 12px;
+}
+.alertpeople {
+  list-style: decimal;
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+}
+.alertperson {
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .contactrow.alertrow {
+    grid-template-columns: 1fr 1.2fr 1fr 1.4fr;
+  }
+}
+.alertrow input {
+  min-width: 0;
+}
+.keysaved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.keysaved input {
+  flex: 1 1 140px;
+}
+.alertrow-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.callmebot summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.alert-test-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  margin: 8px 0 0;
+}

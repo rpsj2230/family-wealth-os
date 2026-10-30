@@ -2625,6 +2625,19 @@ details.bankdet {
   line-height: 1.4;
   font: inherit;
 }
+/* the bank's helpline (family handbook), on its own line above the note */
+.notebox .bt-helpline {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.notebox .bt-helpline input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 20rem;
+}
 
 .chip.fdno {
   white-space: nowrap;

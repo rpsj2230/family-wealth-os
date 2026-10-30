@@ -1,9 +1,11 @@
 import type { Handbook } from '@fwos/core';
-import { buildHandbookDoc } from '@fwos/data';
+import { buildHandbookDoc, loadHandbookTicks } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { loadAccess } from '@/lib/data';
+import { loadAccess, loadContext } from '@/lib/data';
+import { sameJson, tickMap } from '@/lib/handbook-view';
+import { HandbookGuide } from './HandbookGuide';
 import { HandbookView } from './HandbookView';
-import { refreshHandbook } from './actions';
+import { refreshHandbook, tickStep } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,12 +38,19 @@ export default async function EmergencyPage() {
   let row = (
     await supabase.from('emergency_documents').select('content, generated_at').maybeSingle()
   ).data as { content: Handbook; generated_at: string } | null;
-  // a member opening the page always sees a fresh handbook; the viewer sees the stored one
-  if (isMember && (!row || Date.now() - Date.parse(row.generated_at) > 6 * 3_600_000)) {
+  // a member opening the page always sees a fresh handbook, so a nominee or helpline just filled in shows at once; the stored copy
+  // (what the read-only family login reads) is rewritten when anything in it changed, or at least every six hours
+  if (isMember) {
     try {
       const doc = await buildHandbookDoc(supabase as unknown as SupabaseClient);
-      await supabase.rpc('save_emergency_document', { p_household: householdId, p_content: doc });
-      row = { content: doc, generated_at: new Date().toISOString() };
+      const changed =
+        !row ||
+        !sameJson(row.content, doc) ||
+        Date.now() - Date.parse(row.generated_at) > 6 * 3_600_000;
+      if (changed) {
+        await supabase.rpc('save_emergency_document', { p_household: householdId, p_content: doc });
+        row = { content: doc, generated_at: new Date().toISOString() };
+      }
     } catch {
       /* show the stored one */
     }
@@ -69,6 +78,34 @@ export default async function EmergencyPage() {
           ? `The read-only family login opens this only when you release it. Now: ${a?.released ? 'released' : 'locked'}.`
           : 'The read-only family login can always open this.';
   }
+  const guide = row.content.guide;
+  if (guide) {
+    const [{ userId }, ticks, viewers] = await Promise.all([
+      loadContext(),
+      loadHandbookTicks(supabase as unknown as SupabaseClient),
+      // members may see who the read-only family login is, so a tick can say "ticked by the family login"
+      isMember
+        ? supabase
+            .from('household_members')
+            .select('user_id')
+            .eq('household_id', householdId)
+            .eq('role', 'emergency_viewer')
+            .then((r) => (r.data ?? []).map((x) => x.user_id as string))
+        : Promise.resolve([] as string[]),
+    ]);
+    return (
+      <HandbookGuide
+        guide={guide}
+        generatedAt={row.generated_at}
+        initialTicks={tickMap(ticks, userId, new Set(viewers))}
+        tick={tickStep}
+        refresh={isMember ? refreshHandbook : undefined}
+        member={isMember}
+        accessNote={accessNote}
+      />
+    );
+  }
+  // a copy stored before the guide existed (until the next daily rewrite)
   return (
     <HandbookView
       doc={row.content}

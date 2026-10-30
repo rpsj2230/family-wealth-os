@@ -97,6 +97,22 @@ describe('statusOptions', () => {
 });
 
 describe('buildQuickSave', () => {
+  it('the nominee goes on its own, only when it changed, and an empty box clears it', () => {
+    const was = row({ nominee: 'Ragini, 100%' });
+    expect(buildQuickSave(was, was, draft({ nominee: 'Ragini, 100%' }), TODAY).nominee).toBe(
+      undefined,
+    );
+    const q = buildQuickSave(was, was, draft({ nominee: '  Kiran  ' }), TODAY);
+    expect(q).toMatchObject({ nominee: 'Kiran', details: null, monthly: null });
+    expect(q.changes).toEqual(['nominee']);
+    expect(buildQuickSave(was, was, draft({ nominee: '' }), TODAY).nominee).toBeNull();
+    expect(buildQuickSave(was, was, draft({ nominee: 'x'.repeat(201) }), TODAY).problems).toEqual([
+      'the nominee is longer than 200 letters',
+    ]);
+    // a page that did not load nominees does not offer the box, so nothing is sent
+    expect(buildQuickSave(row(), row(), draft(), TODAY).nominee).toBe(undefined);
+  });
+
   it('sends nothing when nothing changed', () => {
     const was = row();
     const q = buildQuickSave(was, was, draft(), TODAY);

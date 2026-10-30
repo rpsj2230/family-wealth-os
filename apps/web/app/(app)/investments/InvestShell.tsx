@@ -127,6 +127,7 @@ export function InvestShell({
   position,
   taxFree = null,
   earnedFy,
+  nominees,
   children,
 }: {
   /** this FY's fund earnings as Home's ledger counts them (core fundsEarnedThisFy); when not given, worked out from the funds' series */
@@ -144,6 +145,8 @@ export function InvestShell({
   actions?: FundEditActions;
   /** what the Value by period tab reads (only given when that tab is open) */
   position?: PositionInput | undefined;
+  /** nominee notes by fund, so the edit panel can offer the nominee (not in the public sample) */
+  nominees?: Record<string, string> | undefined;
   children?: ReactNode;
 }) {
   const tab = q.tab;
@@ -245,6 +248,7 @@ export function InvestShell({
       {...(actions ? { actions } : {})}
       linkBase={{ match: matchHref, demo }}
       initialOpen={q.edit ?? null}
+      nominees={nominees}
     >
       <PageHead
         title="Investments"

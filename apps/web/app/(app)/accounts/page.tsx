@@ -26,7 +26,7 @@ import { quickModel } from '@/lib/quick-edit';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
 import { loadFxHint, loadJointHolders } from '@/lib/quick-edit-data';
 import { loadTidyPlan } from '@/lib/tidy-notes';
-import { loadSettings } from '@fwos/data';
+import { loadHelplines, loadNominees, loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadBankGrowth, loadInflation } from '@/lib/bank-growth-data';
 import { accountsExplain, bankBase } from '@/lib/explain-money';
@@ -50,15 +50,18 @@ export default async function AccountsPage({
     : 'banks';
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
-  const [loaded, inst, settings, offers, jointHolders, fxHint, inflation] = await Promise.all([
-    loadPortfolio(supabase),
-    supabase.from('institutions').select('id, name, notes, deposit_insured'),
-    loadSettings(supabase as unknown as SupabaseClient),
-    loadOffers(supabase),
-    loadJointHolders(supabase as unknown as SupabaseClient),
-    loadFxHint(supabase as unknown as SupabaseClient),
-    loadInflation(supabase as unknown as SupabaseClient),
-  ]);
+  const [loaded, inst, settings, offers, jointHolders, fxHint, inflation, nominees, helplines] =
+    await Promise.all([
+      loadPortfolio(supabase),
+      supabase.from('institutions').select('id, name, notes, deposit_insured'),
+      loadSettings(supabase as unknown as SupabaseClient),
+      loadOffers(supabase),
+      loadJointHolders(supabase as unknown as SupabaseClient),
+      loadFxHint(supabase as unknown as SupabaseClient),
+      loadInflation(supabase as unknown as SupabaseClient),
+      loadNominees(supabase as unknown as SupabaseClient),
+      loadHelplines(supabase as unknown as SupabaseClient),
+    ]);
   const {
     today,
     assetRows,
@@ -143,6 +146,7 @@ export default async function AccountsPage({
     ownerNames: Object.fromEntries(ownerName),
     institutions: (inst.data ?? []).map((i) => ({ id: i.id as string, name: i.name as string })),
     jointHolders,
+    nominees,
   });
   const todayIso = today.toISOString().slice(0, 10);
   const withEditor = (children: ReactNode) => (
@@ -269,6 +273,7 @@ export default async function AccountsPage({
           styles={styles}
           soonDays={settings.config.reminders.maturitySoonDays}
           notes={notes}
+          helplines={helplines}
           saveNote={saveBankNote}
           cashRates={cashRates}
         />

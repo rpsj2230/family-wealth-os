@@ -34,6 +34,8 @@ export interface QuickSaveResult {
 type SaveFn = (input: {
   details: Record<string, unknown> | null;
   monthly: import('@/lib/monthly').Change | null;
+  /** a new nominee note for this account (null clears it); absent when it did not change */
+  nominee?: { assetId: string; note: string | null };
 }) => Promise<QuickSaveResult>;
 
 interface Api {
@@ -223,6 +225,7 @@ function Panel({
     balanceOn: today,
     fx: '',
     savingsRate: was.savingsRate,
+    ...(was.nominee !== undefined ? { nominee: was.nominee } : {}),
   });
   const [result, setResult] = useState<QuickSaveResult | null>(null);
   const [asking, setAsking] = useState(false);
@@ -264,7 +267,11 @@ function Panel({
         setResult({ ok: true, message: 'This is a sample: nothing is saved.' });
         return;
       }
-      const res = await save({ details: q.details, monthly: q.monthly });
+      const res = await save({
+        details: q.details,
+        monthly: q.monthly,
+        ...(q.nominee !== undefined ? { nominee: { assetId: was.id, note: q.nominee } } : {}),
+      });
       if (!res.ok) {
         setResult(res);
         return;
@@ -282,6 +289,7 @@ function Panel({
         recorded: typeof bal === 'number' ? bal : was.recorded,
         recordedOn: typeof bal === 'number' ? (q.monthly?.asOf ?? today) : was.recordedOn,
         savingsRate: draft.savingsRate.trim(),
+        ...(was.nominee !== undefined ? { nominee: (draft.nominee ?? '').trim() } : {}),
       });
       setDraft((d) => ({ ...d, balance: '' }));
     });
@@ -584,7 +592,24 @@ function Panel({
         </header>
 
         <div className="qe-body">
-          <div className="qe-grid">{layout.main.map(field)}</div>
+          <div className="qe-grid">
+            {layout.main.map(field)}
+            {draft.nominee !== undefined && (
+              <label className="qe-f qe-wide">
+                <span>Nominee</span>
+                <input
+                  value={draft.nominee}
+                  onChange={(e) => setD({ nominee: e.target.value })}
+                  maxLength={200}
+                  autoComplete="off"
+                  placeholder="Who is registered, e.g. Ragini, 100%"
+                />
+                <small className="muted">
+                  Shown in the family handbook. Leave empty if you do not know.
+                </small>
+              </label>
+            )}
+          </div>
           <details className="qe-more">
             <summary>More details</summary>
             <div className="qe-grid">{layout.more.map(field)}</div>

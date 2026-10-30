@@ -13,7 +13,8 @@ import { loadAssetDetail } from '@/lib/detail-data';
 import { loadContext } from '@/lib/data';
 import { HoldingChain } from '@/components/MoneyChainView';
 import { chainContextOf, loadTrailContext } from '@/lib/trail-data';
-import { accountLines } from '@fwos/data';
+import { accountLines, loadNominees } from '@fwos/data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { holdingSources } from '@fwos/core';
 import { VALUE_TABLE } from '@/lib/detail-view';
 import { loadFundDetail } from '@/lib/fund-detail-data';
@@ -96,6 +97,7 @@ export default async function AssetPage({
         actions={{ save: saveFundEdit, addFund, addTxn: addFundTxn }}
         linkBase={{ match: '/investments?tab=match', demo: false }}
         initialOpen={sp.edit ?? null}
+        nominees={await loadNominees((await loadContext()).supabase as unknown as SupabaseClient)}
       >
         <DetailHeader
           crumbs={crumbs}

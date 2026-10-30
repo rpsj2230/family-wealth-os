@@ -12,6 +12,7 @@ import { tabHref } from '@/lib/settings-tabs';
 import { WhatsAppButton } from '../share/WhatsAppButton';
 import type { AiKeyRow } from '@/lib/ai-key-view';
 import { AccessForm, EmergencyForm } from './AccessForms';
+import { InactivityAlertForm, type InactivityAlertProps } from './InactivityAlertForm';
 import { AiKeys, AiKeysSample } from './AiKeysCard';
 import {
   DigestForm,
@@ -607,9 +608,12 @@ const PROFILE_FIELDS: [keyof EmergencyProfile, string][] = [
 export function AccessSection({
   profile,
   access,
+  alert,
 }: {
   profile: EmergencyProfile;
   access: { mode: 'always' | 'inactive' | 'manual'; days: number; released: boolean };
+  /** the inactivity alert: the owner's warnings and the people told in order */
+  alert?: InactivityAlertProps;
 }) {
   const missing = PROFILE_FIELDS.filter(([k]) => !String(profile[k]).trim()).map(([, l]) => l);
   const filled = PROFILE_FIELDS.length - missing.length;
@@ -638,8 +642,27 @@ export function AccessSection({
               Open the handbook
             </Link>
           </div>
-          <AccessForm mode={access.mode} days={access.days} released={access.released} />
+          <AccessForm
+            mode={access.mode}
+            days={access.days}
+            released={access.released}
+            daysSetBelow={!!alert?.ready}
+          />
         </section>
+
+        {alert && (
+          <section className="card" id="inactivity" aria-labelledby="inactivity-h">
+            <div className="sectionhead">
+              <h3 id="inactivity-h">If you stop using the portal: the inactivity alert</h3>
+              <span className={`pill ${alert.contacts.length > 0 ? 'ok' : 'warn'}`}>
+                {alert.contacts.length === 0
+                  ? 'Off: nobody on the list'
+                  : `${alert.contacts.length} ${alert.contacts.length === 1 ? 'person' : 'people'} on the list`}
+              </span>
+            </div>
+            <InactivityAlertForm {...alert} />
+          </section>
+        )}
 
         <section className="card" id="handbook" aria-labelledby="handbook-h">
           <div className="sectionhead">

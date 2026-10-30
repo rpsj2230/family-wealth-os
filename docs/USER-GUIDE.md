@@ -343,9 +343,42 @@ The subject reads `Family Wealth Summary · 27 Oct 2026 · Net worth ₹4.82 Cr 
 
 **Preview today's e-mail** (Settings > Notifications, or `/settings/notifications/preview`) shows today's message built now from your own figures, on a phone and on a laptop, without sending anything. A sample with invented figures is at `/demo/digest`. To get a real test in your own inbox, see `docs/runbooks/daily-summary.md` ("digest test"). **Share** gives a short version for WhatsApp, with the same numbers as the Telegram message.
 
-## Family emergency guide
+## Family handbook
 
-**Emergency** lists, per institution, who holds the account, the nominee, what the family does first and where documents are. A print view is included. A separate read-only role for trusted people exists in the database and can never see balances.
+**Family handbook** (`/emergency`) is the page your family opens if something happens to you. It is written from your records and the
+emergency information in Settings, and reads top to bottom:
+
+1. **Start here**: your own message to the family, one large **Call … first** button (the first person under "Who to call"), and one
+   line on roughly what there is ("About ₹3.40 Cr in 8 banks, 20 funds and 3 insurance policies — details below").
+2. **Who to call**, in order, with a button that dials each number; then your advisers.
+3. **The first days, step by step**: a first week, first 30 days and first 90 days, each a short list of steps.
+4. **Where things are**: the will, documents, locker, passwords, devices, e-mail, the backup key.
+5. **Banks, funds and insurance**: one card per bank, fund house and insurer, with what is held there and roughly how much (by
+   person; account numbers show the last four digits only), **who the nominee is** ("Not recorded" when nobody wrote it down), the
+   **helpline** with a button that dials it, and **How to claim**: the papers to collect (death certificate, claim or transmission
+   form, nominee's ID and KYC, passbook or policy document…). General guidance; each place gives its own exact list.
+6. **Other things we own**: property, money held by others, money owed to you, SIPs and deposits that keep moving by themselves.
+7. **Who is who**, and **For the children**: a gentle part with who looks after them and that it is okay to feel sad.
+
+**Ticks.** Every step and every paper on a card can be ticked ("Bank informed", "Death certificate collected"). Ticks are shared:
+everyone who can open the handbook (members, and the read-only family login once it is open) sees them, with "2 of 7 done" per group
+and who ticked each one and when. On the public sample (`/demo/emergency`) ticks stay in that browser only.
+
+**Reading options** (remembered on each phone or computer): **English / हिन्दी**, **Simple words** (shorter, plainer steps) and
+**Larger text**. Names, numbers, bank names and your own message are never translated. **Print or save as PDF** gives a clean copy
+with ☐ boxes to tick by hand.
+
+**What is still missing** (only members see it): a bar "Handbook 70% complete" and a list such as "3 accounts and deposits have no
+nominee recorded", "1 bank has no helpline", "Where is the will? Not written down yet", each with **Fill in** to the right place:
+
+- the **Nominee** of an account or deposit: press **Edit** on its line (Accounts, Monthly update or its own page); of a fund: **Edit**
+  on the fund (Investments); of a policy: Lent, policies, property → Policies → *Update dates, nominee and documents*;
+- a bank's **Helpline**: Accounts → the bank → *Add a note* / *Edit note*;
+- contacts, the will and the other places: Settings → Emergency and access.
+
+Every change is in the activity log like other edits. A member opening the page always sees it rewritten from today's records; the
+copy the family login reads is saved then, every day by the worker, and with **Update now**. It describes and never moves money; it is
+general guidance, not legal or tax advice.
 
 ## Backups
 
@@ -453,6 +486,70 @@ Settings → Connections → Bank e-mails and AI → **AI keys** lets you save a
 
 Settings → Emergency information: the read-only family login can open the handbook always, only after nobody from the household has signed
 in for a number of days, or only when you release it. Release or lock it again with one button. Members always have access.
+
+## If you stop using the portal: the inactivity alert
+
+Settings → Emergency and access → **If you stop using the portal**. If nobody from the household uses the portal for a while, the portal
+first asks you whether you are all right, and then tells the people you chose, one at a time, how to open the family handbook. It is off
+until at least one person is on the list.
+
+**When** (all five numbers are in Settings; the line under them says what they mean, for example "With these: you are reminded daily
+from day 20; Ragini is told after 30 days; Amit after 38 days if Ragini has not confirmed"):
+
+| Setting | Default | Allowed |
+|---|---|---|
+| Warn me from day | 20 | 3 to 365, before the day below |
+| Warn me every | 1 day | 1 to 14 days |
+| Tell the first person after | 30 days | 7 to 365 (the same number as "the handbook opens after", so they can sign in when told) |
+| Reminders for each person | 3 | 0 to 10 |
+| Days between reminders | 2 | 1 to 14 |
+
+**What is sent**
+
+1. **Your warnings.** From the warning day, every member gets an e-mail every *Warn me every* days: "Are you all right? Nobody has used
+   the family portal for 26 days. Sign in to postpone — otherwise in 4 days, on 3 Dec 2026, Ragini will be told how to open the family
+   handbook." It has a button **I'm fine — postpone**, which works without signing in and counts as a visit. Signing in does the same.
+2. **The first person.** When the days have passed (the same day the handbook opens to the family login in "only after" mode), the first
+   person on the list gets a short, calm message by e-mail, and by WhatsApp if they activated it: that you kept the family's money records in
+   a private portal, the link, how to sign in with the family login (its e-mail address, "Forgot your password?" if needed), where the
+   password is kept (your words under *Passwords and logins*; never the password itself), whom to call first (the first person under
+   *Call these people first*), and that the handbook tells them what to do, step by step. No amounts, no account numbers, no PDF. In
+   "only when I release it" mode it says the handbook stays locked until a household member releases it, and who can: the portal never
+   changes who may open it by itself.
+3. **"I have received this".** The message has that button. Until someone presses it, the person is reminded (*Reminders for each person*,
+   *Days between reminders* apart), and then the next person on the list is told the same way, and so on. The links stay the same for the
+   whole absence, so an older message's button still works.
+4. **It stops** as soon as anyone confirms (the members get a note: "Ragini confirmed on 2 Dec 2026…"), as soon as anyone from the
+   household signs in or presses *I'm fine*, or when everyone on the list was told and reminded with nobody confirming.
+5. **Copies.** Every member gets an e-mail copy of every message to a trusted person, headed "Copy for the household: sent to Ragini
+   (reminder 2 of 3)", without the *I have received this* button (a member pressing it must not count as Ragini). A member who is also on
+   the list gets the message once, as that person. WhatsApp goes only to the trusted person.
+
+The job runs once a day (08:30 Singapore) and takes at most one step per household a day, so a missed day never sends two messages at
+once and never skips a person. **Last alert** in the same card shows who was told in the latest absence, how many times, and whether they
+confirmed. **Send a test to me** sends the first person's message to you only, marked TEST (the site needs `SMTP_USER` and
+`SMTP_APP_PASSWORD` in Vercel to send it; otherwise it shows the text).
+
+**WhatsApp (optional, free, through CallMeBot).** There is no WhatsApp account of our own: each person activates CallMeBot's free
+personal API once, on their own phone, and the message can then reach only them.
+
+1. Save CallMeBot's number **+34 644 33 66 63** in the phone's contacts (any name). The number can change: check
+   callmebot.com/blog/free-api-whatsapp-messages.
+2. From their own WhatsApp, send it: **I allow callmebot to send me messages**.
+3. CallMeBot answers "API Activated for your phone number. Your APIKEY is 123123". If nothing arrives within 2 minutes, try again after
+   24 hours.
+4. They give you the key; paste it in Settings beside their WhatsApp number (with the country code). It is write-only: Settings shows
+   "WhatsApp key saved" with **Replace** and never shows the key again. A person with a number but no key gets e-mail only, and Settings
+   says "WhatsApp not activated for <name>".
+
+CallMeBot is a third party, for personal use, with no guaranteed delivery; the e-mail always goes too, and the WhatsApp text leaves where
+the password is kept to the e-mail when the person has an address.
+
+**Before you rely on it:** create the read-only family login (otherwise the people told could not sign in; Settings warns when there is
+none), fill in *Passwords and logins* and *Call these people first*, and tell each person on the list what such a message would mean.
+The database update `20261030000100_emergency_guide.sql` must be applied first; until then Settings says "Run the database update first".
+The job's log says only counts ("inactivity: chain step=remind pos=1 sends=2"), never names, addresses, numbers, keys or links. To see
+what it would do without sending: GitHub → Actions → *Daily summary email* → Run workflow with **Inactivity alert: dry run** ticked.
 
 ## Returns, capital gains and the summary
 

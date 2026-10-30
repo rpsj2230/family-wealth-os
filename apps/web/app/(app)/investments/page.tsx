@@ -4,6 +4,7 @@ import {
   capitalDays,
   capitalStart,
   loadHarvestPositions,
+  loadNominees,
   loadPositionInput,
   loadSettings,
   unpricedFunds,
@@ -107,6 +108,7 @@ export default async function InvestmentsPage({
       position={position}
       taxFree={taxFree}
       earnedFy={earnedFy}
+      nominees={await loadNominees(supabase as unknown as SupabaseClient)}
       actions={{ save: saveFundEdit, addFund, addTxn: addFundTxn }}
     >
       {tab === 'update' && (

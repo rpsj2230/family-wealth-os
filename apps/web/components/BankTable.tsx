@@ -265,6 +265,7 @@ export function BankTable({
   updateBase = '/monthly',
   soonDays = DEFAULT_CONFIG.reminders.maturitySoonDays,
   notes,
+  helplines,
   saveNote,
   cashRates,
   sample = false,
@@ -275,7 +276,9 @@ export function BankTable({
   soonDays?: number;
   /** notes about the whole bank, by bank id */
   notes?: Record<string, string>;
-  /** server action that saves a bank note; without it the note is shown but not editable */
+  /** each bank's helpline, by bank id (shown in the family handbook, with a button that dials it) */
+  helplines?: Record<string, string>;
+  /** server action that saves a bank note and helpline; without it the note is shown but not editable */
   saveNote?: (f: FormData) => Promise<void>;
   /** the interest rate each savings account earns, by asset (see cashRatesFor) */
   cashRates?: Record<string, CashRate>;
@@ -321,18 +324,37 @@ export function BankTable({
                 Update
               </Link>
             </summary>
-            {(notes?.[b.key] || saveNote) && (
+            {(notes?.[b.key] || helplines?.[b.key] || saveNote) && (
               <div className="banknote small">
                 {notes?.[b.key] ? (
                   <span>{notes[b.key]}</span>
                 ) : (
                   <span className="muted">No bank note.</span>
                 )}
+                {helplines?.[b.key] && (
+                  <span className="muted" data-testid="bt-helpline">
+                    Helpline: {helplines[b.key]}
+                  </span>
+                )}
                 {saveNote && (
                   <details>
                     <summary>{notes?.[b.key] ? 'Edit note' : 'Add a note'}</summary>
                     <form action={saveNote} className="row notebox">
                       <input type="hidden" name="id" value={b.key} />
+                      {helplines && (
+                        <label className="bt-helpline">
+                          <span>Helpline (optional)</span>
+                          <input
+                            name="helpline"
+                            defaultValue={helplines[b.key] ?? ''}
+                            maxLength={60}
+                            inputMode="tel"
+                            autoComplete="off"
+                            placeholder="e.g. 1800 000 0000"
+                            aria-label={`Helpline of ${b.name}`}
+                          />
+                        </label>
+                      )}
                       <textarea
                         name="note"
                         rows={2}
