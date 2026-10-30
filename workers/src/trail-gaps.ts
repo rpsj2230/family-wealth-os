@@ -202,6 +202,41 @@ async function main() {
     }
   for (const [k, x] of [...ends].sort((a, b) => b[1].v - a[1].v))
     console.log(`  ${k}: ${x.n} lines, ${pct(x.v, allOut)}`);
+
+  // 5. lines left to answer that have the same sum going the other way in another account within a week: a transfer between
+  // your own accounts the pairing missed, and what that other line was taken for instead
+  console.log(
+    '\n== Lines to answer with the same sum the other way in another account within 7 days (no amounts)',
+  );
+  const all = t.lines.map((l) => ({
+    ...l,
+    cls: t.classified.get(l.id)?.cls ?? 'ask_in',
+    counterpart: t.classified.get(l.id)?.counterpart ?? null,
+  }));
+  const byCents = new Map<number, typeof all>();
+  for (const l of all) {
+    const k = Math.round(Math.abs(l.amount) * 100);
+    byCents.set(k, [...(byCents.get(k) ?? []), l]);
+  }
+  const dayMs = 86_400_000;
+  const words = (x: string) => x.toLowerCase().replace(/\d/g, '#').slice(0, 50);
+  let missed = 0;
+  for (const l of all.filter((x) => x.cls === 'ask_in' || x.cls === 'ask_out')) {
+    const twins = (byCents.get(Math.round(Math.abs(l.amount) * 100)) ?? []).filter(
+      (m) =>
+        m.asset_id !== l.asset_id &&
+        Math.sign(m.amount) === -Math.sign(l.amount) &&
+        Math.abs(Date.parse(m.txn_on) - Date.parse(l.txn_on)) <= 7 * dayMs,
+    );
+    if (!twins.length) continue;
+    missed++;
+    console.log(`  ${l.txn_on} ${name(l.asset_id)} ${l.cls} "${words(l.narration)}"`);
+    for (const m of twins)
+      console.log(
+        `    ${m.txn_on} ${name(m.asset_id)} ${m.cls}${m.counterpart ? ` (paired with ${name(m.counterpart)})` : ''} "${words(m.narration)}"`,
+      );
+  }
+  console.log(`  ${missed} lines`);
 }
 
 main().catch((e) => {
