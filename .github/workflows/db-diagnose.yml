@@ -152,6 +152,29 @@ jobs:
             left join public.amfi_schemes s on s.code = p.amfi_code
            order by 1, 3;
           SQL
+      - name: Fund totals by person, goal and platform (totals only)
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=0 <<'SQL'
+          \echo '== funds held: value at the latest price, the one-day change and the cost, by person, goal and platform (totals)'
+          with f as (
+            select o.display_name as owner, a.id, a.status, p.units, p.invested,
+                   case when lower(coalesce(a.label, '') || ' ' || p.fund_name) like '%in hdfc%' then 'HDFC Securities' else 'Kuvera' end as platform,
+                   coalesce((select string_agg(g.name, ' + ' order by g.name) from public.goal_allocations ga join public.goals g on g.id = ga.goal_id where ga.asset_id = a.id), '(no goal)') as goals,
+                   coalesce(p.amfi_code, case when p.fund_name ilike '%motilal%midcap%direct%' then '127042' end) as code
+              from public.mf_positions p join public.assets a on a.id = p.asset_id join public.owners o on o.id = a.owner_id
+             where coalesce(p.units, 0) > 0 and a.status not in ('closed', 'merged')
+          ), n as (
+            select f.*, (select nav from public.mf_navs m where m.amfi_code = f.code order by nav_date desc limit 1) as nav1,
+                        (select nav from public.mf_navs m where m.amfi_code = f.code order by nav_date desc offset 1 limit 1) as nav0,
+                        (select max(nav_date) from public.mf_navs m where m.amfi_code = f.code) as nav_on
+              from f
+          )
+          select owner, platform, goals, count(*) as funds, count(nav1) as priced,
+                 round(sum(units * nav1) / 1e5, 2) as value_lakh, round(sum(units * (nav1 - nav0)) / 1e3, 1) as one_day_thousand,
+                 round(sum(invested) / 1e5, 2) as cost_lakh, min(nav_on) as oldest_price, max(nav_on) as newest_price
+            from n group by rollup (owner, platform, goals) order by owner nulls last, platform nulls last, goals nulls last;
+          SQL
       - name: Compare with a platform's own figures (ratios only)
         if: inputs.expected != ''
         env:
