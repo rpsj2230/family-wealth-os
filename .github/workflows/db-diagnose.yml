@@ -144,12 +144,12 @@ jobs:
             from public.mf_positions p join public.assets a on a.id = p.asset_id join public.owners o on o.id = a.owner_id
            where p.amfi_code is null and a.status <> 'merged';
           \echo '== funds: plan saved, plan of the matched scheme, SIP saved or stopped, purchases on file (no amounts)'
-          select o.display_name as owner, coalesce(a.label, '') as label, p.fund_name, a.status, p.plan_type, a.amfi_code,
+          select o.display_name as owner, coalesce(a.label, '') as label, p.fund_name, a.status, p.plan_type, p.amfi_code,
                  s.plan as scheme_plan, p.sip_monthly is not null as sip_saved, p.sip_stopped,
                  (select count(*) from public.mf_transactions t where t.asset_id = a.id and t.kind in ('sip','purchase') and coalesce(t.source,'') <> 'estimate') as buys,
                  (select max(txn_on) from public.mf_transactions t where t.asset_id = a.id and t.kind in ('sip','purchase') and coalesce(t.source,'') <> 'estimate') as last_buy
             from public.mf_positions p join public.assets a on a.id = p.asset_id join public.owners o on o.id = a.owner_id
-            left join public.amfi_schemes s on s.code = a.amfi_code
+            left join public.amfi_schemes s on s.code = p.amfi_code
            order by 1, 3;
           SQL
       - name: Compare with a platform's own figures (ratios only)
