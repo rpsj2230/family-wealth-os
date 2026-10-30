@@ -1220,6 +1220,7 @@ table.pltbl th .sw {
 }
 .ledger-wrap {
   container-type: inline-size;
+  overflow-x: auto;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);

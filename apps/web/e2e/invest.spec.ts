@@ -23,6 +23,22 @@ test('the investments pages need a sign-in', async ({ request }) => {
 });
 
 test.describe('Investments (public sample)', () => {
+  test('no tab is wider than a desktop screen', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    for (const tab of [
+      '',
+      '?tab=funds',
+      '?tab=performance',
+      '?tab=transactions',
+      '?tab=breakdown',
+    ]) {
+      await page.goto(`/demo/investments${tab}`);
+      await noSideways(page);
+    }
+    await context.close();
+  });
+
   test('the headline: current value, pills across the panel, and "Also on this page"', async ({
     browser,
   }) => {
