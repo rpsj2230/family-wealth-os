@@ -359,6 +359,30 @@ async function main() {
           `Without property: net worth ₹${inr(noProp.netWorth)}, own money ₹${inr(noProp.ownMoney)}, lifetime profit ₹${inr(noProp.profit)} (${pct(noProp.profitPct)} of own money), XIRR on own money ${pct(noProp.xirr.rate)} (${noProp.xirr.status})`,
         );
       }
+      // bank money by NRE / NRO / other, and the part above the deposit insurance limit per bank and name (totals and counts only)
+      {
+        const left = new Set(nw.excluded.map((e) => e.assetId));
+        const rowOf = new Map(l.assetRows.map((a) => [a.id, a]));
+        const byKind = new Map<string, number>();
+        const byBankName = new Map<string, number>();
+        for (const v of l.portfolio.valued) {
+          if (left.has(v.assetId) || (v.type !== 'bank_account' && v.type !== 'fixed_deposit'))
+            continue;
+          const a = rowOf.get(v.assetId);
+          const amount = v.estimate?.estimatedAmount ?? 0;
+          const kind =
+            a?.account_kind === 'NRE' || a?.account_kind === 'NRO' ? a.account_kind : 'other';
+          byKind.set(kind, (byKind.get(kind) ?? 0) + amount);
+          // insured per name as written at each bank (a joint holding is its own name)
+          const key = `${a?.institution_id ?? '-'}|${a?.owner_id ?? '-'}|${(a?.holder_name ?? '').trim().toLowerCase()}|${a?.is_joint ? 'joint' : ''}`;
+          byBankName.set(key, (byBankName.get(key) ?? 0) + amount);
+        }
+        const limit = cfg.deposits.insuranceLimit;
+        const over = [...byBankName.values()].filter((x) => x > limit);
+        console.log(
+          `Bank money by kind: ${[...byKind].map(([k, x]) => `${k} ₹${inr(x)}`).join(' | ')}; above the ₹${inr(limit)} insured limit: ₹${inr(over.reduce((a, x) => a + x - limit, 0))} in ${over.length} of ${byBankName.size} bank-and-name holdings`,
+        );
+      }
       const fv = fundViews(position, { navStaleDays: cfg.funds.navStaleDays, upcomingDays: 31 });
       console.log(
         `Funds: confirmed ₹${inr(fv.confirmed)}, estimated ₹${inr(fv.estimated)} (with no confirmed units ₹${inr(fv.unconfirmedFunds)}), projected SIP ₹${inr(fv.projected.value)} from ${fv.projected.count} instalments (₹${inr(fv.projected.invested)}); stale prices ${fv.staleCount}, oldest NAV ${fv.oldestNav ?? '-'}`,
