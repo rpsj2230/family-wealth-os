@@ -21,6 +21,8 @@ export function demoTrail(): {
   labels: Record<string, string>;
   names: Record<string, string>;
   accounts: { a: string; b: string; dep: string };
+  banks: Record<string, string>;
+  meta: Record<string, { owner: string; type: string }>;
 } {
   const input = demoHomeInput(parseHomeRange('1y'));
   const position = input.position!;
@@ -158,5 +160,20 @@ export function demoTrail(): {
     chain,
     traceOptions: { smallest: st.trailSmallest, depth: st.trailDepth, budget: st.trailSteps },
   };
-  return { data, labels, names, accounts: { a: a.assetId, b: b.assetId, dep: dep.assetId } };
+  const banks = Object.fromEntries(
+    position.assets
+      .filter((x) => x.institutionId && bankNames[x.institutionId])
+      .map((x) => [x.assetId, bankNames[x.institutionId!]!]),
+  );
+  const meta = Object.fromEntries(
+    position.assets.map((x) => [x.assetId, { owner: x.ownerId, type: x.type }]),
+  );
+  return {
+    data,
+    labels,
+    names,
+    accounts: { a: a.assetId, b: b.assetId, dep: dep.assetId },
+    banks,
+    meta,
+  };
 }

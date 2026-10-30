@@ -26,6 +26,7 @@ export default async function StatementLinePage({
       labels={labels}
       names={names}
       lineHref={(a, l) => `/asset/${a}/line/${l}`}
+      diagramHref={(l) => `/trail?tab=flow&view=journey&l=${l}`}
     />
   );
 }

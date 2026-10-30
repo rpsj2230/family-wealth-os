@@ -209,6 +209,20 @@ Every bank statement line can be followed back to where its money started and fo
 
 **Where it stops.** Money from before your earliest statement, and money in accounts whose statements are not on file, can only be followed as far as the records go; sending those statements (the list is under Needed from you) replaces the guessed steps with the bank's own. Lines not answered yet in Explain movements → Bank statements show as "not answered yet" until you say what they were.
 
+### Money trail as a diagram and a tree
+
+The Money trail page has three tabs: **Details** (everything above, unchanged), **Flow diagram** and **Flow tree**. Both new tabs draw the same trail; they calculate nothing of their own, so their figures are the trail's.
+
+**Flow diagram** has three views:
+
+- **Where it started → where it is**: each rupee once, from where it started (Singapore, interest, deposit interest, money there before the statements, and the gaps), through the account or deposit it first came into, to where it is now or where it left the trail. Money that went round (a deposit paid back and booked again) is counted once. Under the diagram two checks compare it with the trail: money in at the start equals money at the end, and money still held equals the trail's total of today's money (with no filter set).
+- **Movements between holdings**: every movement from one holding to another in the period you choose, each once; a holding is on both sides, so money going from savings to a deposit and back shows as two movements.
+- **One holding's journey**: a holding's money step by step, back to where it started and forward to where it is now; every dated step is a box, so an account visited twice shows twice, in time order. A transaction page and a holding page link to it ("See it as a diagram").
+
+Bands are as wide as the money. **Solid** bands are verified (both lines on the statements, or named by the statement or the records); **dashed** bands were matched by amount and date (the counterpart is not confirmed); **dotted grey** bands and hatched boxes mark where a statement, a link or an answer is missing ("Transaction link not found", "Source statement unavailable", "Origin unknown", "Unverified transaction"). A gap never ends the diagram: money sent to an account whose statement does not show it arriving is drawn to that account, and what is known after it carries on. Tap a box or a band for its amount, dates and status; tap a box for its journey, its page, or (for a source) **Follow this money**. Zoom with + and −, **Fit to screen**, drag to move. **Filters** (financial year, dates, person, bank, account, money source, type of holding, verified or not, and grouping by account or bank) narrow it. **See every flow as a table** lists every flow with its amount, status, number of steps and dates.
+
+**Flow tree** starts from a source (for example Singapore: every Wise transfer in date order) and follows each amount forward through every account, deposit and fund to where it is now, or starts from a holding and goes back. Each box opens; matched steps are dashed on the left; gaps are named where they are.
+
 ## Can I retire now?
 
 Open **Retire**. The verdict stays at the top while you work in the tabs below it: _Your inputs_ (about you, spending and saving, market assumptions; Save keeps them), _Compare_ (three scenarios, retirement ages, the effect of common changes), _Range of outcomes_ and _Corpus and method_. The result is one of:

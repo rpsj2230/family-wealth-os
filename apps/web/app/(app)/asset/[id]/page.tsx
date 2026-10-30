@@ -338,6 +338,8 @@ async function HoldingTrail({ id, kind }: { id: string; kind: 'account' | 'depos
       <HoldingChain c={c} assetId={id} kind={kind} />
       <p className="small">
         <Link href={`/trail?h=${id}`}>Open it on the Money trail page</Link>
+        {' · '}
+        <Link href={`/trail?tab=flow&view=journey&h=${id}`}>See it as a diagram</Link>
       </p>
     </section>
   );

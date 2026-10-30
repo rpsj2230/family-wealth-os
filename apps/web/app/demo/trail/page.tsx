@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BottomNav, Sidebar } from '@/components/AppNav';
+import type { ChainContext } from '@/components/MoneyChainView';
 import { PageHead } from '@/components/PageHead';
+import { Tabs } from '@/components/Tabs';
 import { demoTrail } from '@/lib/demo-trail';
+import { FlowTab, TRAIL_TABS, type FlowParams } from '@/app/(app)/trail/FlowTab';
+import { FlowTreeTab } from '@/app/(app)/trail/FlowTreeTab';
 import { TrailView } from '@/app/(app)/trail/TrailView';
 
 export const metadata: Metadata = {
@@ -14,14 +18,34 @@ async function noSignOut() {
   'use server';
 }
 
-/** Public preview of the money trail on the invented sample household. */
+/** Public preview of the money trail on the invented sample household: details, flow diagram and flow tree. */
 export default async function DemoTrail({
   searchParams,
 }: {
-  searchParams: Promise<{ h?: string }>;
+  searchParams: Promise<FlowParams & { tab?: string }>;
 }) {
-  const { h } = await searchParams;
-  const { data, labels, names, accounts } = demoTrail();
+  const sp = await searchParams;
+  const { data, labels, names, accounts, banks, meta } = demoTrail();
+  const tab = sp.tab === 'flow' || sp.tab === 'tree' ? sp.tab : 'details';
+  const chain: ChainContext = {
+    chain: data.chain,
+    opts: data.traceOptions,
+    labels,
+    names,
+    remitById: data.remitById,
+    lineHref: (a, l) => `/demo/line?a=${a}&l=${l}`,
+    assetHref: (a) => `/demo/trail?h=${a}`,
+  };
+  const c = {
+    data,
+    labels,
+    names,
+    banks,
+    meta,
+    base: '/demo/trail',
+    lineHref: chain.lineHref,
+    assetHref: chain.assetHref,
+  };
   return (
     <div className="shell">
       <Sidebar email="sample@example.com" signOut={noSignOut} />
@@ -39,23 +63,27 @@ export default async function DemoTrail({
             title="Money trail"
             subtitle="Where the money in each account and deposit came from, back to Singapore, and whose money it was."
           />
-          <TrailView
-            data={data}
-            chain={{
-              chain: data.chain,
-              opts: data.traceOptions,
-              labels,
-              names,
-              remitById: data.remitById,
-              lineHref: (a, l) => `/demo/line?a=${a}&l=${l}`,
-              assetHref: (a) => `/demo/trail?h=${a}`,
-            }}
-            selected={h && data.trails.has(h) ? h : accounts.dep}
-            labels={labels}
-            names={names}
+          <Tabs
             base="/demo/trail"
-            sample
+            current={tab}
+            tabs={TRAIL_TABS}
+            {...(sp.h ? { keep: { h: sp.h } } : {})}
           />
+          {tab === 'flow' ? (
+            <FlowTab c={c} p={sp} />
+          ) : tab === 'tree' ? (
+            <FlowTreeTab c={c} chain={chain} p={sp} />
+          ) : (
+            <TrailView
+              data={data}
+              chain={chain}
+              selected={sp.h && data.trails.has(sp.h) ? sp.h : accounts.dep}
+              labels={labels}
+              names={names}
+              base="/demo/trail"
+              sample
+            />
+          )}
         </main>
       </div>
       <BottomNav />

@@ -61,6 +61,7 @@ export default async function DemoLine({
               lineHref={(a, l) => href(a, l)}
               assetHref={(a) => href(a)}
               trailHref={(a) => `/demo/trail?h=${a}`}
+              diagramHref={(l) => `/demo/trail?tab=flow&view=journey&l=${l}`}
               answerHref="/demo/reconcile"
             />
           )}

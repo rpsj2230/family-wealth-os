@@ -11,6 +11,10 @@ export const loadTrailContext = cache(async function loadTrailContext(): Promise
   data: MoneyTrailData;
   labels: Record<string, string>;
   names: Record<string, string>;
+  /** each holding's bank, for the flow diagram's filters */
+  banks: Record<string, string>;
+  /** each holding's owner and type, for the flow diagram */
+  meta: Record<string, { owner: string; type: string }>;
 }> {
   const { supabase } = await loadContext();
   const db = supabase as unknown as SupabaseClient;
@@ -36,7 +40,20 @@ export const loadTrailContext = cache(async function loadTrailContext(): Promise
       };
     }),
   );
-  return { data, labels, names: Object.fromEntries(loaded.ownerName) };
+  const bankOf = Object.fromEntries(
+    loaded.assetRows
+      .filter((a) => a.institution_id && bankName.has(a.institution_id))
+      .map((a) => [a.id, bankName.get(a.institution_id!)!]),
+  );
+  return {
+    data,
+    labels,
+    names: Object.fromEntries(loaded.ownerName),
+    banks: bankOf,
+    meta: Object.fromEntries(
+      loaded.assetRows.map((a) => [a.id, { owner: a.owner_id, type: a.type }]),
+    ),
+  };
 });
 
 /** What the step-by-step trail views need (components/MoneyChainView.tsx), for the signed-in pages. */

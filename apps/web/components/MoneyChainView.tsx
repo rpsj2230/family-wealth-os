@@ -237,7 +237,7 @@ function Tree({
   ];
   const row = <StepRow s={s} c={c} followed={followed} />;
   return (
-    <li className={depth >= 5 ? 'ch-node ch-deep' : 'ch-node'}>
+    <li className={`ch-node${depth >= 5 ? ' ch-deep' : ''}${guessed(s) ? ' ch-matched' : ''}`}>
       {kids.length ? (
         <details open={depth < OPEN_STEPS}>
           <summary>{row}</summary>
@@ -415,18 +415,33 @@ function Ends({ points, c }: { points: EndPoint[]; c: ChainContext }) {
   );
 }
 
-/** Several trees (a holding's parts), the largest first, sharing the steps a page shows. */
-function Forest({
+/** Several trees (a holding's parts), the largest first (or in date order), sharing the steps a page shows. */
+export function Forest({
   links,
   c,
   dir,
+  most = MOST_TREES,
+  byDate = false,
+  testId,
 }: {
   links: ChainLink[];
   c: ChainContext;
   dir: 'back' | 'forward';
+  /** at most this many trees; the rest are counted */
+  most?: number;
+  /** in the order of the steps' dates instead of by amount */
+  byDate?: boolean;
+  testId?: string;
 }) {
   const sorted = [...links].sort((a, b) => b.amount - a.amount);
-  const shown = sorted.slice(0, MOST_TREES);
+  const kept = sorted.slice(0, most);
+  const shown = byDate
+    ? kept.sort((a, b) =>
+        (c.chain.nodes.get(a.node)?.date ?? '').localeCompare(
+          c.chain.nodes.get(b.node)?.date ?? '',
+        ),
+      )
+    : kept;
   const opts = {
     ...c.opts,
     budget: Math.max(20, Math.floor(c.opts.budget / Math.max(1, shown.length))),
@@ -439,9 +454,12 @@ function Forest({
         : traceForward(c.chain, l.node, opts, l.amount),
     )
     .filter((t): t is TraceStep => !!t);
-  const rest = sorted.slice(MOST_TREES);
+  const rest = sorted.slice(most);
   return (
-    <ul className="ch-tree plain" data-testid={dir === 'back' ? 'chain-back' : 'chain-forward'}>
+    <ul
+      className="ch-tree plain"
+      data-testid={testId ?? (dir === 'back' ? 'chain-back' : 'chain-forward')}
+    >
       {trees.map((t, i) => (
         <Tree key={i} s={t} c={c} dir={dir} depth={0} followed={total} />
       ))}

@@ -22,6 +22,7 @@ export function LineView({
   lineHref,
   assetHref = (a) => `/asset/${a}`,
   trailHref = (a) => `/trail?h=${a}`,
+  diagramHref,
   answerHref = '/reconcile?tab=statements',
 }: {
   d: LineDetail;
@@ -32,6 +33,8 @@ export function LineView({
   lineHref: (assetId: string, lineId: string) => string;
   assetHref?: (assetId: string) => string;
   trailHref?: (assetId: string) => string;
+  /** the line's journey as a flow diagram */
+  diagramHref?: (lineId: string) => string;
   answerHref?: string;
 }) {
   const id = d.line.assetId;
@@ -134,6 +137,12 @@ export function LineView({
         <LineChain c={chain} lineId={d.line.id} />
         <p className="small ln-step">
           <Link href={trailHref(id)}>The whole trail of {account}</Link>
+          {diagramHref && (
+            <>
+              {' · '}
+              <Link href={diagramHref(d.line.id)}>See it as a diagram</Link>
+            </>
+          )}
         </p>
       </section>
     </>

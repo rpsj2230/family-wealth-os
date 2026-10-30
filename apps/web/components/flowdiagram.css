@@ -1,0 +1,260 @@
+/* the money flow diagram (components/FlowDiagram.tsx); colours from the chart tokens in fundviz.css (light and dark) */
+.fl {
+  min-width: 0;
+}
+.fl-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.fl-box {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--viz-surface);
+  touch-action: none;
+}
+.fl-svg {
+  display: block;
+  cursor: grab;
+  user-select: none;
+}
+.fl-svg:active {
+  cursor: grabbing;
+}
+.fl-coltitle {
+  fill: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.fl-label {
+  fill: var(--fg);
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: var(--viz-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+.fl-amt {
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.fl-sub {
+  fill: var(--muted);
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--viz-surface);
+  stroke-width: 3px;
+  cursor: pointer;
+}
+.fl-node {
+  cursor: pointer;
+  outline: none;
+}
+.fl-node rect {
+  stroke: var(--viz-surface);
+  stroke-width: 1px;
+}
+.fl-node:focus-visible rect,
+.fl-node:hover rect {
+  stroke: var(--fg);
+  stroke-width: 2px;
+}
+/* roles: fixed order (validated): blue, amber, purple, orange, green; grey for spending, gaps and folded parts */
+.r-singapore rect,
+.fl-sw.r-singapore {
+  fill: var(--viz-1);
+}
+.r-deposit rect,
+.fl-sw.r-deposit {
+  fill: var(--viz-4);
+}
+.r-account rect,
+.fl-sw.r-account {
+  fill: var(--viz-7);
+}
+.r-fund rect,
+.fl-sw.r-fund {
+  fill: var(--viz-2);
+}
+.r-earning rect,
+.fl-sw.r-earning {
+  fill: var(--viz-3);
+}
+.r-source rect,
+.fl-sw.r-source,
+.r-end rect,
+.fl-sw.r-end,
+.r-other rect,
+.fl-sw.r-other {
+  fill: var(--viz-other);
+}
+.r-outside rect,
+.fl-sw.r-outside,
+.fl-node.gap rect,
+.fl-sw.r-gap {
+  fill: url(#fl-hatch);
+  stroke: var(--viz-other);
+  stroke-width: 1.5px;
+  stroke-dasharray: 3 2;
+}
+.fl-sw.r-outside,
+.fl-sw.r-gap {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--viz-other),
+    var(--viz-other) 2px,
+    var(--viz-surface) 2px,
+    var(--viz-surface) 5px
+  );
+  border: 1px dashed var(--viz-other);
+}
+.fl-hatch-bg {
+  fill: var(--viz-surface);
+}
+.fl-hatch-line {
+  stroke: var(--viz-other);
+  stroke-width: 2;
+}
+.fl-sw.r-singapore {
+  background: var(--viz-1);
+}
+.fl-sw.r-deposit {
+  background: var(--viz-4);
+}
+.fl-sw.r-account {
+  background: var(--viz-7);
+}
+.fl-sw.r-fund {
+  background: var(--viz-2);
+}
+.fl-sw.r-earning {
+  background: var(--viz-3);
+}
+.fl-sw.r-source,
+.fl-sw.r-end,
+.fl-sw.r-other {
+  background: var(--viz-other);
+}
+/* bands: the colour of where the money comes from; solid verified, dashed matched, dotted grey missing */
+.fl-link {
+  fill: none;
+  stroke-opacity: 0.38;
+  stroke: var(--viz-other);
+  cursor: pointer;
+  outline: none;
+  transition: stroke-opacity 0.15s;
+}
+.fl-link.r-singapore {
+  stroke: var(--viz-1);
+}
+.fl-link.r-account {
+  stroke: var(--viz-7);
+}
+.fl-link.r-deposit {
+  stroke: var(--viz-4);
+}
+.fl-link.r-fund {
+  stroke: var(--viz-2);
+}
+.fl-link.r-earning {
+  stroke: var(--viz-3);
+}
+.fl-link.s-matched {
+  stroke-dasharray: 10 5;
+}
+.fl-link.s-gap {
+  stroke: var(--viz-other);
+  stroke-dasharray: 2 5;
+  stroke-opacity: 0.55;
+}
+.fl-link:hover,
+.fl-link:focus-visible {
+  stroke-opacity: 0.7;
+}
+.fl-link.dim {
+  stroke-opacity: 0.08;
+}
+.fl-tip {
+  pointer-events: none;
+}
+.fl-legend .fl-key {
+  display: inline-block;
+  width: 26px;
+  height: 0;
+  border-top: 4px solid var(--viz-1);
+}
+.fl-legend .fl-key.s-matched {
+  border-top-style: dashed;
+}
+.fl-legend .fl-key.s-gap {
+  border-top: 4px dotted var(--viz-other);
+}
+.fl-picked {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.fl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fl-table {
+  max-width: 100%;
+}
+.fl-table table {
+  max-width: none;
+}
+/* the filters above the diagram: one row on a wide screen, wrapping on a phone */
+.fl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: end;
+  margin: 0 0 12px;
+}
+.fl-filters label {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 0;
+}
+.fl-filters select,
+.fl-filters input {
+  max-width: 100%;
+  min-width: 0;
+}
+.fl-checks {
+  margin: 10px 0 0;
+}
+.fl-checks li {
+  padding: 2px 0;
+}
+.fl-checks .ok {
+  color: var(--ok-fg);
+}
+.fl-checks .fail {
+  color: var(--fail);
+}
+.fl-views {
+  margin-bottom: 10px;
+}
+.fl-filterbox {
+  margin: 0 0 10px;
+}
+.fl-filterbox > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}

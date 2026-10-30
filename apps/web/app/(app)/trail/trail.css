@@ -242,3 +242,10 @@
   padding: 0.3rem 0;
   overflow-wrap: anywhere;
 }
+
+/* the flow tree: steps that were matched rather than verified are dashed on the left */
+.ch-node.ch-matched > details > summary,
+.ch-node.ch-matched > .ch-solo {
+  border-left: 2px dashed var(--viz-other);
+  padding-left: 4px;
+}

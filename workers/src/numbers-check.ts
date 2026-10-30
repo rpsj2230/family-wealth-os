@@ -8,6 +8,12 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   capitalLedger,
+  chainCoverage,
+  checkOverview,
+  holdingSources,
+  journeyFlows,
+  movementFlows,
+  overviewFlows,
   fundValueFrom,
   fundViews,
   isHeld,
@@ -419,6 +425,63 @@ async function main() {
             ? `median ${depth.sort((a, b) => a - b)[Math.floor(depth.length / 2)]}, most ${depth[depth.length - 1]}`
             : 'none'
         }`,
+      );
+    }
+    // the flow diagram, checked against the trail itself (money-flow.ts): totals only
+    {
+      const c = t.chain;
+      const kinds = new Map(t.holdings.map((h) => [h.id, h.kind]));
+      const owners = new Map(t.holdings.map((h) => [h.id, h.ownerId]));
+      const ctx = {
+        kindOf: (h: string) => kinds.get(h) ?? (c.into.has(h) ? ('deposit' as const) : null),
+        ownerOf: (h: string) => owners.get(h) ?? null,
+      };
+      const started = performance.now();
+      const ov = overviewFlows(c, ctx);
+      const cov = chainCoverage(c, (h) => ctx.kindOf(h));
+      const allStarts = [...c.nodes.values()].reduce(
+        (s, n) => s + n.starts.reduce((a, x) => a + x.amount, 0),
+        0,
+      );
+      const checks = checkOverview(ov, cov.total);
+      const st = (g: ReturnType<typeof overviewFlows>, k: string) =>
+        g.links.filter((l) => l.status === k).reduce((s, l) => s + l.amount, 0);
+      console.log(
+        `\nFlow diagram (overview), built in ${Math.round(performance.now() - started)} ms: ${ov.nodes.length} boxes, ${ov.links.length} flows.`,
+      );
+      console.log(
+        `  Money in at the start ${lakh(ov.total)} (every start in the trail: ${lakh(allStarts)}); ${checks.map((k) => `${k.ok ? 'OK' : 'MISMATCH'} ${k.label} (${lakh(k.shown)} vs ${lakh(k.expected)})`).join('; ')}`,
+      );
+      const flowsInto = ov.links.filter(
+        (l) => l.source.startsWith('in:') || l.source.startsWith('bank:'),
+      );
+      const tot = flowsInto.reduce((s, l) => s + l.amount, 0);
+      console.log(
+        `  Where it went, by status: verified ${lakh(st(ov, 'verified') - ov.links.filter((l) => l.source.startsWith('start:') && l.status === 'verified').reduce((s, l) => s + l.amount, 0))} of ${lakh(tot)}; matched by amount and date ${lakh(flowsInto.filter((l) => l.status === 'matched').reduce((s, l) => s + l.amount, 0))}; missing or unverified ${lakh(flowsInto.filter((l) => l.status === 'gap').reduce((s, l) => s + l.amount, 0))}`,
+      );
+      const mv = movementFlows(c, ctx);
+      const sg = overviewFlows(c, ctx, { sources: ['singapore'] });
+      console.log(
+        `  Movements between holdings: ${mv.links.length} flows, ${lakh(mv.total)} moved in all (a rupee can move more than once); Singapore money followed: ${lakh(sg.total)}`,
+      );
+      let journeys = 0;
+      let bad = 0;
+      for (const h of t.holdings) {
+        const g = journeyFlows(
+          c,
+          ctx,
+          { back: holdingSources(c, h.id), forward: c.outOf.get(h.id) ?? [], focus: h.id },
+          { ...t.traceOptions, budget: 160 },
+        );
+        journeys++;
+        for (const l of g.links) {
+          const a = g.nodes.find((x) => x.id === l.source);
+          const b = g.nodes.find((x) => x.id === l.target);
+          if (!a || !b || a.column >= b.column) bad++;
+        }
+      }
+      console.log(
+        `  Journeys built for ${journeys} holdings; flows running backwards in time: ${bad}`,
       );
     }
     // what is still needed from the household, as the tasks say it
