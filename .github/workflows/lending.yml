@@ -14,6 +14,16 @@ on:
         description: the people you lent to, comma separated (as you write them)
         required: true
         type: string
+      held:
+        description: 'optional: accounts of yours in someone else''s name, Name@Bank, comma separated (Atul@IDFC)'
+        required: false
+        default: ''
+        type: string
+      all_repaid:
+        description: every loan named was paid back in full (some outside these statements)
+        required: false
+        default: false
+        type: boolean
       review_above:
         description: 'optional: set the limit (₹) for asking about a line no rule places; smaller payments count as spending'
         required: false
@@ -34,6 +44,8 @@ jobs:
       MODE: ${{ inputs.mode }}
       NAMES: ${{ inputs.names }}
       REVIEW_ABOVE: ${{ inputs.review_above }}
+      HELD: ${{ inputs.held }}
+      ALL_REPAID: ${{ inputs.all_repaid }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

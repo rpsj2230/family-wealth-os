@@ -19,6 +19,14 @@ async function main() {
     .split(',')
     .map((n) => n.trim())
     .filter(Boolean);
+  // accounts of yours held in someone else's name, "Name@Bank" ("Atul@IDFC")
+  const held = (process.env.HELD ?? '')
+    .split(',')
+    .map((h) => h.trim().split('@'))
+    .filter((h) => h.length === 2 && h[0]!.trim() && h[1]!.trim())
+    .map(([who, bank]) => ({ who: who!.trim(), bank: bank!.trim() }));
+  // the household says every loan named here was paid back in full, some of it outside these statements
+  const allRepaid = process.env.ALL_REPAID === 'true';
   const db = connectDb();
   const hh = await householdId(db);
   const { config } = await loadSettings(db, hh);
@@ -125,12 +133,59 @@ async function main() {
       `Asking limit from ₹${config.statements.reviewAbove.toLocaleString('en-IN')} to ₹${reviewAbove.toLocaleString('en-IN')}: ${below.filter((l) => l.amount < 0).length} payments out become spending, ${below.filter((l) => l.amount > 0).length} payments in become small amounts in`,
     );
   }
+  // the accounts held in someone else's name: which bank on file, whose money (the person most of the lines are with)
+  const heldToAdd: { who: string; instId: string; bank: string; owner: string }[] = [];
+  for (const h of held) {
+    const inst = [...(loaded.institutionName ?? new Map<string, string>())].find(([, n]) =>
+      n.toLowerCase().includes(h.bank.toLowerCase()),
+    );
+    const named = t.lines.filter((l) => personNamed(l.narration, [{ name: h.who }]));
+    const byOwner = new Map<string, number>();
+    for (const l of named) {
+      const o = asset.get(l.asset_id)?.owner_id ?? '';
+      byOwner.set(o, (byOwner.get(o) ?? 0) + 1);
+    }
+    const owner = [...byOwner].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const there = loaded.assetRows.find(
+      (a) =>
+        a.type === 'bank_account' &&
+        a.institution_id === inst?.[0] &&
+        personNamed(a.holder_name ?? '', [{ name: h.who }]) !== null,
+    );
+    console.log(
+      `\nAccount in ${h.who}'s name at ${inst?.[1] ?? `${h.bank} (no such bank on file)`}: ${named.length} statement lines name ${h.who}; ${there ? `already on file ("${there.nickname}")` : owner ? `to be added as ${loaded.ownerName.get(owner)}'s` : 'nobody to own it'}`,
+    );
+    if (inst && owner && !there)
+      heldToAdd.push({ who: h.who, instId: inst[0], bank: inst[1], owner });
+  }
+  if (allRepaid)
+    console.log(
+      'Every loan is recorded as paid back in full; what the statements do not show coming back was paid outside them.',
+    );
   if (!write) {
     console.log(
-      `\nPlan only: ${toAdd.length} loans would be recorded. Run again with mode "apply".`,
+      `\nPlan only: ${toAdd.length} loans and ${heldToAdd.length} accounts would be recorded. Run again with mode "apply".`,
     );
     return;
   }
+  for (const h of heldToAdd)
+    must(
+      await db
+        .from('assets')
+        .insert({
+          household_id: hh,
+          type: 'bank_account',
+          owner_id: h.owner,
+          institution_id: h.instId,
+          nickname: `${h.bank} account in ${h.who}'s name`,
+          holder_name: h.who,
+          status: 'active',
+          currency: 'INR',
+          notes: `Your account, held in ${h.who}'s name. Money to and from ${h.who} at ${h.bank} is money moved between your own accounts. Its statement would give its balance.`,
+        })
+        .select('id'),
+      `account in ${h.who}'s name`,
+    );
 
   if (reviewAbove !== null) {
     const row = must(
@@ -152,7 +207,16 @@ async function main() {
     const first = p.lent[0]!;
     const owner = asset.get(first.assetId)!.owner_id;
     const lent = Math.round(-p.lent.reduce((s, l) => s + l.amount, 0) * 100) / 100;
-    const settled = p.owed <= Math.max(1, lent * 0.01);
+    const settled = allRepaid || p.owed <= Math.max(1, lent * 0.01);
+    // paid back in full, the rest outside these statements: nothing owed after the last line with them
+    const last = [...p.lent, ...p.repaid]
+      .map((l) => l.date)
+      .sort()
+      .pop()!;
+    const steps =
+      allRepaid && p.owed > 1
+        ? [...p.steps.filter((x) => x.date !== last), { date: last, owed: 0 }]
+        : p.steps;
     const a = must(
       await db
         .from('assets')
@@ -163,7 +227,7 @@ async function main() {
           nickname: `Loan to ${p.name}`,
           status: settled ? 'closed' : 'active',
           currency: 'INR',
-          notes: `From the bank statements: lent ${p.lent.length} times from ${first.date}, paid back ${p.repaid.length} times.`,
+          notes: `From the bank statements: lent ${p.lent.length} times from ${first.date}, paid back ${p.repaid.length} times${allRepaid && p.owed > 1 ? '; the rest was paid back outside these statements' : ''}.`,
         })
         .select('id')
         .single(),
@@ -203,7 +267,7 @@ async function main() {
       await db
         .from('observations')
         .insert(
-          p.steps.map((s) => ({
+          steps.map((s) => ({
             household_id: hh,
             asset_id: a.id,
             kind: 'valuation',
@@ -222,7 +286,7 @@ async function main() {
     added++;
   }
   console.log(
-    `\nRecorded ${added} loans${reviewAbove !== null ? `; asking limit set to ₹${reviewAbove.toLocaleString('en-IN')}` : ''}.`,
+    `\nRecorded ${added} loans and ${heldToAdd.length} accounts in another's name${reviewAbove !== null ? `; asking limit set to ₹${reviewAbove.toLocaleString('en-IN')}` : ''}.`,
   );
   const rb = await rebuildStatementMoves(db, hh);
   console.log(
