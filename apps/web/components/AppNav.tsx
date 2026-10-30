@@ -18,6 +18,9 @@ import {
   PiggyBank,
   Banknote,
   Receipt,
+  Route,
+  Scale,
+  Sprout,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -59,6 +62,9 @@ export const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: 'Decide',
     items: [
+      { href: '/trail', label: 'Money trail', icon: Route },
+      { href: '/growth', label: 'Money at work', icon: Sprout },
+      { href: '/reconcile', label: 'Explain movements', icon: Scale },
       { href: '/raise', label: 'I need money', icon: Banknote },
       { href: '/new-money', label: 'New money', icon: PiggyBank },
       { href: '/rates', label: 'Rates', icon: Percent },
