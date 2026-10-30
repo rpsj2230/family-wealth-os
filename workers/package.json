@@ -23,7 +23,8 @@
     "capital-opening": "tsx src/capital-opening.ts",
     "timing": "tsx src/timing.ts",
     "bank-statements": "tsx src/bank-statements.ts",
-    "statement-deposits": "tsx src/statement-deposits.ts"
+    "statement-deposits": "tsx src/statement-deposits.ts",
+    "bank-tidy": "tsx src/bank-tidy.ts"
   },
   "dependencies": {
     "@fwos/core": "workspace:*",
