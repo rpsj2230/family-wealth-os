@@ -7,7 +7,11 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import {
+  addDaysIso,
+  addMonthsIso,
   capitalLedger,
+  fyStartOn,
+  xirr,
   chainCoverage,
   checkOverview,
   holdingSources,
@@ -258,6 +262,7 @@ async function main() {
         `CHECK the ledger's net worth today equals the portfolio's: ${Math.abs(t.netWorth - nw.total) < 1 ? 'yes' : `NO (differs by ₹${inr(t.netWorth - nw.total)})`}`,
       );
       for (const lim of ledger.limitations) console.log(`  limitation: ${lim}`);
+
       // where any difference between the engine's day and the portfolio sits, by kind (totals only)
       const day = positionAsOf(position, date);
       const byType = new Map<string, number>();
@@ -276,6 +281,84 @@ async function main() {
         console.log(
           `This FY: start ₹${inr(fy.figures.start)}, outside confirmed ₹${inr(fy.figures.confirmedExternal)}, not explained ₹${inr(fy.figures.unexplained)}, earned ₹${inr(fy.figures.earnings.total)} (savings ₹${inr(fy.figures.earnings.savings)}, deposits ₹${inr(fy.figures.earnings.deposits)}, funds ₹${inr(fy.figures.earnings.funds)}), end ₹${inr(fy.figures.end)}; time-weighted ${pct(fy.twr)}`,
         );
+      // returns on what is held now, each kind from its own money movements, and own money with property left out (rates and totals)
+      {
+        const left = new Set(nw.excluded.map((e) => e.assetId));
+        const valueOf = (id: string) =>
+          l.portfolio.valued.find((v) => v.assetId === id)?.estimate?.estimatedAmount ?? 0;
+        const at = (s: string) => new Date(`${s}T00:00:00Z`);
+        const perYear: Record<string, number> = {
+          monthly: 12,
+          quarterly: 4,
+          half_yearly: 2,
+          yearly: 1,
+        };
+        const fd: { date: Date; amount: number }[] = [];
+        const mf: { date: Date; amount: number }[] = [];
+        let fdValue = 0;
+        let mfValue = 0;
+        let payouts = 0;
+        for (const a of position.assets) {
+          if (left.has(a.assetId)) continue;
+          const v = valueOf(a.assetId);
+          if (a.type === 'fixed_deposit' && a.fd && a.fd.bookedOn < date && v > 0) {
+            fd.push({ date: at(a.fd.bookedOn), amount: -a.fd.principal });
+            const n = perYear[a.fd.payout ?? 'cumulative'];
+            // a deposit that pays its interest out: each payment is money back on its day
+            if (n)
+              for (
+                let d = addMonthsIso(a.fd.bookedOn, 12 / n);
+                d <= date;
+                d = addMonthsIso(d, 12 / n)
+              ) {
+                fd.push({ date: at(d), amount: (a.fd.principal * a.fd.rate) / n });
+                payouts++;
+              }
+            fdValue += v;
+          }
+          if (a.type === 'mutual_fund' && a.fund && v > 0) {
+            for (const t of a.fund.txns)
+              if (t.amount !== 0)
+                mf.push({
+                  date: at(t.date),
+                  amount: t.units > 0 ? -Math.abs(t.amount) : Math.abs(t.amount),
+                });
+            mfValue += v;
+          }
+        }
+        const rate = (flows: { date: Date; amount: number }[], value: number) =>
+          xirr([...flows, { date: at(date), amount: value }]).rate;
+        const rFd = rate(fd, fdValue);
+        const rMf = rate(mf, mfValue);
+        const rBoth = rate([...fd, ...mf], fdValue + mfValue);
+        console.log(
+          `\nXIRR on what is held now: deposits ${pct(rFd)} (₹${inr(fdValue)}, ${payouts} interest payouts counted), funds ${pct(rMf)} (₹${inr(mfValue)}), deposits and funds together ${pct(rBoth)}`,
+        );
+        const cash = nw.byType.bank_account ?? 0;
+        const fyDays = Math.max(
+          1,
+          (at(date).getTime() - at(addDaysIso(fyStartOn(date), 0)).getTime()) / 86_400_000,
+        );
+        const cashRate =
+          fy.figures && cash > 0 ? (fy.figures.earnings.savings / cash) * (365 / fyDays) : null;
+        const counted = nw.total - (nw.byType.property ?? 0);
+        const earning =
+          rFd !== null && rMf !== null && cashRate !== null
+            ? (fdValue * rFd + mfValue * rMf + cash * cashRate) / counted
+            : null;
+        console.log(
+          `Savings interest this FY as a yearly rate: ${pct(cashRate)}; earning rate of all money now (value-weighted, property out): ${pct(earning)}`,
+        );
+        const noProp = capitalLedger({
+          position: { ...position, assets: position.assets.filter((a) => a.type !== 'property') },
+          moves: ledgerMovesOf(l.engine.moves),
+          openingDate: cfg.capital.openingDate || null,
+          reinvestDays: cfg.harvest.reinvestDays,
+        }).totals;
+        console.log(
+          `Without property: net worth ₹${inr(noProp.netWorth)}, own money ₹${inr(noProp.ownMoney)}, lifetime profit ₹${inr(noProp.profit)} (${pct(noProp.profitPct)} of own money), XIRR on own money ${pct(noProp.xirr.rate)} (${noProp.xirr.status})`,
+        );
+      }
       const fv = fundViews(position, { navStaleDays: cfg.funds.navStaleDays, upcomingDays: 31 });
       console.log(
         `Funds: confirmed ₹${inr(fv.confirmed)}, estimated ₹${inr(fv.estimated)} (with no confirmed units ₹${inr(fv.unconfirmedFunds)}), projected SIP ₹${inr(fv.projected.value)} from ${fv.projected.count} instalments (₹${inr(fv.projected.invested)}); stale prices ${fv.staleCount}, oldest NAV ${fv.oldestNav ?? '-'}`,
