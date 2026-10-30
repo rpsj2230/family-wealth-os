@@ -5,7 +5,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { runDailyValuation, syncSipEstimates } from '@fwos/data';
-import { configFromJson, DEFAULT_CONFIG } from '@fwos/core';
+import { benchmarkCodes, configFromJson, DEFAULT_CONFIG } from '@fwos/core';
 import { parseNavHint, refreshMarketData, type MarketIo, type MarketStore } from '@fwos/ingest';
 
 const url = process.env.SUPABASE_URL;
@@ -56,12 +56,13 @@ const store: MarketStore = {
       await db.from('household_config').select('config'),
       'household configuration',
     );
-    const codes = rows.map(
-      (r) => configFromJson((r as { config: unknown }).config).funds.benchmarkCode,
-    );
-    return [
-      ...new Set((rows.length > 0 ? codes : [DEFAULT_CONFIG.funds.benchmarkCode]).filter(Boolean)),
-    ];
+    // the general benchmark and every index fund or ETF that follows a fund's own benchmark (Settings > Funds)
+    const configs = rows.map((r) => configFromJson((r as { config: unknown }).config).funds);
+    const codes = (configs.length > 0 ? configs : [DEFAULT_CONFIG.funds]).flatMap((f) => [
+      f.benchmarkCode,
+      ...benchmarkCodes(f.benchmarks),
+    ]);
+    return [...new Set(codes.filter(Boolean))];
   },
   async navCount(code) {
     // only prices from the full-history source count: the daily rows of a fund whose back-fill failed must not hide that

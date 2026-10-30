@@ -24,6 +24,7 @@ import {
   ownPeriods,
   PERF_PERIODS,
   shadowLine,
+  benchFlows,
   xirrTrail,
   type XirrPoint,
   type OwnPeriodRow,
@@ -92,6 +93,11 @@ export interface FundReturns extends ReturnView {
   /** the cash flows behind a value-based line are worked out from the start date and SIP, not a statement */
   estimated: boolean;
   benchName: string | null;
+  /** the index fund or ETF the benchmark is followed through, and how the benchmark was chosen */
+  benchProxy: string | null;
+  benchBasis: string | null;
+  /** the benchmark's prices start after the first purchase: the comparison of money starts on this day, from the holding's value then */
+  benchFrom: string | null;
   /** the first purchase (or the start date): the views of the holder's own money start here */
   since: string | null;
   /** the whole price history, from the fund's launch */
@@ -150,8 +156,16 @@ export function buildFundDetail(args: {
   config: AppConfig['funds'];
   /** the most points drawn on the price line */
   maxPoints: number;
-  /** the benchmark proxy's prices, when loaded */
-  benchmark?: { name: string | null; navs: IndexPoint[] } | null;
+  /**
+   * the benchmark: the index's name, the prices of what follows it, the fund or ETF that does (when it is not the name itself), and
+   * how it was chosen ('fund': the fund's own benchmark; 'kind': the rule for its kind; 'default'/'general': the general one)
+   */
+  benchmark?: {
+    name: string | null;
+    navs: IndexPoint[];
+    proxy?: string | undefined;
+    basis?: string | undefined;
+  } | null;
 }): FundDetail {
   const f = args.fund;
   const clipped = clipSeries(f.trend, args.range, args.today);
@@ -236,19 +250,22 @@ export function buildFundDetail(args: {
       defs: PERF_PERIODS.filter((d) => d.key !== '1w'),
       annualiseAfterMonths: args.config.annualiseAfterMonths,
     });
-    const benchMine =
-      benchLine.length >= 2
-        ? shadowLine(
-            f.flows,
-            benchLine,
-            valuePts.map((p) => p.date),
-          )
-        : [];
+    const bf = benchLine.length >= 2 ? benchFlows(f.flows, valuePts, benchLine) : null;
+    const benchMine = bf
+      ? shadowLine(
+          bf.flows,
+          benchLine,
+          valuePts.map((p) => p.date).filter((d) => !bf.from || d >= bf.from),
+        )
+      : [];
     returns = {
       ...mine,
       basis: byPrice ? 'price' : 'values',
       estimated: !byPrice && f.flowsEstimated,
       benchName: args.benchmark?.name ?? null,
+      benchProxy: args.benchmark?.proxy ?? null,
+      benchBasis: args.benchmark?.basis ?? null,
+      benchFrom: bf?.from ?? null,
       since,
       whole,
       own,
@@ -260,7 +277,7 @@ export function buildFundDetail(args: {
                 .filter((p) => p.invested !== null)
                 .map((p) => ({ date: p.date, value: p.invested as number })),
               bench: benchMine,
-              xirr: xirrTrail(f.flows, valuePts, benchMine),
+              xirr: xirrTrail(f.flows, valuePts, benchMine, bf?.flows ?? f.flows),
             }
           : null,
     };

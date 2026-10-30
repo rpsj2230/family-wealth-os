@@ -40,6 +40,7 @@ describe('settings fields', () => {
       matchPriceTolerance: '0.2',
       matchPriceDays: '7',
       platformRules: 'in hdfc = HDFC Securities\n* = Kuvera',
+      benchmarks: DEFAULT_CONFIG.funds.benchmarks.join('\n'),
       planTolerance: '2',
     });
     const ok = parseGroup(
@@ -72,6 +73,7 @@ describe('settings fields', () => {
           matchPriceTolerance: 0.005,
           matchPriceDays: 10,
           platformRules: ['In HDFC = HDFC Securities', '* = Kuvera'],
+          benchmarks: [],
           planTolerance: 0.03,
         },
       },

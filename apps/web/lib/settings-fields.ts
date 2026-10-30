@@ -6,6 +6,7 @@
 import {
   cleanSender,
   DEFAULT_CONFIG,
+  parseBenchmarkRule,
   parsePlatformRule,
   parsePriceLine,
   type AppConfig,
@@ -21,6 +22,7 @@ export type FieldKind =
   | 'lines'
   | 'senders'
   | 'platforms'
+  | 'benchmarks'
   | 'words'
   | 'check'
   | 'date'
@@ -1031,6 +1033,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: 'one rule per line',
       },
       {
+        name: 'benchmarks',
+        label: 'Each fund’s benchmark (on its page, Returns)',
+        hint: 'One rule a line: words in the fund’s name = the index = the scheme code of an index fund or ETF that follows it (code*0.5 + code*0.5 for a mix of two). “kind:small = …” covers a kind of fund (small, mid, large, flexi, elss, hybrid…) that no name rule fits, and “* = …” every other fund. The built-in list has each of your funds’ official benchmarks from their scheme documents.',
+        kind: 'benchmarks',
+        path: ['funds', 'benchmarks'],
+        unit: 'one rule per line',
+      },
+      {
         name: 'planTolerance',
         label: 'A fund’s SIP plan may differ from the amount invested by',
         hint: 'A fund with no transactions has its units rebuilt from its start date and SIP plan. When the money the plan puts in differs from the amount invested you recorded by more than this share, the plan is adjusted to agree: an opening purchase is added, or the instalments are scaled down.',
@@ -1058,6 +1068,7 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
     case 'lines':
     case 'senders':
     case 'platforms':
+    case 'benchmarks':
     case 'words':
       return Array.isArray(v) ? v.join('\n') : '';
     case 'date':
@@ -1148,6 +1159,19 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
       }
       if (rows.length === 0 || rows.length > 40)
         return { ok: false, message: `${f.label}: between 1 and 40 lines.` };
+      bucket[key] = rows;
+      continue;
+    }
+    if (f.kind === 'benchmarks') {
+      const rows = (get(f.name) ?? '')
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      for (const row of rows) {
+        const p = parseBenchmarkRule(row);
+        if ('error' in p) return { ok: false, message: `${f.label}: ${p.error}.` };
+      }
+      if (rows.length > 80) return { ok: false, message: `${f.label}: at most 80 rules.` };
       bucket[key] = rows;
       continue;
     }

@@ -29,7 +29,10 @@ export function RuleGroupForm({
       <div className="formgrid">
         {boxes.map((f) => (
           <Field key={f.name} label={f.label} hint={f.hint} unit={f.unit}>
-            {f.kind === 'lines' || f.kind === 'senders' || f.kind === 'platforms' ? (
+            {f.kind === 'lines' ||
+            f.kind === 'senders' ||
+            f.kind === 'platforms' ||
+            f.kind === 'benchmarks' ? (
               <textarea
                 name={f.name}
                 rows={5}

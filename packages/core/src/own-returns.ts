@@ -141,6 +141,28 @@ export function shadowLine(flows: Flow[], line: IndexPoint[], dates: string[]): 
 }
 
 /**
+ * The purchases and sales to repeat in a benchmark whose prices start after the first purchase: the holding as it stood on the
+ * benchmark's first day counts as one purchase on that day, then every later flow. `from` is null when the benchmark covers every flow.
+ */
+export function benchFlows(
+  flows: Flow[],
+  values: IndexPoint[],
+  line: IndexPoint[],
+): { flows: Flow[]; from: string | null } {
+  const ordered = [...flows].filter((f) => f.amount !== 0).sort(byDate);
+  const start = line[0]?.date;
+  if (!start || !ordered[0] || ordered[0].date >= start) return { flows: ordered, from: null };
+  const opening = pointAtOrBefore([...values].sort(byDate), start)?.value ?? 0;
+  return {
+    flows: [
+      ...(opening > 0 ? [{ date: start, amount: opening }] : []),
+      ...ordered.filter((f) => f.date > start),
+    ],
+    from: start,
+  };
+}
+
+/**
  * The price line from the holder's first purchase on (the price on that day or the last one before it, then every later price), so
  * month grids, falls from the high and rolling returns cover only the time their money was in the fund.
  */
@@ -170,14 +192,17 @@ export function xirrTrail(
   flows: Flow[],
   values: IndexPoint[],
   bench: IndexPoint[] = [],
+  /** the flows repeated in the benchmark, when they differ (see `benchFlows`) */
+  benchFlowsUsed: Flow[] = flows,
 ): XirrPoint[] {
   const ordered = [...flows].filter((f) => f.amount !== 0).sort(byDate);
+  const orderedBench = [...benchFlowsUsed].filter((f) => f.amount !== 0).sort(byDate);
   const first = ordered[0]?.date;
   if (!first) return [];
   const benchOn = new Map(bench.map((p) => [p.date, p.value]));
-  const rate = (date: string, end: number | undefined) => {
-    if (end === undefined || !(end >= 0)) return null;
-    const cf = ordered
+  const rate = (date: string, end: number | undefined, list = ordered) => {
+    if (end === undefined || !(end >= 0) || !list[0] || list[0].date >= date) return null;
+    const cf = list
       .filter((f) => f.date <= date)
       .map((f) => ({ date: new Date(ms(f.date)), amount: -f.amount }));
     cf.push({ date: new Date(ms(date)), amount: end });
@@ -189,6 +214,6 @@ export function xirrTrail(
     .map((p) => ({
       date: p.date,
       yours: rate(p.date, p.value),
-      bench: rate(p.date, benchOn.get(p.date)),
+      bench: rate(p.date, benchOn.get(p.date), orderedBench),
     }));
 }

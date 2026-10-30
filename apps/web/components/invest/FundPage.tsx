@@ -448,6 +448,14 @@ export function FundPage({
             },
           ]
         : [];
+      // the benchmark in words: the index, how it was chosen and what follows it
+      const benchWords = `${ret.benchName ?? 'the benchmark'}${
+        ret.benchBasis === 'fund'
+          ? " (this fund's official benchmark)"
+          : ret.benchBasis === 'kind'
+            ? ' (the usual benchmark for this kind of fund)'
+            : ' (the general benchmark: no rule in Settings names one for this fund)'
+      }${ret.benchProxy && ret.benchProxy !== ret.benchName ? `, followed through ${ret.benchProxy}` : ''}`;
       const sh = ret.shadow;
       const benchNow = sh && sh.bench.length > 0 ? sh.bench[sh.bench.length - 1]! : null;
       const valueNow = sh ? sh.value[sh.value.length - 1]! : null;
@@ -524,7 +532,7 @@ export function FundPage({
                 note={[
                   'Current value: what your units are worth on the day. Invested: the money you put in, less any taken out.',
                   sh.bench.length >= 2
-                    ? `Benchmark: ${ret.benchName ?? 'the benchmark'}, with every purchase and sale of yours made in it on the same day for the same amount.`
+                    ? `Benchmark: ${benchWords}, with every purchase and sale of yours made in it on the same day for the same amount.${ret.benchFrom ? ` Its prices start on ${niceDate(ret.benchFrom)}, so it starts then with your holding's value on that day.` : ''}`
                     : '',
                   lastX && lastX.yours !== null
                     ? `Your XIRR in this fund: ${pct(lastX.yours, 1)} a year${lastX.bench !== null ? `; the benchmark on the same money: ${pct(lastX.bench, 1)}` : ''}${shortSpan ? ' (under a year, so a yearly rate can swing a lot)' : ''}.`
@@ -578,7 +586,7 @@ export function FundPage({
                 unit="index"
                 caption={`Growth of 100: ${f.name} and the benchmark`}
                 series={series}
-                note={`Both start at 100 on ${niceDate(growth.from)}${mine ? ', your first purchase' : ''}. The benchmark is an index fund that follows the Nifty 50, a proxy for the index.`}
+                note={`Both start at 100 on ${niceDate(growth.from)}${mine && growth.from === ret.since ? ', your first purchase' : ''}. Benchmark: ${benchWords}.`}
               />
             </section>
           )}

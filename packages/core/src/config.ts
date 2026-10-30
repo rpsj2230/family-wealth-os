@@ -6,6 +6,7 @@
 import { RULES, fyBoundsOf, type TaxRuleSet } from './tax';
 import { parsePriceLine } from './ai-cost';
 import { parsePlatformRule } from './fund-platform';
+import { parseBenchmarkRule } from './fund-benchmark';
 import { LIQUIDITY_KINDS, type LiquidityKind } from './liquidity-kinds';
 export { effectiveRules, fyBoundsOf, type EffectiveRules } from './tax';
 
@@ -319,6 +320,11 @@ export interface AppConfig {
     matchPriceDays: number;
     /** where each fund is held, one rule a line: "words in the fund's name = platform"; "* = platform" for every other fund */
     platformRules: string[];
+    /**
+     * each fund's own benchmark, one rule a line: "words in the fund's name = index name = scheme code of an index fund or ETF that
+     * tracks it" ("code*0.5 + code*0.5" for a mix); "kind:<kind> = …" for a kind of fund; "* = …" for every other fund
+     */
+    benchmarks: string[];
   };
   /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
   sheetSync: {
@@ -517,6 +523,34 @@ export const DEFAULT_CONFIG: AppConfig = {
     matchPriceTolerance: 0.002,
     matchPriceDays: 7,
     platformRules: ['in hdfc = HDFC Securities', '* = Kuvera'],
+    // each fund's official (tier-1) benchmark from its scheme documents, followed through an index fund or ETF that tracks it; where
+    // no fund tracks an index (BSE 250 SmallCap, BSE 150 MidCap, the 50:50 hybrid index) the closest one stands in, as the name says
+    benchmarks: [
+      'nippon india small cap = Nifty Smallcap 250 TRI = 147623',
+      'kotak small cap = Nifty Smallcap 250 TRI = 147623',
+      'quant small cap = Nifty Smallcap 250 TRI = 147623',
+      'hdfc small cap = BSE 250 SmallCap TRI (Nifty Smallcap 250 stands in) = 147623',
+      'bandhan small cap = BSE 250 SmallCap TRI (Nifty Smallcap 250 stands in) = 147623',
+      'edelweiss mid cap = Nifty Midcap 150 TRI = 146271',
+      'motilal oswal midcap = Nifty Midcap 150 TRI = 146271',
+      'quant mid cap = Nifty Midcap 150 TRI = 146271',
+      'hdfc mid cap = Nifty Midcap 150 TRI = 146271',
+      'mid cap opportunities = Nifty Midcap 150 TRI = 146271',
+      'invesco india midcap = BSE 150 MidCap TRI (Nifty Midcap 150 stands in) = 146271',
+      'parag parikh flexi cap = Nifty 500 TRI = 147625',
+      'hdfc flexi cap = Nifty 500 TRI = 147625',
+      'quant elss = Nifty 500 TRI = 147625',
+      'axis large cap = BSE 100 TRI = 134014',
+      'axis bluechip = BSE 100 TRI = 134014',
+      'franklin build india = BSE India Infrastructure TRI = 153081',
+      'hdfc balanced advantage = NIFTY 50 Hybrid Composite Debt 50:50 (Nifty 50 and 8-13 yr G-Sec, half each) = 120716*0.5 + 139496*0.5',
+      'kind:small = Nifty Smallcap 250 TRI = 147623',
+      'kind:mid = Nifty Midcap 150 TRI = 146271',
+      'kind:flexi = Nifty 500 TRI = 147625',
+      'kind:elss = Nifty 500 TRI = 147625',
+      'kind:large = BSE 100 TRI = 134014',
+      '* = Nifty 50 TRI = 120716',
+    ],
   },
   sheetSync: {
     timeZone: 'Asia/Singapore',
@@ -988,6 +1022,13 @@ export function configFromJson(raw: unknown): AppConfig {
             .filter((x) => x !== '' && !('error' in parsePlatformRule(x)))
             .slice(0, 40)
         : d.funds.platformRules,
+      benchmarks: Array.isArray(fun.benchmarks)
+        ? (fun.benchmarks as unknown[])
+            .filter((x): x is string => typeof x === 'string')
+            .map((x) => x.trim())
+            .filter((x) => x !== '' && !('error' in parseBenchmarkRule(x)))
+            .slice(0, 80)
+        : d.funds.benchmarks,
     },
     sheetSync: (() => {
       const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));
