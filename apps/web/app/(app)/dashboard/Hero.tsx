@@ -1,58 +1,19 @@
 import {
+  TERMS,
   formatInr,
   formatInrCompact,
-  LADDER_DAYS,
   formatPct,
-  coverageWords,
-  sinceWords,
   sourceTag,
-  type Explain,
-  type HeadlineTile,
   type ExplainSet,
 } from '@fwos/core';
 import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
 import { UpdatedCell } from '@/components/BankTable';
-import { Why, WhyHead } from '@/components/Why';
+import { GrowthStrip } from '@/components/GrowthStrip';
+import { WhyHead } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 import { niceDate } from '@/lib/dates';
 import { Capital } from './Movement';
 import { MaybeLink, homeLink } from './parts';
-
-const monthsText = (months: number) =>
-  months >= 24 ? `${(months / 12).toFixed(1)} years` : plural(Math.round(months), 'month');
-
-/** What was earned over a period, from the records on file, with where the period begins and how many holdings it rests on. */
-function TileDelta({ label, tile, why }: { label: string; tile: HeadlineTile; why?: Explain }) {
-  if (tile.dataStarts === null || (tile.empty && tile.from >= tile.to))
-    return (
-      <div className="bv-delta flat">
-        <div className="bv-delta-label">
-          {label}
-          {why && <Why explain={why} />}
-        </div>
-        <div className="bv-delta-value">
-          <strong>–</strong>
-        </div>
-        <div className="bv-delta-note">
-          {tile.dataStarts === null
-            ? 'shows once balances or deposits are recorded'
-            : `nothing was recorded in this period: data starts ${niceDate(tile.dataStarts)}`}
-        </div>
-      </div>
-    );
-  const moved = tile.netWorth.change;
-  return (
-    <Delta
-      label={label}
-      amount={tile.amount}
-      pct={tile.pct}
-      estimate={tile.estimated}
-      note={`${sinceWords(tile)}; % of the money at work`}
-      extra={`${coverageWords(tile)}. Net worth moved ${moved < 0 ? '−' : '+'}${formatInrCompact(Math.abs(moved))}, money added or taken out included.`}
-      why={why}
-    />
-  );
-}
 
 /**
  * One small line under the period tiles while funds with no transaction ledger exist (more than the Settings threshold): their gains
@@ -91,44 +52,86 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
   const t = m.trust;
   const share = (n: number) => (t.total > 0 ? n / t.total : 0);
   const bad = m.attention.filter((a) => a.tone === 'bad').length;
-  const next = m.deposits.overview.next;
-  const liquid = m.liquidity;
+  const g = m.growth;
+  const x = m.extras;
+  const ef = x.earnedFy;
+  // the parts of Earned this FY, signed and short ("7.99 L"); a part under a rupee is left out
+  const part = (label: string, n: number) =>
+    Math.abs(n) < 1
+      ? null
+      : `${label} ${n < 0 ? '−' : ''}${formatInrCompact(Math.abs(n)).replace('₹', '')}`;
+  const since = g.own.since ? `Since ${g.own.since.slice(0, 4)}` : 'Own money';
 
   return (
     <section className="card hm-hero" aria-label="Net worth">
       <div className="bv-top hm-top">
         <div className="bv-hero">
           <WhyHead why={ex['home.netWorth']}>
-            <h2 className="bv-eyebrow">Net worth today</h2>
+            <h2 className="bv-eyebrow">{TERMS.netWorth.label}</h2>
           </WhyHead>
           <div className="bv-big" data-testid="hm-total">
             {formatInrCompact(m.total)}
           </div>
           <div className="bv-exact">{whole(m.total)}</div>
           <p className="bv-count">
-            {plural(m.counted, 'holding')} of {plural(m.people, 'person', 'people')}
-            {m.asOf ? ` · latest recorded value ${niceDate(m.asOf)}` : ''}
+            as of {niceDate(m.today)} · est. · {plural(m.counted, 'holding')} of{' '}
+            {plural(m.people, 'person', 'people')}
+            {x.notCounted.count > 0 && (
+              <span data-testid="hm-not-counted">
+                {' '}
+                · Property {formatInrCompact(x.notCounted.amount)} not counted
+              </span>
+            )}
           </p>
         </div>
 
         <div className="hm-deltas" aria-label="How net worth changed">
           <Delta
-            label="Today"
+            label={TERMS.todayChange.label}
             amount={m.change.today.amount}
             pct={m.change.today.pct}
             note="interest at each rate and fund prices, since yesterday; % of yesterday’s net worth"
             estimate
             why={ex['home.today']}
           />
-          <TileDelta
-            label={`Last ${plural(m.change.monthDays, 'day')}`}
-            tile={m.tiles.recent}
-            why={ex['home.month']}
-          />
+          {ef ? (
+            <Delta
+              label={TERMS.earnedFy.label}
+              amount={ef.total}
+              pct={ef.pct}
+              note={`since ${niceDate(m.change.fyStart)}, your own transfers left out; % of net worth on that day`}
+              estimate
+              why={ex['home.earnedFy']}
+            />
+          ) : null}
         </div>
       </div>
 
       <FundNote m={m} sample={sample} />
+
+      <GrowthStrip
+        title="How is my money growing?"
+        testId="hm-growth"
+        inflation={g.inflation}
+        items={[
+          {
+            key: 'all',
+            label: 'All money',
+            rate: g.all?.rate ?? null,
+            main: true,
+            why: ex['home.earningRate'],
+          },
+          { key: 'funds', label: 'Mutual funds', rate: g.funds, why: ex['home.fundsXirr'] },
+          { key: 'fd', label: 'Fixed deposits', rate: g.fd, why: ex['home.depositsXirr'] },
+          {
+            key: 'savings',
+            label: 'Savings',
+            rate: g.savings?.rate ?? null,
+            why: ex['home.savingsRate'],
+          },
+          { key: 'own', label: since, rate: g.own.rate, why: ex['home.xirr'] },
+        ]}
+      />
 
       <Capital m={m} sample={sample} ex={ex} />
 
@@ -195,106 +198,102 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
         </div>
       </div>
 
-      <dl className="bv-grid" aria-label="More figures">
-        <Stat
-          label="Cash and deposits"
-          value={formatInrCompact(liquid.cashAndDeposits)}
-          sub={`${m.total > 0 ? Math.round((liquid.cashAndDeposits / m.total) * 100) : 0}% of net worth${
-            liquid.months !== null ? ` · covers ${monthsText(liquid.months)} of spending` : ''
-          }`}
-          {...link('/accounts')}
-          why={ex['home.cashAndDeposits']}
-        />
-        <Stat
-          label={`Free within ${plural(LADDER_DAYS.d30, 'day')}`}
-          value={formatInrCompact(liquid.within30)}
-          sub="cash plus deposits that mature, nothing sold"
-          {...link('/raise')}
-          why={ex['home.free30']}
-        />
-        <Stat
-          label="Next maturity"
-          value={next ? formatInrCompact(next.amount) : '–'}
-          sub={
-            next
-              ? `${niceDate(next.date)} · ${next.days === 0 ? 'today' : `in ${plural(next.days, 'day')}`} · ${next.bank}${next.count > 1 ? ` and ${next.count - 1} more` : ''}`
-              : 'no deposit is running'
-          }
-          {...link('/deposits?tab=maturities')}
-          why={ex['home.nextMaturity']}
-        />
-        <Stat
-          label={`Interest in ${m.deposits.interest.fy}`}
-          value={formatInrCompact(m.deposits.interest.thisYear)}
-          sub={`on running deposits · ${formatInrCompact(m.deposits.interest.ahead)} more over the next 12 months if held`}
-          {...link('/deposits')}
-          why={ex['home.interest']}
-        />
-        <Stat
-          label="Mutual funds"
-          value={m.funds ? formatInrCompact(m.funds.totals.value) : '–'}
-          sub={
-            m.funds
-              ? `${m.funds.totals.gain >= 0 ? 'gain' : 'loss'} ${formatInrCompact(Math.abs(m.funds.totals.gain))}${
-                  m.funds.totals.xirr !== null
-                    ? ` · ${formatPct(m.funds.totals.xirr, 1)} a year${m.funds.totals.xirrEstimated ? ' (est.)' : ''}`
-                    : ''
-                }`
-              : 'none recorded'
-          }
-          {...link('/investments')}
-          why={ex['home.fundsStat']}
-        />
-        <Stat
-          label="Goals on track"
-          value={
-            <>
-              {m.goals.onTrack}
-              <span className="muted"> / {m.goals.withTarget}</span>
-            </>
-          }
-          sub={m.goals.list.length === 0 ? 'no goal yet' : 'see each goal'}
-          {...link('/goals')}
-          why={ex['home.goalsStat']}
-        />
-        <Stat
-          label="Needs you"
-          value={m.attention.length}
-          sub={
-            m.attention.length === 0
-              ? 'nothing waiting'
-              : `${bad > 0 ? `${bad} late or urgent · ` : ''}${plural(m.openTasks, 'open task')}`
-          }
-          tone={m.attention.length > 0 ? 'warn' : undefined}
-          href="#hm-needs"
-          why={ex['home.needsStat']}
-        />
-        <Stat
-          label="Above the insured limit"
-          value={
-            m.deposits.cover.uninsured > 0 ? formatInrCompact(m.deposits.cover.uninsured) : 'None'
-          }
-          sub={
-            m.deposits.cover.uninsured > 0
-              ? `in ${plural(m.deposits.cover.banksOver, 'bank')} · limit ${formatInr(m.deposits.cover.limit)} per bank and name`
-              : `all within ${formatInr(m.deposits.cover.limit)} per bank and name`
-          }
-          tone={m.deposits.cover.uninsured > 0 ? 'warn' : undefined}
-          {...link('/deposits?tab=cover')}
-          why={ex['home.insured']}
-        />
-      </dl>
+      <section className="hm-extras" aria-labelledby="hm-extras-h">
+        <h3 id="hm-extras-h" className="bv-h">
+          Also on this page
+        </h3>
+        <dl className="bv-grid">
+          <Stat
+            label={`${TERMS.earnedFy.label}, by kind`}
+            value={ef ? `${ef.total < 0 ? '−' : '+'}${formatInrCompact(Math.abs(ef.total))}` : '–'}
+            sub={
+              ef
+                ? [
+                    part('deposits', ef.deposits),
+                    part('funds', ef.funds),
+                    part('savings', ef.savings),
+                    part('other', ef.other),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'shows once the records reach this year'
+            }
+            why={ex['home.earnedFy']}
+          />
+          <Stat
+            label={TERMS.available30.label}
+            value={formatInrCompact(x.available30.total)}
+            sub={`savings ${formatInrCompact(x.available30.cash)} + deposits maturing ${formatInrCompact(x.available30.deposits)}`}
+            {...link('/raise')}
+            why={ex['home.free30']}
+          />
+          <Stat
+            label={TERMS.maturing90.label}
+            value={formatInrCompact(x.maturing90.principal)}
+            sub={
+              x.maturing90.count > 0
+                ? `${plural(x.maturing90.count, 'deposit')} · plan where it goes`
+                : 'no deposit matures in this time'
+            }
+            {...link('/deposits?tab=maturities')}
+            why={ex['home.maturing90']}
+          />
+          <Stat
+            label={TERMS.aboveInsured.label}
+            value={x.aboveInsured.amount > 0 ? formatInrCompact(x.aboveInsured.amount) : 'None'}
+            sub={
+              x.aboveInsured.amount > 0
+                ? `in ${plural(x.aboveInsured.banks, 'bank')} · limit ${formatInr(x.aboveInsured.limit)} per bank and name`
+                : `all within ${formatInr(x.aboveInsured.limit)} per bank and name`
+            }
+            tone={x.aboveInsured.amount > 0 ? 'warn' : undefined}
+            {...link('/deposits?tab=cover')}
+            why={ex['home.insured']}
+          />
+          <Stat
+            label={TERMS.nreNro.label}
+            value={`${formatInrCompact(x.nre)} · ${formatInrCompact(x.nro)}`}
+            sub="bank money · NRO interest is taxed"
+            {...link('/accounts')}
+            why={ex['home.nreNro']}
+          />
+          <Stat
+            label="Goals on track"
+            value={
+              <>
+                {m.goals.onTrack}
+                <span className="muted"> / {m.goals.withTarget}</span>
+              </>
+            }
+            sub={m.goals.list.length === 0 ? 'no goal yet' : 'see each goal'}
+            {...link('/goals')}
+            why={ex['home.goalsStat']}
+          />
+          <Stat
+            label="Needs you"
+            value={m.attention.length}
+            sub={
+              m.attention.length === 0
+                ? 'nothing waiting'
+                : `${bad > 0 ? `${bad} late or urgent · ` : ''}${plural(m.openTasks, 'open task')}`
+            }
+            tone={m.attention.length > 0 ? 'warn' : undefined}
+            href="#hm-needs"
+            why={ex['home.needsStat']}
+          />
+        </dl>
+      </section>
 
       <details className="bv-how">
         <summary>How these figures are worked out</summary>
         <ul className="list small muted">
           <li>
-            Net worth adds every holding that is wealth (banks, deposits, funds, shares, property,
-            money lent, pension accounts) at its latest recorded value moved forward to today:
-            deposits from their own terms, savings at their rate, funds with the latest price.
-            Insurance cover is never counted. A deposit past its date that is still listed as
-            running is counted at its maturity amount until you say where the money went; one marked
-            unconfirmed is left out.
+            Net worth adds every holding that is wealth (banks, deposits, funds, shares, money lent,
+            pension accounts) at its latest recorded value moved forward to today. Property is shown
+            on its own page but not counted, unless Settings counts it: deposits from their own
+            terms, savings at their rate, funds with the latest price. Insurance cover is never
+            counted. A deposit past its date that is still listed as running is counted at its
+            maturity amount until you say where the money went; one marked unconfirmed is left out.
           </li>
           <li>
             Verified means a value recorded within its refresh window and confirmed, or a deposit
@@ -303,13 +302,13 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
           </li>
           <li>
             Today is an estimate: what savings and deposits earned since yesterday at each rate,
-            plus the move in fund prices over their last two prices. It is not read from a bank. The
-            last {m.change.monthDays} days and the financial year are what the family’s holdings
-            earned in that time: each holding is valued on the first day from the nearest record on
-            or before it, moved forward at its rate (savings and deposits), by the fund’s price
-            (funds) or the exchange rate, and the same on the last day; money you added or took out,
-            a deposit made from savings, a fund bought or sold are not earnings. A period that
-            begins before the first record begins where the data does (
+            plus the move in fund prices over their last two prices. It is not read from a bank.
+            Earned this FY is what the family’s holdings earned since 1 April: each holding is
+            valued on the first day from the nearest record on or before it, moved forward at its
+            rate (savings and deposits), by the fund’s price (funds) or the exchange rate, and the
+            same on the last day; money you added or took out, a deposit made from savings, a fund
+            bought or sold are not earnings. A period that begins before the first record begins
+            where the data does (
             {m.dataStarts ? niceDate(m.dataStarts) : 'once something is recorded'}).
           </li>
           <li>

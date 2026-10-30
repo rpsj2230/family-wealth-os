@@ -621,15 +621,46 @@ a.hm-need-text::after {
 }
 
 /* ---- own money and profit, under the net worth ---- */
+/* Own money + Lifetime profit = Net worth on one line; stacked on a narrow page, the + and = left out */
 .hm-capital {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  min-width: 0;
 }
-/* the one line that says these are lifetime figures: across the whole row */
-.hm-capital .hm-view {
-  grid-column: 1 / -1;
+.hm-bridge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+.hm-bridge-op {
+  display: none;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+@container (min-width: 620px) {
+  .hm-bridge {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+  .hm-bridge-op {
+    display: block;
+  }
+}
+.hm-cap-pct {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.hm-cap-parts-box summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.hm-cap-parts-box .hm-cap-parts {
+  margin-top: 0.4rem;
+  max-width: 32rem;
+}
+.hm-extras .bv-grid {
   margin: 0;
 }
 .hm-cap {

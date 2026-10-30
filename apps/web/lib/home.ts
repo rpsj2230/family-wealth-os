@@ -6,6 +6,8 @@ import {
   maturingWithin,
   savingsRateEarned,
   type ClassYearly,
+  type HomeExtras,
+  type HomeGrowth,
   moneyPosition,
   type PositionCard,
   capitalLedger,
@@ -234,34 +236,6 @@ export interface HomeMoney {
   };
   /** the profit of at least one kind rests on an estimate */
   estimated: boolean;
-}
-
-export interface HomeGrowth {
-  all: { rate: number; perYear: number } | null;
-  banks: { rate: number; perYear: number } | null;
-  fd: number | null;
-  funds: number | null;
-  savings: ClassYearly | null;
-  own: { rate: number | null; since: string | null };
-  inflation: number | null;
-}
-
-export interface HomeExtras {
-  /** profit made since 1 April, own transfers left out, by kind; null before the ledger reaches this year */
-  earnedFy: {
-    total: number;
-    pct: number | null;
-    deposits: number;
-    funds: number;
-    savings: number;
-    other: number;
-  } | null;
-  available30: { total: number; cash: number; deposits: number };
-  maturing30: { count: number; principal: number };
-  maturing90: { count: number; principal: number };
-  aboveInsured: { amount: number; banks: number; limit: number };
-  nre: number;
-  nro: number;
 }
 
 export interface HomeModel {
@@ -907,6 +881,10 @@ export function buildHome(i: HomeInput): HomeModel {
     },
     nre: typeAmount('NRE'),
     nro: typeAmount('NRO'),
+    notCounted: (() => {
+      const left = nw.excluded.filter((e) => e.reason === 'not_counted_setting');
+      return { amount: left.reduce((a, e) => a + (e.amount ?? 0), 0), count: left.length };
+    })(),
   };
 
   return {

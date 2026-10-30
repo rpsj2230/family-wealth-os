@@ -5,6 +5,7 @@
  * checked against the same figure on its own page. No I/O.
  */
 import type { OverviewPart } from './bank-overview';
+import type { ClassYearly } from './class-yearly';
 import { interestOfStored } from './deposit-contract';
 import { addDays as addIsoDays, type RaiseSource } from './liquidity';
 import { type Compounding } from './fd';
@@ -817,4 +818,39 @@ export function largestShare<T extends { amount: number }>(
   if (total <= 0) return null;
   const row = [...rows].sort((a, b) => b.amount - a.amount)[0]!;
   return { row, share: row.amount / total };
+}
+
+/**
+ * How is my money growing? Each kind's yearly rate (XIRR for deposits and funds, the rate savings earned this financial year), all the
+ * money together at today's rates (Earning rate now; the money in banks alone for Accounts), XIRR on own money since records began, and
+ * the retirement plan's inflation to compare against.
+ */
+export interface HomeGrowth {
+  all: { rate: number; perYear: number } | null;
+  banks: { rate: number; perYear: number } | null;
+  fd: number | null;
+  funds: number | null;
+  savings: ClassYearly | null;
+  own: { rate: number | null; since: string | null };
+  inflation: number | null;
+}
+
+export interface HomeExtras {
+  /** profit made since 1 April, own transfers left out, by kind; null before the ledger reaches this year */
+  earnedFy: {
+    total: number;
+    pct: number | null;
+    deposits: number;
+    funds: number;
+    savings: number;
+    other: number;
+  } | null;
+  available30: { total: number; cash: number; deposits: number };
+  maturing30: { count: number; principal: number };
+  maturing90: { count: number; principal: number };
+  aboveInsured: { amount: number; banks: number; limit: number };
+  nre: number;
+  nro: number;
+  /** holdings valued but left out of net worth by Settings (property, unless counted) */
+  notCounted: { amount: number; count: number };
 }

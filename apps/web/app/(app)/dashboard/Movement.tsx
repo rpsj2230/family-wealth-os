@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   MOVEMENT_PERIODS,
+  TERMS,
   formatInrCompact,
   formatPct,
   type ExplainSet,
@@ -11,13 +12,12 @@ import { whole } from '@/app/(app)/accounts/BankOverview';
 import { Est } from '@/components/Est';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
-import { MONEY_WORDS as W } from '@/lib/money-words';
 import { CardHead, MaybeLink, homeLink, rupees, tone } from './parts';
 
 /**
- * The family's own money and its profit, under the net worth: own money put in (with the part worked out from balances shown apart),
- * profit so far and its per cent of own money, the yearly return (XIRR, money-weighted), and the maturity proceeds still to place.
- * Each figure is the capital ledger's (core capital.ts); a figure that cannot be worked out says so instead of showing a number.
+ * Where the wealth came from, as one line: Own money + Lifetime profit = Net worth (the capital ledger's figures, core capital.ts),
+ * with where the own money came from one tap away, and the maturity proceeds still to place. A figure that cannot be worked out says
+ * so instead of showing a number. XIRR on own money is in the growth strip above.
  */
 export function Capital({
   m,
@@ -32,23 +32,53 @@ export function Capital({
   const t = c.totals;
   const opening = c.opening;
   return (
-    <div className="hm-capital" role="group" aria-label="Own money and profit">
-      <p className="hm-view small muted" data-testid="hm-view-lifetime">
-        <strong>Lifetime:</strong> your own money is only what you brought in from outside (salary,
-        money sent from Singapore, the balances on the first day). Interest and fund gains are never
-        counted as own money: they are the profit. Today’s deposits and funds cost more than your
-        own money because earlier interest was reinvested; that cost is the “amount invested now” on
-        the cards below.
-      </p>
-      <div className="hm-cap">
-        <div className="hm-cap-label">
-          {W.ownMoney} <Why explain={ex['home.ownMoney']} />
+    <div className="hm-capital" role="group" aria-label="Where the wealth came from">
+      <div className="hm-bridge">
+        <div className="hm-cap">
+          <div className="hm-cap-label">
+            {TERMS.ownMoney.label} <Why explain={ex['home.ownMoney']} />
+          </div>
+          <div className="hm-cap-value" data-testid="hm-own-money">
+            {opening ? formatInrCompact(t.ownMoney) : '–'}
+          </div>
+          {!opening && (
+            <div className="hm-cap-note">shows once balances or deposits are recorded</div>
+          )}
         </div>
-        <div className="hm-cap-value" data-testid="hm-own-money">
-          {opening ? formatInrCompact(t.ownMoney) : '–'}
+        <span className="hm-bridge-op" aria-hidden="true">
+          +
+        </span>
+        <div className="hm-cap">
+          <div className="hm-cap-label">
+            {TERMS.lifetimeProfit.label} <Est /> <Why explain={ex['home.profitSoFar']} />
+          </div>
+          <div
+            className={`hm-cap-value ${tone(opening ? t.profit : null)}`}
+            data-testid="hm-profit-so-far"
+          >
+            {opening ? rupees(t.profit) : '–'}
+            {opening && t.profitPct !== null && (
+              <span className="hm-cap-pct">
+                {' '}
+                {t.profitPct < 0 ? '−' : '+'}
+                {formatPct(Math.abs(t.profitPct), 1)} overall
+              </span>
+            )}
+          </div>
         </div>
-        {opening ? (
-          <ul className="hm-cap-parts small" data-testid="hm-own-money-parts">
+        <span className="hm-bridge-op" aria-hidden="true">
+          =
+        </span>
+        <div className="hm-cap">
+          {/* the sum of the line: the headline figure again, as the result of the equation */}
+          <div className="hm-cap-label hm-bridge-sum">{TERMS.netWorth.label}</div>
+          <div className="hm-cap-value">{formatInrCompact(m.total)}</div>
+        </div>
+      </div>
+      {opening && (
+        <details className="hm-cap-parts-box small">
+          <summary>Where the own money came from</summary>
+          <ul className="hm-cap-parts" data-testid="hm-own-money-parts">
             <li>
               <span>Balances on {niceDate(opening.date)}</span>
               <span>{formatInrCompact(t.opening)}</span>
@@ -75,39 +105,8 @@ export function Capital({
               </li>
             )}
           </ul>
-        ) : (
-          <div className="hm-cap-note">shows once balances or deposits are recorded</div>
-        )}
-      </div>
-      <div className="hm-cap">
-        <div className="hm-cap-label">
-          {W.profitTotal} <Est /> <Why explain={ex['home.profitSoFar']} />
-        </div>
-        <div
-          className={`hm-cap-value ${tone(opening ? t.profit : null)}`}
-          data-testid="hm-profit-so-far"
-        >
-          {opening ? rupees(t.profit) : '–'}
-        </div>
-        <div className="hm-cap-note">
-          {t.profitPct !== null
-            ? `${formatPct(t.profitPct, 1)} of your own money: today’s net worth less your own money (interest, fund gains, exchange moves)`
-            : 'no own money to measure a per cent against'}
-        </div>
-      </div>
-      <div className="hm-cap">
-        <div className="hm-cap-label">
-          {W.xirrOwn} <Why explain={ex['home.xirr']} />
-        </div>
-        <div className={`hm-cap-value ${tone(t.xirr.rate)}`} data-testid="hm-xirr">
-          {t.xirr.rate !== null ? formatPct(t.xirr.rate, 1) : '–'}
-        </div>
-        <div className="hm-cap-note">
-          {t.xirr.rate !== null
-            ? 'on your own money, with the dates it came in, to today’s net worth'
-            : 'cannot be worked out yet'}
-        </div>
-      </div>
+        </details>
+      )}
       {c.proceeds.count > 0 && (
         <div className="hm-cap warn">
           <div className="hm-cap-label">Matured, to place</div>

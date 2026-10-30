@@ -29,19 +29,20 @@ test.describe('Home (public sample)', () => {
     await page.goto('/demo/dashboard');
     await expect(page.getByRole('heading', { name: 'Family wealth', level: 1 })).toBeVisible();
     const h = hero(page);
-    await expect(h.getByRole('heading', { name: 'Net worth today', level: 2 })).toBeVisible();
+    await expect(h.getByRole('heading', { name: 'Net worth', level: 2 })).toBeVisible();
     await expect(h.getByTestId('hm-total')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
     await expect(h.getByTestId('hm-verified')).toHaveText(/^\d+%$/);
     for (const label of [
-      'Today',
-      'Last 30 days',
-      'Your own money brought in',
-      'Total profit on your own money',
-      'Yearly return on your own money (XIRR)',
+      'Today’s change',
+      'Earned this FY',
+      'How is my money growing?',
+      'Own money',
+      'Lifetime profit',
       'Confirmed recently',
       'Older or unconfirmed',
-      'Cash and deposits',
-      'Next maturity',
+      'Available within 30 days',
+      'Maturing in 90 days',
+      'NRE · NRO',
       'Goals on track',
       'Above the insured limit',
     ])
@@ -104,21 +105,22 @@ test.describe('Home (public sample)', () => {
       expect(levels[i]! - levels[i - 1]!).toBeLessThanOrEqual(1);
   });
 
-  test('shows own money put in, profit so far, the yearly return and the matured money to place', async ({
+  test('shows Own money + Lifetime profit = Net worth, XIRR on own money and the matured money to place', async ({
     page,
   }) => {
     await page.goto('/demo/dashboard');
-    const figures = hero(page).getByRole('group', { name: 'Own money and profit' });
-    for (const label of [
-      'Your own money brought in',
-      'Total profit on your own money',
-      'Yearly return on your own money (XIRR)',
-    ])
-      await expect(figures.locator('.hm-cap-label', { hasText: label })).toBeVisible();
+    const figures = hero(page).getByRole('group', { name: 'Where the wealth came from' });
+    for (const label of ['Own money', 'Lifetime profit', 'Net worth'])
+      await expect(figures.locator('.hm-cap-label', { hasText: label }).first()).toBeVisible();
     await expect(figures.getByTestId('hm-own-money')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
-    await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(/^[+−]₹[\d,]+$/);
-    await expect(figures.getByTestId('hm-xirr')).toHaveText(/^-?\d+\.\d%$|^–$/);
+    await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(
+      /^[+−]₹[\d,]+\s*[+−][\d.]+% overall$/,
+    );
+    // XIRR on own money sits in the growth strip, named by the year records begin
+    await expect(page.getByTestId('hm-growth-own')).toContainText(/Since \d{4}/);
+    await expect(page.getByTestId('hm-growth-own')).toContainText(/-?\d+\.\d\d%|–/);
     // money moved with nothing to say what it was is shown apart, never as profit
+    await figures.getByText('Where the own money came from').click();
     await expect(figures).toContainText('worked out from balances');
     await expect(figures.getByText('est.', { exact: true }).first()).toBeVisible();
     // the proceeds of matured deposits are counted once, with a way to say where they went
@@ -129,22 +131,20 @@ test.describe('Home (public sample)', () => {
     await noSideways(page);
   });
 
-  test('the period tiles start where the period really starts and say what they rest on', async ({
+  test('How is my money growing? shows all money, each kind and own money, with an inflation mark', async ({
     page,
   }) => {
     await page.goto('/demo/dashboard');
-    const deltas = hero(page).getByLabel('How net worth changed');
-    const month = deltas.locator('.bv-delta', { hasText: 'Last 30 days' });
-    // the period begins on its own first day, not on "your first record"
-    await expect(month).toContainText('since 26 Sep 2026');
-    await expect(deltas).not.toContainText('first record');
-    // how many holdings the first day rests on, and that net worth moved by a different amount
-    await expect(month).toContainText(/\d+ of \d+ holdings had a value then/);
-    await expect(month).toContainText('Net worth moved');
-    // the "?" names the records the first day is built from
-    await page.locator('[data-why="home.month"]').first().click();
-    const panel = page.getByTestId('why-panel');
-    await expect(panel).toContainText('nearest record on or before');
+    const strip = page.getByTestId('hm-growth');
+    await expect(strip.getByRole('heading', { name: 'How is my money growing?' })).toBeVisible();
+    for (const key of ['all', 'funds', 'fd', 'savings', 'own'])
+      await expect(page.getByTestId(`hm-growth-${key}`)).toContainText(/\d+\.\d\d%|–/);
+    await expect(strip).toContainText(/inflation \d+\.\d%/);
+    // the bars say their rate in words
+    await expect(strip.getByRole('img', { name: /^All money \d+\.\d\d% a year/ })).toBeVisible();
+    // Earning rate now: each part's value times its rate
+    await page.locator('[data-why="home.earningRate"]').first().click();
+    await expect(page.getByTestId('why-panel')).toContainText('Earning rate now');
     await page.keyboard.press('Escape');
     await noSideways(page);
   });
@@ -169,11 +169,7 @@ test.describe('Home (public sample)', () => {
     for (const [key, href] of Object.entries(hrefs)) {
       const card = section.getByTestId(`hm-class-${key}`);
       await expect(card.getByRole('link').first()).toHaveAttribute('href', href);
-      for (const label of [
-        'Amount invested now',
-        'Interest and gains earned since first record',
-        'Profit on amount invested now',
-      ])
+      for (const label of [key === 'cash' ? 'Balance' : 'Invested', 'Lifetime profit'])
         await expect(card.getByText(label, { exact: true })).toBeVisible();
       await expect(card.getByText(/% of net worth/)).toBeVisible();
     }
@@ -183,6 +179,8 @@ test.describe('Home (public sample)', () => {
     const split = section.getByTestId('hm-fund-split');
     await expect(split).toContainText('confirmed by fund statements');
     await expect(split).toContainText(/fund prices? older than|Every fund price is within/);
+    // the cards add up to the one Lifetime profit
+    await expect(section.getByTestId('hm-lifetime-split')).toContainText(/= ₹[\d.]+ (Cr|L)/);
     // the definitions are stated, including where the cash rate comes from
     await section.getByText('How these are worked out').click();
     await expect(section.getByText('rate on the Rates list for its bank')).toBeVisible();
@@ -247,7 +245,9 @@ test.describe('Home (public sample)', () => {
     await page.goto('/demo/dashboard');
     const hero = page.getByRole('region', { name: 'Net worth' });
     const labels = (
-      await hero.locator('.bv-eyebrow, .bv-delta-label, .hm-cap-label, dl dt').allInnerTexts()
+      await hero
+        .locator('.bv-eyebrow, .bv-delta-label, .hm-cap-label:not(.hm-bridge-sum), dl dt')
+        .allInnerTexts()
     )
       .map((t) => t.replace(/\?/g, '').replace(/\s+/g, ' ').trim().toLowerCase())
       .filter(Boolean);
@@ -331,7 +331,7 @@ test.describe('Home (public sample)', () => {
   });
 
   for (const w of [412, 810]) {
-    test(`the period tiles do not scroll sideways with a wide font at ${w}px`, async ({
+    test(`the headline and growth strip do not scroll sideways with a wide font at ${w}px`, async ({
       browser,
     }) => {
       const context = await browser.newContext({ viewport: { width: w, height: 900 } });
@@ -341,7 +341,7 @@ test.describe('Home (public sample)', () => {
         content: '* { font-family: "DejaVu Sans", sans-serif !important; }',
       });
       await noSideways(page);
-      await expect(hero(page).getByText('holdings had a value then').first()).toBeVisible();
+      await expect(page.getByTestId('hm-growth-all')).toBeVisible();
       await context.close();
     });
   }
@@ -383,14 +383,12 @@ test.describe('Home (public sample)', () => {
     page,
   }) => {
     await page.goto('/demo/dashboard');
-    await expect(page.getByTestId('hm-class-fd-yearly')).toContainText(
-      /Yearly return on amount invested \(XIRR\)\s*\d+\.\d%/,
-    );
+    await expect(page.getByTestId('hm-class-fd-yearly')).toContainText(/XIRR\s*\d+\.\d\d% a year/);
     await expect(page.getByTestId('hm-class-funds-yearly')).toContainText(
-      /Yearly return on amount invested \(XIRR\)\s*-?\d+\.\d%/,
+      /XIRR\s*-?\d+\.\d\d% a year/,
     );
     await expect(page.getByTestId('hm-class-cash-yearly')).toContainText(
-      /Earns interest at\s*\d+\.\d% a year/,
+      /Rate earned\s*\d+\.\d\d% a year/,
     );
     await expect(page.getByTestId('hm-class-others-yearly')).toContainText('not measurable');
   });

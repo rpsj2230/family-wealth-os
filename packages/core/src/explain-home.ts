@@ -28,16 +28,22 @@ import type {
   ClassCard,
   DepositInterest,
   GrowthSplit,
+  HomeExtras,
+  HomeGrowth,
   HomeRange,
   RangeView,
   ValueTrust,
 } from './home';
+import { TERMS } from './terms';
 import type { GainPeriodKey, PeriodGains } from './period-gains';
-import { coverageWords, sinceWords, type HeadlineTile } from './position';
+import type { HeadlineTile } from './position';
 import { formatInrCompact } from './money';
 
 export interface HomeExplainInput {
   today: string;
+  /** How is my money growing? and the extras under the headline */
+  growth: HomeGrowth;
+  extras: HomeExtras;
   total: number;
   money: {
     invested: number;
@@ -149,10 +155,10 @@ function netWorth(i: HomeExplainInput): Explain {
   const f = i.trustDetail.fresh;
   return explain({
     id: 'home.netWorth',
-    title: 'Net worth today',
+    title: TERMS.netWorth.label,
     exact: exInr(i.total),
     shown: formatInrCompact(i.total),
-    what: 'Everything the family holds that is wealth, at today’s value. Insurance cover is never counted.',
+    what: `${TERMS.netWorth.hint} Insurance cover is never counted.`,
     how: `Each of ${exPlural(i.counted, 'holding')} of ${exPlural(i.people, 'person', 'people')} at its latest recorded value moved forward to today: ${i.allocation.map((a) => `${a.label} ${exInr(a.amount)}`).join(' + ')} = ${exInr(i.total)}.`,
     inputs: [
       {
@@ -184,102 +190,15 @@ function netWorth(i: HomeExplainInput): Explain {
     level: estShare(i),
     completeness: `${exInr(b.calculated)} is calculated, ${exInr(b.estimated)} is estimated and ${exInr(b.carried_forward)} is carried forward from the last entry${i.trustDetail.assumptions > 0 ? `; ${exPlural(i.trustDetail.assumptions, 'account')} use an assumed savings rate` : ''}. ${f.fresh} of ${exPlural(f.total, 'holding')} are recorded within their refresh window.`,
     notes: [
+      ...(i.extras.notCounted.count > 0
+        ? [
+            `${exPlural(i.extras.notCounted.count, 'property', 'properties')} worth ${exInr(i.extras.notCounted.amount)} ${i.extras.notCounted.count === 1 ? 'is' : 'are'} shown on its own page but not counted (Settings > Count property in net worth).`,
+          ]
+        : []),
       maturedRuleText(),
       'Every kind below adds up to this figure, so nothing is counted twice.',
     ],
     fix: { label: 'Update balances', href: i.links.monthly },
-  });
-}
-
-/**
- * What the family earned over a period: the gain of each kind of holding between the first day and the last, each valued from the
- * nearest record on or before the day and moved forward to it. Quotes the dates of the records it rests on.
- */
-function tileExplain(
-  id: string,
-  title: string,
-  what: string,
-  key: GainPeriodKey,
-  i: HomeExplainInput,
-  basisNote: string,
-): Explain {
-  const t = i.tiles[key];
-  const p = i.periods;
-  if (i.dataStarts === null || (t.empty && t.from >= t.to))
-    return explain({
-      id,
-      title,
-      what,
-      how: 'Not worked out: nothing is on record for this period yet.',
-      inputs: [{ label: 'Records on file', value: 'none', basis: 'missing' }],
-      level: 'missing',
-      completeness: `Missing: ${i.dataStarts === null ? 'no balance, deposit or fund is recorded' : `the data starts ${exDate(i.dataStarts)}, after this period`}.`,
-      notes: [],
-    });
-  const rows = p.rows.filter((r) => !r.cells[key].empty);
-  const f = t.startFrom;
-  const records =
-    f.oldest === null
-      ? 'deposit terms only'
-      : f.oldest === f.newest
-        ? `the record of ${exDate(f.oldest)}`
-        : `records from ${exDate(f.oldest)} to ${exDate(f.newest)}`;
-  const kindHow = (r: (typeof rows)[number]) => {
-    const c = r.cells[key];
-    return `${r.label}: ${exSigned(c.profit)} (worth ${exInr(c.startValue)} at the start, ${exInr(c.endValue)} at the end${c.putIn > 0 ? `, ${exInr(c.putIn)} put in` : ''}${c.takenOut > 0 ? `, ${exInr(c.takenOut)} taken out` : ''})`;
-  };
-  const cap = (x: string) => `${x[0]!.toUpperCase()}${x.slice(1)}`;
-  return explain({
-    id,
-    title,
-    exact: exSigned(t.amount),
-    what,
-    how: `${rows.map(kindHow).join('; ')}. Together ${exSigned(t.amount)}${t.pct === null ? '' : `; as a share of the money at work: ${ratioHow({ label: 'earned', amount: t.amount }, { label: 'at work', amount: t.base }, 2)}`}. Each holding is valued on ${exDate(t.from)} from the nearest record on or before that day, moved forward to it at its rate or the exchange rate (a fund: the units held times the price of the day, the units from its statement or, with none, from your SIP plan), and the same on the last day; a deposit made from savings, a payout, a fund bought or sold and a balance that jumped are money moving, not earnings.`,
-    inputs: [
-      {
-        label: 'First day built from',
-        value: records,
-        basis: f.movedForward > 0 ? 'estimated' : 'recorded',
-        from: f.oldest,
-        to: t.from,
-        note:
-          f.movedForward > 0
-            ? `${exPlural(f.movedForward, 'holding')} moved forward from an earlier record to ${exDate(t.from)} (savings at the account’s rate, funds by the price)${f.fromTerms > 0 ? `; ${exPlural(f.fromTerms, 'deposit')} worked out from their own terms` : ''}`
-            : undefined,
-      },
-      {
-        label: 'Holdings with a value on the first day',
-        value: `${t.coverage.withValue} of ${t.coverage.of}`,
-        basis: t.coverage.withValue === t.coverage.of ? 'calculated' : 'missing',
-        count: { n: t.coverage.withValue, of: t.coverage.of, noun: 'holdings' },
-        from: t.from,
-        to: t.from,
-      },
-      ...rows.map((r) => ({
-        label: `${r.label}: earned`,
-        value: exSigned(r.cells[key].profit),
-        basis: (r.cells[key].estimated ? 'estimated' : 'calculated') as 'estimated' | 'calculated',
-        from: t.from,
-        to: t.to,
-      })),
-      {
-        label: 'Net worth on the first day and today',
-        value: `${exInr(t.netWorth.start)} → ${exInr(t.netWorth.end)}`,
-        basis: 'calculated',
-        note: `it moved ${exSigned(t.netWorth.change)}; money added or taken out is in that, not in the earnings above`,
-      },
-    ],
-    level:
-      t.clamped || t.estimated || t.coverage.withValue < t.coverage.of
-        ? 'partly_estimated'
-        : 'complete',
-    completeness: t.clamped
-      ? `Data starts ${exDate(t.from)}: nothing is on record before it, so this period begins there and not on ${exDate(t.asked)}. ${cap(coverageWords(t))}.`
-      : `${cap(sinceWords(t))}: built from ${records}. ${cap(coverageWords(t))}.${t.estimated ? ' Part of it is estimated from rates, prices or assumed instalments.' : ''}`,
-    notes: [
-      basisNote,
-      'The change in net worth is a different figure: it includes money you added or took out.',
-    ],
   });
 }
 
@@ -306,7 +225,7 @@ function capitalExplains(
     return {
       'home.ownMoney': none('home.ownMoney', 'Your own money brought in'),
       'home.profitSoFar': none('home.profitSoFar', 'Total profit on your own money'),
-      'home.xirr': none('home.xirr', 'Yearly return on your own money (XIRR)'),
+      'home.xirr': none('home.xirr', TERMS.xirrOwn.label),
       'home.movement': none('home.movement', 'Wealth movement'),
     };
   const unexplainedShare = t.ownMoney > 0 ? Math.abs(t.unexplained) / t.ownMoney : 0;
@@ -316,7 +235,7 @@ function capitalExplains(
   return {
     'home.ownMoney': explain({
       id: 'home.ownMoney',
-      title: 'Your own money brought in',
+      title: TERMS.ownMoney.label,
       exact: exInr(t.ownMoney),
       what: 'The family’s own money in what it holds: the opening position plus money that came in from outside its accounts, less money taken out. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.',
       how: `Opening position ${exInr(t.opening)} on ${exDate(o.date)} + outside money you confirmed ${exSigned(t.confirmedExternal)} + money moved in or out with nothing to say what it was ${exSigned(t.unexplained)} = ${exInr(t.ownMoney)}.`,
@@ -348,7 +267,7 @@ function capitalExplains(
     }),
     'home.profitSoFar': explain({
       id: 'home.profitSoFar',
-      title: 'Total profit on your own money',
+      title: TERMS.lifetimeProfit.label,
       exact: exSigned(t.profit),
       what: 'Net worth less own money put in: interest on savings and deposits, fund gains, exchange-rate moves and income, less fees and taxes, since the opening date.',
       how: `Net worth ${exInr(t.netWorth)} − own money ${exInr(t.ownMoney)} = ${exSigned(t.profit)}${t.profitPct === null ? '' : `; ÷ own money = ${exPct(t.profitPct, 1)}`}. By kind: savings interest ${exSigned(t.earnings.savings)}, deposit interest ${exSigned(t.earnings.deposits)}, funds ${exSigned(t.earnings.funds)}, exchange rates ${exSigned(t.earnings.fx)}, other ${exSigned(t.earnings.others + t.earnings.income)}.`,
@@ -378,7 +297,7 @@ function capitalExplains(
     }),
     'home.xirr': explain({
       id: 'home.xirr',
-      title: 'Yearly return on your own money (XIRR)',
+      title: TERMS.xirrOwn.label,
       exact: t.xirr.rate === null ? '–' : exPct(t.xirr.rate, 2),
       what: 'The yearly rate that turns the opening position and every dated sum of outside money into today’s net worth: a money-weighted return.',
       how: `Flows: −${exInr(t.opening)} on ${exDate(o.date)}, each sum of outside money on its date (a sum worked out from balances in the middle of its month), +${exInr(t.netWorth)} today. ${t.xirr.rate === null ? t.xirr.message : `Solved: ${exPct(t.xirr.rate, 2)} a year.`}`,
@@ -555,18 +474,190 @@ function classCard(key: ClassCard['key'], id: string, i: HomeExplainInput): Expl
   });
 }
 
+/** The "?" of How is my money growing? and of the extras under the headline. */
+function growthExplains(i: HomeExplainInput) {
+  const g = i.growth;
+  const x = i.extras;
+  const value = (k: ClassCard['key']) => i.classes.find((c) => c.key === k)?.current ?? 0;
+  const rate = (r: number | null) => (r === null ? '–' : `${exPct(r, 2)} a year`);
+  const parts = [
+    { label: 'Fixed deposits', value: value('fd'), rate: g.fd, basis: 'calculated' as const },
+    { label: 'Mutual funds', value: value('funds'), rate: g.funds, basis: 'calculated' as const },
+    {
+      label: 'Savings and cash',
+      value: value('cash'),
+      rate: g.savings?.rate ?? null,
+      basis: 'estimated' as const,
+    },
+    { label: 'Money lent and other', value: value('others'), rate: 0, basis: 'recorded' as const },
+  ].filter((p) => p.value > 0);
+  const inflationNote =
+    g.inflation === null
+      ? []
+      : [
+          `The mark on each bar is inflation, ${exPct(g.inflation, 1)} a year, from the retirement plan.`,
+        ];
+  const ef = x.earnedFy;
+  return {
+    'home.earningRate': explain({
+      id: 'home.earningRate',
+      title: TERMS.earningRate.label,
+      exact: g.all ? rate(g.all.rate) : '–',
+      what: TERMS.earningRate.hint,
+      how: g.all
+        ? `${parts.map((p) => `${p.label} ${exInr(p.value)} × ${rate(p.rate)}`).join(' + ')} = ${exInr(g.all.perYear)} a year ÷ ${exInr(parts.reduce((a, p) => a + p.value, 0))} = ${rate(g.all.rate)}.`
+        : 'Shows once every kind of holding has a yearly rate.',
+      inputs: parts.map((p) => ({
+        label: p.label,
+        value: `${exInr(p.value)} · ${rate(p.rate)}`,
+        basis: p.basis,
+        to: i.today,
+      })),
+      level: g.all ? 'partly_estimated' : 'missing',
+      completeness:
+        'Each part’s own rate: the deposits’ and funds’ XIRR from their own dated money, savings from the interest earned this financial year.',
+      notes: [
+        'Different from XIRR on own money: this is what the money earns today, not how it has grown since records began.',
+        ...inflationNote,
+      ],
+    }),
+    'home.fundsXirr': explain({
+      id: 'home.fundsXirr',
+      title: `${TERMS.xirr.label}: mutual funds`,
+      exact: rate(g.funds),
+      what: `${TERMS.xirr.hint} Every purchase, SIP, sale and payout of all funds together, and today’s value.`,
+      how:
+        g.funds === null
+          ? 'Shows once a fund has dated purchases.'
+          : `Solved over all fund money movements: ${rate(g.funds)}.`,
+      inputs: [
+        {
+          label: 'Mutual funds today',
+          value: exInr(value('funds')),
+          basis: 'calculated',
+          to: i.today,
+        },
+      ],
+      level: g.funds === null ? 'missing' : 'complete',
+      completeness: 'From each fund’s transactions; a fund with no statement uses its plan.',
+      notes: inflationNote,
+      fix: { label: 'Open Investments', href: i.links.investments },
+    }),
+    'home.depositsXirr': explain({
+      id: 'home.depositsXirr',
+      title: `${TERMS.xirr.label}: fixed deposits`,
+      exact: rate(g.fd),
+      what: `${TERMS.xirr.hint} Each running deposit from its booking date to today’s value.`,
+      how:
+        g.fd === null
+          ? 'Shows once a deposit is running.'
+          : `Each principal out on its booking day, today’s value of all of them back: ${rate(g.fd)}.`,
+      inputs: [
+        {
+          label: 'Fixed deposits today',
+          value: exInr(value('fd')),
+          basis: 'calculated',
+          to: i.today,
+        },
+      ],
+      level: g.fd === null ? 'missing' : 'complete',
+      completeness: 'Worked out from each deposit’s own terms.',
+      notes: inflationNote,
+      fix: { label: 'Open Deposits', href: i.links.deposits },
+    }),
+    'home.savingsRate': explain({
+      id: 'home.savingsRate',
+      title: `${TERMS.rateEarned.label}: savings`,
+      exact: g.savings ? rate(g.savings.rate) : '–',
+      what: TERMS.rateEarned.hint,
+      how: g.savings
+        ? `Interest earned since 1 April ${ef ? exInr(ef.savings) : ''} on today’s balance ${exInr(value('cash'))}, made yearly: ${rate(g.savings.rate)}.`
+        : 'Shows once this financial year has savings figures.',
+      inputs: [
+        {
+          label: 'Savings and cash today',
+          value: exInr(value('cash')),
+          basis: 'estimated',
+          to: i.today,
+        },
+      ],
+      level: g.savings ? 'estimated' : 'missing',
+      completeness:
+        'Savings are not an XIRR: money moves in and out daily, so the rate earned is the useful figure.',
+      notes: inflationNote,
+      fix: { label: 'Open Accounts', href: i.links.accounts },
+    }),
+    'home.earnedFy': explain({
+      id: 'home.earnedFy',
+      title: TERMS.earnedFy.label,
+      exact: ef ? exSigned(ef.total) : '–',
+      what: TERMS.earnedFy.hint,
+      how: ef
+        ? `Deposits ${exSigned(ef.deposits)} + funds ${exSigned(ef.funds)} + savings ${exSigned(ef.savings)} + other ${exSigned(ef.other)} = ${exSigned(ef.total)}${ef.pct === null ? '' : `, ${exSignedPct(ef.pct, 1)} of net worth on 1 April`}.`
+        : 'Shows once the records reach this financial year.',
+      inputs: ef
+        ? [
+            { label: 'Interest on deposits', value: exSigned(ef.deposits), basis: 'calculated' },
+            { label: 'Fund gains and losses', value: exSigned(ef.funds), basis: 'calculated' },
+            { label: 'Interest on savings', value: exSigned(ef.savings), basis: 'estimated' },
+            {
+              label: 'Exchange-rate moves and other income',
+              value: exSigned(ef.other),
+              basis: 'calculated',
+            },
+          ]
+        : [],
+      level: ef ? 'partly_estimated' : 'missing',
+      completeness: 'The same figures as Wealth movement for this financial year.',
+      notes: [],
+    }),
+    'home.maturing90': explain({
+      id: 'home.maturing90',
+      title: TERMS.maturing90.label,
+      exact: exInr(x.maturing90.principal),
+      what: TERMS.maturing90.hint,
+      how: `${exPlural(x.maturing90.count, 'deposit')} mature from tomorrow to 90 days from today; their principal adds up to ${exInr(x.maturing90.principal)} (${exInr(x.maturing30.principal)} of it within 30 days).`,
+      inputs: [
+        {
+          label: 'Deposits maturing',
+          value: exInr(x.maturing90.principal),
+          basis: 'calculated',
+          from: i.today,
+          count: COUNT(x.maturing90.count, 'deposits'),
+        },
+      ],
+      level: 'complete',
+      completeness: 'From each deposit’s recorded maturity date.',
+      notes: [],
+      fix: { label: 'See maturities', href: i.links.maturities },
+    }),
+    'home.nreNro': explain({
+      id: 'home.nreNro',
+      title: TERMS.nreNro.label,
+      exact: `${exInr(x.nre)} · ${exInr(x.nro)}`,
+      what: TERMS.nreNro.hint,
+      how: `Savings and deposits in NRE accounts ${exInr(x.nre)}; in NRO accounts ${exInr(x.nro)}. Accounts with no type set, and accounts abroad, are in neither.`,
+      inputs: [
+        { label: 'NRE', value: exInr(x.nre), basis: 'estimated', to: i.today },
+        { label: 'NRO', value: exInr(x.nro), basis: 'estimated', to: i.today },
+      ],
+      level: 'complete',
+      completeness: 'From the account type recorded for each account.',
+      notes: [],
+      fix: { label: 'Open Accounts', href: i.links.accounts },
+    }),
+  };
+}
+
 export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
-  const l = i.liquidity;
   const dep = i.deposits;
-  const next = i.banks.overview.next;
-  const f = i.funds;
   const trend = i.trend;
   const g = trend.growth;
   return {
     'home.netWorth': netWorth(i),
     'home.today': explain({
       id: 'home.today',
-      title: 'Net worth change today',
+      title: TERMS.todayChange.label,
       exact: exSigned(i.change.today.amount),
       what: 'Interest at each rate and the move in fund prices since yesterday.',
       how: `Interest since yesterday ${exSigned(i.change.today.banks)} + fund price moves ${exSigned(i.change.today.funds)} = ${exSigned(i.change.today.amount)}${i.change.today.pct === null ? '' : `, ${ratioHow({ label: 'earned', amount: i.change.today.amount }, { label: 'yesterday’s net worth', amount: i.total - i.change.today.amount }, 2)}`}.`,
@@ -588,141 +679,38 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
       completeness: 'An estimate, not read from a bank.',
       notes: [],
     }),
-    'home.month': tileExplain(
-      'home.month',
-      `Earned over the last ${exPlural(i.change.monthDays, 'day')}`,
-      'What the holdings earned over the days set in Settings: interest, price moves and exchange-rate moves, not money you added or took out.',
-      'recent',
-      i,
-      `The number of days (${i.change.monthDays}) is a Settings value.`,
-    ),
     ...capitalExplains(i),
     'home.verified': verified(i),
-    'home.cashAndDeposits': explain({
-      id: 'home.cashAndDeposits',
-      title: 'Cash and deposits',
-      exact: exInr(l.cashAndDeposits),
-      what: 'Bank balances and fixed deposits together, and how many months of spending they cover.',
-      how: `Cash and deposits ${exInr(l.cashAndDeposits)} ÷ net worth ${exInr(i.total)} = ${exPct(i.total > 0 ? l.cashAndDeposits / i.total : 0, 0)}.${l.months === null ? ' No monthly spending is entered, so no cover is worked out.' : ` ÷ monthly spending ${exInr(l.monthlySpending)} = ${l.months.toFixed(1)} months.`}`,
+    'home.free30': explain({
+      id: 'home.free30',
+      title: TERMS.available30.label,
+      exact: exInr(i.extras.available30.total),
+      what: `${TERMS.available30.hint} Nothing is sold.`,
+      how: `Savings and cash ${exInr(i.extras.available30.cash)} + the principal of deposits maturing within ${exPlural(i.freeDays, 'day')} ${exInr(i.extras.available30.deposits)} = ${exInr(i.extras.available30.total)}. Nothing is sold, so there is no tax, exit load or lost interest; the interest the deposits pay comes on top.`,
       inputs: [
         {
-          label: 'Cash and deposits',
-          value: exInr(l.cashAndDeposits),
+          label: 'Savings and cash',
+          value: exInr(i.extras.available30.cash),
           basis: 'estimated',
           to: i.today,
         },
         {
-          label: 'Monthly spending (retirement plan)',
-          value: l.monthlySpending > 0 ? exInr(l.monthlySpending) : 'not entered',
-          basis: l.monthlySpending > 0 ? 'recorded' : 'missing',
-        },
-      ],
-      level: l.months === null ? 'partly_estimated' : 'complete',
-      completeness:
-        l.months === null
-          ? 'Missing: enter the household’s monthly spending to see how many months this covers.'
-          : 'The spending is the figure entered in the retirement plan.',
-      notes: [],
-      fix:
-        l.months === null
-          ? { label: 'Enter spending in the retirement plan', href: '/retire' }
-          : undefined,
-    }),
-    'home.free30': explain({
-      id: 'home.free30',
-      title: `Free within ${exPlural(i.freeDays, 'day')}`,
-      exact: exInr(l.within30),
-      what: 'What could be in the bank within the window with nothing sold.',
-      how: `Cash now plus each deposit that matures within ${exPlural(i.freeDays, 'day')} = ${exInr(l.within30)}. Nothing is sold, so there is no tax, exit load or lost interest.`,
-      inputs: [
-        {
-          label: 'Cash and deposits reachable',
-          value: exInr(l.within30),
-          basis: 'estimated',
+          label: 'Deposits maturing (principal)',
+          value: exInr(i.extras.available30.deposits),
+          basis: 'calculated',
           from: i.today,
-          count: { n: i.freeDays, noun: 'days' },
+          count: COUNT(i.extras.maturing30.count, 'deposits'),
         },
       ],
       level: 'partly_estimated',
       completeness:
         'Cash is the balance moved forward by estimated interest; deposits are calculated from their dates.',
       notes: [
-        'The window is the first “I need money” scenario day in Settings.',
         'A deposit whose date has passed is not a deposit any more: its money is in a savings account or a new deposit, which are listed on their own.',
       ],
       fix: { label: 'Open “I need money”', href: i.links.raise },
     }),
-    'home.nextMaturity': explain({
-      id: 'home.nextMaturity',
-      title: 'Next maturity',
-      exact: next ? exInr(next.amount) : undefined,
-      what: 'The first deposit date coming up and what is paid on it.',
-      how: next
-        ? `${next.count} deposit(s) mature on ${exDate(next.date)} (${next.days === 0 ? 'today' : `in ${exPlural(next.days, 'day')}`}) at ${next.bank}, paying ${exInr(next.amount)}.`
-        : 'No deposit is running.',
-      inputs: [
-        {
-          label: 'Maturity date and amount',
-          value: next ? `${exDate(next.date)} · ${exInr(next.amount)}` : 'none',
-          basis: next ? 'calculated' : 'missing',
-          to: next?.date,
-        },
-      ],
-      level: next ? 'complete' : 'missing',
-      completeness: next ? 'From the deposit’s recorded dates and terms.' : 'No running deposit.',
-      notes: [],
-      fix: { label: 'See maturities', href: i.links.maturities },
-    }),
-    'home.interest': explain({
-      id: 'home.interest',
-      title: `Interest in ${dep.interest.fy}`,
-      exact: exInr(dep.interest.thisYear),
-      what: 'The interest the running deposits have added this financial year, and what they add over the next twelve months if held.',
-      how: `For each deposit: its value today − its value on the later of ${exDate(dep.interest.fyStart)} and the day it was booked = ${exInr(dep.interest.thisYear)}. The next ${dep.interest.aheadDays} days add ${exInr(dep.interest.ahead)} more, to each deposit’s maturity at most.`,
-      inputs: [
-        {
-          label: 'Running deposits',
-          value: exInr(dep.interest.thisYear),
-          basis: 'calculated',
-          from: dep.interest.fyStart,
-          to: i.today,
-          count: COUNT(dep.interest.deposits, 'deposits'),
-        },
-      ],
-      level: 'complete',
-      completeness:
-        'Worked out from each deposit’s own terms. Deposits already paid out are not included. Deposit interest only: savings interest and fund gains are not in it.',
-      notes: ['This is accrued interest, not tax or what the bank has credited.'],
-    }),
-    'home.fundsStat': explain({
-      id: 'home.fundsStat',
-      title: 'Mutual funds',
-      exact: f ? exInr(f.value) : undefined,
-      what: 'What the mutual funds are worth, the gain and the annual return.',
-      how: f
-        ? `Units × latest price = ${exInr(f.value)}; gain ${exSigned(f.gain)} = ${exInr(f.value)} − ${exInr(f.invested)} invested${f.xirr === null ? '' : `; annual return ${exSignedPct(f.xirr, 1)} (XIRR)`}.`
-        : 'No mutual fund is recorded.',
-      inputs: f
-        ? [
-            {
-              label: 'Fund statements',
-              value: `${f.withStatement} of ${f.funds}`,
-              basis: 'statement',
-              count: { n: f.withStatement, of: f.funds, noun: 'funds' },
-            },
-          ]
-        : [{ label: 'Funds', value: 'none', basis: 'missing' }],
-      level: !f
-        ? 'missing'
-        : f.xirrEstimated || f.withStatement < f.funds
-          ? 'partly_estimated'
-          : 'complete',
-      completeness: !f
-        ? 'No fund is recorded.'
-        : `A statement is on file for ${f.withStatement} of ${f.funds} funds; the rest use the plan you entered, so their return is an estimate.`,
-      notes: ['The full explanation of each fund figure is on the Investments page.'],
-      fix: { label: 'Open Investments', href: i.links.investments },
-    }),
+    ...growthExplains(i),
     'home.goalsStat': explain({
       id: 'home.goalsStat',
       title: 'Goals on track',
@@ -757,9 +745,9 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
     }),
     'home.insured': explain({
       id: 'home.insured',
-      title: 'Above the insured limit',
+      title: TERMS.aboveInsured.label,
       exact: exInr(dep.cover.uninsured),
-      what: 'Money in one bank, under one name, above the deposit-insurance limit.',
+      what: TERMS.aboveInsured.hint,
       how: `For each bank and name: deposits and savings together minus the limit ${exInr(dep.cover.limit)}; the excess added = ${exInr(dep.cover.uninsured)} in ${exPlural(dep.cover.banksOver, 'bank')}.`,
       inputs: [
         {

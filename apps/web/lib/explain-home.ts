@@ -9,6 +9,8 @@ export function homeExplain(m: HomeModel, link: LinkOf): ExplainSet<'home'> {
   const f = m.funds;
   return buildHomeExplain({
     today: m.today,
+    growth: m.growth,
+    extras: m.extras,
     total: m.total,
     money: m.money,
     capital: {

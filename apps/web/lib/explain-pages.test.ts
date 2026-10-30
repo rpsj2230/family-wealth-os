@@ -64,7 +64,8 @@ describe('Home explainers (sample household)', () => {
 
   it('profit and the change over a period state their denominators', () => {
     expect(ex['home.profitSoFar'].how).toMatch(/own money/);
-    expect(ex['home.month'].how).toMatch(/money at work|Not worked out/);
+    expect(ex['home.earnedFy'].how).toMatch(/of net worth on 1 April|Shows once/);
+    expect(ex['home.earningRate'].how).toMatch(/a year/);
     expect(ex['home.classFunds'].how).toMatch(/÷ ₹[\d,]+ net worth/);
   });
 

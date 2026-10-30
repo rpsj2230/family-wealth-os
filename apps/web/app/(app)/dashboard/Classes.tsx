@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  TERMS,
   classHref,
   formatInrCompact,
   formatPct,
@@ -14,7 +15,6 @@ import { ForeignCashLines } from '@/components/ForeignCash';
 import { Why } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import type { HomeModel } from '@/lib/home';
-import { MONEY_WORDS as W } from '@/lib/money-words';
 import { Signed, homeLink } from './parts';
 
 const NOUN: Record<ClassCard['key'], [string, string]> = {
@@ -24,17 +24,26 @@ const NOUN: Record<ClassCard['key'], [string, string]> = {
   others: ['holding kept by hand', 'holdings kept by hand'],
 };
 
-/** One kind of holding, small: what was put in, what it has earned, what it is worth, the profit or loss and its share of the total. */
+/**
+ * One kind of holding, small: its current value, what it cost (Invested; Balance for savings), its share of the one Lifetime profit,
+ * its yearly rate (XIRR, or the rate savings earned), its profit and its share of net worth.
+ */
 function ClassCardView({
   c,
   sample,
   why,
   yearly,
+  lifetime,
+  earnedFy,
 }: {
   c: ClassCard;
   sample: boolean;
   why: Explain;
   yearly: ClassYearly | null | undefined;
+  /** this kind's part of the Lifetime profit (the capital ledger's earnings by kind); null before the ledger starts */
+  lifetime: number | null;
+  /** savings: the interest earned this financial year */
+  earnedFy: number | null;
 }) {
   const href = homeLink(classHref(c.key), sample);
   const [one, many] = NOUN[c.key];
@@ -64,14 +73,16 @@ function ClassCardView({
       {c.key === 'cash' && <ForeignCashLines items={c.foreign} testid="hm-class-cash-fx" />}
       <dl className="hm-class-facts">
         <div>
-          <dt>{W.investedNow}</dt>
+          <dt>{c.key === 'cash' ? TERMS.balance.label : TERMS.invested.label}</dt>
           <dd>{formatInrCompact(c.invested)}</dd>
         </div>
         <div>
-          <dt>{W.earnedSince}</dt>
-          <dd>
-            {c.earned === null ? '–' : formatInrCompact(c.earned)}
-            {c.earned !== null && c.key === 'cash' && <Est />}
+          <dt>{TERMS.lifetimeProfit.label}</dt>
+          <dd data-testid={`hm-class-${c.key}-lifetime`}>
+            {lifetime === null
+              ? '–'
+              : `${lifetime < 0 ? '−' : '+'}${formatInrCompact(Math.abs(lifetime))}`}
+            {lifetime !== null && c.key === 'cash' && <Est />}
           </dd>
         </div>
       </dl>
@@ -81,12 +92,12 @@ function ClassCardView({
         title={yearly?.basis}
       >
         <span className="muted">
-          {yearly?.kind === 'rate' ? `${W.earnsRate} ` : `${W.xirrInvested} `}
+          {yearly?.kind === 'rate' ? `${TERMS.rateEarned.label} ` : `${TERMS.xirr.label} `}
         </span>
         {yearly ? (
           <>
-            <strong>{formatPct(yearly.rate, 1)}</strong>
-            {yearly.kind === 'rate' ? <span className="muted"> a year</span> : null}
+            <strong>{formatPct(yearly.rate, 2)}</strong>
+            <span className="muted"> a year</span>
             {yearly.estimated && (
               <>
                 {' '}
@@ -101,21 +112,25 @@ function ClassCardView({
         )}
       </p>
       <p className="hm-class-pl">
-        <Signed
-          label={W.profitOnInvested}
-          amount={c.profit}
-          pct={c.profitPct}
-          estimate={c.estimated && Math.round(c.profit) !== 0}
-        />
-        {c.profitPct !== null && (
-          <span className="small muted"> on the {formatInrCompact(c.invested)} invested now</span>
+        {c.key === 'cash' && earnedFy !== null ? (
+          <Signed label={`${TERMS.interestEarned.label} this FY`} amount={earnedFy} estimate />
+        ) : (
+          <>
+            <Signed
+              label={c.key === 'fd' ? TERMS.profitInterest.label : TERMS.profit.label}
+              amount={c.profit}
+              pct={c.profitPct}
+              estimate={c.estimated && Math.round(c.profit) !== 0}
+            />
+            {c.profitPct !== null && <span className="small muted"> overall</span>}
+          </>
         )}
       </p>
       <p className="hm-class-share small muted">
         {formatPct(c.share, 0)} of net worth
         {c.count > 0 ? ` · ${plural(c.count, one, many)}` : ''}
         {c.key === 'fd' && c.maturity > c.current
-          ? ` · ${formatInrCompact(c.maturity)} at maturity`
+          ? ` · ${TERMS.maturityValue.label.toLowerCase()} ${formatInrCompact(c.maturity)}`
           : ''}
       </p>
       {c.awaiting && (
@@ -178,14 +193,21 @@ export function Classes({
   const funds = m.classes.find((c) => c.key === 'funds')!;
   const w = m.periods.basis;
   const rates = m.assumptions;
+  const t = m.capital.totals;
+  const e = t.earnings;
+  const started = !!m.capital.opening;
+  const lifetimeOf: Record<ClassCard['key'], number> = {
+    fd: e.deposits,
+    funds: e.funds,
+    cash: e.savings,
+    others: e.others,
+  };
+  const rest = e.fx + e.income;
   return (
     <section className="card hm-classes" aria-labelledby="hm-classes">
       <header className="hm-head">
         <h2 id="hm-classes">By kind of holding</h2>
-        <span className="muted small">
-          current holdings: what today’s holdings cost and are worth (lifetime figures are at the
-          top)
-        </span>
+        <span className="muted small">what each kind cost, is worth and has earned</span>
       </header>
       <ul className="hm-class-grid">
         {m.classes.map((c) => (
@@ -193,6 +215,8 @@ export function Classes({
             key={c.key}
             c={c}
             yearly={m.yearly[c.key]}
+            lifetime={started ? lifetimeOf[c.key] : null}
+            earnedFy={c.key === 'cash' ? (m.extras.earnedFy?.savings ?? null) : null}
             sample={sample}
             why={
               ex[
@@ -208,50 +232,59 @@ export function Classes({
           />
         ))}
       </ul>
+      {started && (
+        <p className="small muted" data-testid="hm-lifetime-split">
+          {TERMS.lifetimeProfit.label}: the four kinds{' '}
+          {formatInrCompact(e.deposits + e.funds + e.savings + e.others)}
+          {Math.abs(rest) >= 1
+            ? ` + exchange-rate moves and other income ${formatInrCompact(rest)}`
+            : ''}{' '}
+          = {formatInrCompact(t.profit)}.
+        </p>
+      )}
       <FundSplitLine m={m} />
       <details className="bv-how">
         <summary>How these are worked out</summary>
         <ul className="list small muted">
           <li>
-            <strong>Fixed deposits.</strong> Invested is the amount of each deposit. Current is what
-            it has grown to today on its own terms (rate, dates and how interest is added); maturity
-            is what it pays on its date. A deposit that has matured stops earning; its proceeds are
-            counted once, here and in net worth, until you say where they went, unless a new deposit
-            or a later balance already holds them (then they are not counted twice).
+            <strong>Fixed deposits.</strong> Invested is the amount of each deposit. Current value
+            is what it has grown to today on its own terms (rate, dates and how interest is added);
+            maturity is what it pays on its date. A deposit that has matured stops earning; its
+            proceeds are counted once, here and in net worth, until you say where they went, unless
+            a new deposit or a later balance already holds them (then they are not counted twice).
           </li>
           <li>
             <strong>Mutual funds.</strong> Invested is the money still in the funds: the cost of the
-            units held, as Investments shows it. Current is the units times the latest price, with
-            SIP instalments assumed since the last statement added and marked <Est />. Profit is
-            current less invested; where a fund has no statement ({w.fundsFromPlan} of{' '}
+            units held, as Investments shows it. Current value is the units times the latest price,
+            with SIP instalments assumed since the last statement added and marked <Est />. Profit
+            is current less invested; where a fund has no statement ({w.fundsFromPlan} of{' '}
             {plural(funds.count, 'fund')} here) the cost is the amount entered, so its profit is{' '}
             <Est />.
           </li>
           <li>
-            <strong>Cash.</strong> Invested is the last balance recorded for each account. Current
-            is that balance plus the interest estimated since, at the account’s own rate, else the
-            rate on the Rates list for its bank, else the {formatPct(rates.savingsRate, 2)} assumed
-            in Settings, less the {formatPct(rates.tdsRate, 0)} tax taken at source. Profit is that
-            interest, an <Est /> because banks credit interest in lumps. A balance in another
-            currency (for example Singapore dollars) is counted in the figure at today’s exchange
-            rate and shown on its own under it, with its rupee value and the rate’s date; it earns
-            nothing here, because a changing exchange rate is not interest.
+            <strong>Cash.</strong> Balance is the last balance recorded for each account. Current
+            value is that balance plus the interest estimated since, at the account’s own rate, else
+            the rate on the Rates list for its bank, else the {formatPct(rates.savingsRate, 2)}{' '}
+            assumed in Settings, less the {formatPct(rates.tdsRate, 0)} tax taken at source. Profit
+            is that interest, an <Est /> because banks credit interest in lumps. A balance in
+            another currency (for example Singapore dollars) is counted in the figure at today’s
+            exchange rate and shown on its own under it, with its rupee value and the rate’s date;
+            it earns nothing here, because a changing exchange rate is not interest.
           </li>
           <li>
-            <strong>Others.</strong> Shares, property, money lent, money held by others, pension
-            accounts and any other counted holding. Invested is the amount recorded and current is
-            what is counted today, so the profit is nothing unless a recorded value has moved on
-            from what was recorded. A change you make to a recorded value shows in the net worth
-            over time, not as profit here.
+            <strong>Others.</strong> Shares, money lent, money held by others, pension accounts and
+            any other counted holding. Invested is the amount recorded and current value is what is
+            counted today, so the profit is nothing unless a recorded value has moved on from what
+            was recorded. A change you make to a recorded value shows in the net worth over time,
+            not as profit here.
           </li>
           <li>
-            <strong>Earned since first record</strong> is everything the kind has earned since it
-            was first held, including interest from deposits already paid out and gains from units
-            already sold, so it can be more than the gain on what is still held.{' '}
-            <strong>Cost of current holdings</strong> is what today’s holdings cost: a deposit
-            renewed with its interest counts at its new, larger amount, so{' '}
-            <strong>Gain on current holdings</strong> leaves out interest already rolled into a
-            deposit. The lifetime profit at the top counts it once, as profit.
+            <strong>{TERMS.lifetimeProfit.label}</strong> on each card is that kind’s part of the
+            one Lifetime profit at the top, including interest already paid out and gains on units
+            already sold, so the cards add up to it with exchange-rate moves and other income.{' '}
+            <strong>{TERMS.invested.label}</strong> is what today’s holdings cost: a deposit renewed
+            with its interest counts at its new, larger amount, so{' '}
+            <strong>{TERMS.profit.label}</strong> leaves out interest already rolled into a deposit.
           </li>
         </ul>
       </details>

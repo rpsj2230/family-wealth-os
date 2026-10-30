@@ -1,0 +1,102 @@
+/* How is my money growing? A compact strip of yearly rates with thin bars and an inflation mark. Colours are tokens, so dark mode is a
+   change of values. */
+.gs {
+  --gs-bg: var(--soft);
+  --gs-track: rgba(100, 116, 139, 0.18);
+  --gs-bar: var(--primary);
+  --gs-main: var(--ok-fg);
+  --gs-tick: var(--fg);
+  background: var(--gs-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+  min-width: 0;
+  container-type: inline-size;
+}
+.gs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.gs-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.gs-tick {
+  display: inline-block;
+  width: 0;
+  height: 10px;
+  border-left: 1.5px solid var(--gs-tick);
+  vertical-align: -1px;
+  margin: 0 2px;
+  opacity: 0.8;
+}
+.gs-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: 14px;
+}
+.gs-item {
+  min-width: 0;
+}
+.gs-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.gs-rate {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+.gs-item.main .gs-rate {
+  color: var(--gs-main);
+  font-size: 1.32rem;
+}
+.gs-bar {
+  position: relative;
+  height: 4px;
+  background: var(--gs-track);
+  border-radius: 4px;
+  margin-top: 6px;
+}
+.gs-bar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--gs-bar);
+}
+.gs-item.main .gs-bar i {
+  background: var(--gs-main);
+}
+.gs-bar s {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  border-left: 1.5px solid var(--gs-tick);
+  opacity: 0.75;
+}
+/* by the strip's own width (the sidebar takes part of the window): two columns, the lead figure across the top */
+@container (max-width: 560px) {
+  .gs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gs-item.main {
+    grid-column: 1 / -1;
+  }
+}
