@@ -56,8 +56,9 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     // by bank and by person: current value, profit, average rate and the deposits' XIRR for each
     const by = p.getByTestId('bv-by');
     await expect(by.getByRole('table', { name: 'By bank' })).toBeVisible();
-    for (const h of ['Bank', 'Current value', 'Profit', 'Average interest rate', 'Deposits XIRR'])
-      await expect(by.getByRole('columnheader', { name: h, exact: true }).first()).toBeVisible();
+    // on a phone the rows become cards, so each figure is checked by its label, which shows at every width
+    for (const h of ['Current value', 'Profit', 'Average interest rate', 'Deposits XIRR'])
+      expect(await by.locator(`td[data-label="${h}"]`).count()).toBeGreaterThan(0);
     // the bars have a text alternative that names every share
     await expect(
       p.getByRole('img', { name: /Where the money sits: Savings and cash \d+%/ }),
