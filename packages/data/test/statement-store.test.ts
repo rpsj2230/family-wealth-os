@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readStatementGrid } from '@fwos/ingest';
-import { balanceOn, lineKeys, monthBalances } from '../src/statement-store';
+import { balanceLessTwins, balanceOn, lineKeys, monthBalances } from '../src/statement-store';
 
 // Invented figures.
 const s = readStatementGrid([
@@ -48,5 +48,39 @@ describe('the order of one day’s lines', () => {
     expect(chainOrder(rows).map((r) => r.id)).toEqual(['z', 'a', 'b']);
     // with no earlier day, the day's first line is the one no other line leads to
     expect(chainOrder(rows.slice(0, 2)).map((r) => r.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('lines saved once without balances and again with them', () => {
+  const l = (id: string, txn_on: string, amount: number, narration: string) => ({
+    id,
+    txn_on,
+    amount,
+    narration,
+  });
+  it('pairs each line with its copy: same day and amount, the same words first, each used once', () => {
+    const bare = [
+      l('b1', '2020-07-10', -100000, 'Fd …1907 Booked'),
+      l('b2', '2020-07-10', -100000, 'Fd …1963 Booked'),
+      l('b3', '2020-07-10', 50000, 'Sample Person'),
+      l('b4', '2020-07-26', -6000, 'Sample Person'),
+    ];
+    const full = [
+      l('f1', '2020-07-10', -100000, 'Fd …1963 Booked'),
+      l('f2', '2020-07-10', -100000, 'FD BOOKING …1907'),
+      l('f3', '2020-07-10', 50000, 'Sample Person'),
+    ];
+    const pairs = balanceLessTwins(bare, full).map(([b, f]) => [b.id, f.id]);
+    // the …1963 lines pair by their words; …1907 is worded differently in the other file and pairs by day and amount
+    expect(pairs).toEqual([
+      ['b2', 'f1'],
+      ['b1', 'f2'],
+      ['b3', 'f3'],
+    ]);
+  });
+  it('leaves a line with no copy alone', () => {
+    expect(
+      balanceLessTwins([l('b', '2020-07-10', -10, 'x')], [l('f', '2020-07-11', -10, 'x')]),
+    ).toEqual([]);
   });
 });

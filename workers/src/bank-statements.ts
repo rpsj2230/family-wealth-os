@@ -15,6 +15,7 @@ import {
   loadPortfolioData,
   loadSettings,
   loadStatements,
+  mergeBalanceLessCopies,
   rebuildStatementMoves,
   conflictingBalances,
   saveBankStatement,
@@ -101,6 +102,12 @@ async function main() {
   });
   for (const r of resolved) {
     await importOne(db, hh, write, r.input, r.bank, r.assetId);
+    // lines saved twice, once without balances and once with: the copy without goes (a run with no files only tidies)
+    const tidy = await mergeBalanceLessCopies(db, hh, r.assetId, write);
+    if (tidy.merged)
+      console.log(
+        `  ${write ? 'Removed' : 'Would remove'} ${tidy.merged} lines saved twice (the copy without a balance); answers moved ${tidy.answersMoved}${write ? `, files left empty and removed ${tidy.filesRemoved}` : ''}`,
+      );
     // the account's last four digits, from the statement, when none were on record
     if (write && r.fillLast4) {
       const { error } = await db
@@ -199,7 +206,7 @@ async function importOne(
       if (error) throw new Error(`opening date: ${error.message}`);
     }
     console.log(
-      `- ${tag}: ${s.lines.length} lines (${saved.lines} new), ${saved.balances} month-end balances${saved.opened ? `, opening day set to ${s.openedOn ?? s.from}` : ''}${s.breaks ? `, ${s.breaks} breaks` : ''}`,
+      `- ${tag}: ${s.lines.length} lines (${saved.lines} new${saved.adopted ? `, ${saved.adopted} already on file took their balance` : ''}), ${saved.balances} month-end balances${saved.opened ? `, opening day set to ${s.openedOn ?? s.from}` : ''}${s.breaks ? `, ${s.breaks} breaks` : ''}`,
     );
   }
   console.log(`Lines read: ${lines}`);

@@ -62,6 +62,46 @@ export function lineKeys(lines: StatementLine[]): string[] {
   });
 }
 
+/** What two copies of one bank line share whatever file they came from: the day, the signed amount and the words. */
+export interface TwinLine {
+  txn_on: string;
+  amount: number;
+  narration: string;
+}
+
+/**
+ * Pairs lines saved without a balance (a download that prints none, kept "lines only") with the same lines from a statement that
+ * has balances. Their keys differ because the balance is part of the key, so the second file would otherwise add every line again.
+ * Lines pair on the same day and amount; within that, the same words first, then the rest in order (six deposits of ₹1 L booked on
+ * one day are interchangeable). Each line is used once.
+ */
+export function balanceLessTwins<A extends TwinLine, B extends TwinLine>(
+  bare: A[],
+  full: B[],
+): [A, B][] {
+  const group = <T extends TwinLine>(ls: T[]) => {
+    const m = new Map<string, T[]>();
+    for (const l of ls) {
+      const k = `${l.txn_on}|${cents(l.amount)}`;
+      m.set(k, [...(m.get(k) ?? []), l]);
+    }
+    return m;
+  };
+  const fulls = group(full);
+  const out: [A, B][] = [];
+  for (const [k, bs] of group(bare)) {
+    const left = [...(fulls.get(k) ?? [])];
+    const rest: A[] = [];
+    for (const b of bs) {
+      const i = left.findIndex((f) => f.narration === b.narration);
+      if (i >= 0) out.push([b, left.splice(i, 1)[0]!]);
+      else rest.push(b);
+    }
+    for (const b of rest) if (left.length) out.push([b, left.shift()!]);
+  }
+  return out;
+}
+
 /**
  * The balances a statement proves: the one before its first line, and the one at the end of each calendar month it covers (or on its
  * last day, for a month it ends in). These become the account's recorded balances, so each month's own money and profit start from

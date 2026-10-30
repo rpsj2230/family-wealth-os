@@ -1,7 +1,79 @@
 import { addDaysIso } from '@fwos/core';
 import type { BankStatement } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { balanceOn, lineKeys, monthBalances } from './statement-store';
+import { balanceLessTwins, balanceOn, lineKeys, monthBalances } from './statement-store';
+
+interface TwinLineRow {
+  id: string;
+  txn_on: string;
+  amount: number;
+  narration: string;
+}
+
+/**
+ * Tidies an account whose lines were saved twice: once without balances (a download kept "lines only") and again from a statement
+ * with balances. The copy without a balance goes; an answer given for it moves to its twin when the twin has none. A file left with
+ * no lines goes too, and the others' line counts are put right. With write false it only counts.
+ */
+export async function mergeBalanceLessCopies(
+  db: SupabaseClient,
+  householdId: string,
+  assetId: string,
+  write: boolean,
+): Promise<{ merged: number; answersMoved: number; filesRemoved: number }> {
+  const lines: (TwinLineRow & {
+    statement_id: string;
+    balance: number | null;
+    answer: string | null;
+  })[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db
+      .from('statement_lines')
+      .select('id, statement_id, txn_on, amount, narration, balance, answer')
+      .eq('household_id', householdId)
+      .eq('asset_id', assetId)
+      .order('id')
+      .range(from, from + 999);
+    if (error) throw new Error(`statement lines: ${error.message}`);
+    lines.push(...((data ?? []) as typeof lines).map((l) => ({ ...l, amount: Number(l.amount) })));
+    if ((data ?? []).length < 1000) break;
+  }
+  const pairs = balanceLessTwins(
+    lines.filter((l) => l.balance === null),
+    lines.filter((l) => l.balance !== null),
+  );
+  const moving = pairs.filter(([bare, full]) => bare.answer && !full.answer);
+  const touched = new Set(pairs.map(([bare]) => bare.statement_id));
+  if (!write) return { merged: pairs.length, answersMoved: moving.length, filesRemoved: 0 };
+  for (const [bare, full] of moving) {
+    const { error } = await db
+      .from('statement_lines')
+      .update({ answer: bare.answer })
+      .eq('id', full.id);
+    if (error) throw new Error(`an answer could not move: ${error.message}`);
+  }
+  const ids = pairs.map(([bare]) => bare.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await db
+      .from('statement_lines')
+      .delete()
+      .in('id', ids.slice(i, i + 200));
+    if (error) throw new Error(`the copies could not be removed: ${error.message}`);
+  }
+  let filesRemoved = 0;
+  for (const id of touched) {
+    const { count } = await db
+      .from('statement_lines')
+      .select('id', { count: 'exact', head: true })
+      .eq('statement_id', id);
+    const { error } = count
+      ? await db.from('bank_statements').update({ line_count: count }).eq('id', id)
+      : await db.from('bank_statements').delete().eq('id', id);
+    if (error) throw new Error(`a statement file could not be tidied: ${error.message}`);
+    if (!count) filesRemoved++;
+  }
+  return { merged: pairs.length, answersMoved: moving.length, filesRemoved };
+}
 
 /** The recorded balances of the account inside the statement's days that the statement shows to be different. */
 export async function conflictingBalances(db: SupabaseClient, assetId: string, s: BankStatement) {
@@ -29,7 +101,13 @@ export async function saveBankStatement(
   assetId: string,
   s: BankStatement,
   fileName: string,
-): Promise<{ statementId: string; lines: number; balances: number; opened: boolean }> {
+): Promise<{
+  statementId: string;
+  lines: number;
+  adopted: number;
+  balances: number;
+  opened: boolean;
+}> {
   const { data: st, error: e1 } = await db
     .from('bank_statements')
     .insert({
@@ -59,6 +137,34 @@ export async function saveBankStatement(
     narration: l.narration,
     line_key: keys[i]!,
   }));
+  // lines already on the account without a balance (a download kept "lines only") take this statement's balance instead of being
+  // added a second time; whatever was answered for them stays
+  let adopted = 0;
+  if (rows.length && rows.every((r) => r.balance !== null)) {
+    const { data: onFile } = await db
+      .from('statement_lines')
+      .select('id, txn_on, amount, narration, balance, line_key')
+      .eq('household_id', householdId)
+      .eq('asset_id', assetId)
+      .gte('txn_on', s.from!)
+      .lte('txn_on', s.to!);
+    const stored = (
+      (onFile ?? []) as (TwinLineRow & { balance: number | null; line_key: string })[]
+    ).map((l) => ({ ...l, amount: Number(l.amount) }));
+    const keys = new Set(stored.map((l) => l.line_key));
+    const pairs = balanceLessTwins(
+      stored.filter((l) => l.balance === null),
+      rows.filter((r) => !keys.has(r.line_key)),
+    );
+    for (const [old, row] of pairs) {
+      const { error } = await db
+        .from('statement_lines')
+        .update({ balance: row.balance, line_key: row.line_key, statement_id: statementId })
+        .eq('id', old.id);
+      if (error) throw new Error(`A line could not take its balance: ${error.message}`);
+      adopted++;
+    }
+  }
   let added = 0;
   for (let i = 0; i < rows.length; i += 500) {
     const { data, error } = await db
@@ -157,5 +263,5 @@ export async function saveBankStatement(
       opened = !error;
     }
   }
-  return { statementId, lines: added, balances, opened };
+  return { statementId, lines: added, adopted, balances, opened };
 }
