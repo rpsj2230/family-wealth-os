@@ -60,6 +60,8 @@ export function depositsFromStatements(
   bookings: DepositLine[],
   paybacks: DepositLine[],
   accountLast4: Map<string, string | null>,
+  /** a deposit's interest paid out on its own lines ("INT AUTO REDEEM …0445"): counted in what it paid back */
+  interest: DepositLine[] = [],
 ): StatementDeposit[] {
   const out: StatementDeposit[] = [];
   const used = new Set<string>();
@@ -96,9 +98,20 @@ export function depositsFromStatements(
     );
     for (const o of together) used.add(o.id);
     used.add(booking.id);
-    const principal = Math.round(-booking.amount * 100) / 100;
-    const paidBack = Math.round(together.reduce((s, o) => s + o.amount, 0) * 100) / 100;
     const endedOn = together[together.length - 1]!.date;
+    const paid = interest.filter(
+      (o) =>
+        !used.has(o.id) &&
+        o.amount > 0 &&
+        o.assetId === back.assetId &&
+        o.date > booking.date &&
+        o.date <= addDaysIso(endedOn, 3) &&
+        depositNumbers(o.narration, accountLast4.get(o.assetId) ?? null).includes(last4),
+    );
+    for (const o of paid) used.add(o.id);
+    const principal = Math.round(-booking.amount * 100) / 100;
+    const paidBack =
+      Math.round([...together, ...paid].reduce((s, o) => s + o.amount, 0) * 100) / 100;
     const years = Math.max(yearsBetween(booking.date, endedOn), 1 / 365);
     const rate = paidBack > principal ? 4 * ((paidBack / principal) ** (1 / (4 * years)) - 1) : 0;
     out.push({
@@ -110,8 +123,68 @@ export function depositsFromStatements(
       paidBack,
       rate: Math.min(Math.round(rate * 1e6) / 1e6, 0.5),
       bookingLineId: booking.id,
-      paybackLineIds: together.map((o) => o.id),
+      paybackLineIds: [...together, ...paid].map((o) => o.id),
     });
   }
   return out.sort((a, b) => a.bookedOn.localeCompare(b.bookedOn) || a.last4.localeCompare(b.last4));
+}
+
+/** A deposit on file, as far as matching it to the statements goes. */
+export interface DepositRecord {
+  id: string;
+  /** the person and bank (any text that is the same for the same person at the same bank) */
+  key: string;
+  principal: number;
+  bookedOn: string;
+  endedOn: string;
+  /** its dates were guessed (from a diary note or a monthly sheet), so they may be off by months */
+  estimated: boolean;
+}
+
+const daysBetween = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
+const sameSum = (a: number, b: number) => Math.abs(a - b) <= Math.max(1, b * 0.005);
+
+/**
+ * Which deposits found on the statements a record on file already stands for. A monthly sheet often kept several deposits booked
+ * together as one row ("₹5 L at IDFC" for five ₹1 L deposits), and a diary note dated a deposit by the note, not the bank. A record
+ * is its statement deposits when they are the same person at the same bank and their principals add up to its principal: booked
+ * within three days and paid back within ten days of its dates, or, for a record whose dates were guessed, running at some time in
+ * its period. Deposits booked and paid back together are tried as one group first, then each alone.
+ */
+export function matchDepositRecords<D extends StatementDeposit & { key: string }>(
+  found: D[],
+  records: DepositRecord[],
+): { matches: { recordId: string; deposits: D[]; datesFixed: boolean }[]; rest: D[] } {
+  const used = new Set<D>();
+  const matches: { recordId: string; deposits: D[]; datesFixed: boolean }[] = [];
+  for (const loose of [false, true])
+    for (const r of [...records].sort((a, b) => a.bookedOn.localeCompare(b.bookedOn))) {
+      if (matches.some((m) => m.recordId === r.id) || (loose && !r.estimated)) continue;
+      const cands = found.filter(
+        (d) =>
+          !used.has(d) &&
+          d.key === r.key &&
+          (loose
+            ? d.bookedOn <= addDaysIso(r.endedOn, 30) && d.endedOn >= addDaysIso(r.bookedOn, -30)
+            : daysBetween(d.bookedOn, r.bookedOn) <= 3 && daysBetween(d.endedOn, r.endedOn) <= 10),
+      );
+      if (!cands.length) continue;
+      const groups = new Map<string, D[]>();
+      for (const d of cands) {
+        const k = `${d.bookedOn}|${d.endedOn}`;
+        groups.set(k, [...(groups.get(k) ?? []), d]);
+      }
+      const total = (ds: D[]) => ds.reduce((s, d) => s + d.principal, 0);
+      const pick =
+        [...groups.values()].find((g) => sameSum(total(g), r.principal)) ??
+        (sameSum(total(cands), r.principal) ? cands : undefined) ??
+        (() => {
+          const one = cands.find((d) => sameSum(d.principal, r.principal));
+          return one ? [one] : undefined;
+        })();
+      if (!pick) continue;
+      for (const d of pick) used.add(d);
+      matches.push({ recordId: r.id, deposits: pick, datesFixed: loose });
+    }
+  return { matches, rest: found.filter((d) => !used.has(d)) };
 }

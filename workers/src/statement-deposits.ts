@@ -6,7 +6,12 @@
  * rebuilds the movements, so both lines are explained. Run by hand (Actions > Deposits from statements). Prints dates, deposit
  * numbers' last four digits and ratios, never an amount.
  */
-import { depositsFromStatements, type DepositLine } from '@fwos/core';
+import {
+  depositsFromStatements,
+  matchDepositRecords,
+  type DepositLine,
+  type DepositRecord,
+} from '@fwos/core';
 import { historyIo, loadMoneyTrail, loadPortfolioData, rebuildStatementMoves } from '@fwos/data';
 import { connectDb, householdId, must } from './shared';
 
@@ -51,40 +56,61 @@ async function main() {
       }));
   const bookings = unexplained('fd_funding');
   const paybacks = unexplained('fd_proceeds');
+  const interest = t.lines
+    .filter((l) => t.classified.get(l.id)?.cls === 'fd_interest')
+    .map((l) => ({
+      id: l.id,
+      assetId: l.asset_id,
+      date: l.txn_on,
+      amount: l.amount,
+      narration: l.narration,
+    }));
   const last4 = new Map(loaded.assetRows.map((a) => [a.id, a.identifier_last4 ?? null]));
-  const found = depositsFromStatements(bookings, paybacks, last4);
+  const keyOf = (id: string) => `${asset.get(id)?.owner_id}|${bankOf(id) ?? ''}`;
+  const found = depositsFromStatements(bookings, paybacks, last4, interest).map((d) => ({
+    ...d,
+    key: keyOf(d.accountId),
+  }));
   console.log(
-    `Deposit lines no deposit on file explains: ${bookings.length} bookings, ${paybacks.length} pay-backs. Pairs found: ${found.length}`,
+    `Deposit lines no deposit on file explains: ${bookings.length} bookings, ${paybacks.length} pay-backs. Deposits found: ${found.length}`,
   );
 
-  const fds = loaded.fdRows;
-  const fdAsset = (id: string) => asset.get(id);
-  const toAdd: typeof found = [];
-  for (const d of found) {
-    const acct = asset.get(d.accountId)!;
-    const bank = bankOf(d.accountId);
-    // deposits on file of the same person at the same bank: the same number, or dates that overlap
-    const same = fds.filter((f) => {
-      const a = fdAsset(f.asset_id);
-      return a && a.owner_id === acct.owner_id && bankOf(f.asset_id) === bank;
-    });
-    const sameNumber = same.find((f) => f.fd_ref_last4 === d.last4);
-    const overlap = same.filter((f) => {
-      const end = f.ended_on ?? f.maturity_on;
-      return f.booked_on <= d.endedOn && end >= d.bookedOn && f.fd_ref_last4 !== d.last4;
-    });
+  // the deposits on file they may already be (merged records are not loaded)
+  const fdRow = new Map(loaded.fdRows.map((f) => [f.asset_id, f]));
+  const records: DepositRecord[] = loaded.fdRows.map((f) => ({
+    id: f.asset_id,
+    key: keyOf(f.asset_id),
+    principal: Number(f.principal),
+    bookedOn: f.booked_on,
+    endedOn: f.ended_on ?? f.maturity_on,
+    estimated: !!(f.start_estimated || f.ended_estimated),
+  }));
+  const { matches, rest } = matchDepositRecords(found, records);
+  const nums = (ds: { last4: string }[]) => ds.map((d) => `…${d.last4}`).join(' ');
+  console.log(`\n== Records on file that are these deposits: ${matches.length}`);
+  for (const m of matches) {
+    const f = fdRow.get(m.recordId)!;
+    const ds = m.deposits;
+    const what =
+      ds.length === 1
+        ? `takes its number${m.datesFixed ? ' and the bank’s dates' : ''}`
+        : `is ${ds.length} deposits: they are added and this record is kept as history (counted nowhere)`;
     console.log(
-      `- ${name(d.accountId)}: FD …${d.last4} booked ${d.bookedOn}, paid back ${d.endedOn} (${d.paybackLineIds.length} line${d.paybackLineIds.length === 1 ? '' : 's'}), back ${(d.paidBack / d.principal).toFixed(3)}× the principal, ${(d.rate * 100).toFixed(2)}% a year${sameNumber ? ' — already on file with this number (dates differ); not added' : ''}`,
+      `- ${name(m.recordId)} booked ${f.booked_on} ends ${f.ended_on ?? f.maturity_on} (${f.start_estimated || f.ended_estimated ? 'dates guessed' : 'dates on file'}) ← ${nums(ds)} booked ${ds[0]!.bookedOn} paid back ${ds[ds.length - 1]!.endedOn}: ${what}`,
     );
-    for (const f of overlap)
-      console.log(
-        `    on file, dates overlap: ${name(f.asset_id).replace(/^/, 'FD ')} booked ${f.booked_on} ends ${f.ended_on ?? f.maturity_on}, ${(Number(f.principal) / d.principal).toFixed(2)}× this one's principal${fdAsset(f.asset_id)?.status === 'merged' ? ' (merged)' : ''}`,
-      );
-    if (!sameNumber) toAdd.push(d);
   }
+  console.log(`\n== Deposits no record stands for, to be added: ${rest.length}`);
+  for (const d of rest)
+    console.log(
+      `- ${name(d.accountId)}: FD …${d.last4} booked ${d.bookedOn}, paid back ${d.endedOn} (${d.paybackLineIds.length} line${d.paybackLineIds.length === 1 ? '' : 's'}), back ${(d.paidBack / d.principal).toFixed(3)}× the principal, ${(d.rate * 100).toFixed(2)}% a year`,
+    );
+  const toAdd = [
+    ...rest,
+    ...matches.filter((m) => m.deposits.length > 1).flatMap((m) => m.deposits),
+  ];
   if (!write) {
     console.log(
-      `Plan only: ${toAdd.length} deposits would be added. Run again with mode "apply" to add them.`,
+      `\nPlan only: ${toAdd.length} deposits would be added, ${matches.filter((m) => m.deposits.length === 1).length} records given their number (and dates), ${matches.filter((m) => m.deposits.length > 1).length} records kept as history. Run again with mode "apply" to do it.`,
     );
     return;
   }
@@ -122,19 +148,66 @@ async function main() {
       continue;
     }
     // the dates are the bank's own, not estimates
-    const id = (r as { id: string }).id;
     must(
       await db
         .from('fixed_deposits')
         .update({ ended_estimated: false, fd_ref_last4: d.last4 })
-        .eq('asset_id', id)
+        .eq('asset_id', (r as { id: string }).id)
         .eq('household_id', hh)
         .select('asset_id'),
       'deposit dates',
     );
     added++;
   }
-  console.log(`Added ${added} deposits.`);
+  let numbered = 0;
+  let kept = 0;
+  for (const m of matches) {
+    if (m.deposits.length === 1) {
+      const d = m.deposits[0]!;
+      const f = fdRow.get(m.recordId)!;
+      const change: Record<string, unknown> = {
+        fd_ref_last4: d.last4,
+        ended_on: d.endedOn,
+        ended_estimated: false,
+        bank_maturity_amount: d.paidBack,
+      };
+      if (m.datesFixed)
+        Object.assign(change, {
+          booked_on: d.bookedOn,
+          maturity_on: d.endedOn,
+          start_estimated: false,
+          ...(d.rate > 0 ? { rate: d.rate } : {}),
+        });
+      else if (f.maturity_on <= d.bookedOn) change.maturity_on = d.endedOn;
+      must(
+        await db
+          .from('fixed_deposits')
+          .update(change)
+          .eq('asset_id', m.recordId)
+          .eq('household_id', hh)
+          .select('asset_id'),
+        'deposit record',
+      );
+      numbered++;
+    } else {
+      // the deposits it stood for are on file now, each with its number: the record stays as history, counted nowhere
+      const note = `Stood for ${m.deposits.length} deposits on the statements (${nums(m.deposits)}), now on file one by one.`;
+      const prior = asset.get(m.recordId)?.notes;
+      must(
+        await db
+          .from('assets')
+          .update({ status: 'merged', notes: prior ? `${prior}\n${note}` : note })
+          .eq('id', m.recordId)
+          .eq('household_id', hh)
+          .select('id'),
+        'record kept as history',
+      );
+      kept++;
+    }
+  }
+  console.log(
+    `Added ${added} deposits; ${numbered} records given their number (and dates); ${kept} records kept as history.`,
+  );
   const rb = await rebuildStatementMoves(db, hh);
   console.log(
     `Movements from statements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}`,

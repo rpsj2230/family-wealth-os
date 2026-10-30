@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { depositNumbers, depositsFromStatements } from '../src/statement-deposits';
+import {
+  depositNumbers,
+  depositsFromStatements,
+  matchDepositRecords,
+  type StatementDeposit,
+} from '../src/statement-deposits';
 
 // Invented numbers and amounts.
 let n = 0;
@@ -68,5 +73,92 @@ describe('deposits found as a booking and a pay-back on the statements', () => {
   });
   it('leaves a pay-back with no booking alone', () => {
     expect(found.some((d) => d.last4 === '1880')).toBe(false);
+  });
+});
+
+describe('a deposit whose interest was paid on its own lines', () => {
+  it('counts that interest in what it paid back', () => {
+    const [d] = depositsFromStatements(
+      [line('yes', '2020-05-09', -100_000, 'NET TXN: FD BOOKED …0445')],
+      [line('yes', '2021-11-18', 100_000, 'PRIN AUTO_REDEEM …0445')],
+      new Map([['yes', '0037']]),
+      [
+        line('yes', '2020-08-09', 1_800, 'INT AUTO_REDEEM …0445'),
+        line('yes', '2020-11-09', 1_800, 'INT AUTO_REDEEM …0445'),
+        line('yes', '2020-11-09', 999, 'INT AUTO_REDEEM …9999'),
+      ],
+    );
+    expect([d!.paidBack, d!.paybackLineIds.length]).toEqual([103_600, 3]);
+    expect(d!.rate).toBeGreaterThan(0.02);
+  });
+});
+
+describe('records on file that already stand for deposits on the statements', () => {
+  const dep = (last4: string, bookedOn: string, endedOn: string, principal: number) =>
+    ({
+      accountId: 'idfc',
+      key: 'r|idfc',
+      last4,
+      bookedOn,
+      endedOn,
+      principal,
+      paidBack: principal * 1.07,
+      rate: 0.07,
+      bookingLineId: `b${last4}`,
+      paybackLineIds: [`p${last4}`],
+    }) satisfies StatementDeposit & { key: string };
+  const found = [
+    // five ₹1 L deposits booked on one day and paid back together, kept on the monthly sheet as one ₹5 L row
+    ...['1794', '1829', '1863', '1896', '1921'].map((n) =>
+      dep(n, '2022-09-11', '2024-09-12', 100_000),
+    ),
+    // five more booked that day and closed early: on no row
+    ...['1943', '1954', '1987', '2006', '2040'].map((n) =>
+      dep(n, '2022-09-11', '2022-10-21', 100_000),
+    ),
+    // a deposit a diary note dated by the note (26 Jul 2020) instead of its booking (19 Oct 2019)
+    dep('1880', '2019-10-19', '2020-10-31', 400_000),
+  ];
+  const records = [
+    {
+      id: 'sheet',
+      key: 'r|idfc',
+      principal: 500_000,
+      bookedOn: '2022-09-11',
+      endedOn: '2024-09-12',
+      estimated: false,
+    },
+    {
+      id: 'diary',
+      key: 'r|idfc',
+      principal: 400_000,
+      bookedOn: '2020-07-26',
+      endedOn: '2020-10-20',
+      estimated: true,
+    },
+    // another person's record at the same bank and dates is never theirs
+    {
+      id: 'other',
+      key: 'g|idfc',
+      principal: 500_000,
+      bookedOn: '2022-09-11',
+      endedOn: '2022-10-21',
+      estimated: false,
+    },
+  ];
+  const { matches, rest } = matchDepositRecords(found, records);
+  it('finds the five deposits a ₹5 L row stands for, by their sum and dates', () => {
+    const sheet = matches.find((m) => m.recordId === 'sheet')!;
+    expect(sheet.deposits.map((d) => d.last4)).toEqual(['1794', '1829', '1863', '1896', '1921']);
+    expect(sheet.datesFixed).toBe(false);
+  });
+  it('finds the deposit a diary note dated wrongly, and says its dates are to be put right', () => {
+    const diary = matches.find((m) => m.recordId === 'diary')!;
+    expect(diary.deposits.map((d) => d.last4)).toEqual(['1880']);
+    expect(diary.datesFixed).toBe(true);
+  });
+  it('leaves the deposits no record stands for to be added', () => {
+    expect(rest.map((d) => d.last4)).toEqual(['1943', '1954', '1987', '2006', '2040']);
+    expect(matches.some((m) => m.recordId === 'other')).toBe(false);
   });
 });
