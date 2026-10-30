@@ -82,7 +82,7 @@ export function CashOverviewPanel({
               why={ex['cash.sinceLast']}
             />
             <Delta
-              label="Earned today"
+              label="Today’s change"
               amount={o.today.change}
               pct={o.today.changePct}
               note="a day of interest at each account's rate; % of yesterday’s value"
@@ -255,7 +255,7 @@ export function CashOverviewPanel({
           <li>
             A savings balance is the last one recorded, moved forward at the account&apos;s rate
             when it is old. “Since the last balances” is that movement; a foreign-currency balance
-            is counted at today&apos;s rupee value with no gain, and shown on its own under the
+            is counted at today&apos;s rupee value with no profit, and shown on its own under the
             total with its rupee value, the rate and the day of the rate (the latest exchange rate
             on file, refreshed every day).
           </li>

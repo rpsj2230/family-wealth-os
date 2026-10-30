@@ -4,6 +4,7 @@
  * monthly contributions and the pace projection. Pure: the page passes the performance object it already built plus a few dates
  * and counts; every figure is explained from that object, never recomputed.
  */
+import { TERMS } from './terms';
 import {
   explain,
   exDate,
@@ -119,7 +120,7 @@ function estimateState(p: PortfolioPerformance): {
     : '';
   return {
     level: share >= 0.999 ? 'estimated' : 'partly_estimated',
-    text: `${pc} of today’s value is in funds with no fund statement: their monthly money put in is worked out from the start date and SIP, so the figures that use it are estimated.${since}`,
+    text: `${pc} of current value is in funds with no fund statement: their monthly amount invested is worked out from the start date and SIP, so the figures that use it are estimated.${since}`,
     basis: 'estimated',
   };
 }
@@ -172,7 +173,7 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
     id: 'invest.returns',
     title: 'Return over time',
     what: 'How the funds themselves did over each period, whatever the dates you put money in (a time-weighted return).',
-    how: `For each period: the index value today ÷ the index value on the period’s first day − 1. The index chains the return between each pair of dates after taking money put in or out of the value, so adding money does not lift it. From a year it is turned into a rate per year (after ${i.cfg.annualiseAfterMonths} months); under that it is the plain change.${
+    how: `For each period: the index value at the end ÷ the index value on the period’s first day − 1. The index chains the return between each pair of dates after taking money added or withdrawn out of it, so adding money does not lift it. From a year it is turned into a rate per year (after ${i.cfg.annualiseAfterMonths} months); under that it is the plain change.${
       longest?.r
         ? ` For example ${longest.def.label}: ${exSignedPct(longest.r.absolute, 1)} from ${exDate(longest.r.from)} to ${exDate(longest.r.to)}.`
         : ''
@@ -218,7 +219,7 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
     id: 'invest.pl',
     title: 'Profit and loss by period',
     what: `The rupees and per cent the funds made or lost in each ${i.pl.kindLabel}.`,
-    how: `For each ${i.pl.kindLabel}: value at its end − value at its start − net money put in = profit (deposits are not profit and withdrawals are not a loss). The % is the time-weighted return of that period. ${i.pl.rows} periods are shown, from ${exDate(i.pl.from)} to ${exDate(i.pl.to)}; the running total adds the rupees.`,
+    how: `For each ${i.pl.kindLabel}: value at its end − value at its start − money added less withdrawn = profit (deposits are not profit and withdrawals are not a loss). The % is the time-weighted return of that period. ${i.pl.rows} periods are shown, from ${exDate(i.pl.from)} to ${exDate(i.pl.to)}; the running total adds the rupees.`,
     inputs: [
       ...inputsIndex,
       ...(i.pl.mode !== 'none'
@@ -272,8 +273,8 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
   const growth100 = explain({
     id: 'invest.growth100',
     title: 'Growth of 100',
-    what: `What 100 rupees put in on ${exDate(from)} would be worth now, following the funds${hasBench ? ' and following the benchmark' : ''}.`,
-    how: `The time-weighted index starts at 100 on ${exDate(from)} and is multiplied by each period’s return (value moves only, money added or taken out is removed). It is 100 × (1 + the return since ${exDate(from)}). ${hasBench ? 'The benchmark line is its price rebased to 100 on the same day.' : ''}`,
+    what: `What 100 rupees invested on ${exDate(from)} would be worth now, following the funds${hasBench ? ' and following the benchmark' : ''}.`,
+    how: `The time-weighted index starts at 100 on ${exDate(from)} and is multiplied by each period’s return (value moves only, money added or withdrawn is removed). It is 100 × (1 + the return since ${exDate(from)}). ${hasBench ? 'The benchmark line is its price rebased to 100 on the same day.' : ''}`,
     inputs: inputsIndex,
     level: p.index.length < 2 ? 'missing' : est.level,
     completeness:
@@ -294,7 +295,9 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
     inputs: inputsIndex,
     level: dd.points.length === 0 ? 'missing' : est.level,
     completeness: dd.points.length === 0 ? 'Missing: at least two values.' : est.text,
-    notes: ['It uses the time-weighted index, so money you put in during a fall does not hide it.'],
+    notes: [
+      'It uses the time-weighted index, so money you invested during a fall does not hide it.',
+    ],
     fix: flowFix(c),
   });
 
@@ -368,7 +371,7 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
         id: 'invest.whatIf',
         title: 'The same money in the index fund',
         what: 'What your same payments, on the same days, would be worth if each had gone into the index fund instead.',
-        how: `Every purchase is put into ${i.benchmark?.name ?? 'the index fund'} at that day’s price and every sale taken out; what is left is valued at the latest price: ${exInr(w.value)} against ${exInr(c.hero.value)} in your funds. Net money in ${exInr(w.netIn)}; gain ${exSigned(w.gain)}${w.xirr !== null ? `; the index fund’s annual return on those flows ${exSignedPct(w.xirr, 1)}` : ''}.`,
+        how: `Each purchase buys ${i.benchmark?.name ?? 'the index fund'} at that day’s price and each sale sells it; what is left is valued at the latest price: ${exInr(w.value)} against ${exInr(c.hero.value)} in your funds. Added less withdrawn ${exInr(w.netIn)}; profit ${exSigned(w.gain)}${w.xirr !== null ? `; the index fund’s XIRR on those flows ${exPct(w.xirr, 1)} a year` : ''}.`,
         inputs: [
           {
             label: 'Your payments in and out',
@@ -390,7 +393,7 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
                   label: 'Payments before the index fund’s first price (left out)',
                   value: String(w.skipped),
                   basis: 'missing' as const,
-                  note: `${Math.round(w.coverage * 100)}% of the money put in is covered`,
+                  note: `${Math.round(w.coverage * 100)}% of the amount invested is covered`,
                 },
               ]
             : []),
@@ -440,9 +443,9 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
   const growthText = `${i.growth.statementFunds} of ${exPlural(i.growth.totalFunds, 'fund')} have a fund statement; the rest follow the values you recorded.${i.growth.startsLate ? ' History starts later than this range.' : ''}`;
   const chgValue = explain({
     id: 'invest.chgValue',
-    title: 'Value now',
+    title: 'Current value',
     exact: exInr(c.hero.value),
-    what: 'What all the funds shown are worth today.',
+    what: 'What all the funds shown are worth now.',
     how: `Units × latest price for each fund, added = ${exInr(c.hero.value)} as of ${exDate(c.today)}. See the headline value for the price dates.`,
     inputs: [
       {
@@ -465,23 +468,23 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
     id: 'invest.chgChange',
     title: `Change in ${i.growth.rangeWords}`,
     exact: ch ? exSigned(ch.endValue - ch.startValue) : undefined,
-    what: 'How much the value of the funds changed over the range chosen, including money put in and taken out.',
+    what: 'How much the value of the funds changed over the range chosen, including money added and withdrawn.',
     how: ch
       ? `Value on ${exDate(ch.to)} ${exInr(ch.endValue)} − value on ${exDate(ch.from)} ${exInr(ch.startValue)} = ${exSigned(ch.endValue - ch.startValue)}. This change includes new money, so it is not the profit.`
       : 'Not worked out: two dated values are needed.',
     inputs: chInputs('Start and end values'),
     level: ch ? growthLevel : 'missing',
     completeness: ch ? growthText : 'Missing: two dated values.',
-    notes: ['“Made by the market” removes the new money from this change.'],
+    notes: ['Earned removes the money added and withdrawn from this change.'],
   });
   const chgNew = explain({
     id: 'invest.chgNewMoney',
-    title: 'New money put in',
+    title: 'Added less withdrawn',
     exact: ch !== null && ch.netIn !== null ? exSigned(ch.netIn) : undefined,
-    what: 'Purchases less sales over the range: the part of the change that is money, not performance.',
+    what: 'Money added less money withdrawn over the range: the part of the change that is money, not performance.',
     how:
       ch !== null && ch.netIn !== null
-        ? `Cost of the units held on ${exDate(ch.to)} − cost of the units held on ${exDate(ch.from)} = ${exSigned(ch.netIn)} (purchases less sales).`
+        ? `Purchases at what they cost − sales at what they paid, from ${exDate(ch.from)} to ${exDate(ch.to)} = ${exSigned(ch.netIn)}. A sale counts at what it paid, so the profit it took out stays in Earned.`
         : 'Not worked out: the cost of the units at the start is not recorded.',
     inputs: chInputs('Cost of units held at each end'),
     level: ch !== null && ch.netIn !== null ? growthLevel : 'missing',
@@ -493,12 +496,12 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
   });
   const chgMarket = explain({
     id: 'invest.chgMarket',
-    title: 'Made by the market',
+    title: TERMS.earned.label,
     exact: ch !== null && ch.gain !== null ? exSigned(ch.gain) : undefined,
-    what: 'The change in value that is not new money: what the market added or took away.',
+    what: TERMS.earned.hint,
     how:
       ch !== null && ch.gain !== null
-        ? `Change in value ${exSigned(ch.endValue - ch.startValue)} − new money ${exSigned(ch.netIn ?? 0)} = ${exSigned(ch.gain)}.${ch.returnPct !== null ? ` As a share of the average money at work: ${exSigned(ch.gain)} ÷ (start value ${exInr(ch.startValue)} + half the new money ${exInr((ch.netIn ?? 0) / 2)}) = ${exSignedPct(ch.returnPct, 1)}.` : ''}`
+        ? `Change in value ${exSigned(ch.endValue - ch.startValue)} − added less withdrawn ${exSigned(ch.netIn ?? 0)} = earned ${exSigned(ch.gain)}.${ch.returnPct !== null ? ` As a share of the average money at work: ${exSigned(ch.gain)} ÷ (start value ${exInr(ch.startValue)} + half the money added ${exInr((ch.netIn ?? 0) / 2)}) = ${exSignedPct(ch.returnPct, 1)}.` : ''}`
         : 'Not worked out: it needs the cost of the units at both ends.',
     inputs: chInputs('Values and cost at each end'),
     level: ch !== null && ch.gain !== null ? growthLevel : 'missing',
@@ -514,8 +517,8 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
   // ---- contributions
   const contrib = explain({
     id: 'invest.contrib',
-    title: 'Money put in each month',
-    what: `Money put into funds in each of the last ${i.cfg.contributionMonths} months, split into monthly instalments, one-off purchases and units moved in.`,
+    title: 'Invested each month',
+    what: `Money added to funds in each of the last ${i.cfg.contributionMonths} months, split into monthly instalments, one-off purchases and units moved in.`,
     how: `Each column adds that month’s purchase lines on the statements: SIP instalments + one-off purchases + units moved in or bought with a dividend. Total over the months shown: ${exInr(i.growth.contributionTotal)}.`,
     inputs: [
       {
@@ -552,7 +555,7 @@ export function buildPerfExplain(i: PerfExplainInput, c: PerfContext): PerfExpla
   const pace = explain({
     id: 'invest.pace',
     title: 'If you carry on like this',
-    what: 'What today’s value and SIPs would grow to if the same yearly return carried on. A projection, not a promise.',
+    what: 'What current value and SIPs would grow to if the same yearly return carried on. A projection, not a promise.',
     how:
       i.pace.years.length > 0
         ? `Today’s value ${exInr(c.hero.value)} grown at ${(i.pace.rate * 100).toFixed(1)}% a year with ${exInr(c.hero.sipMonthly)} added each month gives ${i.pace.years.map((y) => `${exInr(y.expected)} in ${y.years} year${y.years === 1 ? '' : 's'} (range ${exInr(y.low)} to ${exInr(y.high)})`).join(', ')}.`

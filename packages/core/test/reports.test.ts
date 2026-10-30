@@ -9,6 +9,7 @@ import {
   fundFlow,
   FUND_BY,
   fundSummary,
+  pooledXirr,
   periodOf,
   sipTable,
   tableToCsv,
@@ -293,5 +294,39 @@ describe('tableToCsv', () => {
     expect(lines[0]).toContain('Avg rate (%)');
     expect(lines[lines.length - 1]).toContain('Grand total');
     expect(lines[1]).toContain('Bank B,1,200000,230000,30000,7.50,57.14');
+  });
+});
+
+describe('pooledXirr: one XIRR over a group of funds, as Investments works it out', () => {
+  const today = '2026-10-26';
+  it('a fund on its own and two copies of it give the same rate', () => {
+    const one = pooledXirr([fund({ id: 'A' })], today);
+    expect(one).not.toBeNull();
+    expect(pooledXirr([fund({ id: 'A' }), fund({ id: 'B' })], today)).toBeCloseTo(one!, 8);
+  });
+
+  it('weighs funds by their money and its dates, not by value alone', () => {
+    // a fund bought last month for 1,00,000 now worth 1,10,000 earns a very high yearly rate on its own; pooled with a large,
+    // old fund it barely moves the rate, while a value-weighted average of the two rates would jump
+    const big = fund({ id: 'A', value: 1_000_000, xirr: 0.1 });
+    const recent = fund({
+      id: 'R',
+      value: 110_000,
+      invested: 100_000,
+      startedOn: '2026-09-26',
+      sipMonthly: null,
+      xirr: 2,
+      txns: [{ date: '2026-09-26', kind: 'purchase', units: 1000, amount: 100_000 }],
+    });
+    const pooled = pooledXirr([big, recent], today)!;
+    const alone = pooledXirr([big], today)!;
+    const weighted = (1_000_000 * 0.1 + 110_000 * 2) / 1_110_000;
+    expect(Math.abs(pooled - alone)).toBeLessThan(Math.abs(weighted - alone));
+  });
+
+  it('the fund table uses it for each group when today is given', () => {
+    const list = [fund({ id: 'A' }), fund({ id: 'B', owner: 'Ravi' })];
+    const t = fundSummary(list, 'owner', 'month', today);
+    expect(t.rows[0]!.xirr).toBeCloseTo(pooledXirr([list[0]!], today)!, 8);
   });
 });

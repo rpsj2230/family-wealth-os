@@ -30,8 +30,8 @@ export function perfDates(from: string, today: string, weeks = 0): string[] {
 }
 
 /**
- * A fund's cash flows: money put in positive, money taken out negative. From the statement's transactions when there are any (units
- * held before the statement began count as money put in on its first day, at that day's price, so the first period is not read as a
+ * A fund's cash flows: invested positive, money withdrawn negative. From the statement's transactions when there are any (units
+ * held before the statement began count as invested on its first day, at that day's price, so the first period is not read as a
  * gain); otherwise worked out from the start date and SIP plan and marked estimated.
  */
 export function flowsOfFund(args: {

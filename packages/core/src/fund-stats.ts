@@ -124,7 +124,7 @@ const keyOf = (f: StatFund, by: ShareBy): [string, string] =>
       ? [f.amc ?? '__none', f.amc ?? NO_AMC]
       : [f.assetId, f.name];
 
-/** Value, money put in and gain by kind, fund house or fund, largest first. Funds with no value are left out. */
+/** Value, invested and gain by kind, fund house or fund, largest first. Funds with no value are left out. */
 export function shareRows(funds: StatFund[], by: ShareBy): ShareRow[] {
   const total = funds.reduce((a, f) => a + Math.max(0, f.value), 0);
   const map = new Map<string, ShareRow>();
@@ -583,7 +583,7 @@ export function statBlock(
 // ------------------------------------------------------------------------------------------------
 // Per fund
 // ------------------------------------------------------------------------------------------------
-/** Average price paid per unit still held: the money put in over the units. Null unless both are known. */
+/** Average price paid per unit still held: the amount invested over the units. Null unless both are known. */
 export const avgCostPerUnit = (invested: number, units: number | null) =>
   units !== null && units > 0 && invested > 0 ? invested / units : null;
 

@@ -375,7 +375,7 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       {
         name: 'unexplainedTolerance',
         label: 'A new balance is explained when within',
-        hint: 'When a new actual balance differs from the estimate by more than this, the difference is shown as “not yet explained” (never as profit or as money you put in) until you say what it was.',
+        hint: 'When a new actual balance differs from the estimate by more than this, the difference is shown as “not yet explained” (never as profit or as money you added) until you say what it was.',
         kind: 'money',
         path: ['estimates', 'unexplainedTolerance'],
         unit: '₹',
@@ -393,7 +393,7 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       {
         name: 'openingDate',
         label: 'Measure your own money and profit from',
-        hint: 'Own money put in (lifetime), lifetime profit and the yearly return start from net worth on this day (the opening position). Leave empty to start from the first day the holdings on file have a value.',
+        hint: 'Own money, lifetime profit and XIRR on own money start from net worth on this day (the opening position). Leave empty to start from the first day the holdings on file have a value.',
         kind: 'date',
         path: ['capital', 'openingDate'],
         optional: true,
@@ -995,8 +995,8 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       },
       {
         name: 'noLedgerNoteAbove',
-        label: 'Warn about approximate fund gains while this many funds lack a transaction ledger',
-        hint: 'Home shows a note that fund gains are approximate until you import your fund statements, while MORE funds than this have only monthly values and no transactions. 0 shows it while any fund lacks them.',
+        label: 'Warn about approximate fund profit while this many funds lack a transaction ledger',
+        hint: 'Home shows a note that fund profit is approximate until you import your fund statements, while MORE funds than this have only monthly values and no transactions. 0 shows it while any fund lacks them.',
         kind: 'int',
         path: ['funds', 'noLedgerNoteAbove'],
         unit: 'funds',

@@ -160,7 +160,7 @@ export function bankFigure(
     if (page !== 'cash' && o.parts.fd.count > 0)
       out.push(
         {
-          label: 'Deposit amounts put in',
+          label: 'Deposit principal invested',
           value: exInr(o.parts.fd.invested),
           basis: 'recorded',
           from: f.fd.firstBooked,
@@ -215,10 +215,10 @@ export function bankFigure(
         title: `${w.thing.charAt(0).toUpperCase()}${w.thing.slice(1)} today${scope}`,
         exact: exInr(o.current),
         shown: formatInrCompact(o.current),
-        what: `What the ${w.thing} are worth today.`,
+        what: `What the ${w.thing} are worth now.`,
         how: [
           page !== 'cash' && o.parts.fd.count > 0
-            ? `each deposit’s value today from its own rate and terms ${exInr(o.parts.fd.current)}`
+            ? `each deposit’s current value from its own rate and terms ${exInr(o.parts.fd.current)}`
             : null,
           page !== 'deposits' && o.parts.cash.count > 0
             ? `each savings balance as last recorded ${exInr(o.parts.cash.invested)} plus interest estimated since ${exInr(cashEst)}`
@@ -252,7 +252,7 @@ export function bankFigure(
     }
     case 'profit':
     case 'sinceLast': {
-      const title = kind === 'profit' ? 'Gain on current holdings' : 'Since the last balances';
+      const title = kind === 'profit' ? 'Profit' : 'Since the last balances';
       const base = o.invested;
       return explain({
         id,
@@ -260,16 +260,16 @@ export function bankFigure(
         exact: exSigned(o.profit),
         what:
           kind === 'profit'
-            ? `What the ${w.thing} have earned on the amount put in.`
+            ? `What the ${w.thing} have earned on the amount invested.`
             : 'How much today’s estimate is above the balances last recorded.',
         how:
-          `${exInr(o.current)} value today − ${exInr(base)} ${kind === 'profit' ? 'invested' : 'last recorded'} = ${exSigned(o.profit)}. ` +
+          `${exInr(o.current)} current value − ${exInr(base)} ${kind === 'profit' ? 'invested' : 'last recorded'} = ${exSigned(o.profit)}. ` +
           (o.profitPct === null
             ? 'Nothing is invested, so no percentage.'
             : `As a share of the amount ${kind === 'profit' ? 'invested' : 'last recorded'}: ${ratioHow({ label: 'profit', amount: o.profit }, { label: kind === 'profit' ? 'invested' : 'last recorded', amount: base })}.`),
         inputs: [
           {
-            label: 'Value today',
+            label: 'Current value',
             value: exInr(o.current),
             basis: page === 'deposits' ? 'calculated' : 'estimated',
             to: f.today,
@@ -292,7 +292,7 @@ export function bankFigure(
             : `Savings profit is interest estimated at ${f.rates.assumed > 0 ? 'rates of which some are assumed' : 'the rates in force'}; banks credit interest in lumps, so the real figure moves in steps.`,
         notes: [
           staleNote,
-          'Money added or taken out is not profit here: only the amount recorded as invested is the base.',
+          'Money added or withdrawn is not profit here: only the amount recorded as invested is the base.',
         ],
         fix: page === 'deposits' ? undefined : monthlyFix,
       });
@@ -301,10 +301,10 @@ export function bankFigure(
       const prior = o.current - o.today.change;
       return explain({
         id,
-        title: 'Earned today',
+        title: 'Today’s change',
         exact: exSigned(o.today.change),
         what: 'What the lines earned in the last day.',
-        how: `Deposits: value today − value yesterday on each one’s own terms = ${exInr(o.today.fd)}. Savings: balance × rate × (1 − tax at source) ÷ 365 for one day = ${exInr(o.today.savings)}. Together ${exSigned(o.today.change)}${o.today.changePct === null ? '' : `; as a share of yesterday’s value: ${ratioHow({ label: 'earned', amount: o.today.change }, { label: 'yesterday’s value', amount: prior }, 3)}`}.`,
+        how: `Deposits: current value − value yesterday on each one’s own terms = ${exInr(o.today.fd)}. Savings: balance × rate × (1 − tax at source) ÷ 365 for one day = ${exInr(o.today.savings)}. Together ${exSigned(o.today.change)}${o.today.changePct === null ? '' : `; as a share of yesterday’s value: ${ratioHow({ label: 'earned', amount: o.today.change }, { label: 'yesterday’s value', amount: prior }, 3)}`}.`,
         inputs: [
           ...(page !== 'cash'
             ? [
@@ -355,7 +355,7 @@ export function bankFigure(
             to: f.today,
           },
           {
-            label: 'Value today',
+            label: 'Current value',
             value: exInr(o.current),
             basis: page === 'deposits' ? 'calculated' : 'estimated',
             to: f.today,
@@ -371,7 +371,7 @@ export function bankFigure(
         completeness:
           page === 'deposits'
             ? 'Every figure comes from the deposits’ own terms.'
-            : 'Deposits are calculated; savings and holdings have no maturity and are counted at today’s value.',
+            : 'Deposits are calculated; savings and holdings have no maturity and are counted at current value.',
         notes: [],
       });
     }
@@ -380,7 +380,7 @@ export function bankFigure(
         id,
         title: 'Where the money sits',
         what: 'How the money splits between savings and cash, fixed deposits and other holdings.',
-        how: `Each part’s value today ÷ the total ${exInr(o.current)}: ${o.where.map((x) => `${x.label} ${exInr(x.amount)} = ${exPct(x.share, 0)}`).join('; ')}.`,
+        how: `Each part’s current value ÷ the total ${exInr(o.current)}: ${o.where.map((x) => `${x.label} ${exInr(x.amount)} = ${exPct(x.share, 0)}`).join('; ')}.`,
         inputs: o.where
           .filter((x) => x.amount > 0)
           .map((x) => ({
@@ -404,10 +404,10 @@ export function bankFigure(
         title: isFd ? 'Fixed deposits today' : 'Savings and cash',
         exact: exInr(p.current),
         what: isFd
-          ? 'What the running fixed deposits are worth today.'
-          : 'What the savings accounts are worth today.',
+          ? 'What the running fixed deposits are worth now.'
+          : 'What the savings accounts are worth now.',
         how: isFd
-          ? `Each deposit’s value on its own terms = ${exInr(p.current)}: ${exInr(p.invested)} put in, ${exInr(p.maturity)} at maturity${o.fdRate !== null ? `, ${exPct(o.fdRate, 2)} a year on average (weighted by amount put in)` : ''}.`
+          ? `Each deposit’s value on its own terms = ${exInr(p.current)}: ${exInr(p.invested)} invested, ${exInr(p.maturity)} at maturity${o.fdRate !== null ? `, ${exPct(o.fdRate, 2)} a year on average (weighted by amount invested)` : ''}.`
           : `Each balance last recorded ${exInr(p.invested)} plus interest estimated since ${exInr(cashEst)} = ${exInr(p.current)}.`,
         inputs: isFd
           ? [
@@ -446,9 +446,9 @@ export function bankFigure(
     case 'invested':
       return explain({
         id,
-        title: 'Amount invested now',
+        title: 'Invested',
         exact: exInr(o.invested),
-        what: 'The amount put in: the principal of each running deposit.',
+        what: 'The amount invested: the principal of each running deposit.',
         how: `Principal of ${exPlural(o.deposits, 'running deposit')} added = ${exInr(o.invested)}. Interest is not in it.`,
         inputs: [
           {
@@ -490,7 +490,7 @@ export function bankFigure(
         title: 'Interest still to earn',
         exact: exInr(o.interest.toEarn),
         what: 'The interest the deposits will still add before they all mature.',
-        how: `Maturity value ${exInr(o.maturity)} − value today ${exInr(o.current)} = ${exInr(o.interest.toEarn)}.`,
+        how: `Maturity value ${exInr(o.maturity)} − current value ${exInr(o.current)} = ${exInr(o.interest.toEarn)}.`,
         inputs: [
           {
             label: 'Maturity value',
@@ -499,7 +499,7 @@ export function bankFigure(
             to: f.fd.lastMaturity,
           },
           {
-            label: 'Value today',
+            label: 'Current value',
             value: exInr(o.current),
             basis: page === 'deposits' ? 'calculated' : 'estimated',
             to: f.today,
@@ -700,7 +700,7 @@ export function bankFigure(
         id,
         title: 'Whose money',
         what: `How the ${w.thing} split between the people.`,
-        how: `Each person’s value today ÷ ${exInr(o.current)}: ${o.people.map((p) => `${exInr(p.current)} = ${exPct(p.share, 0)}`).join('; ')}. The ▲/▼ beside a person is their value less their invested amount.`,
+        how: `Each person’s current value ÷ ${exInr(o.current)}: ${o.people.map((p) => `${exInr(p.current)} = ${exPct(p.share, 0)}`).join('; ')}. The ▲/▼ beside a person is their value less their invested amount.`,
         inputs: o.people.map((p, i) => ({
           label: `Person ${i + 1}`,
           value: exInr(p.current),
@@ -737,7 +737,7 @@ export function bankFigure(
         id,
         title: 'Which bank holds how much',
         what: `The ${w.thing} by bank.`,
-        how: `Each bank’s value today ÷ ${exInr(o.current)}: ${f.banks
+        how: `Each bank’s current value ÷ ${exInr(o.current)}: ${f.banks
           .slice(0, 4)
           .map((b) => `${b.name} ${exInr(b.amount)} = ${exPct(b.share, 0)}`)
           .join('; ')}${f.banks.length > 4 ? ` and ${f.banks.length - 4} more` : ''}.`,
@@ -884,8 +884,8 @@ function growthFigure(
         id,
         title: `${TERMS.xirr.label}: fixed deposits`,
         exact: yr(g.fd.rate),
-        what: `${TERMS.xirr.hint} Each running deposit from its booking date to today’s value.`,
-        how: `Each principal out on its booking day, today’s value of all of them (${exInr(o.parts.fd.current)}) back: ${yr(g.fd.rate)}. With interest added every quarter this is a little above the rates written on the deposits.`,
+        what: `${TERMS.xirr.hint} Each running deposit from its booking date to current value.`,
+        how: `Each principal out on its booking day, current value of all of them (${exInr(o.parts.fd.current)}) back: ${yr(g.fd.rate)}. With interest added every quarter this is a little above the rates written on the deposits.`,
         inputs: [
           {
             label: 'Running deposits',

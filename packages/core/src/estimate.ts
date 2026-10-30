@@ -306,7 +306,7 @@ export function estimateFundWithSip(args: {
 }
 
 /**
- * Fund whose units are known: today's value is units x today's NAV (the live feed), plus the units any SIP instalment since the
+ * Fund whose units are known: current value is units x today's NAV (the live feed), plus the units any SIP instalment since the
  * units were counted would have bought. Exact when no instalment is assumed; an estimate only for the assumed instalments.
  * A fund statement (or the monthly update) replaces the units and the estimate restarts from there.
  */

@@ -196,7 +196,7 @@ export function harvestReportTable(t: HarvestTable): ReportTable {
       { key: 'units', label: 'Units to sell', kind: 'text' },
       { key: 'price', label: 'Price used (₹)', kind: 'rate' },
       { key: 'cost', label: 'Cost', kind: 'money' },
-      { key: 'value', label: 'Value now', kind: 'money' },
+      { key: 'value', label: 'Current value', kind: 'money' },
       { key: 'longTerm', label: 'Long-term gain', kind: 'money' },
       { key: 'shortTerm', label: 'Short-term gain', kind: 'money' },
       { key: 'exitLoad', label: 'Exit load', kind: 'money' },

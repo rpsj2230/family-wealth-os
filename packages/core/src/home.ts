@@ -199,7 +199,7 @@ export interface ValueTrust {
 }
 
 /**
- * Splits today's value by how it is known. A holding counts as verified when its last value was recorded within its refresh window
+ * Splits current value by how it is known. A holding counts as verified when its last value was recorded within its refresh window
  * and confirmed, or when it is worked out from the contract (a deposit). Imported values not yet confirmed, values older than the
  * window and holdings with no value are the rest. The total equals net worth because the same holdings are counted.
  */
@@ -230,7 +230,7 @@ export function valueTrust(
 }
 
 // ------------------------------------------------------------------------------------------------
-// Money put in and growth
+// Invested and profit
 // ------------------------------------------------------------------------------------------------
 export interface GrowthPart {
   key: string;
@@ -245,13 +245,13 @@ export interface GrowthSplit {
   current: number;
   growth: number;
   growthPct: number | null;
-  /** share of the current value that was put in, 0 to 1 */
+  /** share of the current value that was invested, 0 to 1 */
   investedShare: number;
   parts: (GrowthPart & { growth: number })[];
   approximate: boolean;
 }
 
-/** What was put in against what it is worth, for the holdings that have a recorded cost (banks, deposits and funds). */
+/** What was invested against what it is worth, for the holdings that have a recorded cost (banks, deposits and funds). */
 export function growthSplit(parts: GrowthPart[]): GrowthSplit {
   const rows = parts.map((p) => ({ ...p, growth: p.current - p.invested }));
   const invested = rows.reduce((a, r) => a + r.invested, 0);
@@ -427,11 +427,11 @@ export interface ClassCard {
   label: string;
   /** holdings counted: deposits, funds, accounts; for Others only the holdings kept by hand are counted */
   count: number;
-  /** the money put in: deposit principal, cost of the units still held, the last balance recorded, the amount recorded */
+  /** the amount invested: deposit principal, cost of the units still held, the last balance recorded, the amount recorded */
   invested: number;
   /** worth today */
   current: number;
-  /** worth at maturity: what deposits pay on their dates; everything else at today's value */
+  /** worth at maturity: what deposits pay on their dates; everything else at current value */
   maturity: number;
   /** current less invested, and as a share of invested (null when nothing is invested) */
   profit: number;
@@ -564,7 +564,7 @@ export function classCards(i: ClassCardsInput): ClassCard[] {
 // Invested money and the profit on it
 // ------------------------------------------------------------------------------------------------
 export interface InvestedMoney {
-  /** the money put into deposits (their principal) and funds (the cost of the units still held) */
+  /** the amount investedto deposits (their principal) and funds (the cost of the units still held) */
   invested: number;
   /** what those deposits and funds are worth above it: interest accrued on deposits plus the gain on the fund units held */
   profit: number;

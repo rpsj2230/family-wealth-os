@@ -1,6 +1,6 @@
 /**
- * The "?" explainers on one fund's page: the headline tiles (value now, money put in, profit, annual return, today's move,
- * monthly investment), the units still held, the exit-load and tax panel, the gains booked by selling and the returns by period.
+ * The "?" explainers on one fund's page: the headline tiles (current value, invested, profit, annual return, today's move,
+ * monthly investment), the units still held, the exit-load and tax panel, the booked profit and the returns by period.
  * Pure; the page passes the fund row, its detail and tax panel as plain facts.
  */
 import {
@@ -129,9 +129,9 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
 
   const value = explain({
     id: 'fund.value',
-    title: 'Value now',
+    title: 'Current value',
     exact: exInr(i.value),
-    what: `What ${i.name} is worth today.`,
+    what: `What ${i.name} is worth now.`,
     how:
       i.units !== null && i.nav !== null
         ? `${i.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units × ₹${i.nav.toLocaleString('en-IN', { maximumFractionDigits: 4 })} (price on ${exDate(i.navDate)}) = ${exInr(i.units * i.nav)}${Math.abs(i.units * i.nav - i.value) > 1 ? `; the value shown, ${exInr(i.value)}, is ${i.valueBasis}` : ''}.`
@@ -180,7 +180,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
 
   const moneyIn = explain({
     id: 'fund.moneyIn',
-    title: 'Money put in (invested)',
+    title: 'Invested',
     exact: exInr(i.invested),
     what: 'What you paid for the units you still hold in this fund.',
     how: `Cost of the units still held (oldest units sold first) = ${exInr(i.invested)}${i.avgCost !== null && i.units ? `, which is ₹${i.avgCost.toLocaleString('en-IN', { maximumFractionDigits: 2 })} a unit on average (${exInr(i.invested)} ÷ ${i.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units)` : ''}.`,
@@ -207,19 +207,19 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
   const pctBase = i.invested > 0 ? profit / i.invested : null;
   const profitE = explain({
     id: 'fund.profit',
-    title: 'Profit on amount invested now',
+    title: 'Profit',
     exact: exSigned(profit),
     what: 'How much the units you still hold are worth above (or below) what you paid for them.',
-    how: `${exInr(i.value)} value − ${exInr(i.invested)} money put in = ${exSigned(profit)}.${pctBase === null ? ' No cost is recorded, so no percentage.' : ` As a share of the money put in: ${ratioHow({ label: 'profit', amount: profit }, { label: 'money put in', amount: i.invested })}.`}`,
+    how: `${exInr(i.value)} value − ${exInr(i.invested)} invested = ${exSigned(profit)}.${pctBase === null ? ' No cost is recorded, so no percentage.' : ` As a share of the amount invested: ${ratioHow({ label: 'profit', amount: profit }, { label: 'invested', amount: i.invested })}.`}`,
     inputs: [
       {
-        label: 'Value now',
+        label: 'Current value',
         value: exInr(i.value),
         basis: value.completeness.level === 'complete' ? 'calculated' : 'estimated',
         to: i.navDate ?? i.today,
       },
       {
-        label: 'Money put in',
+        label: 'Invested',
         value: exInr(i.invested),
         basis: moneyIn.inputs[0]!.basis,
         from: i.firstTxnOn,
@@ -228,7 +228,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     ],
     level: histLevel,
     completeness: histText,
-    notes: ['Gains already booked by selling are separate (see Gains booked by selling).'],
+    notes: ['Booked profit (from units sold) is separate: see Booked profit.'],
     fix: histFix,
     also: histAlso,
   });
@@ -276,14 +276,14 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
           how: 'Not worked out: a dated payment (from a statement or a start date) is needed.',
           inputs: [{ label: 'Dated payments', value: 'none', basis: 'missing' }],
           level: 'missing',
-          completeness: 'Missing: a fund statement, or a start date and the amount put in.',
+          completeness: 'Missing: a fund statement, or a start date and the amount invested.',
           fix: { label: 'Import a fund statement', href: i.links.import },
         })
       : explain({
           id: 'fund.xirr',
           title: 'Yearly return on amount invested (XIRR)',
           what: 'The single yearly rate your money has grown at, given the date of each payment in and out.',
-          how: `Find the rate r so that each payment in and out, grown at r from its date, plus today’s value ${exInr(i.value)} on ${exDate(i.today)}, adds up to zero. ${exPlural(i.flowCount, 'dated payment')} from ${exDate(i.flowsFrom)} to ${exDate(i.flowsTo)} give ${exSignedPct(i.xirr, 1)} a year.`,
+          how: `Find the rate r so that each payment in and out, grown at r from its date, plus current value ${exInr(i.value)} on ${exDate(i.today)}, adds up to zero. ${exPlural(i.flowCount, 'dated payment')} from ${exDate(i.flowsFrom)} to ${exDate(i.flowsTo)} give ${exSignedPct(i.xirr, 1)} a year.`,
           inputs: [
             {
               label: i.flowsEstimated
@@ -308,7 +308,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
             : 'complete',
           completeness: i.xirrEstimated
             ? i.flowsEstimated
-              ? 'Estimated: with no fund statement the payments are worked out from the start date, the amount put in and the SIP.'
+              ? 'Estimated: with no fund statement the payments are worked out from the start date, the amount invested and the SIP.'
               : 'Partly estimated: the history does not add up, so the lines may be incomplete.'
             : `Every payment is read from the statement (${exRange(i.flowsFrom, i.flowsTo)}).`,
           notes: [
@@ -352,7 +352,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     id: 'fund.units',
     title: 'Units still held',
     what: 'The units of this fund you hold now, and where that count comes from.',
-    how: `${i.units === null ? 'The unit count is not recorded.' : `${i.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units, ${i.unitsFrom === 'ledger' ? 'the units the statement lines lead to' : i.unitsFrom === 'recorded' ? 'the count recorded on the fund' : 'not known'}.`} Each purchase still held is listed oldest first, valued at today’s price; the gain is value − cost.`,
+    how: `${i.units === null ? 'The unit count is not recorded.' : `${i.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units, ${i.unitsFrom === 'ledger' ? 'the units the statement lines lead to' : i.unitsFrom === 'recorded' ? 'the count recorded on the fund' : 'not known'}.`} Each purchase still held is listed oldest first, valued at today’s price; its profit is current value − cost.`,
     inputs: [
       {
         label: 'Units',
@@ -401,7 +401,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     id: 'fund.tax',
     title: 'Exit load and tax',
     what: 'Which units are still under an exit load, which are short-term or long-term for tax, and which are at a loss.',
-    how: `${t.exitLoadHeadline} The ${exPlural(t.lots, 'purchase')} still held are put in short-term or long-term by the date each was bought${t.holdingMonths !== null ? ` (long-term after ${t.holdingMonths} months, from the tax rules in Settings)` : ''}: ${t.stcgUnits.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units short-term, ${t.ltcgUnits.toLocaleString('en-IN', { maximumFractionDigits: 3 })} long-term.`,
+    how: `${t.exitLoadHeadline} The ${exPlural(t.lots, 'purchase')} still held are placed in short-term or long-term by the date each was bought${t.holdingMonths !== null ? ` (long-term after ${t.holdingMonths} months, from the tax rules in Settings)` : ''}: ${t.stcgUnits.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units short-term, ${t.ltcgUnits.toLocaleString('en-IN', { maximumFractionDigits: 3 })} long-term.`,
     inputs: [
       {
         label: 'Kind of fund for tax',
@@ -454,7 +454,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
       ? explain({
           id: 'fund.booked',
           title: 'Profit booked by selling',
-          what: 'The gain or loss already locked in by units sold from this fund.',
+          what: 'The profit or loss already booked by units sold from this fund.',
           how: i.hasStatement
             ? 'No sale is on the statement.'
             : 'Needs a fund statement: no sale can be read without one.',
@@ -477,7 +477,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
           id: 'fund.booked',
           title: 'Profit booked by selling',
           exact: exSigned(r.stcg + r.ltcg + r.other),
-          what: 'The gain or loss already locked in by units sold from this fund.',
+          what: 'The profit or loss already booked by units sold from this fund.',
           how: `For each sale: money received − what those units cost (oldest first). Short-term ${exSigned(r.stcg)} + long-term ${exSigned(r.ltcg)} + other ${exSigned(r.other)} = ${exSigned(r.stcg + r.ltcg + r.other)} over ${exPlural(r.sales, 'sale')}, ${exInr(r.proceeds)} received.`,
           inputs: [
             {
@@ -493,7 +493,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
                     label: 'Sales whose purchase is not on file',
                     value: String(r.unknownCost),
                     basis: 'missing' as const,
-                    note: 'their gain is left out',
+                    note: 'their profit is left out',
                   },
                 ]
               : []),
@@ -501,9 +501,9 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
           level: r.unknownCost > 0 ? 'partly_estimated' : 'complete',
           completeness:
             r.unknownCost > 0
-              ? `${r.unknownCost} of ${exPlural(r.sales, 'sale')} used units bought before the statement began; their gain is left out.`
+              ? `${r.unknownCost} of ${exPlural(r.sales, 'sale')} used units bought before the statement began; their profit is left out.`
               : 'Every sale has its purchase cost on a statement.',
-          notes: ['These are gains, not tax.'],
+          notes: ['This is profit before tax; the tax is on the Tax pages.'],
           fix:
             r.unknownCost > 0
               ? { label: 'Import earlier history', href: i.links.import }
@@ -518,11 +518,11 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
         what:
           ret.basis === 'price'
             ? 'The fund’s own return over each period, from its published prices (not your return).'
-            : 'The return over each period from the values you recorded and the money put in.',
+            : 'The return over each period from the values you recorded and the amount invested.',
         how:
           ret.basis === 'price'
             ? `For each period: price at the end ÷ price at the start − 1, as a rate per year from a year. Prices run ${exRange(ret.from, ret.to)}. It ignores when you put money in; your own return is the XIRR in the tiles above.`
-            : `For each period: recorded value at the end ÷ at the start, after taking out money put in. ${exRange(ret.from, ret.to)}.`,
+            : `For each period: recorded value at the end ÷ at the start, after taking out invested. ${exRange(ret.from, ret.to)}.`,
         inputs: [
           {
             label: ret.basis === 'price' ? 'Published prices' : 'Recorded values',
@@ -541,7 +541,7 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
           ret.basis === 'price'
             ? 'Read from the fund’s published prices.'
             : ret.estimated
-              ? 'No published prices: worked out from recorded values, with the money put in estimated from the start date and SIP.'
+              ? 'No published prices: worked out from recorded values, with the amount invested estimated from the start date and SIP.'
               : 'No published prices: worked out from recorded values.',
         notes: ['The benchmark is the price of an index fund, a stand-in for the index.'],
         fix:

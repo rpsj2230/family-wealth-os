@@ -1,7 +1,7 @@
 /**
  * The money figures at the top of the daily summary: net worth, what it did today, the profit so far, and the four kinds of holding
  * (deposits, funds, cash, others). Pure, and the same arithmetic as Home's headline: the day's change is what the banks earned plus
- * the funds' move, the profit is what is worth less what was put in, and the four cards come from `classCards`, which makes them add
+ * the funds' move, the profit is what is worth less what was invested, and the four cards come from `classCards`, which makes them add
  * up to net worth exactly. Whoever loads the data builds the bank blocks and the overview the way Home does.
  */
 import type { BankBlock } from './accounts-view';

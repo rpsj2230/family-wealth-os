@@ -48,7 +48,7 @@ function Detail({ r, term, today }: { r: LedgerEntry; term: string; today: strin
     bits.push(
       r.realisedGain === null ? (
         <span key="g" className="muted">
-          gain not known (purchase not on the statement)
+          profit not known (purchase not on the statement)
         </span>
       ) : (
         <span key="g" className={tone(r.realisedGain)}>
@@ -279,7 +279,7 @@ export function Ledger({
         <b>{list.length}</b> of {rows.length} lines
         {list.length > 0 && (
           <>
-            {' · '}put in <b>{inr(tot.boughtAmount)}</b>
+            {' · '}added <b>{inr(tot.boughtAmount)}</b>
             {tot.sipCount > 0 && (
               <>
                 {' '}
@@ -288,10 +288,10 @@ export function Ledger({
             )}
             {tot.soldAmount > 0 && (
               <>
-                {' · '}taken out <b>{inr(tot.soldAmount)}</b>
+                {' · '}withdrawn <b>{inr(tot.soldAmount)}</b>
                 {tot.salesUnknown < list.filter((x) => x.group === 'sell').length && (
                   <>
-                    {' · '}gain booked{' '}
+                    {' · '}booked profit{' '}
                     <b className={tone(tot.realisedGain)}>{rupees(tot.realisedGain)}</b>
                   </>
                 )}

@@ -65,7 +65,7 @@ describe('buildFundSave', () => {
   it('asks for the value when the fund has no live price', () => {
     const noPrice = { ...row, nav: null };
     const d = { ...draftOf(noPrice), units: '120' };
-    expect(buildFundSave(noPrice, d, TODAY).problems[0]).toContain('value now');
+    expect(buildFundSave(noPrice, d, TODAY).problems[0]).toContain('current value');
     const ok = buildFundSave(noPrice, { ...d, value: '6,100' }, TODAY);
     expect(ok.payload).toMatchObject({ units: 120, nav: null, value: 6100 });
   });
@@ -187,7 +187,7 @@ describe('buildAddFund', () => {
         'the fund name (2 to 120 characters)',
         'whose fund it is',
         'the amount invested',
-        'the value now',
+        'the current value',
       ]),
     );
   });

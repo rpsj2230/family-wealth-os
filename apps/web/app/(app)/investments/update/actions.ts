@@ -19,7 +19,7 @@ export interface FundUpdateRow {
   sipMonthly: string;
 }
 
-/** Saves the monthly fund figures in one go: units, price, value (units × price unless typed), amount put in and the SIP. */
+/** Saves the monthly fund figures in one go: units, price, value (units × price unless typed), amount invested and the SIP. */
 export async function saveFundUpdate(
   asOf: string,
   rows: FundUpdateRow[],
@@ -100,7 +100,7 @@ export async function addFundTransaction(
   return {
     ok: true,
     message: all
-      ? 'Sale of every unit added: the fund is closed and its SIP stopped from that day. The gain is in the fund’s sales.'
+      ? 'Sale of every unit added: the fund is closed and its SIP stopped from that day. The profit is booked profit in the fund’s sales.'
       : 'Transaction added; units and amount invested updated.',
   };
 }

@@ -499,7 +499,7 @@ const MOVE: Partial<
   outside_in: { kind: 'contribution', into: true, note: 'Money from outside (bank statement)' },
   rent: { kind: 'income', into: true, note: 'Rent (bank statement)' },
   income: { kind: 'income', into: true, note: 'Earnings (bank statement)' },
-  spent: { kind: 'withdrawal', into: false, note: 'Spending and money taken out (bank statement)' },
+  spent: { kind: 'withdrawal', into: false, note: 'Spending and money withdrawn (bank statement)' },
   fee: { kind: 'fee', into: false, note: 'Bank charges (bank statement)' },
   tax: { kind: 'tax', into: false, note: 'Tax taken at source (bank statement)' },
 };

@@ -279,7 +279,7 @@ export function AccountEditGrid({
                     {wide && <th className="c-date">Start</th>}
                     <th className="c-date">Matures</th>
                     <th className="c-amt">Invested</th>
-                    {wide && <th className="c-amt">At maturity</th>}
+                    {wide && <th className="c-amt">Maturity value</th>}
                     {wide && <th className="c-ref">Deposit no.</th>}
                     <th className="c-notes">Notes</th>
                     <th className="c-status">Status</th>

@@ -132,7 +132,7 @@ test('sample accounts: each deposit shows rate, start, maturity, invested, amoun
     'Start',
     'Maturity',
     'Invested / balance',
-    'At maturity',
+    'Maturity value',
     'Current value',
     'Notes',
   ])

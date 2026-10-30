@@ -20,7 +20,7 @@ export function FundTransactionForm({
       <h2>Add a transaction</h2>
       <p className="muted small">
         For a purchase, SIP instalment, switch or sale between monthly updates. Units and the amount
-        put in are updated for you. Sales take out the same share of both.
+        invested are updated for you. Sales take out the same share of both.
       </p>
       <div className="row" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'end' }}>
         <label>

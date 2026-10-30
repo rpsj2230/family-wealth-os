@@ -200,7 +200,7 @@ export function explainMissing(
 }
 
 /**
- * A share written with both parts: "₹8,03,737 profit ÷ ₹43,01,000 money put in = +18.7%".
+ * A share written with both parts: "₹8,03,737 profit ÷ ₹43,01,000 invested = +18.7%".
  * The denominator is always named, because a percentage without one cannot be checked.
  */
 export function ratioHow(

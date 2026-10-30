@@ -144,7 +144,7 @@ export function sourceTag(
 }
 
 /**
- * A reading the bank sent (email or statement) that is older than the value now shown, so it does not count. The tag says so instead of
+ * A reading the bank sent (email or statement) that is older than the current value shown, so it does not count. The tag says so instead of
  * leaving you to wonder why an email that was fetched changed nothing.
  */
 export function olderBankReading(
@@ -186,11 +186,11 @@ export interface BankRow {
   notes: string | null;
   status: string;
   /**
-   * counted in net worth today, by the central engine's one rule (valuation.ts): a running deposit, the proceeds of a matured one that
+   * counted in net worth, by the central engine's one rule (valuation.ts): a running deposit, the proceeds of a matured one that
    * still await confirmation, a savings balance; not a deposit whose proceeds were placed, a closed account or one with no value
    */
   inNetWorth?: boolean;
-  /** today's value in INR: for a deposit calculated from its terms (the full amount at maturity), for savings the estimate */
+  /** current value in INR: for a deposit calculated from its terms (the full amount at maturity), for savings the estimate */
   current: number | null;
   /** savings: last recorded balance and where it came from */
   recorded: number | null;

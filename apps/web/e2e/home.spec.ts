@@ -17,7 +17,7 @@ test.describe('Home (public sample)', () => {
     const note = page.getByTestId('hm-fund-note');
     await expect(note).toBeVisible();
     await expect(note).toContainText(
-      'Fund gains are approximate until you import your fund statements',
+      /Fund profit is approximate until you import your fund statements/,
     );
     await expect(note).toContainText(/\d+ of \d+ funds? (has|have) no transaction ledger/);
     await noSideways(page);
@@ -30,29 +30,32 @@ test.describe('Home (public sample)', () => {
     await expect(page.getByRole('heading', { name: 'Family wealth', level: 1 })).toBeVisible();
     const h = hero(page);
     await expect(h.getByRole('heading', { name: 'Net worth', level: 2 })).toBeVisible();
-    await expect(h.getByTestId('hm-total')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
-    await expect(h.getByTestId('hm-verified')).toHaveText(/^\d+%$/);
+    // the big figure is the full amount in Indian grouping
+    await expect(h.getByTestId('hm-total')).toHaveText(/^₹\d{1,2}(,\d\d)*,\d{3}$/);
     for (const label of [
       'Today’s change',
       'Earned this FY',
       'How is my money growing?',
       'Own money',
       'Lifetime profit',
-      'Confirmed recently',
-      'Older or unconfirmed',
-      'Available within 30 days',
+      'Available in 30 days',
       'Maturing in 90 days',
       'NRE · NRO',
-      'Goals on track',
-      'Above the insured limit',
+      'Above insured limit',
+      'Also on this page',
     ])
       await expect(h.getByText(label, { exact: false }).first()).toBeVisible();
     // a change is an arrow and a word as well as a colour
-    await expect(h.locator('.bv-delta .sr-only').first()).toHaveText(/Up|Down|No change/);
-    await expect(h.getByText('est.', { exact: true }).first()).toBeVisible();
-    await h.getByText('How these figures are worked out').click();
+    await expect(h.locator('.hl-pill .sr-only').first()).toHaveText(/Up|Down|No change/);
+    await expect(h.getByText(/· est\./).first()).toBeVisible();
+    // how much is known for certain, under the headline
+    const v = page.getByRole('region', { name: 'How much is verified' });
+    await expect(v.getByTestId('hm-verified')).toHaveText(/^\d+%$/);
+    for (const label of ['Confirmed recently', 'Older or unconfirmed', 'Goals on track'])
+      await expect(v.getByText(label, { exact: false }).first()).toBeVisible();
+    await v.getByText('How these figures are worked out').click();
     await expect(
-      h.getByText('Verified means a value recorded within its refresh window'),
+      v.getByText('Verified means a value recorded within its refresh window'),
     ).toBeVisible();
 
     const needs = page.getByRole('region', { name: 'Needs you' });
@@ -111,20 +114,21 @@ test.describe('Home (public sample)', () => {
     await page.goto('/demo/dashboard');
     const figures = hero(page).getByRole('group', { name: 'Where the wealth came from' });
     for (const label of ['Own money', 'Lifetime profit', 'Net worth'])
-      await expect(figures.locator('.hm-cap-label', { hasText: label }).first()).toBeVisible();
-    await expect(figures.getByTestId('hm-own-money')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
-    await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(
-      /^[+−]₹[\d,]+\s*[+−][\d.]+% overall$/,
-    );
+      await expect(figures.locator('.hl-bk', { hasText: label }).first()).toBeVisible();
+    await expect(figures.getByTestId('hm-own-money')).toHaveText(/^₹[\d,]+$/);
+    await expect(figures.getByTestId('hm-profit-so-far')).toHaveText(/^[+−]₹[\d,]+$/);
+    await expect(figures).toContainText(/\([+−][\d.]+% overall\)/);
     // XIRR on own money sits in the growth strip, named by the year records begin
     await expect(page.getByTestId('hm-growth-own')).toContainText(/Since \d{4}/);
     await expect(page.getByTestId('hm-growth-own')).toContainText(/-?\d+\.\d\d%|–/);
     // money moved with nothing to say what it was is shown apart, never as profit
     await figures.getByText('Where the own money came from').click();
     await expect(figures).toContainText('worked out from balances');
-    await expect(figures.getByText('est.', { exact: true }).first()).toBeVisible();
     // the proceeds of matured deposits are counted once, with a way to say where they went
-    await expect(figures.getByTestId('hm-proceeds')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
+    await expect(figures.getByTestId('hm-proceeds')).toContainText(
+      /^₹[\d.]+ (Cr|L) from \d+ matured deposits? is counted once/,
+    );
+    await expect(figures.getByRole('link', { name: 'say where the money went' })).toBeVisible();
     await page.locator('[data-why="home.profitSoFar"]').first().click();
     await expect(page.getByTestId('why-panel')).toContainText('own money');
     await page.keyboard.press('Escape');
@@ -207,7 +211,7 @@ test.describe('Home (public sample)', () => {
       'Moved in or out, not yet explained',
       'Interest on savings',
       'Interest on deposits',
-      'Fund gains and losses',
+      'Fund profit and loss',
     ])
       await expect(table.getByRole('rowheader', { name: label })).toBeVisible();
     await expect(card).toContainText(/Earned [+−]₹/);
@@ -246,7 +250,7 @@ test.describe('Home (public sample)', () => {
     const hero = page.getByRole('region', { name: 'Net worth' });
     const labels = (
       await hero
-        .locator('.bv-eyebrow, .bv-delta-label, .hm-cap-label:not(.hm-bridge-sum), dl dt')
+        .locator('.hl-h, .hl-pl, .hl-bk:not(.hl-bridge-sum), .hl-tl, .hl-xl')
         .allInnerTexts()
     )
       .map((t) => t.replace(/\?/g, '').replace(/\s+/g, ' ').trim().toLowerCase())

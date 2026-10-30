@@ -519,7 +519,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
     { label: 'Savings and cash', value: inr(t?.cash ?? 0) },
     { label: 'Deposits invested', value: inr(t?.fdInvested ?? 0) },
     { label: 'Deposits at maturity', value: inr(t?.fdMaturity ?? 0) },
-    { label: 'Deposits worth today', value: inr(t?.fdCurrent ?? 0) },
+    { label: 'Deposits current value', value: inr(t?.fdCurrent ?? 0) },
     { label: 'Accounts and deposits', value: String(rows.length) },
     {
       label: 'People',
@@ -572,7 +572,13 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
   if (block)
     tables.unshift({
       title: 'By person',
-      columns: ['Person', 'Savings and cash', 'Deposits invested', 'Deposits worth today', 'Total'],
+      columns: [
+        'Person',
+        'Savings and cash',
+        'Deposits invested',
+        'Deposits current value',
+        'Total',
+      ],
       numeric: [1, 2, 3, 4],
       rows: block.sections.map((s) => ({
         cells: [
@@ -619,7 +625,7 @@ export async function loadBankDetail(id: string, ownerId?: string): Promise<Bank
         'Days left',
         'Invested',
         'Interest to come',
-        'At maturity',
+        'Maturity value',
       ],
       numeric: [2, 4, 5, 6, 7],
       rows: sorted.map((r) => ({

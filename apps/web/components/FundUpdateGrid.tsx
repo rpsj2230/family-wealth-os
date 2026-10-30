@@ -96,7 +96,7 @@ export function FundUpdateGrid({
               <th className="num">Units</th>
               <th className="num">Price (NAV)</th>
               <th className="num">Value</th>
-              <th className="num">Money put in</th>
+              <th className="num">Invested</th>
               <th className="num">SIP / month</th>
             </tr>
           </thead>
@@ -137,7 +137,7 @@ export function FundUpdateGrid({
                     <input
                       inputMode="decimal"
                       value={rows[i]![k]}
-                      aria-label={`${f.name} ${k === 'sip' ? 'SIP' : 'money put in'}`}
+                      aria-label={`${f.name} ${k === 'sip' ? 'SIP' : 'invested'}`}
                       onChange={(e) => set(i, k, e.target.value)}
                       style={{ width: 110, textAlign: 'right' }}
                     />

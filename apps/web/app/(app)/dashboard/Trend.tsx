@@ -50,7 +50,7 @@ function RangeLinks({ base, current, keep }: { base: string; current: HomeRange;
 
 /**
  * Net worth over time for the range in the address, what it changed by (and by the same length of time before it), the straight-line
- * "if the pace holds" extension, and how much of the money in banks and funds was put in against how much it has grown.
+ * "if the pace holds" extension, and how much of the money in banks and funds is invested against the profit on it.
  */
 export function Trend({ m, base, ex }: { m: HomeModel; base: string; ex: ExplainSet<'home'> }) {
   const t = m.trend;
@@ -124,15 +124,15 @@ export function Trend({ m, base, ex }: { m: HomeModel; base: string; ex: Explain
       {g.current > 0 && (
         <div className="hm-growth">
           <WhyHead why={ex['home.growth']}>
-            <h3 className="bv-h">Money put in and growth, in banks and funds</h3>
+            <h3 className="bv-h">Invested and profit, in banks and funds</h3>
           </WhyHead>
           <SplitBar
-            caption="Money put in against growth"
+            caption="Invested against profit"
             parts={[
-              { key: 'in', label: 'Put in', share: g.investedShare, className: 'hm-g-in' },
+              { key: 'in', label: 'Invested', share: g.investedShare, className: 'hm-g-in' },
               {
                 key: 'gain',
-                label: g.growth >= 0 ? 'Growth' : 'Loss',
+                label: g.growth >= 0 ? 'Profit' : 'Loss',
                 share: 1 - g.investedShare,
                 className: 'hm-g-out',
               },
@@ -141,26 +141,26 @@ export function Trend({ m, base, ex }: { m: HomeModel; base: string; ex: Explain
           <ul className="bv-legend hm-legend" style={{ ['--cols' as string]: 3 }}>
             <li>
               <span className="bv-swatch hm-g-in" aria-hidden="true" />
-              <span className="bv-lname">Put in</span>
+              <span className="bv-lname">Invested</span>
               <strong className="bv-lamt">{formatInrCompact(g.invested)}</strong>
               <span className="bv-lpct">deposits and savings as recorded, funds as invested</span>
             </li>
             <li>
               <span className="bv-swatch hm-g-out" aria-hidden="true" />
-              <span className="bv-lname">{g.growth >= 0 ? 'Growth' : 'Loss'}</span>
+              <span className="bv-lname">{g.growth >= 0 ? 'Profit' : 'Loss'}</span>
               <strong className={`bv-lamt ${g.growth < 0 ? 'bv-neg' : 'bv-pos'}`}>
                 {g.growth < 0 ? '▼ ' : '▲ '}
                 {formatInrCompact(Math.abs(g.growth))}
               </strong>
               <span className="bv-lpct">
                 {g.growthPct !== null
-                  ? `${formatPct(Math.abs(g.growthPct), 1)} on the ${formatInrCompact(g.invested)} put in`
+                  ? `${g.growthPct < 0 ? '−' : '+'}${formatPct(Math.abs(g.growthPct), 1)} overall on ${formatInrCompact(g.invested)} invested`
                   : ''}
                 {g.approximate ? ' · approximate: some funds have no statement' : ''}
               </span>
             </li>
             <li>
-              <span className="bv-lname">Worth today</span>
+              <span className="bv-lname">Current value</span>
               <strong className="bv-lamt">{formatInrCompact(g.current)}</strong>
               <span className="bv-lpct">
                 {g.parts.map((p) => `${p.label} ${formatInrCompact(p.current)}`).join(' · ')}

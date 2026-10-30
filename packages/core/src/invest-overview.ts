@@ -1,5 +1,5 @@
 /**
- * What the Investments overview shows, as numbers: the headline figures (money put in, value, profit or loss in rupees and per cent,
+ * What the Investments overview shows, as numbers: the headline figures (invested, value, profit or loss in rupees and per cent,
  * what is booked by selling, the annual return, today's move, SIPs), how the value splits between your money and its growth, the
  * funds table with its groupings and totals, how old the units are, and the next monthly instalments. Pure; the page only formats.
  */
@@ -36,7 +36,7 @@ export interface Hero {
   folios: number;
   invested: number;
   value: number;
-  /** value less money put in: the profit or loss on the units still held */
+  /** value less invested: the profit or loss on the units still held */
   unrealised: number;
   unrealisedPct: number | null;
   realised: {
@@ -60,7 +60,7 @@ export interface Hero {
   withStatement: number;
   estimated: number;
   unreconciled: number;
-  /** how today's value splits between the money put in and its growth: each 0 to 1, summing to 1 (growth is 0 for a loss) */
+  /** how current value splits between the amount invested and its growth: each 0 to 1, summing to 1 (growth is 0 for a loss) */
   split: { cost: number; growth: number } | null;
 }
 
@@ -146,7 +146,7 @@ export interface FundLine {
   /** the first purchase or start date, and the date of the price, for the line under the name */
   startedOn: string | null;
   navDate: string | null;
-  /** in words, where today's value comes from */
+  /** in words, where current value comes from */
   valueBasis: string;
   /** whether the transaction history adds up, and the chip that says so; the figures of a fund that does not reconcile carry "est." */
   ledgerStatus: LedgerStatus;
@@ -358,7 +358,7 @@ export type FundSortKey =
 export const FUND_COLUMNS: { key: FundSortKey; label: string }[] = [
   { key: 'name', label: 'Fund' },
   { key: 'invested', label: 'Invested' },
-  { key: 'value', label: 'Value now' },
+  { key: 'value', label: 'Current value' },
   { key: 'gain', label: 'Profit or loss' },
   { key: 'gainPct', label: 'Profit or loss %' },
   { key: 'dayAmount', label: 'Today' },

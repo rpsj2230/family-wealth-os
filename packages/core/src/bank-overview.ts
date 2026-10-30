@@ -1,5 +1,5 @@
 /**
- * The "money in banks" overview at the top of Accounts: what was put in, what it is worth today, what it will be worth at maturity,
+ * The "money in banks" overview at the top of Accounts: what was invested, what it is worth now, what it will be worth at maturity,
  * what it earned (in total and in the last day), where it sits and who holds it. Pure functions over the bank blocks; the page only
  * draws what this returns, so every figure can be tested.
  *
@@ -8,10 +8,10 @@
  *
  * Meaning of each figure:
  *  - invested: deposit principal + the last recorded balance of every savings account and holding
- *  - maturity: the amount each deposit pays at maturity + today's value of savings and holdings (they have no maturity)
- *  - current: today's value of each line, as estimated by the portfolio
+ *  - maturity: the amount each deposit pays at maturity + current value of savings and holdings (they have no maturity)
+ *  - current: current value of each line, as estimated by the portfolio
  *  - today's change: what the lines earned in the last day, worked out by period-gains (the one module for every period figure). A
- *    deposit earns the difference between its value today and its value yesterday on its own terms; a savings account earns its last
+ *    deposit earns the difference between its current value and its value yesterday on its own terms; a savings account earns its last
  *    recorded balance at its rate, after tax at source, for one day. It is an estimate (the bank credits
  *    savings interest in lumps), and money held by others earns nothing in this figure.
  * Foreign-currency lines are counted at today's rupee value with no gain or loss (the exchange rate is not interest).
@@ -113,7 +113,7 @@ export interface BankOverview {
     journey: number | null;
   };
 
-  /** average rate of the deposits weighted by amount put in (decimal); null without a deposit */
+  /** average rate of the deposits weighted by amount invested (decimal); null without a deposit */
   fdRate: number | null;
   next: OverviewNextMaturity | null;
   soon: { days: number; count: number; amount: number };
@@ -184,7 +184,7 @@ function counted(r: BankRow): boolean {
 
 /**
  * What one line adds to the totals: invested (deposit principal, or the last balance recorded), what it pays at maturity (savings: today's
- * value) and today's value. `counted` is false for a line that is out of the totals (closed, stopped, or a deposit past its date waiting to
+ * value) and current value. `counted` is false for a line that is out of the totals (closed, stopped, or a deposit past its date waiting to
  * be confirmed). The page totals and the overview use this one function, so they always agree.
  */
 export function bankRowFigures(r: BankRow): {

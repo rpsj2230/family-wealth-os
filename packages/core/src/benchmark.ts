@@ -13,12 +13,12 @@ import { pointAtOrBefore, type Flow, type IndexPoint } from './return-profile';
 export interface WhatIf {
   /** what the same money would be worth today in the benchmark */
   value: number;
-  /** money put in less money taken out, for the flows the benchmark's history covers */
+  /** invested less money withdrawn, for the flows the benchmark's history covers */
   netIn: number;
   gain: number;
   /** the annual return of those flows (XIRR); null when it cannot be solved */
   xirr: number | null;
-  /** the share of the money put in (in rupees) that the benchmark's history reaches back to */
+  /** the share of the amount invested (in rupees) that the benchmark's history reaches back to */
   coverage: number;
   /** flows before the benchmark's first price, left out */
   skipped: number;

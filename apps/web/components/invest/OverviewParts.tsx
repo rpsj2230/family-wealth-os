@@ -151,12 +151,11 @@ export function GoalSummary({
       </ul>
       <ul className="vizlegend">
         <li>
-          <span className="sw" style={{ background: 'var(--viz-1)' }} aria-hidden="true" /> Money
-          put in
+          <span className="sw" style={{ background: 'var(--viz-1)' }} aria-hidden="true" /> Invested
         </li>
         <li>
           <span className="sw" style={{ background: 'var(--viz-good)' }} aria-hidden="true" />{' '}
-          Growth
+          Profit
         </li>
       </ul>
       <p className="cardnote">
@@ -196,11 +195,11 @@ export function PersonCompare({
           <tr>
             <th>Person</th>
             <th className="num">Funds</th>
-            <th className="num">Invested now</th>
-            <th className="num">Value today</th>
-            <th className="num">Profit or loss</th>
-            <th className="num">Today</th>
-            <th className="num">Return a year</th>
+            <th className="num">Invested</th>
+            <th className="num">Current value</th>
+            <th className="num">Profit</th>
+            <th className="num">Today’s change</th>
+            <th className="num">XIRR</th>
             <th className="num">Last 1Y</th>
             <th className="num">Share</th>
             <th className="num">SIP a month</th>
@@ -220,23 +219,23 @@ export function PersonCompare({
                 {r.totals.funds}
                 {r.folios > 0 && <span className="fl-s">{r.folios} folios</span>}
               </td>
-              <td className="num" data-label="Invested now">
+              <td className="num" data-label="Invested">
                 {inr(r.totals.invested)}
               </td>
-              <td className="num" data-label="Value today">
+              <td className="num" data-label="Current value">
                 {inr(r.totals.value)}
               </td>
-              <td className={`num ${tone(r.totals.gain)}`} data-label="Profit or loss">
+              <td className={`num ${tone(r.totals.gain)}`} data-label="Profit">
                 {rupees(r.totals.gain)}
                 <span className="fl-s">
                   {r.totals.gainPct === null ? '' : pct(r.totals.gainPct, 1)}
                 </span>
               </td>
-              <td className={`num ${tone(r.totals.dayAmount)}`} data-label="Today">
+              <td className={`num ${tone(r.totals.dayAmount)}`} data-label="Today’s change">
                 {r.totals.dayAmount === null ? '–' : rupees(r.totals.dayAmount)}
                 <span className="fl-s">{r.totals.dayPct === null ? '' : pct(r.totals.dayPct)}</span>
               </td>
-              <td className={`num ${tone(r.totals.xirr)}`} data-label="Return a year">
+              <td className={`num ${tone(r.totals.xirr)}`} data-label="XIRR">
                 {r.totals.xirr === null ? '–' : pct(r.totals.xirr, 1)}
                 {r.totals.xirr !== null && r.totals.xirrEstimated && (
                   <span className="fl-est"> ~</span>

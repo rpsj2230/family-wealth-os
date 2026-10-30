@@ -116,8 +116,8 @@ describe('the hero and the tiles', () => {
     expect(text).toContain('₹62.00 L');
     expect(text).toContain('₹62,00,000');
     expect(text).toMatch(/▲ \+₹9,500 \(\+0\.2%\)/);
-    expect(text).toMatch(/Overall profit \/ loss ▲ \+₹[\d.]+ L \(\+\d+\.\d%\)/);
-    expect(text).toContain('you put in');
+    expect(text).toMatch(/Profit \(overall\) ▲ \+₹[\d.]+ L \(\+\d+\.\d%\)/);
+    expect(text).toContain('invested in deposits and funds');
   });
 
   it('shows the header, with the date, "values as of" and the late-input chip', () => {

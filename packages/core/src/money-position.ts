@@ -6,7 +6,7 @@
  *
  * Each card says what it counts and how sure it is: actual (recorded or confirmed), estimated (worked out from terms, a rate or a
  * plan) or unavailable (and why). Where daily snapshots of net worth go back far enough, a card also shows its change since a month,
- * a quarter and a year before, against the snapshot of that day: a change in balance or value, not a profit (money put in or taken
+ * a quarter and a year before, against the snapshot of that day: a change in balance or value, not a profit (invested or taken
  * out is in it). Mutual funds are never cash; cash, deposits and funds are never added into one figure called cash.
  *
  * Pure: no I/O. Every figure comes from what the page already worked out (classCards, foreignCash, net worth by kind and person,
@@ -246,10 +246,10 @@ export function moneyPosition(i: MoneyPositionInput): PositionCard[] {
     label: 'Mutual funds',
     value: funds?.current ?? 0,
     basis:
-      'Units held × the latest price. The cost is what the units still held cost (first in, first out), not all money ever put in.',
+      'Units held × the latest price. The cost is what the units still held cost (first in, first out), not all money ever invested.',
     lines: [
       { label: 'Cost of the units held', value: funds?.invested ?? 0 },
-      { label: 'Gain not yet booked', value: funds ? funds.current - funds.invested : 0 },
+      { label: 'Profit', value: funds ? funds.current - funds.invested : 0 },
     ],
     status: funds?.estimated ? 'estimated' : 'actual',
     asOf: i.today,

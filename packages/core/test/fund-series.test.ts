@@ -41,10 +41,30 @@ describe('fundSeries', () => {
       '2026-03-31',
     );
     expect(s.map((p) => p.date)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
-    expect(s[0]).toEqual({ date: '2026-01-31', value: 10_500, invested: 10_000 });
+    expect(s[0]).toEqual({ date: '2026-01-31', value: 10_500, invested: 10_000, net: 10_000 });
     expect(s[1]!.value).toBeCloseTo(11_000);
     // half the units sold: half the cost goes with them
-    expect(s[2]).toEqual({ date: '2026-03-31', value: 6_000, invested: 5_000 });
+    // the money added less withdrawn keeps the profit the sale took out: 10,000 − 6,000
+    expect(s[2]).toEqual({ date: '2026-03-31', value: 6_000, invested: 5_000, net: 4_000 });
+  });
+
+  it('a sale takes out the oldest units first, so invested is the cost of the units still held', () => {
+    const s = fundSeries(
+      {
+        ...empty,
+        txns: [
+          { date: '2026-01-05', units: 100, amount: 1_000 }, // ₹10 a unit
+          { date: '2026-02-05', units: 100, amount: 2_000 }, // ₹20 a unit
+          { date: '2026-03-05', units: -100, amount: 2_500 },
+        ],
+        navs: [{ date: '2026-03-31', nav: 25 }],
+      },
+      '2026-03-31',
+      undefined,
+      ['2026-03-31'],
+    );
+    // the ₹10 units went first: the ₹20 units are left, at their own cost (an average would say ₹1,500)
+    expect(s[0]).toEqual({ date: '2026-03-31', value: 2_500, invested: 2_000, net: 500 });
   });
   it('falls back to snapshots, then to recorded values with the plan cost', () => {
     const s = fundSeries(

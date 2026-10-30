@@ -63,9 +63,9 @@ export function EstimateNote({ share }: { share: number }) {
   return (
     <p className="cardnote">
       <span className="estchip">estimated</span> {Math.round(share * 100)}% of today&apos;s value is
-      in funds with no fund statement. For them the money put in each month is worked out from the
-      start date and the SIP, so the figures that use it are marked estimated and become exact once
-      a statement is imported.
+      in funds with no fund statement. For them the amount invested each month is worked out from
+      the start date and the SIP, so the figures that use it are marked estimated and become exact
+      once a statement is imported.
     </p>
   );
 }
@@ -111,8 +111,8 @@ export function ReturnsByPeriod({
             <tr>
               <th>Period</th>
               <th className="num">Return</th>
-              {showGain && <th className="num gaincol">Profit or loss</th>}
-              {hasBench && <th className="num">Benchmark (proxy)</th>}
+              {showGain && <th className="num gaincol">Earned</th>}
+              {hasBench && <th className="num">Benchmark</th>}
               {hasBench && <th className="num">Difference</th>}
             </tr>
           </thead>
@@ -141,15 +141,12 @@ export function ReturnsByPeriod({
                   )}
                 </td>
                 {showGain && (
-                  <td
-                    className={`num gaincol ${gain ? tone(gain.gain) : ''}`}
-                    data-label="Profit or loss"
-                  >
+                  <td className={`num gaincol ${gain ? tone(gain.gain) : ''}`} data-label="Earned">
                     {gain ? rupees(gain.gain) : '–'}
                   </td>
                 )}
                 {hasBench && (
-                  <td className={`num ${tone(v.benchmark)}`} data-label="Benchmark (proxy)">
+                  <td className={`num ${tone(v.benchmark)}`} data-label="Benchmark">
                     {v.benchmark === null ? '–' : pct(v.benchmark, 1)}
                   </td>
                 )}
@@ -208,7 +205,7 @@ export function ReturnsByPeriod({
           <ul className="vizlegend">
             <li>
               <span className="sw" style={{ background: 'var(--viz-good)' }} aria-hidden="true" />{' '}
-              Your funds (green gain, red loss)
+              Your funds (green profit, red loss)
             </li>
             {hasBench && (
               <li>
@@ -315,7 +312,7 @@ export function PlChart({
       <div
         className="plbars"
         role="img"
-        aria-label={`Profit or loss by ${v.kind}`}
+        aria-label={`Earned by ${v.kind}`}
         style={{ ['--up' as string]: `${upShare * 100}%` }}
       >
         <div className="axisline" style={{ top: `${upShare * 100}%` }} />
@@ -428,7 +425,7 @@ const flag = (b: { partial: boolean; estimated: boolean }, showEst = true) => (
     {b.estimated && showEst && (
       <span
         className="estchip"
-        title="Includes funds whose money put in is worked out from the start date and SIP"
+        title="Includes funds whose amount invested is worked out from the start date and SIP"
       >
         est.
       </span>
@@ -486,9 +483,9 @@ export function PlTable({ v }: { v: PlView }) {
         <thead>
           <tr>
             <th>Period</th>
-            <th className="num">Profit or loss</th>
+            <th className="num">Earned</th>
             <th className="num wide-only">Return</th>
-            <th className="num wide-only">Money added</th>
+            <th className="num wide-only">Added</th>
             <th className="num wide-only">Value at the end</th>
             <th className="num">Running total</th>
           </tr>
@@ -500,14 +497,14 @@ export function PlTable({ v }: { v: PlView }) {
                 {b.label}
                 {flag(b, !v.allEstimated)}
               </td>
-              <td className={`num ${tone(b.gain)}`} data-label="Profit or loss">
+              <td className={`num ${tone(b.gain)}`} data-label="Earned">
                 {rupees(b.gain)}
                 <span className="fl-s narrow-only">{b.ret === null ? '' : pct(b.ret, 2)}</span>
               </td>
               <td className={`num wide-only ${tone(b.ret)}`} data-label="Return">
                 {b.ret === null ? '–' : pct(b.ret, 2)}
               </td>
-              <td className={`num wide-only ${b.netIn < 0 ? 'out' : ''}`} data-label="Money added">
+              <td className={`num wide-only ${b.netIn < 0 ? 'out' : ''}`} data-label="Added">
                 {Math.abs(b.netIn) < 1 ? '–' : rupees(b.netIn)}
               </td>
               <td className="num wide-only" data-label="Value at the end">
@@ -585,14 +582,14 @@ export function PlSection({
       <PlPrev v={v} />
       <PlChart v={v} styles={styles} />
       <p className="cardnote">
-        Money you put in or take out is never counted as profit: each {unit}&apos;s profit is the
+        Money you add or withdraw is never counted as profit: each {unit}&apos;s profit is the
         change in value less the net money added, and the per cent is the time-weighted return.
         {v.kind === 'week' &&
           ` Weeks go back ${weeks} weeks, as the funds are valued month by month before that.`}
         {v.cut && ` Showing the latest ${rowsShown} ${unit}s.`}
         {v.estimated &&
           (v.allEstimated
-            ? ' Every period here includes funds with no fund statement, whose money put in is worked out from the start date and SIP.'
+            ? ' Every period here includes funds with no fund statement, whose amount invested is worked out from the start date and SIP.'
             : ' Periods marked est. include funds with no fund statement.')}
       </p>
       <PlTable v={v} />
@@ -906,7 +903,7 @@ export function RiskCard({ risk, months }: { risk: RiskStats | null; months: num
           <dd className="n">the same, counting only the falls</dd>
         </div>
         <div>
-          <dt>Return a year</dt>
+          <dt>Time-weighted return a year</dt>
           <dd className={`v ${tone(risk.annualReturn)}`}>{pct(risk.annualReturn, 1)}</dd>
           <dd className="n">over these {risk.months} months</dd>
         </div>
@@ -936,7 +933,7 @@ export function WhatIfCard({
   if (!w)
     return (
       <p className="empty">
-        This compares your actual purchases with the same money put into a Nifty 50 index fund on
+        This compares your actual purchases with the same money invested in a Nifty 50 index fund on
         the same days. It appears once the benchmark&apos;s prices are loaded.
       </p>
     );
@@ -947,7 +944,7 @@ export function WhatIfCard({
           <div className="muted small">Your funds</div>
           <div className="big">{inr(yourValue)}</div>
           <div className={`small ${tone(yourValue - yourNet)}`}>
-            {rupees(yourValue - yourNet)} on {inr(yourNet)} put in
+            {rupees(yourValue - yourNet)} on {inr(yourNet)} invested
           </div>
           <div className="small">
             {yourXirr === null ? '' : `${pct(yourXirr, 1)} a year (XIRR)`}
@@ -973,10 +970,10 @@ export function WhatIfCard({
         </div>
       </div>
       <p className="cardnote">
-        Each purchase is put into the index fund at that day&apos;s price and each sale taken out of
-        it.
+        Each purchase is invested in the index fund at that day&apos;s price and each sale withdrawn
+        from it.
         {w.coverage < 0.999 &&
-          ` Money put in before the index fund's prices begin (${Math.round((1 - w.coverage) * 100)}%) is left out of the comparison.`}{' '}
+          ` Money invested before the index fund's prices begin (${Math.round((1 - w.coverage) * 100)}%) is left out of the comparison.`}{' '}
         A proxy, not the index itself.
       </p>
     </>

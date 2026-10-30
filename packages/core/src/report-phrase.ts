@@ -19,11 +19,7 @@ export interface PhraseResult {
 
 const TEMPLATE_WORDS: [RegExp, TemplateKey, string][] = [
   [/\bnet\s*worth\b|\bwealth\b/, 'networth', 'Net worth'],
-  [
-    /\b(realis|realiz)ed\b|\bbooked\b|\bcapital gains?\b|\bsold\b/,
-    'realised',
-    'Gains booked by selling',
-  ],
+  [/\b(realis|realiz)ed\b|\bbooked\b|\bcapital gains?\b|\bsold\b/, 'realised', 'Booked profit'],
   [
     /\bsips?\b|\bcontributions?\b|\bput in\b|\binvested\b/,
     'contributions',

@@ -280,7 +280,7 @@ export function Classes({
           </li>
           <li>
             <strong>{TERMS.lifetimeProfit.label}</strong> on each card is that kind’s part of the
-            one Lifetime profit at the top, including interest already paid out and gains on units
+            one Lifetime profit at the top, including interest already paid out and profit on units
             already sold, so the cards add up to it with exchange-rate moves and other income.{' '}
             <strong>{TERMS.invested.label}</strong> is what today’s holdings cost: a deposit renewed
             with its interest counts at its new, larger amount, so{' '}

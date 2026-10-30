@@ -304,6 +304,7 @@ export function InvestShell({
             projectionRate={pace.rate}
             projectionAssumed={pace.assumed}
             holdingMonths={view.holdingMonths}
+            extras={heroExtras(view.groups.flatMap((g) => g.funds))}
             base={base}
             tabLinks={{
               performance: tabHref('performance'),
@@ -536,7 +537,7 @@ function OverviewBody({
               },
               {
                 key: 'in',
-                name: 'Money put in',
+                name: 'Invested',
                 colour: 'var(--viz-line)',
                 points: view.series
                   .filter((p) => p.invested !== null)
@@ -717,7 +718,7 @@ function FundsBody({
             <WhyHead why={ex['invest.goals']}>
               <h2 id="fg">Goal by goal</h2>
             </WhyHead>
-            <span className="small muted">Money put in, growth and value</span>
+            <span className="small muted">Invested, profit and current value</span>
           </div>
           <GoalSummary
             groups={goalGroups}
@@ -803,4 +804,18 @@ function ValuationTab({
       demo={demo}
     />
   );
+}
+
+/** "Also on this page" of the headline: the value by platform (largest first) and the Regular plans, from the funds shown. */
+function heroExtras(funds: { value: number; plan: string; platform: string | null }[]) {
+  const by = new Map<string, number>();
+  for (const f of funds)
+    by.set(f.platform ?? 'Not set', (by.get(f.platform ?? 'Not set') ?? 0) + f.value);
+  const regular = funds.filter((f) => f.plan === 'regular');
+  return {
+    platforms: [...by.entries()]
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value),
+    regular: { value: regular.reduce((a, f) => a + f.value, 0), count: regular.length },
+  };
 }

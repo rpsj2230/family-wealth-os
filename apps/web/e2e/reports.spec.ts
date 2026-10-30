@@ -14,7 +14,7 @@ test.describe('Reports (public sample)', () => {
     await page.goto('/demo/reports');
     await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Deposits at a glance' })).toContainText(
-      'Amount put in',
+      'Invested (principal)',
     );
     const maturity = page.getByRole('table', { name: 'Maturity summary' });
     await expect(maturity.getByRole('columnheader', { name: 'Maturity date' })).toBeVisible();
@@ -51,7 +51,7 @@ test.describe('Reports (public sample)', () => {
   }) => {
     await page.goto('/demo/reports?tab=funds');
     await expect(page.getByRole('region', { name: 'Mutual funds at a glance' })).toContainText(
-      'Value now',
+      'Current value',
     );
     await expect(
       page

@@ -60,7 +60,7 @@ export function positionConfig(
   };
 }
 
-/** What net worth says each holding is worth today: the figure the engine uses for the day `today` itself. */
+/** What net worth says each holding is worth now: the figure the engine uses for the day `today` itself. */
 export function currentValues(portfolio: Portfolio): Record<string, CurrentValue> {
   const out: Record<string, CurrentValue> = {};
   const excluded = new Set(portfolio.netWorth.excluded.map((e) => e.assetId));

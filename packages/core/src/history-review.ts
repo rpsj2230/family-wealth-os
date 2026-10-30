@@ -7,7 +7,7 @@
  * For each month it says which holdings changed most, to help you remember (a deposit that appeared, a balance that jumped), and it sets
  * apart the pairs of months that cancel out: money that the monthly tabs show leaving in one month and arriving in the next is a
  * transfer between your own accounts recorded in two different months. Such a pair leaves own money unchanged, so there is nothing to
- * answer. An answer is a confirmed movement in the ledger (outside money in, money taken out, or earnings the app did not estimate),
+ * answer. An answer is a confirmed movement in the ledger (outside money in, money withdrawn, or earnings the app did not estimate),
  * dated inside the month; the month's remaining amount is worked out again from it.
  *
  * Pure: no I/O.

@@ -75,9 +75,9 @@ const afterMatch = (fund: string, scheme: string, h: SchemeHistoryResult | null)
   (h === null
     ? 'Its prices are fetched next.'
     : h.status === 'fetched'
-      ? 'Its price history is stored, so the value now follows the market.'
+      ? 'Its price history is stored, so the current value follows the market.'
       : h.status === 'already'
-        ? 'Its prices were already stored, so the value now follows the market.'
+        ? 'Its prices were already stored, so the current value follows the market.'
         : h.message);
 
 /**

@@ -1,5 +1,5 @@
 /**
- * The "?" explainers of the Investments overview and breakdown: the headline figures (value, money put in, profit and the two
+ * The "?" explainers of the Investments overview and breakdown: the headline figures (value, invested, profit and the two
  * percentages with their denominators, today's move, annual return, the ring, SIPs, long-term share, statements) and the cards
  * under them. Pure: the page passes the numbers and flags it already holds (the hero, the statistics block, the ledger verdicts,
  * lots basis, flows estimated); this file only puts them into words and never decides a figure differently.
@@ -52,7 +52,7 @@ export interface InvestFundFact {
   navDate: string | null;
   /** matched to an official scheme, so its price is fetched every day */
   livePrice: boolean;
-  /** the words the page already uses for where today's value comes from ("units × live price", ...) */
+  /** the words the page already uses for where current value comes from ("units × live price", ...) */
   valueBasis: string;
   hasStatement: boolean;
   lotsBasis: LotsBasis;
@@ -127,7 +127,7 @@ export function nameList(names: string[], max = 3): string {
 
 const compactIfBig = (n: number) => (Math.abs(n) >= 1e5 ? formatInrCompact(n) : undefined);
 
-/** The basis a value method maps to: the page's own words for where today's value comes from. */
+/** The basis a value method maps to: the page's own words for where current value comes from. */
 export function valueMethodBasis(valueBasis: string): ExplainBasis {
   if (valueBasis === 'units × live price') return 'calculated';
   if (valueBasis.startsWith('last recorded')) return 'recorded';
@@ -246,7 +246,7 @@ function valueExplain(i: InvestExplainInput, c: Coverage): Explain {
     title: 'Current value of mutual funds',
     exact: exInr(h.value),
     shown: compactIfBig(h.value),
-    what: `What ${i.scope} are worth today at their latest prices.`,
+    what: `What ${i.scope} are worth at their latest prices.`,
     how: `For each of ${exPlural(c.total, 'fund')}: units held × latest price (NAV) = ${exInr(h.value)} added together. ${
       byMethod.size > 1
         ? [...byMethod.entries()]
@@ -320,7 +320,7 @@ function moneyInExplain(i: InvestExplainInput, c: Coverage): Explain {
   if (c.total === 0) inputs.push({ label: 'Funds', value: 'none', basis: 'missing' });
   return explain({
     id: 'invest.moneyIn',
-    title: 'Money put in (invested)',
+    title: 'Invested',
     exact: exInr(h.invested),
     shown: compactIfBig(h.invested),
     what: 'What you paid for the units you still hold.',
@@ -350,18 +350,18 @@ function profitExplain(
   const sharePct = h.value > 0 ? h.unrealised / h.value : null;
   return explain({
     id: 'invest.profit',
-    title: 'Profit on amount invested now (units held)',
+    title: TERMS.profit.label,
     exact: exSigned(h.unrealised),
     shown: compactIfBig(h.unrealised),
     what: 'How much the units you still hold are worth above (or below) what you paid for them.',
     how:
-      `${exInr(h.value)} value − ${exInr(h.invested)} money put in = ${exSigned(h.unrealised)}. ` +
+      `${exInr(h.value)} value − ${exInr(h.invested)} invested = ${exSigned(h.unrealised)}. ` +
       (pct === null
         ? 'No cost is recorded, so no percentage can be worked out.'
-        : `As a share of the money put in: ${ratioHow({ label: 'profit', amount: h.unrealised }, { label: 'money put in', amount: h.invested })}.`) +
+        : `As a share of the amount invested: ${ratioHow({ label: 'profit', amount: h.unrealised }, { label: 'invested', amount: h.invested })}.`) +
       (sharePct === null
         ? ''
-        : ` As a share of today’s value (what the ring shows): ${ratioHow({ label: 'profit', amount: h.unrealised }, { label: 'today’s value', amount: h.value }, 1, false)}.`),
+        : ` As a share of current value (what the ring shows): ${ratioHow({ label: 'profit', amount: h.unrealised }, { label: 'current value', amount: h.value }, 1, false)}.`),
     inputs: [
       {
         label: 'Current value',
@@ -371,7 +371,7 @@ function profitExplain(
         count: { n: c.total, noun: 'funds' },
       },
       {
-        label: 'Money put in (cost of units held)',
+        label: 'Invested (cost of units held)',
         value: exInr(h.invested),
         basis: money.completeness.level === 'complete' ? 'statement' : 'estimated',
         from: minDate(i.funds.map((f) => f.firstTxnOn ?? f.startedOn)),
@@ -382,8 +382,8 @@ function profitExplain(
     completeness:
       `${historyText(c)} ${value.completeness.level === 'complete' ? '' : 'Some prices are moved on from the last record or have no live price: see the value.'}`.trim(),
     notes: [
-      'Gains already booked by selling are not in this figure; they are under “Booked by selling”, and the two together are the “Total gain”.',
-      'The two percentages answer different questions: growth ÷ money put in is your return on your money; growth ÷ today’s value is how much of today’s value is growth.',
+      'Booked profit (from units sold) is not in this figure; it is under “Booked profit”, and the two together are the “Total profit”.',
+      'The two percentages answer different questions: profit ÷ invested is the overall return; profit ÷ current value is the share of the current value that is profit.',
     ],
     fix: fixFor(c, i.links),
     also: [alsoImport(c, i.links)],
@@ -514,7 +514,7 @@ function xirrExplain(i: InvestExplainInput, c: Coverage): Explain {
       id: 'invest.xirr',
       title: 'Yearly return on amount invested (XIRR)',
       what: 'The single yearly rate that your money has grown at, given the dates each rupee went in or came out.',
-      how: 'Not worked out: it needs at least one dated payment in and today’s value, from a statement or a start date.',
+      how: 'Not worked out: it needs at least one dated payment in and current value, from a statement or a start date.',
       inputs: [
         {
           label: 'Dated cash flows',
@@ -531,7 +531,7 @@ function xirrExplain(i: InvestExplainInput, c: Coverage): Explain {
   const why: string[] = [];
   if (fromPlan.length > 0)
     why.push(
-      `${exPlural(fromPlan.length, 'fund')} ${fromPlan.length === 1 ? 'has' : 'have'} no fund statement, so ${fromPlan.length === 1 ? 'its' : 'their'} ${exPlural(flowsPlan, 'payment')} ${flowsPlan === 1 ? 'is' : 'are'} worked out from the start date, the amount put in and the SIP`,
+      `${exPlural(fromPlan.length, 'fund')} ${fromPlan.length === 1 ? 'has' : 'have'} no fund statement, so ${fromPlan.length === 1 ? 'its' : 'their'} ${exPlural(flowsPlan, 'payment')} ${flowsPlan === 1 ? 'is' : 'are'} worked out from the start date, the amount invested and the SIP`,
     );
   const unrec = i.funds.filter((f) => f.figuresEstimated && f.hasStatement);
   if (unrec.length > 0)
@@ -541,8 +541,8 @@ function xirrExplain(i: InvestExplainInput, c: Coverage): Explain {
   return explain({
     id: 'invest.xirr',
     title: 'Yearly return on amount invested (XIRR)',
-    what: 'The single yearly rate that makes every payment you made, every payment you took out and today’s value balance, given the date of each.',
-    how: `Find the rate r so that each payment in (−) and out (+), grown at r from its date, plus today’s value ${exInr(h.value)} on ${exDate(i.today)}, adds up to zero. Over ${exPlural(flowsStatement + flowsPlan, 'dated payment')} from ${exDate(first)} to ${exDate(i.today)} the answer is ${exSignedPct(h.xirr, 1)} a year. It is a money-weighted return: when you paid in matters.`,
+    what: 'The single yearly rate that makes every payment you made, every payment you took out and current value balance, given the date of each.',
+    how: `Find the rate r so that each payment in (−) and out (+), grown at r from its date, plus current value ${exInr(h.value)} on ${exDate(i.today)}, adds up to zero. Over ${exPlural(flowsStatement + flowsPlan, 'dated payment')} from ${exDate(first)} to ${exDate(i.today)} the answer is ${exSignedPct(h.xirr, 1)} a year. It is a money-weighted return: when you paid in matters.`,
     inputs: [
       ...(fromStatement.length > 0
         ? [
@@ -596,7 +596,7 @@ function xirrExplain(i: InvestExplainInput, c: Coverage): Explain {
       ? `Partly estimated: ${why.join('; ')}.`
       : `Every payment comes from a fund statement that adds up (${exPlural(flowsStatement, 'payment')} from ${exDate(first)}).`,
     notes: [
-      'Units that were already held before the first line on a statement count as paid in on that first day at that day’s price, so they are not read as a gain.',
+      'Units that were already held before the first line on a statement count as paid in on that first day at that day’s price, so they are not read as profit.',
       'Units bought with a reinvested dividend are not a payment from your pocket and are not counted as one.',
       'A return worked out over less than a year can look extreme; the page shows the yearly rate only once there is enough history.',
     ],
@@ -616,7 +616,7 @@ function bookedExplain(i: InvestExplainInput, c: Coverage): Explain {
     return explain({
       id: 'invest.booked',
       title: 'Profit booked by selling',
-      what: 'The gain or loss already locked in by units you sold.',
+      what: 'The profit or loss already booked by units you sold.',
       how: 'No sale is on the statements imported so far, so nothing is shown. Nothing has been booked, or the statements are not imported yet.',
       inputs: [
         {
@@ -639,7 +639,7 @@ function bookedExplain(i: InvestExplainInput, c: Coverage): Explain {
     title: 'Profit booked by selling',
     exact: exSigned(r.total),
     shown: compactIfBig(r.total),
-    what: 'The gain or loss already locked in by units you sold, from the sale lines on your statements.',
+    what: 'The profit or loss already booked by units you sold, from the sale lines on your statements.',
     how: `For each sale: money received − what those units cost (oldest units sold first). Short-term ${exSigned(r.stcg)} + long-term ${exSigned(r.ltcg)} + funds taxed another way ${exSigned(r.other)} = ${exSigned(r.total)} over ${exPlural(r.sales, 'sale line')}.`,
     inputs: [
       {
@@ -656,7 +656,7 @@ function bookedExplain(i: InvestExplainInput, c: Coverage): Explain {
               label: 'Sales whose purchase is not on the statement',
               value: String(r.unknown),
               basis: 'missing' as const,
-              note: 'their gain is left out',
+              note: 'their profit is left out',
             },
           ]
         : []),
@@ -664,9 +664,9 @@ function bookedExplain(i: InvestExplainInput, c: Coverage): Explain {
     level: r.unknown > 0 ? 'partly_estimated' : 'complete',
     completeness:
       r.unknown > 0
-        ? `${r.unknown} of ${exPlural(r.sales, 'sale')} used units whose purchase is not on a statement, so ${r.unknown === 1 ? 'its gain is' : 'their gains are'} left out and the real figure differs.`
+        ? `${r.unknown} of ${exPlural(r.sales, 'sale')} used units whose purchase is not on a statement, so ${r.unknown === 1 ? 'its profit is' : 'their profit is'} left out and the real figure differs.`
         : `Every sale line has its purchase cost on a statement.`,
-    notes: ['These are gains, not tax. The tax and the filing schedule are on the Tax pages.'],
+    notes: ['This is profit before tax. The tax and the filing schedule are on the Tax pages.'],
     fix: r.unknown > 0 ? { label: 'Import earlier history', href: i.links.import } : undefined,
   });
 }
@@ -678,7 +678,7 @@ function totalGainExplain(i: InvestExplainInput, c: Coverage): Explain {
     title: 'Total profit (held and booked)',
     exact: exSigned(h.totalGain),
     shown: compactIfBig(h.totalGain),
-    what: 'The gain on units you still hold plus the gain already booked by selling.',
+    what: 'The profit on units you still hold plus the booked profit.',
     how: `Profit on units held ${exSigned(h.unrealised)} + booked by selling ${exSigned(h.realised.total)} = ${exSigned(h.totalGain)}.`,
     inputs: [
       {
@@ -933,7 +933,7 @@ function projectionExplain(i: InvestExplainInput): Explain {
   return explain({
     id: 'invest.projection',
     title: 'The projection',
-    what: 'What today’s value and today’s SIPs would grow to if the same yearly return carried on. A projection, not a promise.',
+    what: 'What current value and today’s SIPs would grow to if the same yearly return carried on. A projection, not a promise.',
     how: first
       ? `Today’s value ${exInr(i.hero.value)} grown at ${(p.rate * 100).toFixed(1)}% a year, with ${exInr(i.hero.sipMonthly)} added each month, gives ${p.years.map((y) => `${exInr(y.expected)} in ${y.years} year${y.years === 1 ? '' : 's'}`).join(', ')}. The range around each is ± ${(p.spread * 100).toFixed(0)} points of return.`
       : 'No projection: the value and a return are needed.',
@@ -952,7 +952,7 @@ function projectionExplain(i: InvestExplainInput): Explain {
     level: p.assumed ? 'estimated' : 'partly_estimated',
     completeness: p.assumed
       ? 'Estimated: the return is assumed, because no annual return can be worked out yet.'
-      : 'Partly estimated: today’s value is calculated, but the return is your past return carried forward, which the future will not repeat.',
+      : 'Partly estimated: current value is calculated, but the return is your past return carried forward, which the future will not repeat.',
     notes: [
       `The cap (${(p.cap * 100).toFixed(0)}%) and the spread are saved settings.`,
       'Funds have no maturity value; there is no date on which this is paid out.',
@@ -1000,9 +1000,9 @@ function valueChartExplain(i: InvestExplainInput, c: Coverage): Explain {
   const first = minDate(i.funds.map((f) => f.firstTxnOn ?? f.startedOn ?? f.updatedOn));
   return explain({
     id: 'invest.valueChart',
-    title: 'Value and money put in',
+    title: 'Current value and invested',
     what: 'The value of the funds against the cost of the units held, at each month end.',
-    how: `At each month end: units held then × the price of that day = value; cost of the units held then = money put in. The last point is today (${exInr(i.hero.value)} value against ${exInr(i.hero.invested)} money put in).`,
+    how: `At each month end: units held then × the price of that day = value; cost of the units held then = invested. The last point is today (${exInr(i.hero.value)} value against ${exInr(i.hero.invested)} invested).`,
     inputs: [
       {
         label: 'Funds from statement lines and prices',
@@ -1030,7 +1030,7 @@ function valueChartExplain(i: InvestExplainInput, c: Coverage): Explain {
         ? `Every fund is drawn from its statement lines and published prices, ${exRange(first, i.today)}.`
         : `${rest.length} of ${exPlural(c.total, 'fund')} ${rest.length === 1 ? 'has' : 'have'} no statement that adds up: the line there follows the values you recorded.`,
     notes: [
-      '“Money put in” is the cost of the units held at that date, the same as in the headline, so a sale lowers it.',
+      '“Invested” is the cost of the units held at that date, the same as in the headline, so a sale lowers it.',
     ],
     fix: fixFor(c, i.links),
   });
@@ -1040,8 +1040,8 @@ function goalsExplain(i: InvestExplainInput): Explain {
   return explain({
     id: 'invest.goals',
     title: 'Goal by goal',
-    what: 'The funds you have set aside for each goal, with what was put in, what they are worth and the gain.',
-    how: `For each goal: value of its funds, money put in and gain = value − money put in; the percentage is gain ÷ money put in. ${i.goals.withGoal} ${i.goals.withGoal === 1 ? 'fund is' : 'funds are'} set aside for a goal; ${i.goals.without} ${i.goals.without === 1 ? 'is' : 'are'} not.`,
+    what: 'The funds you have set aside for each goal, with what was invested, their current value and the profit.',
+    how: `For each goal: current value of its funds, invested and profit = current value − invested; the percentage is profit ÷ invested (overall). ${i.goals.withGoal} ${i.goals.withGoal === 1 ? 'fund is' : 'funds are'} set aside for a goal; ${i.goals.without} ${i.goals.without === 1 ? 'is' : 'are'} not.`,
     inputs: [
       {
         label: 'Funds set aside for a goal',
@@ -1116,7 +1116,7 @@ function moversExplain(i: InvestExplainInput): Explain {
     id: 'invest.movers',
     title: 'Movers',
     what: 'The funds that moved most today and over their whole holding.',
-    how: `Today: each fund’s change between its last two published prices (${exDate(minDate(withDay.map((f) => f.dayFrom)))} to ${exDate(maxDate(withDay.map((f) => f.dayTo)))}). Overall: value ÷ money put in − 1 for each fund with a cost, so it is a return on that fund’s own cost. Needs at least two funds.`,
+    how: `Today: each fund’s change between its last two published prices (${exDate(minDate(withDay.map((f) => f.dayFrom)))} to ${exDate(maxDate(withDay.map((f) => f.dayTo)))}). Overall: value ÷ invested − 1 for each fund with a cost, so it is a return on that fund’s own cost. Needs at least two funds.`,
     inputs: [
       {
         label: 'Funds with two published prices',
@@ -1189,7 +1189,7 @@ function peopleExplain(i: InvestExplainInput): Explain {
     id: 'invest.people',
     title: 'Person against person',
     what: 'One line per person with the same figures side by side.',
-    how: `Each column is worked out for that person’s funds alone, exactly as in the headline. Percentages state their base: profit % is ÷ money put in; “Share” is the person’s value ÷ the value of everyone shown (${exInr(i.hero.value)}); “Last 1Y” is the funds’ own price return over a year, not your return; “Long-term” is the long-term share of equity value; “Top n” is the share of the person’s value in their largest funds.`,
+    how: `Each column is worked out for that person’s funds alone, exactly as in the headline. Percentages state their base: profit % is ÷ invested; “Share” is the person’s value ÷ the value of everyone shown (${exInr(i.hero.value)}); “Last 1Y” is the funds’ own price return over a year, not your return; “Long-term” is the long-term share of equity value; “Top n” is the share of the person’s value in their largest funds.`,
     inputs: i.ledger.map((l) => ({
       label: l.name,
       value: `${l.funds} funds`,
@@ -1208,8 +1208,8 @@ function fundsTableExplain(i: InvestExplainInput, c: Coverage): Explain {
   return explain({
     id: 'invest.fundsTable',
     title: 'The funds table',
-    what: 'Every fund on one line with its money put in, value, gain, today’s move and annual return, and the totals of the group.',
-    how: `Invested = cost of the units held. Value = units × latest price. Gain = value − invested; its % is gain ÷ invested. Today = move between the last two prices. Return a year = the fund’s own XIRR (“~” when estimated). Share = fund value ÷ ${exInr(i.hero.value)} (all funds shown). A group total adds its funds; its % is the group’s gain ÷ the group’s invested.`,
+    what: 'Every fund on one line with its invested, current value, profit, today’s change and XIRR, and the totals of the group.',
+    how: `Invested = cost of the units held. Current value = units × latest price. Profit = current value − invested; its % is profit ÷ invested (overall). Today’s change = move between the last two prices. XIRR = the fund’s own XIRR, a year (“~” when estimated). Share = fund value ÷ ${exInr(i.hero.value)} (all funds shown). A group total adds its funds; its % is the group’s profit ÷ the group’s invested.`,
     inputs: [
       { label: 'Funds', value: String(c.total), basis: 'recorded', to: i.today },
       {
@@ -1282,7 +1282,7 @@ function keyFiguresExplain(i: InvestExplainInput, c: Coverage): Explain {
     id: 'invest.keyFigures',
     title: 'Key figures',
     what: 'The headline numbers for the funds shown, in one grid.',
-    how: `Money put in ${exInr(i.hero.invested)} · value ${exInr(i.hero.value)} · gain ${exSigned(i.hero.unrealised)} (${i.hero.unrealisedPct === null ? '–' : exSignedPct(i.hero.unrealisedPct, 1)} of the money put in) · annual return ${i.hero.xirr === null ? '–' : exSignedPct(i.hero.xirr, 1)}. Best and weakest are each fund’s value ÷ cost − 1.`,
+    how: `Invested ${exInr(i.hero.invested)} · current value ${exInr(i.hero.value)} · profit ${exSigned(i.hero.unrealised)} (${i.hero.unrealisedPct === null ? '–' : exSignedPct(i.hero.unrealisedPct, 1)} overall) · XIRR ${i.hero.xirr === null ? '–' : exPct(i.hero.xirr, 1)} a year. Best and weakest are each fund’s value ÷ cost − 1.`,
     inputs: [
       { label: 'Funds', value: String(c.total), basis: 'recorded', to: i.today },
       {
@@ -1356,7 +1356,7 @@ function ageingExplain(i: InvestExplainInput): Explain {
     id: 'invest.ageing',
     title: 'How old the units are',
     what: 'The value of the units you hold, grouped by how long ago each purchase was made.',
-    how: `Each purchase still held is valued at today’s price (units × latest price) and put in a band by the date it was bought. Bands are set in Settings. Total ${exInr(i.hero.value)}; funds whose purchases are not known are left out.`,
+    how: `Each purchase still held is valued at today’s price (units × latest price) and placed in a band by the date it was bought. Bands are set in Settings. Total ${exInr(i.hero.value)}; funds whose purchases are not known are left out.`,
     inputs: [
       {
         label: 'Purchases from statements',
@@ -1399,9 +1399,9 @@ function ageingExplain(i: InvestExplainInput): Explain {
 function gainByFundExplain(i: InvestExplainInput, c: Coverage): Explain {
   return explain({
     id: 'invest.gainByFund',
-    title: 'Gain or loss by fund',
-    what: 'For each fund, its value less the money put in on the units still held.',
-    how: `Value − money put in for each fund (these add up to ${exSigned(i.hero.unrealised)}); the percentage is the gain ÷ that fund’s money put in.`,
+    title: 'Profit or loss by fund',
+    what: 'For each fund, its value less the amount invested on the units still held.',
+    how: `Value − invested for each fund (these add up to ${exSigned(i.hero.unrealised)}); the percentage is the profit ÷ that fund’s invested (overall).`,
     inputs: [
       {
         label: 'Funds with a cost and a value',
@@ -1417,7 +1417,7 @@ function gainByFundExplain(i: InvestExplainInput, c: Coverage): Explain {
     ],
     level: historyLevel(c),
     completeness: historyText(c),
-    notes: ['Gains already booked by selling are not in these bars.'],
+    notes: ['Booked profit (from units sold) is not in these bars.'],
     fix: fixFor(c, i.links),
   });
 }
@@ -1479,7 +1479,7 @@ function bookedCardExplain(i: InvestExplainInput, c: Coverage): Explain {
   return {
     ...bookedExplain(i, c),
     id: 'invest.bookedCard',
-    title: 'Gains already booked by selling',
+    title: 'Booked profit',
   };
 }
 

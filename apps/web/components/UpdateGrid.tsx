@@ -292,10 +292,10 @@ export function UpdateGrid({
         <td className="num" data-label="Invested">
           {money(fd.principal)}
         </td>
-        <td className="num" data-label="At maturity">
+        <td className="num" data-label="Maturity value">
           {money(fd.maturityAmount)}
         </td>
-        <td className="num" data-label="Worth today">
+        <td className="num" data-label="Current value">
           {fd.needsConfirmation ? (
             <span
               className="muted"
@@ -482,8 +482,8 @@ export function UpdateGrid({
                                 <th className="num">Rate</th>
                                 <th className="num">Matures</th>
                                 <th className="num">Invested</th>
-                                <th className="num">At maturity</th>
-                                <th className="num">Worth today</th>
+                                <th className="num">Maturity value</th>
+                                <th className="num">Current value</th>
                                 <th>Status</th>
                               </tr>
                             </thead>

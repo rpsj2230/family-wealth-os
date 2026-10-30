@@ -77,10 +77,10 @@ export function buildValuationExplain(
   const ex: ValuationRow | undefined = last;
   const table = explain({
     id: 'valuation.table',
-    title: 'Value, change and gain by period',
-    what: 'For each period: what the funds were worth at its end, how that changed from the end of the period before (new money included, as on a fund statement), and how much of the change was money you put in and how much was a real gain.',
+    title: 'Current value, change and profit by period',
+    what: 'For each period: what the funds were worth at its end, how that changed from the end of the period before (new money included, as on a fund statement), and how much of the change was money you invested and how much was real profit.',
     how: ex
-      ? `${ex.period.label}: value ${exInr(ex.value ?? 0)}${ex.change === null ? '' : ` − the period before ${exInr((ex.value ?? 0) - ex.change)} = change ${exSigned(ex.change)} (${signedShare(ex.changePct)})`}. Money put in, net of sales: ${exSigned(ex.netIn)}. Gain = change − net money in = ${ex.gain === null ? 'not worked out' : exSigned(ex.gain)}${ex.gainPct === null || ex.gain === null || ex.base <= 0 ? '' : `; as a share of the money at work in the period (the value at its start plus each purchase for the days it was held): ${ratioHow({ label: 'gain', amount: ex.gain }, { label: 'at work', amount: ex.base })}`}.`
+      ? `${ex.period.label}: value ${exInr(ex.value ?? 0)}${ex.change === null ? '' : ` − the period before ${exInr((ex.value ?? 0) - ex.change)} = change ${exSigned(ex.change)} (${signedShare(ex.changePct)})`}. Added less withdrawn: ${exSigned(ex.netIn)}. Earned = change − added less withdrawn = ${ex.gain === null ? 'not worked out' : exSigned(ex.gain)}${ex.gainPct === null || ex.gain === null || ex.base <= 0 ? '' : `; as a share of the money at work in the period (the value at its start plus each purchase for the days it was held): ${ratioHow({ label: 'earned', amount: ex.gain }, { label: 'at work', amount: ex.base })}`}.`
       : 'Not worked out: no fund has a value on record.',
     inputs: [
       {
@@ -91,7 +91,7 @@ export function buildValuationExplain(
         to: rows[rows.length - 1]?.period.through,
       },
       {
-        label: 'Money put in and taken out',
+        label: 'Added and withdrawn',
         value: 'from the fund statement (or the plan when there is none)',
         basis: 'statement',
         note: 'the same cash flows as the profit and loss on the Performance tab',
@@ -101,7 +101,7 @@ export function buildValuationExplain(
     completeness,
     notes: [
       'The first two change columns are the plain change in value. The last two take out the money you added or withdrew, so a month with a big purchase never reads as a good month.',
-      'The gain is worked out by the same function as the profit on Home and the Performance tab, so the same period gives the same rupees everywhere.',
+      'Earned is worked out by the same function as the profit on Home and the Performance tab, so the same period gives the same rupees everywhere.',
       'A period before the first record is cut where the records begin; one with no price or record near its end says “no data” instead of zero.',
       'Funds are worth the units held on a day times the price of that day. With a fund statement the units are the statement’s. A fund with no transactions has its units worked out from your plan: the start date, the amount invested and every SIP amount and change with its date, each instalment buying its amount divided by the price of its day (the next priced day when it fell on a holiday). That is labelled estimated from your SIP plan and the price of each day. Your monthly sheet value is used only as a last resort, for a fund with no start date or no price. Between two monthly sheet values the fund moves with its price; money added by the SIP plan and any difference between the sheet and the prices is not counted as profit.',
     ],

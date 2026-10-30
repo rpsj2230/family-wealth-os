@@ -167,27 +167,27 @@ export function BreakdownTab({
 
   const headline: Stat[] = [
     {
-      label: 'Money put in',
+      label: 'Invested',
       value: formatInr(Math.round(stats.invested)),
       note: 'cost of the units held',
       why: ex['invest.moneyIn'],
     },
-    { label: 'Value now', value: formatInr(Math.round(stats.value)), why: ex['invest.value'] },
+    { label: 'Current value', value: formatInr(Math.round(stats.value)), why: ex['invest.value'] },
     {
-      label: 'Gain on units held',
+      label: 'Profit',
       value: rupees(stats.unrealised),
       note:
         stats.unrealisedPct === null
           ? undefined
-          : `${pct(stats.unrealisedPct, 1)} on the ${formatInrCompact(stats.invested)} put in`,
+          : `${pct(stats.unrealisedPct, 1)} overall on ${formatInrCompact(stats.invested)} invested`,
       tone: tone(stats.unrealised),
       why: ex['invest.profit'],
     },
     {
-      label: 'Return a year (XIRR)',
+      label: 'XIRR',
       value: (
         <>
-          {h.xirr === null ? '–' : pct(h.xirr, 1)}
+          {h.xirr === null ? '–' : `${pct(h.xirr, 1).replace(/^\+/, '')} a year`}
           {h.xirr !== null && (
             <BasisChip
               real={!h.xirrEstimated}
@@ -251,8 +251,7 @@ export function BreakdownTab({
     <>
       <p className="lead muted">
         {who ? `${styles[who]?.name}'s funds` : 'All funds'}: where the money is, what has made or
-        lost it, how much is already long-term, the monthly investments and the gains already
-        booked.
+        lost it, how much is already long-term, the monthly investments and the booked profit.
       </p>
       {!who && view.groups.length > 1 && (
         <section className="card wide" aria-labelledby="bp">
@@ -354,15 +353,15 @@ export function BreakdownTab({
       <section className="card wide" aria-labelledby="gb">
         <div className="cardhead">
           <WhyHead why={ex['invest.gainByFund']}>
-            <h2 id="gb">Gain or loss by fund</h2>
+            <h2 id="gb">Profit or loss by fund</h2>
           </WhyHead>
-          <span className="small muted">Value less money put in, on the units still held</span>
+          <span className="small muted">Current value less invested, on the units still held</span>
         </div>
         {stats.gainBars.length === 0 ? (
           <p className="empty">No fund has both a cost and a value yet.</p>
         ) : (
           <GainBars
-            caption="Gain or loss on each fund"
+            caption="Profit or loss on each fund"
             rows={stats.gainBars.map((g) => ({
               key: g.assetId,
               label: <Link href={`/asset/${g.assetId}`}>{g.label}</Link>,
@@ -417,7 +416,7 @@ export function BreakdownTab({
                 ]}
               />
               <p className="cardnote">
-                Gain on the older units {rupees(hold.longGain)}, on the newer units{' '}
+                Profit on the older units {rupees(hold.longGain)}, on the newer units{' '}
                 {rupees(hold.shortGain)}.
                 {hold.nextTurn && (
                   <>
@@ -518,7 +517,7 @@ export function BreakdownTab({
       <section className="card wide" aria-labelledby="rg">
         <div className="cardhead">
           <WhyHead why={ex['invest.bookedCard']}>
-            <h2 id="rg">Gains already booked by selling</h2>
+            <h2 id="rg">Booked profit</h2>
           </WhyHead>
           <span className="small muted">From the sales on fund statements, oldest units first</span>
         </div>
@@ -530,7 +529,7 @@ export function BreakdownTab({
         ) : (
           <>
             <StatList
-              label="Gains already booked"
+              label="Booked profit"
               items={[
                 {
                   label: 'Sales on statements',
@@ -561,7 +560,7 @@ export function BreakdownTab({
               <p className="cardnote">
                 {real.unknownCost} sale{real.unknownCost === 1 ? '' : 's'} used units whose purchase
                 is not on the statement, so{' '}
-                {real.unknownCost === 1 ? 'its gain is' : 'their gains are'} left out.
+                {real.unknownCost === 1 ? 'its profit is' : 'their profit is'} left out.
               </p>
             )}
             {real.byYear.length > 0 && (
@@ -599,7 +598,7 @@ export function BreakdownTab({
               </div>
             )}
             <p className="cardnote">
-              These are gains, not tax. The tax and the schedule for filing are on{' '}
+              This is booked profit, not tax. The tax and the schedule for filing are on{' '}
               <Link href="/tax/filing">Tax filing papers</Link>.
             </p>
           </>

@@ -152,7 +152,7 @@ export interface RateHolding {
   joint: boolean;
   /** the second name on a joint account (the owner is the first); null when not joint or not recorded */
   jointHolderId?: string | null;
-  /** today's value in INR, including interest */
+  /** current value in INR, including interest */
   current: number;
   /** the rate it earns: the deposit's rate, or the account's own or assumed savings rate */
   rate: number;

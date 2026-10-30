@@ -70,9 +70,10 @@ describe('Reports explainers', () => {
     expect(ex['reports.fdInterest'].completeness.text).toContain('whole life');
   });
 
-  it('says the annual return is an average of the funds, not the portfolio XIRR', () => {
-    expect(ex['reports.fundXirr'].what).toContain('average');
-    expect(ex['reports.fundXirr'].how).toContain('differs from the portfolio annual return');
+  it('says the XIRR is one rate over all the funds together, the same rule as Investments', () => {
+    expect(ex['reports.fundXirr'].title).toBe('XIRR');
+    expect(ex['reports.fundXirr'].how).toContain('solved for one yearly rate');
+    expect(ex['reports.fundXirr'].how).toContain('The same rule as Investments');
   });
 
   it('explains a table from the table itself', () => {
@@ -91,7 +92,7 @@ describe('Reports explainers', () => {
       links: { import: '/import' },
     });
     expect(f.completeness.level).toBe('partly_estimated');
-    expect(f.how).toContain('Gain % = Gain ÷ Invested');
+    expect(f.how).toContain('Overall % = Profit ÷ Invested');
     expect(f.fix?.href).toBe('/import');
   });
 });

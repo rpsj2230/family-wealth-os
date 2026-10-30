@@ -131,7 +131,7 @@ export function buildFundSave(was: FundEditRow, d: FundDraft, today: string): Fu
       p.value = Math.round(units * was.nav * 100) / 100;
     } else if (typedValue === null || Number.isNaN(typedValue) || typedValue < 0) {
       problems.push(
-        'the value now (this fund has no live price, so the value cannot be worked out)',
+        'the current value (this fund has no live price, so the value cannot be worked out)',
       );
     } else {
       p.nav = null;
@@ -256,7 +256,7 @@ export function buildAddFund(
   if (invested === null || Number.isNaN(invested) || invested < 0)
     problems.push('the amount invested');
   const value = typed(d.value);
-  if (value === null || Number.isNaN(value) || value <= 0) problems.push('the value now');
+  if (value === null || Number.isNaN(value) || value <= 0) problems.push('the current value');
   const units = typed(d.units);
   if (Number.isNaN(units) || (units !== null && units < 0)) problems.push('units held');
   const sip = typed(d.sip);

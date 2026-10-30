@@ -109,7 +109,7 @@ function xirrWords(
   return `${overall}XIRR ${pct(x.yours, 1)} a year${x.bench !== null ? ` · benchmark XIRR ${pct(x.bench, 1)}` : ''}${short ? ' (under a year)' : ''}`;
 }
 
-/** The holder's own money over each period: the value at the start, money in and out, the value now, the profit and the return. */
+/** The holder's own money over each period: the value at the start, money in and out, the current value, the profit and the return. */
 function OwnPeriods({ rows }: { rows: FundReturns['own'] }) {
   return (
     <div className="tablewrap">
@@ -177,7 +177,7 @@ function OwnPeriods({ rows }: { rows: FundReturns['own'] }) {
 /**
  * A fund's page: the headline row, then tabs. Overview (the figures and graphs), Returns (the fund's price return over each period
  * against the benchmark, calendar and financial years, month grid, fall from the high, rolling returns, risk), Transactions (every
- * line with running figures, filters and export), Lots and gains (each purchase still held with its age and gain, each sale with
+ * line with running figures, filters and export), Lots and profit (each purchase still held with its age and profit, each sale with
  * the gain it booked, the SIP calendar) and Records (details, recorded values, activity).
  */
 export function FundPage({
@@ -398,7 +398,7 @@ export function FundPage({
           { key: 'returns', label: 'Returns' },
           { key: 'transactions', label: 'Transactions', badge: d.ledger.length || null },
           ...(sipPlan ? [{ key: 'sip', label: 'SIP plan' }] : []),
-          { key: 'lots', label: 'Lots and gains' },
+          { key: 'lots', label: 'Lots and profit' },
           { key: 'records', label: 'Records' },
         ]}
       />
@@ -797,14 +797,14 @@ export function FundPage({
         <section className="card wide" aria-labelledby="fs">
           <div className="cardhead">
             <WhyHead why={ex['fund.booked']}>
-              <h2 id="fs">Gains booked by selling</h2>
+              <h2 id="fs">Booked profit</h2>
             </WhyHead>
             <span className="small muted">Oldest units sold first</span>
           </div>
           {sales.length > 0 ? (
             <>
               <StatList
-                label="Gains booked by selling"
+                label="Booked profit"
                 items={
                   [
                     {
@@ -842,7 +842,7 @@ export function FundPage({
                       <th className="num">Units</th>
                       <th className="num">Received</th>
                       <th className="num">Units held for</th>
-                      <th className="num">Gain booked</th>
+                      <th className="num">Booked profit</th>
                       <th>Term</th>
                     </tr>
                   </thead>
@@ -861,7 +861,7 @@ export function FundPage({
                         <td className="num" data-label="Units held for">
                           {held(r.heldDays)}
                         </td>
-                        <td className={`num ${tone(r.realisedGain)}`} data-label="Gain booked">
+                        <td className={`num ${tone(r.realisedGain)}`} data-label="Booked profit">
                           {r.realisedGain === null ? 'not known' : rupees(r.realisedGain)}
                         </td>
                         <td data-label="Term">
@@ -879,10 +879,10 @@ export function FundPage({
                 </table>
               </div>
               <p className="cardnote">
-                These are gains, not tax. The tax and the schedule for filing are on{' '}
+                This is booked profit, not tax. The tax and the schedule for filing are on{' '}
                 <Link href={demo ? '/demo/tax' : '/tax/filing'}>Tax filing papers</Link>. A sale
-                that used units bought before the statement began has no known cost, so its gain is
-                not shown.
+                that used units bought before the statement began has no known cost, so its profit
+                is not shown.
               </p>
             </>
           ) : (
@@ -957,12 +957,12 @@ export function FundPage({
                   },
                   { label: 'One-off', value: t.oneOffAmount ? inr(t.oneOffAmount) : 'None' },
                   {
-                    label: 'Taken out',
+                    label: 'Withdrawn',
                     value: t.soldAmount ? inr(t.soldAmount) : 'None',
                     note: t.soldUnits ? `${units(t.soldUnits)} units` : undefined,
                   },
                   {
-                    label: 'Gain booked',
+                    label: 'Booked profit',
                     value: t.soldAmount ? rupees(t.realisedGain) : 'None',
                     tone: t.soldAmount ? tone(t.realisedGain) : null,
                     note: t.salesUnknown

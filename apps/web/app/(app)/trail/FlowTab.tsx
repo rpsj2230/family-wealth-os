@@ -69,7 +69,7 @@ export const SOURCE_LABEL: Record<OriginKind, string> = {
   singapore: 'Singapore (Wise or DBS)',
   interest: 'Savings interest',
   deposit_interest: 'Deposit interest',
-  fund_gain: 'Fund gains',
+  fund_gain: 'Fund profit',
   rent: 'Rent and earnings',
   outside: 'Money from outside',
   before_records: 'There before the first statement',

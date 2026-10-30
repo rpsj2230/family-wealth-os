@@ -23,6 +23,28 @@ test('the investments pages need a sign-in', async ({ request }) => {
 });
 
 test.describe('Investments (public sample)', () => {
+  test('the headline: current value, pills across the panel, and "Also on this page"', async ({
+    browser,
+  }) => {
+    for (const width of [390, 1280]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await context.newPage();
+      await page.goto('/demo/investments');
+      const hero = page.getByRole('region', { name: 'Mutual funds at a glance' });
+      await expect(hero.getByText('Current value of mutual funds')).toBeVisible();
+      // the pills sit on one line each beside the figure, not squeezed into a column
+      const pill = await hero.locator('.hpill').first().boundingBox();
+      expect(pill!.height).toBeLessThan(90);
+      await expect(hero.getByRole('heading', { name: 'Also on this page' })).toBeVisible();
+      for (const id of ['inv-x-regular', 'inv-x-platforms', 'inv-x-benchmarks'])
+        await expect(hero.getByTestId(id)).toBeVisible();
+      // each figure once: the long-term share is a cell of the panel, not repeated in the extras
+      await expect(hero.getByText('Long-term share', { exact: true })).toHaveCount(1);
+      await noSideways(page);
+      await context.close();
+    }
+  });
+
   test('overview: the headline, goals, movers, instalments and the people side by side', async ({
     page,
   }) => {
@@ -59,10 +81,10 @@ test.describe('Investments (public sample)', () => {
     await page.goto('/demo/investments?tab=performance');
     await expect(page.getByText('Time-weighted return', { exact: false }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Return over time' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: /Benchmark \(proxy\)/ })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Benchmark', exact: true })).toBeVisible();
     await expect(page.getByRole('list', { name: 'Return over each period' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Profit and loss by period' })).toBeVisible();
-    await expect(page.getByRole('img', { name: 'Profit or loss by month' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Earned by month' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Month by month' })).toBeVisible();
     await expect(page.getByRole('table', { name: /Return in each month/ })).toBeVisible();
     await expect(page.getByText('Best month')).toBeVisible();
@@ -89,7 +111,7 @@ test.describe('Investments (public sample)', () => {
     const compare = page.getByRole('navigation', { name: 'Compare' });
     await by.getByRole('link', { name: 'Week', exact: true }).click();
     await expect(page).toHaveURL(/by=week/);
-    await expect(page.getByRole('img', { name: 'Profit or loss by week' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Earned by week' })).toBeVisible();
     await by.getByRole('link', { name: 'Quarter' }).click();
     await expect(page).toHaveURL(/by=quarter/);
     await expect(page.getByRole('cell', { name: /^Q2 FY 2026-27/ })).toBeVisible();
@@ -280,7 +302,7 @@ test.describe('Investments (public sample)', () => {
     await panel.getByLabel('Fund name').fill('Sample New Fund');
     await panel.getByLabel('Whose').selectOption({ label: 'Anil' });
     await panel.getByLabel(/Amount invested/).fill('50000');
-    await panel.getByLabel(/Value now/).fill('52000');
+    await panel.getByLabel(/Current value/).fill('52000');
     await panel.getByRole('button', { name: 'Add the fund' }).click();
     await expect(panel.getByRole('status')).toContainText('nothing is saved');
     await panel.getByRole('button', { name: 'Done' }).click();
@@ -337,14 +359,12 @@ test.describe('Investments (public sample)', () => {
     await expect(page.getByRole('heading', { name: 'By fund', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Direct and Regular plans' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'How old the units are' })).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Gain or loss on each fund' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Profit or loss on each fund' })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'How much is long-term already' }),
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Monthly investments (SIP)' })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: 'Gains already booked by selling' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Booked profit', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: /2026-27/ })).toBeVisible();
     await noSideways(page);
   });

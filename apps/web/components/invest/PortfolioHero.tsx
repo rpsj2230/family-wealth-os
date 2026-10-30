@@ -12,6 +12,7 @@ import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { Why } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import './invest.css';
+import '@/components/headline.css';
 
 /** The explainers the hero carries: one for each headline figure. */
 export interface HeroExplain {
@@ -200,8 +201,14 @@ export function PortfolioHero({
   base,
   tabLinks,
   ex,
+  extras,
 }: {
   ex: HeroExplain;
+  /** "Also on this page": where the funds are held and the Regular plans that pay a yearly commission */
+  extras?: {
+    platforms: { name: string; value: number }[];
+    regular: { value: number; count: number };
+  };
   hero: Hero;
   asOf: string;
   history: SeriesPoint[];
@@ -396,6 +403,46 @@ export function PortfolioHero({
           why={ex['invest.statements']}
         />
       </dl>
+
+      {extras && (
+        <div className="hl-extras invhero-extras">
+          <h3 className="hl-xh">Also on this page</h3>
+          <ul className="hl-xg">
+            <li
+              className={`hl-x${extras.regular.count > 0 ? ' warn' : ''}`}
+              data-testid="inv-x-regular"
+            >
+              <div className="hl-xl">Regular plans</div>
+              <div className="hl-xv num">
+                {extras.regular.count > 0 ? formatInrCompact(extras.regular.value) : 'None'}
+              </div>
+              <div className="hl-xs">
+                {extras.regular.count > 0
+                  ? `${extras.regular.count} fund${extras.regular.count === 1 ? '' : 's'} pay a yearly commission; Direct does not`
+                  : 'every fund is a Direct plan'}
+              </div>
+            </li>
+            {extras.platforms.length > 0 && (
+              <li className="hl-x" data-testid="inv-x-platforms">
+                <div className="hl-xl">Where they are held</div>
+                <div className="hl-xv num">
+                  {extras.platforms.map((p) => formatInrCompact(p.value)).join(' · ')}
+                </div>
+                <div className="hl-xs">{extras.platforms.map((p) => p.name).join(' · ')}</div>
+              </li>
+            )}
+            <li className="hl-x" data-testid="inv-x-benchmarks">
+              <div className="hl-xl">
+                <Link href={tabLinks.performance} className="hl-tlink">
+                  Against benchmarks
+                </Link>
+              </div>
+              <div className="hl-xv">See Performance</div>
+              <div className="hl-xs">your XIRR against each fund’s own index</div>
+            </li>
+          </ul>
+        </div>
+      )}
 
       <p className="invhero-foot">
         <b>{TERMS.maturityValue.label}:</b> not applicable, because mutual funds have no fixed end

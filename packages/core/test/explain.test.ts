@@ -100,11 +100,9 @@ describe('the Investments explainers', () => {
 
   it('states both percentages with their denominators, as the user asked', () => {
     // fixture: value 51,04,737, money put in 43,01,000, profit 8,03,737
+    expect(set['invest.profit'].how).toContain('₹8,03,737 profit ÷ ₹43,01,000 invested = +18.7%');
     expect(set['invest.profit'].how).toContain(
-      '₹8,03,737 profit ÷ ₹43,01,000 money put in = +18.7%',
-    );
-    expect(set['invest.profit'].how).toContain(
-      '₹8,03,737 profit ÷ ₹51,04,737 today’s value = 15.7%',
+      '₹8,03,737 profit ÷ ₹51,04,737 current value = 15.7%',
     );
     expect(set['invest.profit'].exact).toBe('+₹8,03,737');
     expect(set['invest.ring'].how).toContain(

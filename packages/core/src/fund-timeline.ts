@@ -1,6 +1,6 @@
 /**
  * Mutual funds over time, as numbers ready to draw: the time ranges, the part of a series inside a range, the change over a range,
- * the return and the annual return (XIRR) month by month, money put in per month, the SIP calendar, the price line with purchase
+ * the return and the annual return (XIRR) month by month, invested per month, the SIP calendar, the price line with purchase
  * dots, and units over time. Pure: the caller supplies what is stored. Nothing here invents a number: where the data to work
  * something out is missing, the result says so (null, or a `basis` that names what it rests on).
  */
@@ -99,7 +99,7 @@ export interface PeriodChange {
   to: string;
   startValue: number;
   endValue: number;
-  /** the part of the change that is new money put in less money taken out; null when the money put in is not known */
+  /** the part of the change that is new invested less money withdrawn; null when the amount invested is not known */
   netIn: number | null;
   /** what the market added or took: the change in value less the net new money; null when netIn is not known */
   gain: number | null;
@@ -113,7 +113,14 @@ export function periodChange(points: SeriesPoint[]): PeriodChange | null {
   const a = points[0]!;
   const b = points[points.length - 1]!;
   const known = a.invested !== null && b.invested !== null;
-  const netIn = known ? b.invested! - a.invested! : null;
+  // money added less withdrawn when the ledger gives it (a sale at what it paid, so booked profit stays in Earned); else the change
+  // in the cost held
+  const netIn =
+    a.net !== undefined && b.net !== undefined
+      ? b.net - a.net
+      : known
+        ? b.invested! - a.invested!
+        : null;
   const gain = netIn === null ? null : b.value - a.value - netIn;
   const base = netIn === null ? 0 : a.value + netIn / 2;
   return {
@@ -135,7 +142,7 @@ export interface ValuePoint {
   value: number;
 }
 
-/** Gain as a share of the money put in, at every point where the money put in is known and positive. */
+/** Gain as a share of the amount invested, at every point where the amount invested is known and positive. */
 export function returnSeries(points: SeriesPoint[]): ValuePoint[] {
   return points
     .filter((p) => p.invested !== null && p.invested > 0)
@@ -195,7 +202,7 @@ export function xirrOverTime(args: {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Money put in, by month
+// Invested, by month
 // ------------------------------------------------------------------------------------------------
 export interface StatTxn {
   /** the stored line, for a link to its own page */

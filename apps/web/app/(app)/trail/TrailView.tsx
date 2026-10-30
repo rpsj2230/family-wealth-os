@@ -350,8 +350,8 @@ export function TrailView({
           Interest earned, and fund sales made, on money one of you gave the other since{' '}
           {data.ownershipFrom ? niceDate(data.ownershipFrom) : 'the day set in Settings'}. The
           income is in the receiver’s name but counts in the giver’s income for tax. For a fund sale
-          the figure is the share of the sale made from the giver’s money; the gain on that share is
-          theirs.
+          the figure is the share of the sale made from the giver’s money; the profit on that share
+          is theirs.
         </p>
         {!data.ownershipFrom ? (
           <p className="small">

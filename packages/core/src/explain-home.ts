@@ -223,8 +223,8 @@ function capitalExplains(
     });
   if (!c || !t || !o)
     return {
-      'home.ownMoney': none('home.ownMoney', 'Your own money brought in'),
-      'home.profitSoFar': none('home.profitSoFar', 'Total profit on your own money'),
+      'home.ownMoney': none('home.ownMoney', 'Own money'),
+      'home.profitSoFar': none('home.profitSoFar', 'Lifetime profit'),
       'home.xirr': none('home.xirr', TERMS.xirrOwn.label),
       'home.movement': none('home.movement', 'Wealth movement'),
     };
@@ -237,7 +237,7 @@ function capitalExplains(
       id: 'home.ownMoney',
       title: TERMS.ownMoney.label,
       exact: exInr(t.ownMoney),
-      what: 'The family’s own money in what it holds: the opening position plus money that came in from outside its accounts, less money taken out. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.',
+      what: 'The family’s own money in what it holds: the opening position plus money that came in from outside its accounts, less money withdrawn. Interest, profit, renewals, reinvestment and transfers between your own accounts never change it.',
       how: `Opening position ${exInr(t.opening)} on ${exDate(o.date)} + outside money you confirmed ${exSigned(t.confirmedExternal)} + money moved in or out with nothing to say what it was ${exSigned(t.unexplained)} = ${exInr(t.ownMoney)}.`,
       inputs: [
         {
@@ -262,19 +262,19 @@ function capitalExplains(
       completeness:
         level === 'complete'
           ? 'Most of the money moved is confirmed or small.'
-          : 'Much of the money moved is worked out from balances, not confirmed: confirm salary, gifts and money taken out on Explain movements.',
+          : 'Much of the money moved is worked out from balances, not confirmed: confirm salary, gifts and money withdrawn on Explain movements.',
       notes: c.limitations,
     }),
     'home.profitSoFar': explain({
       id: 'home.profitSoFar',
       title: TERMS.lifetimeProfit.label,
       exact: exSigned(t.profit),
-      what: 'Net worth less own money put in: interest on savings and deposits, fund gains, exchange-rate moves and income, less fees and taxes, since the opening date.',
+      what: 'Net worth less own money: interest on savings and deposits, fund profit, exchange-rate moves and income, less fees and taxes, since the opening date.',
       how: `Net worth ${exInr(t.netWorth)} − own money ${exInr(t.ownMoney)} = ${exSigned(t.profit)}${t.profitPct === null ? '' : `; ÷ own money = ${exPct(t.profitPct, 1)}`}. By kind: savings interest ${exSigned(t.earnings.savings)}, deposit interest ${exSigned(t.earnings.deposits)}, funds ${exSigned(t.earnings.funds)}, exchange rates ${exSigned(t.earnings.fx)}, other ${exSigned(t.earnings.others + t.earnings.income)}.`,
       inputs: [
-        { label: 'Net worth today', value: exInr(t.netWorth), basis: 'estimated', to: i.today },
+        { label: 'Net worth', value: exInr(t.netWorth), basis: 'estimated', to: i.today },
         {
-          label: 'Own money put in',
+          label: 'Own money',
           value: exInr(t.ownMoney),
           basis: 'calculated',
           from: o.date,
@@ -286,14 +286,12 @@ function capitalExplains(
           value: exSigned(t.earnings.deposits),
           basis: 'calculated',
         },
-        { label: 'Fund gains and losses', value: exSigned(t.earnings.funds), basis: 'estimated' },
+        { label: 'Fund profit and loss', value: exSigned(t.earnings.funds), basis: 'estimated' },
         { label: 'Exchange-rate moves', value: exSigned(t.earnings.fx), basis: 'calculated' },
       ],
       level,
       completeness: 'Money moved with nothing to say what it was is never counted as profit.',
-      notes: [
-        'The per cent is of own money put in; it is not shown when own money is zero or less.',
-      ],
+      notes: ['The per cent is of own money; it is not shown when own money is zero or less.'],
     }),
     'home.xirr': explain({
       id: 'home.xirr',
@@ -303,7 +301,7 @@ function capitalExplains(
       how: `Flows: −${exInr(t.opening)} on ${exDate(o.date)}, each sum of outside money on its date (a sum worked out from balances in the middle of its month), +${exInr(t.netWorth)} today. ${t.xirr.rate === null ? t.xirr.message : `Solved: ${exPct(t.xirr.rate, 2)} a year.`}`,
       inputs: [
         { label: 'Opening position', value: exInr(t.opening), basis: 'calculated', to: o.date },
-        { label: 'Net worth today', value: exInr(t.netWorth), basis: 'estimated', to: i.today },
+        { label: 'Net worth', value: exInr(t.netWorth), basis: 'estimated', to: i.today },
       ],
       level: t.xirr.rate === null ? 'missing' : level,
       completeness:
@@ -347,7 +345,7 @@ function capitalExplains(
               basis: 'calculated',
             },
             {
-              label: 'Fund gains and losses',
+              label: 'Fund profit and loss',
               value: exSigned(f.earnings.funds),
               basis: 'estimated',
             },
@@ -415,11 +413,11 @@ function classCard(key: ClassCard['key'], id: string, i: HomeExplainInput): Expl
     id,
     title: c.label,
     exact: exInr(c.current),
-    what: `What the ${c.label.toLowerCase()} are worth, what was put in and the profit, and their share of net worth.`,
+    what: `What the ${c.label.toLowerCase()} are worth, what was invested and the profit, and their share of net worth.`,
     how: `${how[key]} Profit ${exSigned(c.profit)}${c.profitPct === null ? '' : ` = ${ratioHow({ label: 'profit', amount: c.profit }, { label: 'invested', amount: c.invested })}`}. Share of net worth: ${ratioHow({ label: c.label.toLowerCase(), amount: c.current }, { label: 'net worth', amount: i.total }, 0, false)}.`,
     inputs: [
       {
-        label: 'Worth today',
+        label: 'Current value',
         value: exInr(c.current),
         basis: basis[key],
         to: i.today,
@@ -525,7 +523,7 @@ function growthExplains(i: HomeExplainInput) {
       id: 'home.fundsXirr',
       title: `${TERMS.xirr.label}: mutual funds`,
       exact: rate(g.funds),
-      what: `${TERMS.xirr.hint} Every purchase, SIP, sale and payout of all funds together, and today’s value.`,
+      what: `${TERMS.xirr.hint} Every purchase, SIP, sale and payout of all funds together, and current value.`,
       how:
         g.funds === null
           ? 'Shows once a fund has dated purchases.'
@@ -547,11 +545,11 @@ function growthExplains(i: HomeExplainInput) {
       id: 'home.depositsXirr',
       title: `${TERMS.xirr.label}: fixed deposits`,
       exact: rate(g.fd),
-      what: `${TERMS.xirr.hint} Each running deposit from its booking date to today’s value.`,
+      what: `${TERMS.xirr.hint} Each running deposit from its booking date to current value.`,
       how:
         g.fd === null
           ? 'Shows once a deposit is running.'
-          : `Each principal out on its booking day, today’s value of all of them back: ${rate(g.fd)}.`,
+          : `Each principal out on its booking day, current value of all of them back: ${rate(g.fd)}.`,
       inputs: [
         {
           label: 'Fixed deposits today',
@@ -598,7 +596,7 @@ function growthExplains(i: HomeExplainInput) {
       inputs: ef
         ? [
             { label: 'Interest on deposits', value: exSigned(ef.deposits), basis: 'calculated' },
-            { label: 'Fund gains and losses', value: exSigned(ef.funds), basis: 'calculated' },
+            { label: 'Fund profit and loss', value: exSigned(ef.funds), basis: 'calculated' },
             { label: 'Interest on savings', value: exSigned(ef.savings), basis: 'estimated' },
             {
               label: 'Exchange-rate moves and other income',
@@ -809,13 +807,13 @@ export function buildHomeExplain(i: HomeExplainInput): ExplainSet<'home'> {
     }),
     'home.growth': explain({
       id: 'home.growth',
-      title: 'Money put in and growth',
+      title: 'Invested and profit',
       exact: exSigned(g.growth),
-      what: 'In banks and funds: what was put in against what it is worth, and the growth between them.',
-      how: `Worth today ${exInr(g.current)} − put in ${exInr(g.invested)} = ${exSigned(g.growth)}${g.growthPct === null ? '' : `; ${ratioHow({ label: 'growth', amount: g.growth }, { label: 'put in', amount: g.invested })}`}. The bar shows what was put in as a share of today’s value: ${exPct(g.investedShare, 0)}.`,
+      what: 'In banks and funds: what was invested against what it is worth, and the growth between them.',
+      how: `Current value ${exInr(g.current)} − invested ${exInr(g.invested)} = ${exSigned(g.growth)}${g.growthPct === null ? '' : `; ${ratioHow({ label: 'growth', amount: g.growth }, { label: 'invested', amount: g.invested })}`}. The bar shows what was invested as a share of current value: ${exPct(g.investedShare, 0)}.`,
       inputs: g.parts.map((p) => ({
         label: p.label,
-        value: `${exInr(p.invested)} put in → ${exInr(p.current)} now`,
+        value: `${exInr(p.invested)} invested → ${exInr(p.current)} now`,
         basis: (p.approximate ? 'estimated' : 'recorded') as 'estimated' | 'recorded',
       })),
       level: g.approximate ? 'partly_estimated' : 'complete',

@@ -429,6 +429,6 @@ export const ORIGIN_LABEL: Record<OriginKind, string> = {
   untraced_account: 'From an account with no statement on file',
   untraced_deposit: 'From a deposit not on file',
   untraced_fund: 'From a fund bought with money the statements do not show',
-  fund_gain: 'Gain on a fund sold',
+  fund_gain: 'Booked profit on a fund sold',
   unexplained: 'Not explained by the statements',
 };

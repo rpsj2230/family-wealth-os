@@ -1,5 +1,5 @@
 /**
- * How a fund (or all funds) progressed: value against the money put in, month by month, and where that leads if the pace holds.
+ * How a fund (or all funds) progressed: value against the amount invested, month by month, and where that leads if the pace holds.
  * The best source wins for each month: the transaction ledger times the fund's price on that date, then a recorded snapshot, then a
  * recorded value. Pure: the caller supplies what is stored.
  */
@@ -8,6 +8,12 @@ export interface SeriesPoint {
   value: number;
   /** cost of the units held on that date; null when it is not known */
   invested: number | null;
+  /**
+   * money added less money withdrawn up to that date: purchases at what they cost, sales at what they paid. Unlike `invested` it
+   * keeps the profit a sale took out, so a period's Earned counts booked profit. Left out where only a cost is known (it is then
+   * taken to be the cost).
+   */
+  net?: number;
 }
 
 export interface FundHistory {
@@ -73,26 +79,39 @@ export function fundSeries(
     return current ? [{ date: today, value: current.value, invested: current.invested }] : [];
   const start = firsts.sort()[0]!;
   const points: SeriesPoint[] = [];
-  // units and cost held after each transaction (a sale takes out the same share of both)
-  const held: { date: string; units: number; invested: number }[] = [];
-  let units = 0;
-  let invested = 0;
+  // units and cost held after each transaction. A sale takes out the oldest units first, with their own cost, so the invested line is
+  // the cost of the units still held on every day: the same cost the headline's Invested uses.
+  const held: { date: string; units: number; invested: number; net: number }[] = [];
+  const lots: { units: number; cost: number }[] = [];
+  let net = 0;
   for (const t of txns) {
     if (t.units > 0) {
-      units += t.units;
-      invested += Math.abs(t.amount);
+      lots.push({ units: t.units, cost: Math.abs(t.amount) });
+      net += Math.abs(t.amount);
     } else if (t.units < 0) {
-      const share = units > 0 ? Math.min(1, -t.units / units) : 1;
-      invested -= invested * share;
-      units = Math.max(0, units + t.units);
+      net -= Math.abs(t.amount);
+      let left = -t.units;
+      while (left > 1e-9 && lots.length > 0) {
+        const lot = lots[0]!;
+        const take = Math.min(left, lot.units);
+        lot.cost -= lot.units > 0 ? lot.cost * (take / lot.units) : lot.cost;
+        lot.units -= take;
+        left -= take;
+        if (lot.units <= 1e-9) lots.shift();
+      }
     }
-    held.push({ date: t.date, units, invested });
+    held.push({
+      date: t.date,
+      units: lots.reduce((a, l) => a + l.units, 0),
+      invested: lots.reduce((a, l) => a + l.cost, 0),
+      net,
+    });
   }
   for (const d of dates ? dates.filter((x) => x >= start) : monthEnds(start, today)) {
     const hold = lastOnOrBefore(held, d);
     const nav = lastOnOrBefore(h.navs, d, 12);
     if (hold && nav) {
-      points.push({ date: d, value: hold.units * nav.nav, invested: hold.invested });
+      points.push({ date: d, value: hold.units * nav.nav, invested: hold.invested, net: hold.net });
       continue;
     }
     const snap = lastOnOrBefore(h.snapshots, d);
@@ -119,6 +138,7 @@ export function fundSeries(
         date: today,
         value: current.value,
         invested: current.invested ?? last.invested,
+        ...(last.net !== undefined ? { net: last.net } : {}),
       };
     else points.push({ date: today, value: current.value, invested: current.invested });
   }
@@ -134,6 +154,8 @@ export function combineSeries(all: SeriesPoint[][]): SeriesPoint[] {
     let invested = 0;
     let known = 0;
     let anyInvested = false;
+    let net = 0;
+    let anyNet = false;
     for (const s of all) {
       const p = lastOnOrBefore(s, d);
       if (!p) continue;
@@ -143,12 +165,16 @@ export function combineSeries(all: SeriesPoint[][]): SeriesPoint[] {
         invested += p.invested;
         anyInvested = true;
       }
+      // a fund with no ledger counts its cost as the money in
+      if (p.net !== undefined) anyNet = true;
+      net += p.net ?? p.invested ?? 0;
     }
     if (known > 0)
       out.push({
         date: d,
         value: Math.round(value),
         invested: anyInvested ? Math.round(invested) : null,
+        ...(anyNet ? { net: Math.round(net) } : {}),
       });
   }
   return out;

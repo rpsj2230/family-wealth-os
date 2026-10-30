@@ -19,7 +19,7 @@ test.describe('Deposits: the overview (public sample)', () => {
     await expect(
       p.getByRole('heading', { name: /Current value of fixed deposits/, level: 2 }),
     ).toBeVisible();
-    await expect(p.getByTestId('dv-current')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
+    await expect(p.getByTestId('dv-current')).toHaveText(/^₹\d{1,2}(,\d\d)*,\d{3}$/);
     for (const label of [
       'Invested (principal)',
       'Current value',
@@ -34,12 +34,12 @@ test.describe('Deposits: the overview (public sample)', () => {
       'XIRR',
       'Next maturity',
       'Largest bank',
-      'Above the insured limit',
+      'Above insured limit',
     ]) {
       await expect(p.getByText(label, { exact: false }).first()).toBeVisible();
     }
-    await expect(p.getByText('est.', { exact: true })).toBeVisible();
-    await expect(p.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
+    await expect(p.locator('.hl-asof')).toContainText('· est.');
+    await expect(p.locator('.hl-pill.up .sr-only').first()).toHaveText(/Up/);
     expect(await p.getByTestId('dv-banks').locator('li').count()).toBeGreaterThan(0);
     expect(await p.getByTestId('dv-ladder').locator('li').count()).toBeGreaterThan(0);
     // savings are not part of this overview

@@ -2,24 +2,24 @@
  * The one place that works out what a holding earned in a stretch of time: the last day or N days, this month, this quarter, this
  * financial year, the last financial year, since the start. Home, the Deposits, Cash and Accounts overviews ("earned today"), the
  * interest by financial year in Reports and the Investments profit-and-loss all take their period figures from here or are tested to
- * agree with it. Worked out from the terms of each holding, never from saved snapshots of net worth. Money put in or taken out is not
+ * agree with it. Worked out from the terms of each holding, never from saved snapshots of net worth. Invested or taken out is not
  * profit; it is counted separately so a new deposit, a fund purchase or a payout never looks like a gain or a loss.
  *
  * Periods. A period runs from the start of its `from` day to the start of its `to` day (a period that ends today ends now, `to` =
- * today). `through` is its last day. A sum moved on any day from `from` to `through` is money put in or taken out in the period. So a
+ * today). `through` is its last day. A sum moved on any day from `from` to `through` is invested or taken out in the period. So a
  * 30-day period spans 30 days of accrual, the last financial year ends where this one begins, and a deposit booked on 1 April is
- * money put in during the year that starts on 1 April.
+ * invested during the year that starts on 1 April.
  *
  * What each kind of holding is worth at a moment:
  *  - Fixed deposit: its value at the start of that day on its own terms (fdValueOn). The profit is the interest accrued in the period.
  *    A deposit booked inside the period starts at its principal on its booking date; one that left the class (paid out, closed,
- *    renewed) adds its interest up to the day it left, and the payout is money taken out, not profit. A renewal is a new deposit.
+ *    renewed) adds its interest up to the day it left, and the payout is money withdrawn, not profit. A renewal is a new deposit.
  *  - Mutual fund: its value on the last day before the period (units held then times the last price on or before it) and on its last
  *    day (today: the figure Investments shows), as `fundSeries` works them out. The profit is the change in value less net purchases
- *    in between. Sales are money taken out, so a gain already booked by selling is part of the profit of the period it was sold in. A
+ *    in between. Sales are money withdrawn, so a gain already booked by selling is part of the profit of the period it was sold in. A
  *    fund with no statement is rebuilt from its plan, and marked estimated, as are units assumed from a SIP plan. A fund with no
  *    ledger at all (only monthly values) is moved from each value with its price and its planned SIP instalments (position.ts); when
- *    the next value arrives, what it differs from that by is not money earned and not money put in by the plan: it is carried apart
+ *    the next value arrives, what it differs from that by is not money earned and not invested by the plan: it is carried apart
  *    (`unexplained`) and taken out of the profit of the period it falls in, so the day a monthly value is entered never reads as a gain.
  *  - Savings and cash: the interest the recorded balance earns at the account's rate after the tax taken at source, the last recorded
  *    balance carried forward until the next record. Deposits into and withdrawals from the account are not profit. Always an
@@ -28,7 +28,7 @@
  *
  * The per cent is of the money at work: the value at the start plus each sum put in for the days it was there (Modified Dietz), less
  * each sum taken out for the days it was gone. With no money moved that is exactly the value at the start. "Since the start" has no
- * value to start from, so a deposit or fund is measured against all the money put in. Pure; no I/O.
+ * value to start from, so a deposit or fund is measured against all the amount invested. Pure; no I/O.
  */
 import { daysBetween, type Compounding } from './fd';
 import { depositOn, payoutSchedule, type Payout } from './deposit-contract';
@@ -199,10 +199,10 @@ export interface ClassPeriod {
   /** worth at the start of the period and at its end, of what was held then */
   startValue: number;
   endValue: number;
-  /** money added in the period (a new deposit, a fund purchase) and money taken out (a payout, a sale) */
+  /** money added in the period (a new deposit, a fund purchase) and money withdrawn (a payout, a sale) */
   putIn: number;
   takenOut: number;
-  /** the money at work: the value at the start plus money put in and less money taken out, each for the part of the period it counts */
+  /** the money at work: the value at the start plus invested and less money withdrawn, each for the part of the period it counts */
   base: number;
   /** some of the figure rests on an estimate: a rate, an assumed instalment, a plan */
   estimated: boolean;
@@ -304,7 +304,7 @@ const contractOfTerms = (d: DepositTerms) => ({
 /**
  * The day the deposit's money left the class: the day its proceeds were placed (a plan from deposit-contract.ts), else (no plan) the day
  * it was paid out or closed or its maturity date, never later than today; null while it is still counted (running, or proceeds
- * awaiting confirmation). It is still in the class at the start of that day: the sum leaving on it is money taken out that day.
+ * awaiting confirmation). It is still in the class at the start of that day: the sum leaving on it is money withdrawn that day.
  */
 function leftOn(d: DepositTerms, today: string): string | null {
   if (d.placedOn !== undefined) {
@@ -339,7 +339,7 @@ export function depositPeriod(deposits: DepositTerms[], w: Span, today: string):
     if (d.bookedOn <= w.through && (left === null || left > w.through))
       end += depositValueAt(d, w.to);
     if (inside(d.bookedOn, w)) flows.push({ date: d.bookedOn, amount: d.principal });
-    // interest paid out to an account has left the deposit: earned, and money taken out of the class
+    // interest paid out to an account has left the deposit: earned, and money withdrawn of the class
     for (const p of payoutSchedule(contractOfTerms(d)))
       if (
         p.date < d.maturityOn &&
@@ -365,13 +365,13 @@ export interface FundHolding {
   value: number;
   /** worth on each day that is measured (see periodDates), oldest first, as the fund's own series works it out */
   points: { date: string; value: number }[];
-  /** money put in (positive) and taken out (negative): the fund's own cash flows, from its statement or its plan */
+  /** invested (positive) and taken out (negative): the fund's own cash flows, from its statement or its plan */
   flows: Flow[];
   /** transactions of a fund statement are on file; without, the flows and values come from the plan */
   hasStatement: boolean;
   /**
    * Days a new monthly value differed from what the last one, moved with the price and the planned instalments, predicted (signed
-   * rupees; a fund with only monthly values): not profit and not money put in. Left out of the profit of the period they fall in.
+   * rupees; a fund with only monthly values): not profit and not invested. Left out of the profit of the period they fall in.
    */
   steps?: { date: string; amount: number }[];
   /** where the fund's value comes from: its transaction ledger, units rebuilt from its SIP plan, or (last resort) a value on file moved with the price */
@@ -622,7 +622,7 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
   /**
    * One cell for every period. "Since the start" begins on the day that kind of holding was first held, not on the family's first
    * record, so a deposit made last year is not measured over the years a fund has run. With `againstPutIn` its per cent is of all
-   * the money put in (there was no value at the start to measure against).
+   * the amount invested (there was no value at the start to measure against).
    */
   const byClass = (
     sinceDay: string | null,
@@ -731,7 +731,7 @@ export function periodGains(i: PeriodGainsInput): PeriodGains {
 }
 
 // ------------------------------------------------------------------------------------------------
-// The words about how far fund gains can be trusted
+// The words about how far fund profit can be trusted
 // ------------------------------------------------------------------------------------------------
 export interface FundLedgerNote {
   /** show the note: more funds than the Settings threshold have no transaction ledger */
@@ -744,7 +744,7 @@ export interface FundLedgerNote {
 }
 
 /**
- * "Fund gains are approximate until you import your fund statements (3 of 26 funds have no transaction ledger)". Shown while more
+ * "Fund profit is approximate until you import your fund statements (3 of 26 funds have no transaction ledger)". Shown while more
  * funds than `above` (Settings, default 0 = any) have only monthly values or a plan and no transactions; after a statement is imported
  * those funds are exact and no longer counted, and the note goes when none is left.
  */
@@ -758,7 +758,7 @@ export function fundLedgerNote(
     show: without > Math.max(0, above),
     without,
     of,
-    text: `Fund gains are approximate until you import your fund statements (${without} of ${of} ${of === 1 ? 'fund has' : 'funds have'} no transaction ledger)`,
+    text: `Fund profit is approximate until you import your fund statements (${without} of ${of} ${of === 1 ? 'fund has' : 'funds have'} no transaction ledger)`,
   };
 }
 

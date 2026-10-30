@@ -2,6 +2,60 @@
 
 For Rupash and Ragini. Everything here describes what the app does today. Items marked _(waiting)_ need something from you first (see `docs/NEEDS-FROM-YOU.md`).
 
+## Money words
+
+Every page, table, download, the daily e-mail and the WhatsApp text use the same words, each with the same "?" text. They come from one list in the code (`packages/core/src/terms.ts`), and a test fails if a page uses an old word ("put in", "value today", "worth today", "value now", "amount invested now", "gain" for profit, CAGR). The Tax pages keep the Income Tax words (short-term and long-term capital gains).
+
+There are two pictures of money, never mixed:
+
+- **The family:** Own money + Lifetime profit = Net worth, with **XIRR on own money**. Property is not counted unless Settings > Count property in net worth is on; money lent is counted.
+- **What you hold:** Invested + Profit = Current value, with the **Overall return** (Profit ÷ Invested) and the **XIRR** of each kind of holding (deposits, funds; savings show the **Rate earned**).
+
+Every percentage says what kind it is: **overall** (total growth, however long it took), **a year** (a yearly rate such as XIRR), **for the period**, or **of …** (a share). Only returns and changes carry + or − and green or red.
+
+| Term | What it means (the "?" text) |
+| --- | --- |
+| **Net worth** | Everything the family owns today at its current value, less anything owed. Property is not counted unless Settings says so. |
+| **Own money** | Money that came into the family from outside (transfers from abroad, salary, gifts, and what you held on the first day of records), less money withdrawn to spend. Interest and profit are never part of it. |
+| **Lifetime profit** | Everything your own money has earned since records began: Net worth − Own money. |
+| **XIRR on own money** | The yearly rate the family’s own money has earned since records began, counting when each rupee came in and went out. Savings and time waiting in savings are included. |
+| **Overall return on own money** | Lifetime profit as a share of Own money: total growth, however long it took. Not a yearly rate. |
+| **Earning rate now** | What all your money earns a year at today’s rates: deposits and funds at their XIRR, savings at the rate earned this year, money lent at 0%. |
+| **Current value** | What it is worth now. |
+| **Invested** | What the deposits and fund units you hold today cost. Units you sold are not in it. A deposit renewed with its interest counts at its new amount. |
+| **Invested (principal)** | The amount each running deposit was booked with. A deposit renewed with its interest counts at its new amount, so earlier interest can be inside it. |
+| **Balance** | The last balance the bank showed, with its date. |
+| **Profit** | What your holdings have gained on top of what they cost: Current value − Invested. |
+| **Profit (interest earned)** | The interest the deposits have earned and still hold: Current value − Invested. Interest already paid out is Booked profit. |
+| **Overall return** | Profit as a share of Invested: total growth, however long it took. Not a yearly rate. |
+| **XIRR** | Your profit as a yearly rate, counting when each rupee went in and came out. Comparable with an FD rate. |
+| **Booked profit** | Profit already taken: gains on fund units sold, and interest paid out to your account. |
+| **Total profit** | Profit + Booked profit. |
+| **Today’s change** | How much the value moved since the previous day. Money you added or took out is not counted. |
+| **Earned** | Profit made in the period shown, with money added or withdrawn left out. Profit from sales in the period is included. |
+| **Earned this FY** | Profit made since 1 April, with money added or withdrawn left out: interest, fund gains, exchange-rate moves and other income. |
+| **Added** | Money that went in during the period. |
+| **Withdrawn** | Money that came out during the period. |
+| **Maturity value** | What the deposit pays on its maturity date: the bank’s figure, otherwise worked out from its terms. |
+| **Interest still to come** | Maturity value − Current value. |
+| **Total interest** | Maturity value − Invested: all the interest over the deposit’s term. |
+| **Interest earned** | Interest for the period shown, whether credited, paid out or still building up. |
+| **Interest rate** | The yearly rate on the deposit’s or account’s contract, from the bank. |
+| **Rate earned** | Interest earned this financial year as a yearly rate on today’s balance. |
+| **Average interest rate** | The rates of all the deposits (or accounts) shown, weighted by how much is in each. |
+| **Rate after tax** | The interest rate after Indian tax: NRE interest is tax-free, NRO interest is taxed at the rate in Settings. |
+| **Available within 30 days** | Savings and cash plus deposits maturing in the next 30 days. |
+| **Maturing in 90 days** | The principal of deposits that mature in the next 90 days. |
+| **Above the insured limit** | Deposits and balances over the insured limit per bank per name, which deposit insurance does not cover. |
+| **NRE · NRO** | Bank money in NRE accounts (interest tax-free) and NRO accounts (interest taxed in India). |
+| **Units** | The fund units you hold. |
+| **NAV** | The price of one unit. |
+| **Average cost** | Invested ÷ Units. |
+| **Fund return** | How the fund’s NAV moved over the period: the fund’s own performance, not yours. |
+| **Benchmark** | The index the fund is measured against, from its scheme documents. Named under each chart. |
+| **SIP status** | The monthly instalment and its status: Running, Paused until a date, Stopped, or None. |
+| **Long-term share** | The share of the equity value held long enough to be taxed as long-term. |
+
 ## What the numbers mean
 
 - **Verified** is the last balance you entered or an official statement showed, with its date.
@@ -29,8 +83,14 @@ The whole figure is then **Complete**, **Partly estimated**, **Estimated** or **
 
 The first page answers, from the top down:
 
-1. **What are we worth?** The big number is net worth in lakhs and crores with the exact rupees under it. Beside it, **How much is verified** shows the share of that value that was recorded recently and confirmed, or worked out from a deposit's own terms (the rest is older, or imported and not yet confirmed). Beneath the number are three figures, each with an arrow and a word: **Today** (an estimate: interest earned since yesterday at each rate plus the move in fund prices), the **last 30 days** and **this financial year** (from 1 April). The last two are what your holdings **earned** in that time (interest, fund price moves, exchange-rate moves), not the change in net worth, so money you added or took out is never in them. Each says where its period really begins ("since 28 Sep 2026", "since 1 Apr 2026") and how many of your holdings it rests on ("86 of 100 holdings had a value then"), and under it, in smaller type, how far net worth itself moved (money added or taken out included). Only when there is no record at all before the start of a period does it say "data starts 3 Mar 2025". The 30 days is a setting.
-   Under the net worth are five **money figures**: **Total invested** (the money in deposits and funds: each deposit's amount and the cost of the fund units still held; savings and cash balances, shares, property and money lent are not "invested"), **Current value** (the same net worth), **Maturity value** (deposits at what they pay on their dates, everything else at today's value), **Profit so far** (what the deposits and funds are worth above that invested money: interest accrued on deposits plus the gain on the fund units held, in rupees and as a share of the money invested at cost; the tile says what the invested money is worth now) and **Earned today**. A mark **est.** (hover for the reason) is on every figure that rests on an estimate: interest at a rate, a fund price move, a plan. It is the same mark on every page.
+1. **The headline** (one dark panel) answers what you are worth and how it is growing:
+   - **Net worth** in full rupees, with two pills: **Today's change** and **Earned this FY** (profit since 1 April, your own transfers left out). Under it, the date, "est." and, when property is not counted, "Property ₹… not counted".
+   - **How is my money growing?** One strip of yearly rates: **All money** (Earning rate now: deposits and funds at their XIRR, savings at the rate earned this year, money lent at 0%), **Mutual funds** (XIRR), **Fixed deposits** (XIRR), **Savings** (rate earned this FY) and **Since 2017** (XIRR on own money). The mark on each bar is the inflation rate of your retirement plan.
+   - **Own money + Lifetime profit = Net worth**, with the overall return on own money; "Where the own money came from" opens the parts (opening balances, money sent from Singapore, other money in or out).
+   - Four tiles: **Fixed deposits** and **Mutual funds** (current value, profit with its overall return, XIRR), **Savings and cash** (interest earned this FY, rate earned), **Money lent and other**.
+   - **Also on this page:** Earned this FY by kind, **Available in 30 days** (savings plus deposits maturing), **Maturing in 90 days**, **Above insured limit**, and **NRE · NRO**.
+
+   Under the headline, **How much is verified** shows the share of net worth that was recorded recently and confirmed, or worked out from a deposit's own terms, with **Goals on track** and **Needs you**.
 
    Next come **four small cards**, one per kind of holding (**Fixed deposits**, **Mutual funds**, **Cash**, **Others**), that add up to the net worth. Each shows what is worth now, what was **invested**, what it has **earned so far** and the **profit so far** with an arrow and a word, and its share of the total; each links to its own page. Fixed deposits: invested is the amount of each deposit and the value is its accrued value today. Mutual funds: invested is the money still in the funds (the cost of the units held, as Investments shows it) and the value is units times the latest price, with SIP instalments assumed since the last statement. Cash: invested is the last balance recorded and the profit is the interest estimated since, at the account's own rate, else the Rates list, else the assumed rate in Settings, after the tax taken at source. Others (shares, property, money lent, held by others, pension accounts): shown at the value you recorded, with no profit unless a recorded value has moved on from what was recorded. **Earned so far** also counts interest from deposits already paid out and gains from units already sold, so it can be more than the profit on what you still hold. **How these are worked out** under the cards says all of this.
 
@@ -147,7 +207,13 @@ First time: **Settings > Connections > Google Sheet** has the steps (create a fr
 
 ## Cash, and the total on Accounts
 
-**Cash** (the *Savings and cash* tile on Accounts opens it) is to savings what Deposits is to fixed deposits: the cash available today, what the balances are estimated to earn (a year, a month, a day), which bank holds how much with each bank's share and average rate, the balances that are out of date, the largest balance, the split by person and by NRE and NRO, and a register of every savings account with its rate, last recorded balance, value today and interest a year. The person filter narrows all of it. Interest is an estimate: balance times rate, less the tax at source set in Settings.
+**Accounts and Deposits open with the same dark headline as Home.**
+- **Accounts:** Current value in banks with Today's change and Interest earned this FY, then **How is my bank money growing?** (all bank money, deposits XIRR, savings rate earned). Tiles for Fixed deposits (invested, profit, overall %, XIRR), Savings and cash, **Average interest rate** (NRE tax-free, NRO with the rate after tax), Maturity value with the interest still to come, and what matures soon. Under "Also on this page": above the insured limit, **Savings vs deposits** (what the savings would earn more a year at your average deposit rate) and NRE · NRO · other. These rates are worked out by the same ledger as Home, so the two pages always agree.
+- **Deposits:** Current value of fixed deposits with **Profit (interest earned)** and Today's change, tiles for Invested (principal), Maturity value with the total interest and how much of it is earned so far, Interest still to come, Interest earned this FY (NRO part taxable), Average interest rate and what matures soon, and under "Also on this page" the insured limit, the **XIRR** of the deposits, the next maturity, deposits to confirm and the largest bank.
+- **Investments:** Current value of mutual funds with Profit (overall return and XIRR) and Today's change across the top, the Invested and Profit ring and the value chart under them, the figures of the funds, and under "Also on this page" the Regular plans that pay a yearly commission, where the funds are held and a link to the benchmarks.
+
+
+**Cash** (the *Savings and cash* tile on Accounts opens it) is to savings what Deposits is to fixed deposits: the cash available today, what the balances are estimated to earn (a year, a month, a day), which bank holds how much with each bank's share and average rate, the balances that are out of date, the largest balance, the split by person and by NRE and NRO, and a register of every savings account with its rate, last recorded balance, current value and interest a year. The person filter narrows all of it. Interest is an estimate: balance times rate, less the tax at source set in Settings.
 
 The total on Cash stays all the cash in rupees. A foreign-currency account is counted in it at today's rate and its balance is listed on its own under the total (`S$ 41,250`, then `≈ ₹23.14 L at 1 SGD = ₹56.1, rate of 26 Oct`); in the register of accounts a foreign account shows its balance in its own currency, and under the rupee value the rate it is worth at.
 

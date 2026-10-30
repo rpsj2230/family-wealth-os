@@ -117,157 +117,159 @@ export function RegisterTab({
         <h2 id="reg">All fixed deposits</h2>
         <span className="small muted">Soonest maturity first. Open a deposit for its history.</span>
       </div>
-      <table className="tbl lines responsive">
-        <thead>
-          <tr>
-            <th>Deposit</th>
-            <th>Created</th>
-            <th className="num">Principal</th>
-            <th className="num">Value today</th>
-            <th>Rate</th>
-            <th>Matures</th>
-            <th className="num">At maturity</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((g) => (
-            <Fragment key={g.key}>
-              {group !== 'none' && (
-                <tr className="secthead">
-                  <td colSpan={7}>
-                    <strong>{g.label}</strong>{' '}
-                    <span className="muted small">
-                      {g.list.length} deposit{g.list.length === 1 ? '' : 's'} · put in{' '}
-                      {rupee(g.list.reduce((a, f) => a + f.principal, 0))} · worth today{' '}
-                      {rupee(g.list.reduce((a, f) => a + f.accruedToday, 0))} · pays{' '}
-                      {rupee(g.list.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))} at maturity
-                    </span>
-                  </td>
-                </tr>
-              )}
-              {g.list.map((f) => {
-                const bank = links.bank(f);
-                const check =
-                  f.varianceVsBankPct !== null && Math.abs(f.varianceVsBankPct) > 0.05
-                    ? f.varianceVsBankPct
-                    : null;
-                return (
-                  <tr
-                    key={f.id}
-                    className={
-                      f.listState === 'hidden' || (f.status !== 'active' && !needsConfirmation(f))
-                        ? 'dim'
-                        : ''
-                    }
-                    {...(f.status === 'active' && !needsConfirmation(f)
-                      ? {}
-                      : { 'data-nosum': '' })}
-                  >
-                    <td data-label="Deposit">
-                      <PersonBadge p={styles[f.ownerId]} size={16} />{' '}
-                      <Link href={links.asset(f)}>
-                        <strong>{f.bank}</strong>
-                      </Link>{' '}
-                      <span className="muted">· {f.owner}</span>
-                      <div className="muted small">
-                        {KIND[f.kind] ?? f.kind}
-                        {f.status !== 'active' || needsConfirmation(f) ? (
-                          <>
-                            {' · '}
-                            <span className={needsConfirmation(f) ? 'pill warn' : ''}>
-                              {depositStatusWord(f)}
-                            </span>
-                          </>
-                        ) : null}
-                        {bank && (
-                          <>
-                            {' · '}
-                            <Link href={bank}>bank page</Link>
-                          </>
-                        )}
-                      </div>
-                      {f.listState === 'confirm' && (
-                        <div className="small">
-                          <span className="muted">{maturedNote(!!f.proceedsAwaiting)}.</span>{' '}
-                          <ConfirmMatured assetId={f.id} name={f.bank} sample={links.sample} />
-                        </div>
-                      )}
-                    </td>
-                    <td className="nowrap" data-label="Created">
-                      {niceDate(f.bookedOn)}
-                    </td>
-                    <td className="num" data-label="Principal">
-                      {rupee(f.principal)}
-                    </td>
-                    <td className="num" data-label="Value today">
-                      {f.status === 'active' && !needsConfirmation(f) ? (
-                        rupee(f.accruedToday)
-                      ) : f.proceedsAwaiting ? (
-                        <span title="Matured: counted once in net worth until you say where the money went">
-                          {rupee(f.accruedToday)}
-                          <div className="small" style={{ color: 'var(--warn-fg)' }}>
-                            awaiting confirmation
-                          </div>
-                        </span>
-                      ) : (
-                        <span
-                          className="muted"
-                          title="Not counted: the money is probably already in another account or a new deposit"
-                        >
-                          {rupee(f.accruedToday)}
-                          <div className="small">not counted</div>
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Rate">{(f.rate * 100).toFixed(2)}%</td>
-                    <td data-label="Matures">
-                      {niceDate(f.maturityOn)}
-                      <div className="muted small">{daysPhrase(f.daysLeft)}</div>
-                    </td>
-                    <td className="num" data-label="At maturity">
-                      {f.bankMaturity === null ? (
-                        <>
-                          –<div className="muted small wrapnote">bank figure not entered</div>
-                        </>
-                      ) : (
-                        <>
-                          {rupee(f.bankMaturity)}
-                          <div className="muted small wrapnote">bank figure</div>
-                        </>
-                      )}
-                      {check !== null && (
-                        <div className="fail small wrapnote">
-                          Our calculation differs by {Math.abs(check).toFixed(2)}%.{' '}
-                          <Link href={links.editOne(f)}>Check the rate and dates</Link>
-                        </div>
-                      )}
+      <div className="xlwrap">
+        <table className="tbl lines responsive">
+          <thead>
+            <tr>
+              <th>Deposit</th>
+              <th>Created</th>
+              <th className="num">Principal</th>
+              <th className="num">Current value</th>
+              <th>Rate</th>
+              <th>Matures</th>
+              <th className="num">Maturity value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <Fragment key={g.key}>
+                {group !== 'none' && (
+                  <tr className="secthead">
+                    <td colSpan={7}>
+                      <strong>{g.label}</strong>{' '}
+                      <span className="muted small">
+                        {g.list.length} deposit{g.list.length === 1 ? '' : 's'} · invested{' '}
+                        {rupee(g.list.reduce((a, f) => a + f.principal, 0))} · current value{' '}
+                        {rupee(g.list.reduce((a, f) => a + f.accruedToday, 0))} · pays{' '}
+                        {rupee(g.list.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))} at maturity
+                      </span>
                     </td>
                   </tr>
-                );
-              })}
-            </Fragment>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr data-totals className="sumrow">
-            <th scope="row" data-count>
-              Total · <span data-count-n>{counted.length}</span> running deposits
-            </th>
-            <td />
-            <td className="num" data-sum>
-              {rupee(counted.reduce((a, f) => a + f.principal, 0))}
-            </td>
-            <td className="num" data-sum>
-              {rupee(counted.reduce((a, f) => a + f.accruedToday, 0))}
-            </td>
-            <td data-wavg="2">{pctOf(counted)}</td>
-            <td />
-            <td className="num" data-sum>
-              {rupee(counted.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+                )}
+                {g.list.map((f) => {
+                  const bank = links.bank(f);
+                  const check =
+                    f.varianceVsBankPct !== null && Math.abs(f.varianceVsBankPct) > 0.05
+                      ? f.varianceVsBankPct
+                      : null;
+                  return (
+                    <tr
+                      key={f.id}
+                      className={
+                        f.listState === 'hidden' || (f.status !== 'active' && !needsConfirmation(f))
+                          ? 'dim'
+                          : ''
+                      }
+                      {...(f.status === 'active' && !needsConfirmation(f)
+                        ? {}
+                        : { 'data-nosum': '' })}
+                    >
+                      <td data-label="Deposit">
+                        <PersonBadge p={styles[f.ownerId]} size={16} />{' '}
+                        <Link href={links.asset(f)}>
+                          <strong>{f.bank}</strong>
+                        </Link>{' '}
+                        <span className="muted">· {f.owner}</span>
+                        <div className="muted small">
+                          {KIND[f.kind] ?? f.kind}
+                          {f.status !== 'active' || needsConfirmation(f) ? (
+                            <>
+                              {' · '}
+                              <span className={needsConfirmation(f) ? 'pill warn' : ''}>
+                                {depositStatusWord(f)}
+                              </span>
+                            </>
+                          ) : null}
+                          {bank && (
+                            <>
+                              {' · '}
+                              <Link href={bank}>bank page</Link>
+                            </>
+                          )}
+                        </div>
+                        {f.listState === 'confirm' && (
+                          <div className="small">
+                            <span className="muted">{maturedNote(!!f.proceedsAwaiting)}.</span>{' '}
+                            <ConfirmMatured assetId={f.id} name={f.bank} sample={links.sample} />
+                          </div>
+                        )}
+                      </td>
+                      <td className="nowrap" data-label="Created">
+                        {niceDate(f.bookedOn)}
+                      </td>
+                      <td className="num" data-label="Principal">
+                        {rupee(f.principal)}
+                      </td>
+                      <td className="num" data-label="Current value">
+                        {f.status === 'active' && !needsConfirmation(f) ? (
+                          rupee(f.accruedToday)
+                        ) : f.proceedsAwaiting ? (
+                          <span title="Matured: counted once in net worth until you say where the money went">
+                            {rupee(f.accruedToday)}
+                            <div className="small" style={{ color: 'var(--warn-fg)' }}>
+                              awaiting confirmation
+                            </div>
+                          </span>
+                        ) : (
+                          <span
+                            className="muted"
+                            title="Not counted: the money is probably already in another account or a new deposit"
+                          >
+                            {rupee(f.accruedToday)}
+                            <div className="small">not counted</div>
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="Rate">{(f.rate * 100).toFixed(2)}%</td>
+                      <td data-label="Matures">
+                        {niceDate(f.maturityOn)}
+                        <div className="muted small">{daysPhrase(f.daysLeft)}</div>
+                      </td>
+                      <td className="num" data-label="Maturity value">
+                        {f.bankMaturity === null ? (
+                          <>
+                            –<div className="muted small wrapnote">bank figure not entered</div>
+                          </>
+                        ) : (
+                          <>
+                            {rupee(f.bankMaturity)}
+                            <div className="muted small wrapnote">bank figure</div>
+                          </>
+                        )}
+                        {check !== null && (
+                          <div className="fail small wrapnote">
+                            Our calculation differs by {Math.abs(check).toFixed(2)}%.{' '}
+                            <Link href={links.editOne(f)}>Check the rate and dates</Link>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr data-totals className="sumrow">
+              <th scope="row" data-count>
+                Total · <span data-count-n>{counted.length}</span> running deposits
+              </th>
+              <td />
+              <td className="num" data-sum>
+                {rupee(counted.reduce((a, f) => a + f.principal, 0))}
+              </td>
+              <td className="num" data-sum>
+                {rupee(counted.reduce((a, f) => a + f.accruedToday, 0))}
+              </td>
+              <td data-wavg="2">{pctOf(counted)}</td>
+              <td />
+              <td className="num" data-sum>
+                {rupee(counted.reduce((a, f) => a + (f.bankMaturity ?? 0), 0))}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </section>
   );
 }

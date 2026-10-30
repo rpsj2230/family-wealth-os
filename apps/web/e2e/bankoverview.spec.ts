@@ -19,9 +19,8 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     await expect(
       p.getByRole('heading', { name: /Current value in banks/, level: 2 }),
     ).toBeVisible();
-    // the big figure is in lakh/crore form with the full amount in Indian grouping beneath it
-    await expect(p.getByTestId('bv-current')).toHaveText(/^₹\d+\.\d\d (Cr|L)$/);
-    await expect(p).toContainText(/₹\d{1,2},\d\d,\d\d,\d{3}/);
+    // the big figure is the full amount in Indian grouping
+    await expect(p.getByTestId('bv-current')).toHaveText(/^₹\d{1,2}(,\d\d)*,\d{3}$/);
     for (const label of [
       'Invested',
       'Current value',
@@ -37,15 +36,15 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
       'Interest still to come',
       'Average interest rate',
       'Largest bank',
-      'Above the insured limit',
+      'Above insured limit',
       'Whose money',
       'NRE and NRO',
     ]) {
       await expect(p.getByText(label, { exact: false }).first()).toBeVisible();
     }
     // today's earning says it is an estimate; profit is marked with an arrow and a word for a screen reader
-    await expect(p.getByText('est.', { exact: true }).first()).toBeVisible();
-    await expect(p.locator('.bv-delta.up .sr-only').first()).toHaveText(/Up/);
+    await expect(p.locator('.hl-asof')).toContainText('· est.');
+    await expect(p.locator('.hl-pill.up .sr-only').first()).toHaveText(/Up/);
     // the window for "maturing in" comes from Settings (30 days by default), it is not written into the page
     await expect(p.getByText(/Maturing in 30 days/)).toBeVisible();
     // the bars have a text alternative that names every share

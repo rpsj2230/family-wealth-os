@@ -248,3 +248,25 @@ describe('navChart and units', () => {
     ]);
   });
 });
+
+describe('periodChange counts booked profit in Earned', () => {
+  it('uses money added less withdrawn when the series has it', () => {
+    // bought 10,000; half sold for 6,000 (1,000 profit booked); the rest worth 6,000 at the end
+    const c = periodChange([
+      { date: '2026-01-01', value: 10_000, invested: 10_000, net: 10_000 },
+      { date: '2026-03-31', value: 6_000, invested: 5_000, net: 4_000 },
+    ])!;
+    expect(c.netIn).toBe(-6_000);
+    // Earned = change in value − (added − withdrawn) = −4,000 + 6,000 = 2,000: 1,000 booked + 1,000 on the units held
+    expect(c.gain).toBe(2_000);
+  });
+
+  it('falls back to the change in cost held without it', () => {
+    const c = periodChange([
+      { date: '2026-01-01', value: 10_000, invested: 10_000 },
+      { date: '2026-03-31', value: 12_000, invested: 11_000 },
+    ])!;
+    expect(c.netIn).toBe(1_000);
+    expect(c.gain).toBe(1_000);
+  });
+});

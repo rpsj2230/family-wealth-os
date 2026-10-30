@@ -70,7 +70,7 @@ const NODE = 14;
 
 const ROLE_LABEL: Record<FlowRole, string> = {
   singapore: 'Money from Singapore',
-  earning: 'Interest and gains',
+  earning: 'Interest and profit',
   source: 'Other starting points',
   account: 'Bank accounts',
   deposit: 'Fixed deposits',

@@ -8,6 +8,7 @@
  * figure has an arrow and a sign, every state a word. Nothing is pure white or pure black, so a client that darkens the page by
  * itself keeps the text readable.
  */
+import { TERMS } from './terms';
 import { DEFAULT_CONFIG } from './config';
 import type { DigestInput } from './digest';
 import {
@@ -468,10 +469,10 @@ function buildHtml(m: Model): string {
 <div class="mu" style="font:13px/18px ${FONT};color:${L.mute}">${esc(inrExact(m.total))}${i.wealth ? '' : ' · estimated'}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px"><tr>
 <td valign="top" width="50%" style="padding-right:8px"><div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">${esc(m.todayLabel)}</div><div style="padding-top:2px">${heroToday}</div></td>
-<td valign="top" width="50%"><div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">Overall profit / loss</div><div style="padding-top:2px">${heroOverall}</div></td></tr></table>
+<td valign="top" width="50%"><div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">${esc(TERMS.profit.label)} (overall)</div><div style="padding-top:2px">${heroOverall}</div></td></tr></table>
 ${
   o
-    ? `<div class="mu" style="font:12px/17px ${FONT};color:${L.mute};padding-top:8px">Overall profit or loss is on the ${esc(inr(o.invested))} you put in (deposit principal, fund cost), the same figure as on Home${o.estimated ? '; partly an estimate' : ''}.${m.month ? ` Last 30 days: <span class="${toneClass(tone(m.month.amount))}" style="color:${toneColor(tone(m.month.amount))};font-weight:700">${esc(signedInr(m.month.amount))}${m.month.pct !== null ? ` (${esc(signedPct(m.month.pct))})` : ''}</span>.` : ''}</div>`
+    ? `<div class="mu" style="font:12px/17px ${FONT};color:${L.mute};padding-top:8px">Profit on the ${esc(inr(o.invested))} invested in deposits and funds (current value − invested)${o.estimated ? '; partly an estimate' : ''}. Lifetime profit on your own money is on Home.${m.month ? ` Earned, last 30 days: <span class="${toneClass(tone(m.month.amount))}" style="color:${toneColor(tone(m.month.amount))};font-weight:700">${esc(signedInr(m.month.amount))}${m.month.pct !== null ? ` (${esc(signedPct(m.month.pct))})` : ''}</span>.` : ''}</div>`
     : ''
 }
 </td></tr>`,
@@ -554,7 +555,7 @@ ${
           .join('')}</table>`,
       );
     rows.push(
-      section('What changed', card(parts.join('')), 'money added or taken out is part of a move'),
+      section('What changed', card(parts.join('')), 'money added or withdrawn is part of a move'),
     );
   }
   if (i.monthly) {

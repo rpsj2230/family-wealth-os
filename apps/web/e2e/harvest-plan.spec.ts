@@ -19,7 +19,7 @@ test.describe('Harvest plan (public sample)', () => {
       'Fund',
       'Units to sell',
       'Cost',
-      'Value now',
+      'Current value',
       'Long-term gain',
       'Sell by',
       'Buy back',

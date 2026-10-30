@@ -1,18 +1,9 @@
-import {
-  TERMS,
-  formatInr,
-  formatInrCompact,
-  formatPct,
-  sourceTag,
-  type ExplainSet,
-} from '@fwos/core';
-import { Delta, SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
+import { formatInrCompact, formatPct, sourceTag, type ExplainSet } from '@fwos/core';
+import { SplitBar, Stat, plural } from '@/app/(app)/accounts/BankOverview';
 import { UpdatedCell } from '@/components/BankTable';
-import { GrowthStrip } from '@/components/GrowthStrip';
 import { WhyHead } from '@/components/Why';
 import type { HomeModel } from '@/lib/home';
 import { niceDate } from '@/lib/dates';
-import { Capital } from './Movement';
 import { MaybeLink, homeLink } from './parts';
 
 /**
@@ -40,105 +31,24 @@ export function FundNote({
 }
 
 /**
- * The top of Home: what the family is worth, how it changed today, this month and this financial year, how much of that is
- * verified, and the few figures that say what to look at next. Every figure comes from buildHome(); this only draws it.
+ * Under the headline of Home: how much of the net worth is verified, the goals and what needs a person, and how the figures are worked
+ * out. Every figure comes from buildHome(); this only draws it.
  */
 export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: ExplainSet<'home'> }) {
   const to = (path: string) => homeLink(path, sample);
-  const link = (path: string) => {
-    const href = to(path);
-    return href ? { href } : {};
-  };
   const t = m.trust;
   const share = (n: number) => (t.total > 0 ? n / t.total : 0);
   const bad = m.attention.filter((a) => a.tone === 'bad').length;
-  const g = m.growth;
-  const x = m.extras;
-  const ef = x.earnedFy;
-  // the parts of Earned this FY, signed and short ("7.99 L"); a part under a rupee is left out
-  const part = (label: string, n: number) =>
-    Math.abs(n) < 1
-      ? null
-      : `${label} ${n < 0 ? '−' : ''}${formatInrCompact(Math.abs(n)).replace('₹', '')}`;
-  const since = g.own.since ? `Since ${g.own.since.slice(0, 4)}` : 'Own money';
+  const goals = to('/goals');
 
   return (
-    <section className="card hm-hero" aria-label="Net worth">
-      <div className="bv-top hm-top">
-        <div className="bv-hero">
-          <WhyHead why={ex['home.netWorth']}>
-            <h2 className="bv-eyebrow">{TERMS.netWorth.label}</h2>
-          </WhyHead>
-          <div className="bv-big" data-testid="hm-total">
-            {formatInrCompact(m.total)}
-          </div>
-          <div className="bv-exact">{whole(m.total)}</div>
-          <p className="bv-count">
-            as of {niceDate(m.today)} · est. · {plural(m.counted, 'holding')} of{' '}
-            {plural(m.people, 'person', 'people')}
-            {x.notCounted.count > 0 && (
-              <span data-testid="hm-not-counted">
-                {' '}
-                · Property {formatInrCompact(x.notCounted.amount)} not counted
-              </span>
-            )}
-          </p>
-        </div>
-
-        <div className="hm-deltas" aria-label="How net worth changed">
-          <Delta
-            label={TERMS.todayChange.label}
-            amount={m.change.today.amount}
-            pct={m.change.today.pct}
-            note="interest at each rate and fund prices, since yesterday; % of yesterday’s net worth"
-            estimate
-            why={ex['home.today']}
-          />
-          {ef ? (
-            <Delta
-              label={TERMS.earnedFy.label}
-              amount={ef.total}
-              pct={ef.pct}
-              note={`since ${niceDate(m.change.fyStart)}, your own transfers left out; % of net worth on that day`}
-              estimate
-              why={ex['home.earnedFy']}
-            />
-          ) : null}
-        </div>
-      </div>
-
+    <section className="card hm-hero" aria-label="How much is verified">
       <FundNote m={m} sample={sample} />
-
-      <GrowthStrip
-        title="How is my money growing?"
-        testId="hm-growth"
-        inflation={g.inflation}
-        items={[
-          {
-            key: 'all',
-            label: 'All money',
-            rate: g.all?.rate ?? null,
-            main: true,
-            why: ex['home.earningRate'],
-          },
-          { key: 'funds', label: 'Mutual funds', rate: g.funds, why: ex['home.fundsXirr'] },
-          { key: 'fd', label: 'Fixed deposits', rate: g.fd, why: ex['home.depositsXirr'] },
-          {
-            key: 'savings',
-            label: 'Savings',
-            rate: g.savings?.rate ?? null,
-            why: ex['home.savingsRate'],
-          },
-          { key: 'own', label: since, rate: g.own.rate, why: ex['home.xirr'] },
-        ]}
-      />
-
-      <Capital m={m} sample={sample} ex={ex} />
 
       <div className="hm-trust">
         <div>
           <WhyHead why={ex['home.verified']}>
-            <h3 className="bv-h">How much is verified</h3>
+            <h2 className="bv-h">How much is verified</h2>
           </WhyHead>
           <p className="hm-trust-line">
             <strong data-testid="hm-verified">{formatPct(t.verifiedShare, 0)}</strong> of the total
@@ -198,91 +108,32 @@ export function Hero({ m, sample, ex }: { m: HomeModel; sample: boolean; ex: Exp
         </div>
       </div>
 
-      <section className="hm-extras" aria-labelledby="hm-extras-h">
-        <h3 id="hm-extras-h" className="bv-h">
-          Also on this page
-        </h3>
-        <dl className="bv-grid">
-          <Stat
-            label={`${TERMS.earnedFy.label}, by kind`}
-            value={ef ? `${ef.total < 0 ? '−' : '+'}${formatInrCompact(Math.abs(ef.total))}` : '–'}
-            sub={
-              ef
-                ? [
-                    part('deposits', ef.deposits),
-                    part('funds', ef.funds),
-                    part('savings', ef.savings),
-                    part('other', ef.other),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')
-                : 'shows once the records reach this year'
-            }
-            why={ex['home.earnedFy']}
-          />
-          <Stat
-            label={TERMS.available30.label}
-            value={formatInrCompact(x.available30.total)}
-            sub={`savings ${formatInrCompact(x.available30.cash)} + deposits maturing ${formatInrCompact(x.available30.deposits)}`}
-            {...link('/raise')}
-            why={ex['home.free30']}
-          />
-          <Stat
-            label={TERMS.maturing90.label}
-            value={formatInrCompact(x.maturing90.principal)}
-            sub={
-              x.maturing90.count > 0
-                ? `${plural(x.maturing90.count, 'deposit')} · plan where it goes`
-                : 'no deposit matures in this time'
-            }
-            {...link('/deposits?tab=maturities')}
-            why={ex['home.maturing90']}
-          />
-          <Stat
-            label={TERMS.aboveInsured.label}
-            value={x.aboveInsured.amount > 0 ? formatInrCompact(x.aboveInsured.amount) : 'None'}
-            sub={
-              x.aboveInsured.amount > 0
-                ? `in ${plural(x.aboveInsured.banks, 'bank')} · limit ${formatInr(x.aboveInsured.limit)} per bank and name`
-                : `all within ${formatInr(x.aboveInsured.limit)} per bank and name`
-            }
-            tone={x.aboveInsured.amount > 0 ? 'warn' : undefined}
-            {...link('/deposits?tab=cover')}
-            why={ex['home.insured']}
-          />
-          <Stat
-            label={TERMS.nreNro.label}
-            value={`${formatInrCompact(x.nre)} · ${formatInrCompact(x.nro)}`}
-            sub="bank money · NRO interest is taxed"
-            {...link('/accounts')}
-            why={ex['home.nreNro']}
-          />
-          <Stat
-            label="Goals on track"
-            value={
-              <>
-                {m.goals.onTrack}
-                <span className="muted"> / {m.goals.withTarget}</span>
-              </>
-            }
-            sub={m.goals.list.length === 0 ? 'no goal yet' : 'see each goal'}
-            {...link('/goals')}
-            why={ex['home.goalsStat']}
-          />
-          <Stat
-            label="Needs you"
-            value={m.attention.length}
-            sub={
-              m.attention.length === 0
-                ? 'nothing waiting'
-                : `${bad > 0 ? `${bad} late or urgent · ` : ''}${plural(m.openTasks, 'open task')}`
-            }
-            tone={m.attention.length > 0 ? 'warn' : undefined}
-            href="#hm-needs"
-            why={ex['home.needsStat']}
-          />
-        </dl>
-      </section>
+      <dl className="bv-grid" aria-label="Goals and what needs you">
+        <Stat
+          label="Goals on track"
+          value={
+            <>
+              {m.goals.onTrack}
+              <span className="muted"> / {m.goals.withTarget}</span>
+            </>
+          }
+          sub={m.goals.list.length === 0 ? 'no goal yet' : 'see each goal'}
+          {...(goals ? { href: goals } : {})}
+          why={ex['home.goalsStat']}
+        />
+        <Stat
+          label="Needs you"
+          value={m.attention.length}
+          sub={
+            m.attention.length === 0
+              ? 'nothing waiting'
+              : `${bad > 0 ? `${bad} late or urgent · ` : ''}${plural(m.openTasks, 'open task')}`
+          }
+          tone={m.attention.length > 0 ? 'warn' : undefined}
+          href="#hm-needs"
+          why={ex['home.needsStat']}
+        />
+      </dl>
 
       <details className="bv-how">
         <summary>How these figures are worked out</summary>

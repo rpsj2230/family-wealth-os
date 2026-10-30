@@ -1,0 +1,246 @@
+/* The headline of Home (money words v6): one dark panel, the same in light and dark mode, sized by the width of the page area. */
+.hl {
+  --hl-fg: #fff;
+  --hl-soft: rgba(255, 255, 255, 0.78);
+  --hl-faint: rgba(255, 255, 255, 0.12);
+  --hl-line: rgba(255, 255, 255, 0.18);
+  --hl-pos: #7ef0b4;
+  --hl-neg: #ffb4a8;
+  --hl-warn-bg: rgba(255, 190, 80, 0.16);
+  --hl-warn-line: rgba(255, 190, 80, 0.45);
+  --hl-warn-fg: #ffd28a;
+  container-type: inline-size;
+  background: linear-gradient(135deg, #2b2370, #3b2f8f 60%, #4a3aa8);
+  color: var(--hl-fg);
+  border-radius: 16px;
+  padding: 18px 20px 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hl a {
+  color: inherit;
+}
+.hl .num {
+  font-variant-numeric: tabular-nums;
+}
+.hl-lbl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.hl-h {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hl-soft);
+}
+.hl-big {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-top: 2px;
+}
+.hl-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.hl-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  background: var(--hl-faint);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.9rem;
+}
+.hl-pill.up .hl-sig {
+  color: var(--hl-pos);
+}
+.hl-pill.down .hl-sig {
+  color: var(--hl-neg);
+}
+.hl-asof {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--hl-soft);
+}
+.hl-pos {
+  color: var(--hl-pos);
+}
+.hl-neg {
+  color: var(--hl-neg);
+}
+.hl-small {
+  font-size: 0.8rem;
+  color: var(--hl-soft);
+}
+.hl .gs {
+  margin-top: 14px;
+}
+.hl-sec {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hl-line);
+}
+.hl-bridge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.hl-b {
+  background: var(--hl-faint);
+  border-radius: 10px;
+  padding: 6px 10px;
+  min-width: 0;
+}
+.hl-bk {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: var(--hl-soft);
+}
+.hl-b b {
+  font-size: 1.05rem;
+}
+.hl-op {
+  color: var(--hl-soft);
+}
+.hl-parts {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--hl-soft);
+}
+.hl-parts summary {
+  cursor: pointer;
+}
+.hl-parts ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-width: 32rem;
+}
+.hl-parts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hl-warnline {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  background: var(--hl-warn-bg);
+  border: 1px solid var(--hl-warn-line);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.hl-tiles {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--hl-line);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.hl-tl {
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hl-soft);
+}
+.hl-tlink {
+  text-decoration: none;
+}
+.hl-tlink:hover,
+.hl-tlink:focus-visible {
+  text-decoration: underline;
+}
+.hl-tv {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.hl-ts {
+  font-size: 0.8rem;
+  color: var(--hl-soft);
+}
+.hl-extras {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hl-line);
+}
+.hl-xh {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--hl-soft);
+}
+.hl-xg {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+}
+.hl-x {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 9px 12px;
+  min-width: 0;
+}
+.hl-x.warn {
+  background: var(--hl-warn-bg);
+  border: 1px solid var(--hl-warn-line);
+}
+.hl-x.warn .hl-xv {
+  color: var(--hl-warn-fg);
+}
+.hl-xl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.74rem;
+  color: var(--hl-soft);
+}
+.hl-xv {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.hl-xs {
+  font-size: 0.72rem;
+  color: var(--hl-soft);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+@container (max-width: 520px) {
+  .hl-big {
+    font-size: 1.7rem;
+  }
+  .hl-op {
+    display: none;
+  }
+  .hl-b {
+    flex: 1 1 100%;
+  }
+}
+
+/* the same extras inside the Investments headline (its own dark panel) */
+.invhero {
+  --hl-soft: rgba(255, 255, 255, 0.78);
+  --hl-line: rgba(255, 255, 255, 0.18);
+  --hl-warn-bg: rgba(255, 190, 80, 0.16);
+  --hl-warn-line: rgba(255, 190, 80, 0.45);
+  --hl-warn-fg: #ffd28a;
+}
+.invhero-extras a {
+  color: inherit;
+}

@@ -12,7 +12,7 @@ import { BankBadge } from '@/components/BankBadge';
 import { PersonBadge } from '@/components/Person';
 import type { CashRate } from '@/lib/rates-view';
 
-/** Every savings account on one line: bank, person, type, rate, balance, value today and the interest it earns in a year (an estimate). */
+/** Every savings account on one line: bank, person, type, rate, balance, current value and the interest it earns in a year (an estimate). */
 export function CashRegister({
   blocks,
   rates,
@@ -44,7 +44,7 @@ export function CashRegister({
             <th>Type</th>
             <th className="num">Rate</th>
             <th className="num">Last recorded</th>
-            <th className="num">Value today</th>
+            <th className="num">Current value</th>
             <th className="num">Interest a year</th>
             <th>Updated</th>
           </tr>
@@ -82,7 +82,7 @@ export function CashRegister({
                       ? formatInr(Math.round(r.recorded))
                       : formatForeign(r.recorded, r.currency)}
                 </td>
-                <td data-label="Value today" className="num">
+                <td data-label="Current value" className="num">
                   <b>{formatInr(Math.round(r.current ?? 0))}</b>
                   {!inr && r.recorded ? (
                     <div className="muted small" data-testid="cr-fx">

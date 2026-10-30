@@ -1,6 +1,6 @@
 /**
  * The full transaction ledger of a fund, ready to show: every line with its type, units, price, amount and units held after it, the
- * cost of the units held and their value at that date, what each purchase is worth today, and for each sale the gain it booked
+ * cost of the units held and their value at that date, what each purchase is worth now, and for each sale the gain it booked
  * (oldest units sold first) and whether it was short or long term. Also the pure parts of the ledger table: filter, sort, export rows.
  * Nothing here invents a figure: a price, a value or a gain that the data cannot support is null.
  */
@@ -364,7 +364,7 @@ export function ledgerExportRows(
     'Units held after',
     'Cost of units held (INR)',
     'Value of units held (INR)',
-    'Gain booked (INR)',
+    'Booked profit (INR)',
     'Source',
     'Description',
   ];

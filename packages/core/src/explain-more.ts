@@ -423,7 +423,7 @@ export function buildNewMoneyExplain(i: NewMoneyExplainInput): ExplainSet<'newmo
       how:
         i.suggestions.count === 0
           ? 'No holding earns clearly less than a better offer that has insurance room.'
-          : `For each holding: (best available rate after tax − its rate after tax) × its amount = the gain a year; ${exPlural(i.suggestions.count, 'suggestion')} add to ${exInr(i.suggestions.totalGain)} a year. A running deposit is never suggested to be broken early; moves are for maturity.`,
+          : `For each holding: (best available rate after tax − its rate after tax) × its amount = the extra interest a year; ${exPlural(i.suggestions.count, 'suggestion')} add to ${exInr(i.suggestions.totalGain)} a year. A running deposit is never suggested to be broken early; moves are for maturity.`,
       inputs: [
         rateInput,
         {

@@ -2,7 +2,7 @@
  * A fund from the holder's side: what their own money did, as opposed to what one unit of the fund did. The fund's price line goes
  * back to its launch; these figures start with the holder's first purchase and count only their money.
  *
- *  - `ownPeriods`: for each period (last month, last year, since the first purchase…) the value at its start, the money put in and
+ *  - `ownPeriods`: for each period (last month, last year, since the first purchase…) the value at its start, the amount invested and
  *    taken out inside it, the value at its end, the profit in rupees and the return on the money (money-weighted: XIRR per year for a
  *    period of a year or more; the profit on the money at work for a shorter one).
  *  - `shadowLine`: what the same purchases and sales, on the same days, would be worth had they gone into another line (a benchmark).
@@ -36,7 +36,7 @@ export interface OwnPeriodRow {
   /** sales and payouts inside the period, as a positive amount */
   takenOut: number;
   endValue: number;
-  /** end value less start value less the net money put in: what the market added */
+  /** end value less start value less the money added less withdrawn: what the market added */
   gain: number;
   /** the return on the holder's money: per year (XIRR) when `annualised`, otherwise the profit on the money at work */
   ret: number | null;
@@ -185,7 +185,7 @@ export interface XirrPoint {
 
 /**
  * The holder's XIRR up to each valuation day, and the benchmark's on the same money: for each date, the purchases and sales up to it
- * (money put in counts as paid out) and the value on that day (counts as received). Dates before the first purchase, or on its day,
+ * (invested counts as paid out) and the value on that day (counts as received). Dates before the first purchase, or on its day,
  * have nothing to say and are left out.
  */
 export function xirrTrail(

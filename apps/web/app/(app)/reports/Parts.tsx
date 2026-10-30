@@ -10,6 +10,7 @@ import {
   fundAge,
   fundFlow,
   fundSummary,
+  pooledXirr,
   parseFdBy,
   parseFundBy,
   buildReportsExplain,
@@ -150,7 +151,7 @@ export function DepositReports({
             why: ex['reports.fdCount'],
           },
           {
-            label: 'Amount put in',
+            label: 'Invested (principal)',
             value: formatInrCompact(principal),
             main: true,
             why: ex['reports.fdPrincipal'],
@@ -272,11 +273,8 @@ export function FundReports({
   const invested = sum(funds.map((f) => f.invested));
   const value = sum(funds.map((f) => f.value));
   const sip = sum(funds.filter((f) => !f.sipStopped).map((f) => f.sipMonthly ?? 0));
-  const withX = funds.filter((f) => f.xirr !== null && f.value > 0);
-  const xirr =
-    withX.length > 0
-      ? sum(withX.map((f) => f.value * (f.xirr as number))) / sum(withX.map((f) => f.value))
-      : null;
+  // one XIRR over all the funds' money together, as Investments works it out
+  const xirr = funds.length > 0 ? pooledXirr(funds, ctx.today) : null;
   return (
     <>
       <KpiStrip
@@ -289,23 +287,25 @@ export function FundReports({
             why: ex['reports.fundInvested'],
           },
           {
-            label: 'Value now',
+            label: 'Current value',
             value: formatInrCompact(value),
             main: true,
             why: ex['reports.fundValue'],
           },
           {
-            label: 'Gain',
+            label: 'Profit',
             value: formatInrCompact(value - invested),
             tone: value - invested < 0 ? 'fail' : 'gain',
             sub:
-              invested > 0 ? `${pctText((value - invested) / invested, 1)} of invested` : undefined,
+              invested > 0
+                ? `${value >= invested ? '+' : ''}${pctText((value - invested) / invested, 1)} overall`
+                : undefined,
             why: ex['reports.fundGain'],
           },
           {
-            label: 'Average yearly return (XIRR)',
-            value: pctText(xirr, 1),
-            sub: 'average of the funds, weighted by value',
+            label: 'XIRR',
+            value: xirr === null ? '–' : `${pctText(xirr, 2)} a year`,
+            sub: 'all purchases and sales together',
             why: ex['reports.fundXirr'],
           },
           {
@@ -322,7 +322,7 @@ export function FundReports({
       </p>
       <Report
         ctx={ctx}
-        table={fundSummary(funds, fb, fp)}
+        table={fundSummary(funds, fb, fp, ctx.today)}
         controls={
           <>
             <Switch

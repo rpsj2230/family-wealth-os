@@ -202,7 +202,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Maturity value',
     kind: 'estimate',
     definition:
-      'What the deposit pays on its maturity date on its contract terms (the bank’s own figure when it is on file). A future amount, not part of today’s value.',
+      'What the deposit pays on its maturity date on its contract terms (the bank’s own figure when it is on file). A future amount, not part of current value.',
     effectiveDate: 'The maturity date.',
   },
   maturityProceeds: {
@@ -210,7 +210,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Maturity proceeds awaiting confirmation',
     kind: 'estimate',
     definition:
-      'Money paid out by deposits that matured where you have not yet said where it went (a savings account, a new deposit, taken out). Counted once in net worth; never reinvested automatically.',
+      'Money paid out by deposits that matured where you have not yet said where it went (a savings account, a new deposit, withdrawn). Counted once in net worth; never reinvested automatically.',
     effectiveDate: 'The maturity date of each deposit.',
   },
   fundsConfirmed: {
@@ -263,10 +263,10 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
   },
   externalCapital: {
     key: 'externalCapital',
-    label: 'Own money put in (lifetime)',
+    label: 'Own money',
     kind: 'history',
     definition:
-      'The opening position plus all money that came in from outside the family’s accounts (salary, gifts received, sale of something not tracked) less all money taken out of them. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.',
+      'The opening position plus all money that came in from outside the family’s accounts (salary, gifts received, sale of something not tracked) less all money withdrawn of them. Interest, profit, renewals, reinvestment and transfers between your own accounts never change it.',
     effectiveDate: 'The valuation date.',
   },
   netExternalFlows: {
@@ -290,17 +290,17 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Lifetime profit',
     kind: 'history',
     definition:
-      'Net worth less own money put in: interest, fund and share gains, exchange-rate moves and income, after fees and taxes. Changes not yet explained are shown apart and not counted.',
+      'Net worth less own money: interest, fund and share profit, exchange-rate moves and income, after fees and taxes. Changes not yet explained are shown apart and not counted.',
     effectiveDate: 'The valuation date, since the opening date.',
   },
   cumulativeGainPct: {
     key: 'cumulativeGainPct',
     label: 'Lifetime profit (%)',
     kind: 'history',
-    definition: 'Lifetime profit as a per cent of own money put in.',
+    definition: 'Lifetime profit as a per cent of own money.',
     effectiveDate: 'The valuation date, since the opening date.',
     denominator:
-      'Own money put in (opening position plus net outside money). Not shown when that is zero or negative.',
+      'Own money (opening position plus net outside money). Not shown when that is zero or negative.',
   },
   xirr: {
     key: 'xirr',
@@ -316,7 +316,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Time-weighted return',
     kind: 'history',
     definition:
-      'The growth of the money invested over the period with the effect of money added or taken out removed: each stretch between movements is measured on its own and the stretches are chained.',
+      'The growth of the money invested over the period with the effect of money added or withdrawn removed: each stretch between movements is measured on its own and the stretches are chained.',
     effectiveDate: 'The period shown.',
     denominator: 'Value at the start of each stretch.',
   },
@@ -333,28 +333,28 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Cost of current holdings',
     kind: 'actual',
     definition:
-      'What the holdings you have today cost: each running deposit’s amount, the last balance of each savings account, and the first-in first-out cost of the fund units still held. A deposit renewed with its interest counts at its new, larger amount, so reinvested interest is inside it. Not the same as own money put in (lifetime).',
+      'What the holdings you have today cost: each running deposit’s amount, the last balance of each savings account, and the first-in first-out cost of the fund units still held. A deposit renewed with its interest counts at its new, larger amount, so reinvested interest is inside it. Not the same as own money.',
     effectiveDate: 'Today.',
   },
   currentGain: {
     key: 'currentGain',
-    label: 'Gain on current holdings',
+    label: 'Profit',
     kind: 'estimate',
     definition:
-      'Value today of the holdings you have now, less what they cost. Interest already rolled into a renewed deposit is part of its cost, so it is not in this gain; the lifetime profit counts it once.',
+      'Current value of the holdings you have now, less what they cost. Interest already rolled into a renewed deposit is part of its cost, so it is not in this profit; the lifetime profit counts it once.',
     effectiveDate: 'Today.',
     denominator: 'Cost of current holdings.',
   },
   realisedGain: {
     key: 'realisedGain',
-    label: 'Realised gain',
+    label: 'Booked profit',
     kind: 'history',
     definition: 'Sale proceeds less the first-in first-out cost of the units sold.',
     effectiveDate: 'The sale dates in the period.',
   },
   unrealisedGain: {
     key: 'unrealisedGain',
-    label: 'Unrealised gain',
+    label: 'Profit',
     kind: 'market',
     definition: 'Value of the units still held less their cost.',
     effectiveDate: 'The NAV or price date shown.',
@@ -379,7 +379,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Not yet explained',
     kind: 'estimate',
     definition:
-      'The difference between a new actual balance and what the earlier balance, confirmed movements and interest predicted. Never counted as profit or as money put in until you classify it.',
+      'The difference between a new actual balance and what the earlier balance, confirmed movements and interest predicted. Never counted as profit or as invested until you classify it.',
     effectiveDate: 'The date of the balance that showed it.',
   },
   periodChange: {
@@ -387,7 +387,7 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Change in wealth',
     kind: 'history',
     definition:
-      'Net worth at the end of the period less net worth at its start, split into outside money, interest, market gains, income, fees and taxes, and anything not yet explained.',
+      'Net worth at the end of the period less net worth at its start, split into outside money, interest, market profit, income, fees and taxes, and anything not yet explained.',
     effectiveDate: 'The period shown.',
   },
 };

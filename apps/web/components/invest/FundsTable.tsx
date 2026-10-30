@@ -33,41 +33,41 @@ const money2 = (n: number) =>
 
 const COLS: { key: FundSortKey; label: string; cls: string }[] = [
   { key: 'name', label: 'Fund', cls: 'c-name' },
-  { key: 'invested', label: 'Invested now', cls: 'c-inv' },
-  { key: 'value', label: 'Value today', cls: 'c-val' },
-  { key: 'gain', label: 'Profit or loss', cls: 'c-pl' },
-  { key: 'dayAmount', label: 'Today', cls: 'c-day' },
-  { key: 'xirr', label: 'Yearly return (XIRR)', cls: 'c-xirr' },
-  { key: 'sipMonthly', label: 'SIP a month', cls: 'c-sip' },
+  { key: 'invested', label: 'Invested', cls: 'c-inv' },
+  { key: 'value', label: 'Current value', cls: 'c-val' },
+  { key: 'gain', label: 'Profit', cls: 'c-pl' },
+  { key: 'dayAmount', label: 'Today’s change', cls: 'c-day' },
+  { key: 'xirr', label: 'XIRR', cls: 'c-xirr' },
+  { key: 'sipMonthly', label: 'SIP', cls: 'c-sip' },
 ];
 
 function Totals({ t, label }: { t: GroupTotals; label?: ReactNode }) {
   return (
     <>
       <td className="c-name fl-glabel">{label}</td>
-      <td className="num c-inv" data-label="Invested now">
+      <td className="num c-inv" data-label="Invested">
         {inr(t.invested)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
       </td>
-      <td className="num c-val" data-label="Value today">
+      <td className="num c-val" data-label="Current value">
         {inr(t.value)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
         <span className="fl-s">
           {(t.share * 100).toFixed(t.share < 0.1 ? 1 : 0)}% of total value
         </span>
       </td>
-      <td className={`num c-pl ${tone(t.gain)}`} data-label="Profit or loss">
+      <td className={`num c-pl ${tone(t.gain)}`} data-label="Profit">
         {rupees(t.gain)}
         {t.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
         <span className="fl-s">
           {t.gainPct === null ? '–' : `${pct(t.gainPct, 1)} of invested`}
         </span>
       </td>
-      <td className={`num c-day ${tone(t.dayAmount)}`} data-label="Today">
+      <td className={`num c-day ${tone(t.dayAmount)}`} data-label="Today’s change">
         {t.dayAmount === null ? '–' : rupees(t.dayAmount)}
         <span className="fl-s">{t.dayPct === null ? '' : `${pct(t.dayPct)} on prior value`}</span>
       </td>
-      <td className={`num c-xirr ${tone(t.xirr)}`} data-label="Return a year">
+      <td className={`num c-xirr ${tone(t.xirr)}`} data-label="XIRR">
         {t.xirr === null ? '–' : pct(t.xirr, 1)}
         {t.xirr !== null && t.xirrEstimated && (
           <span className="fl-est" title="Partly estimated">
@@ -76,7 +76,7 @@ function Totals({ t, label }: { t: GroupTotals; label?: ReactNode }) {
           </span>
         )}
       </td>
-      <td className="num c-sip" data-label="SIP a month">
+      <td className="num c-sip" data-label="SIP">
         {t.sipMonthly > 0 ? inr(t.sipMonthly) : '–'}
       </td>
       <td className="c-act" />
@@ -155,32 +155,32 @@ function Row({
           <span className="fl-subtext">{sub.join(' · ')}</span>
         </div>
       </td>
-      <td className="num c-inv" data-label="Invested now">
+      <td className="num c-inv" data-label="Invested">
         {l.invested ? inr(l.invested) : '–'}
         <span className="fl-s">
           {l.avgCost !== null ? `avg ${money2(l.avgCost)}` : ''}
           {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
-      <td className="num c-val" data-label="Value today">
+      <td className="num c-val" data-label="Current value">
         {l.value ? inr(l.value) : '–'}
         <span className="fl-s">
           {l.value > 0 ? `${(l.share * 100).toFixed(l.share < 0.1 ? 1 : 0)}% of total value` : ''}
           {l.value > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
-      <td className={`num c-pl ${l.invested ? tone(l.gain) : ''}`} data-label="Profit or loss">
+      <td className={`num c-pl ${l.invested ? tone(l.gain) : ''}`} data-label="Profit">
         {l.invested ? rupees(l.gain) : '–'}
         <span className="fl-s">
           {l.gainPct === null ? '' : `${pct(l.gainPct, 1)} of invested now`}
           {l.invested > 0 && l.figuresEstimated && <Est title={LEDGER_EST_TITLE} />}
         </span>
       </td>
-      <td className={`num c-day ${tone(l.dayAmount)}`} data-label="Today">
+      <td className={`num c-day ${tone(l.dayAmount)}`} data-label="Today’s change">
         {l.dayAmount === null ? '–' : rupees(l.dayAmount)}
         <span className="fl-s">{l.dayPct === null ? '' : `${pct(l.dayPct)} on prior value`}</span>
       </td>
-      <td className={`num c-xirr ${tone(l.xirr)}`} data-label="Return a year">
+      <td className={`num c-xirr ${tone(l.xirr)}`} data-label="XIRR">
         {l.xirr === null ? '–' : pct(l.xirr, 1)}
         {l.xirr !== null && l.xirrEstimated && !l.figuresEstimated && (
           <span
@@ -196,7 +196,7 @@ function Row({
           {l.ret1y === null ? '' : `1Y price ${pct(l.ret1y, 1)}`}
         </span>
       </td>
-      <td className="num c-sip" data-label="SIP a month">
+      <td className="num c-sip" data-label="SIP">
         <SipCell l={l} />
       </td>
       <td className="c-act">
@@ -315,15 +315,15 @@ export function FundsTable({
         'Type',
         'Platform',
         'Invested',
-        'Value',
-        'Profit or loss',
-        'Profit or loss %',
-        'Today',
-        'Today %',
+        'Current value',
+        'Profit',
+        'Overall return %',
+        'Today’s change',
+        'Today’s change %',
         'XIRR',
         '1 year price return',
         'Share of total',
-        'SIP a month',
+        'SIP',
       ],
     ];
     const n = (v: number | null, d = 2) => (v === null ? '' : v.toFixed(d));

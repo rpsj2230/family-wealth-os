@@ -48,7 +48,7 @@ const at = (points: { date: string; value: number }[], d: string) => {
 /**
  * The Performance tab: returns over fixed periods against the benchmark, profit and loss by week, month, quarter or year with
  * comparisons, the month-by-month grid, growth of 100 against the benchmark, the fall from the highest point, rolling returns, risk
- * figures, the what-if against the index fund, value against money put in, the monthly investments and the pace forecast.
+ * figures, the what-if against the index fund, current value against invested, the monthly investments and the pace forecast.
  */
 export function PerformanceTab({
   ex,
@@ -133,7 +133,7 @@ export function PerformanceTab({
   }));
   const valueStats: Stat[] = [
     {
-      label: 'Value now',
+      label: 'Current value',
       value: formatInr(Math.round(h.value)),
       note: `as of ${niceDate(view.today)}`,
       why: ex['invest.chgValue'],
@@ -207,7 +207,7 @@ export function PerformanceTab({
             <h2 id="plp">Profit and loss by period</h2>
           </WhyHead>
           <span className="small muted">
-            Rupees and per cent; deposits and withdrawals are not counted as gains
+            Rupees and per cent; money added or withdrawn is not counted as profit
           </span>
         </div>
         <PlSection
@@ -263,7 +263,7 @@ export function PerformanceTab({
           <WhyHead why={ex['invest.growth100']}>
             <h2 id="gv">Growth of 100{hasBench ? ' against the benchmark' : ''}</h2>
           </WhyHead>
-          <span className="small muted">Time-weighted: money put in does not lift the line</span>
+          <span className="small muted">Time-weighted: money added does not lift the line</span>
         </div>
         <PlotChart
           unit="index"
@@ -341,7 +341,7 @@ export function PerformanceTab({
           caption={`Current value of mutual funds against invested, ${growth.rangeWords}`}
           series={[
             { key: 'value', name: 'Value', points: valuePoints, colour, area: true },
-            { key: 'in', name: 'Money put in', points: investedPoints, colour: 'var(--viz-line)' },
+            { key: 'in', name: 'Invested', points: investedPoints, colour: 'var(--viz-line)' },
           ]}
           markers={markers}
           legendMarkers={[
@@ -366,7 +366,7 @@ export function PerformanceTab({
       <section className="card wide" aria-labelledby="mc">
         <div className="cardhead">
           <WhyHead why={ex['invest.contrib']}>
-            <h2 id="mc">Money put in each month</h2>
+            <h2 id="mc">Invested each month</h2>
           </WhyHead>
           <span className="small muted">Last {view.config.contributionMonths} months</span>
         </div>
@@ -378,7 +378,7 @@ export function PerformanceTab({
         ) : (
           <MonthColumns
             months={growth.contributions}
-            caption="Money put into funds in each of the last months"
+            caption="Invested in funds in each of the last months"
           />
         )}
       </section>
@@ -425,7 +425,7 @@ export function PerformanceTab({
         </div>
         <p className="cardnote">
           Best and weakest funds are on the <Link href={link({ tab: 'breakdown' })}>Breakdown</Link>{' '}
-          tab; {formatInrCompact(stats.invested)} is put in so far.
+          tab; {formatInrCompact(stats.invested)} is invested so far.
         </p>
       </section>
     </>

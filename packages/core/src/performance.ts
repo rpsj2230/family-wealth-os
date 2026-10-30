@@ -1,5 +1,5 @@
 /**
- * Returns on fund holdings from the statement's own transactions: money in is negative, money out and today's value
+ * Returns on fund holdings from the statement's own transactions: money in is negative, money out and current value
  * positive, solved as XIRR. Only funds with transactions are included, and the coverage is reported, so a figure is
  * never presented for money it does not describe.
  */
@@ -36,7 +36,7 @@ export interface FundForReturns {
   value: number;
   txns: FundTxn[];
   /**
-   * What is known without a fund statement: the amount put in, when it began and any SIP. Used for an estimated return when
+   * What is known without a fund statement: the amount invested, when it began and any SIP. Used for an estimated return when
    * there are no transactions.
    */
   plan?: {
@@ -116,7 +116,7 @@ export function returnsFor(funds: FundForReturns[], today: string): Returns {
   };
 }
 
-/** Net money put in by month (purchases minus sales), cumulative, for a chart. */
+/** Net invested by month (purchases minus sales), cumulative, for a chart. */
 export function contributionSeries(
   funds: FundForReturns[],
 ): { month: string; cumulative: number }[] {

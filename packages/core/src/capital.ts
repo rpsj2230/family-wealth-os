@@ -1,5 +1,5 @@
 /**
- * The capital and earnings ledger of the family: how much of today's net worth is the family's own money put in, how much is profit,
+ * The capital and earnings ledger of the family: how much of today's net worth is the family's own money, how much is profit,
  * and what the money earned as a yearly rate. One function (`capitalLedger`) for Home, the e-mail, Reports and the history pages.
  *
  * For the family as a whole, money moved between its own holdings cancels out: a deposit funded from savings, maturity proceeds paid
@@ -10,18 +10,18 @@
  *
  * where earnings are worked out by the central engine from each holding's own rule (interest on savings and deposits, fund and share
  * gains, exchange-rate moves, growth assumed in Settings) plus confirmed income, less confirmed fees and taxes. The rest of the change
- * is outside money: what you confirmed (a salary transfer, a gift, money taken out: money_moves of kind contribution / withdrawal),
+ * is outside money: what you confirmed (a salary transfer, a gift, money withdrawn: money_moves of kind contribution / withdrawal),
  * and, where nothing was confirmed, an amount worked out from the balances, labelled "not yet explained" and never counted as profit.
  *
  *   net worth = opening position + confirmed outside money + not yet explained + profit
  *
- *  - Own money put in = opening position + confirmed outside money + not yet explained + corrections (the not-yet-explained part is
+ *  - Own money = opening position + confirmed outside money + not yet explained + corrections (the not-yet-explained part is
  *    shown apart: it is assumed to be your own money until you classify it; a correction says an earlier balance was wrong, so the money
  *    was there all along). Renewals, transfers and reinvested interest never change it.
- *  - Profit so far = net worth − own money put in = the sum of the earnings.
- *  - Profit % = profit ÷ own money put in; not shown when own money is zero or negative (no meaningful base).
+ *  - Profit = net worth − own money = the sum of the earnings.
+ *  - Profit % = profit ÷ own money; not shown when own money is zero or negative (no meaningful base).
  *  - Annual return (XIRR, money-weighted) on −opening at the opening date, −each sum of outside money on its date (a not-yet-explained
- *    amount in the middle of its month), +net worth today. Not shown when it cannot be solved.
+ *    amount in the middle of its month), +net worth. Not shown when it cannot be solved.
  *  - Time-weighted return: each month's earnings over the money at work in it (the value at its start plus half the money moved),
  *    chained.
  * Months are calendar months from the opening date (Settings > capital, else the first day with records), the last ending today.
@@ -158,7 +158,7 @@ export function reinvestmentsOf(position: PositionInput, days: number): Reinvest
 
 /**
  * The reinvested money still on its way on day `d` (sold on or before it, bought back after it), so a sale before a month end and its
- * buy-back after it is neither money taken out nor money brought in. Not counted when one of the person's rupee savings balances was
+ * buy-back after it is neither money withdrawn nor money brought in. Not counted when one of the person's rupee savings balances was
  * recorded after the sale and up to `d`: that balance may already hold the proceeds.
  */
 export function reinvestedOn(position: PositionInput, pairs: Reinvestment[], d: string): number {
@@ -397,7 +397,7 @@ export function capitalLedger(args: {
   const ownMoney = opening + confirmedExternal + unexplained + corrections;
   const profit = earnings.total;
 
-  // money-weighted: the opening position and each sum of outside money on its date, against net worth today
+  // money-weighted: the opening position and each sum of outside money on its date, against net worth
   const flows = [
     { date: new Date(`${first0}T00:00:00Z`), amount: -opening },
     ...args.moves
@@ -443,7 +443,7 @@ export function capitalLedger(args: {
     );
   if (ownMoney > 0 && Math.abs(unexplained) > 0.2 * ownMoney)
     limitations.push(
-      'Most of the money moved in or out is worked out from balances, not confirmed: confirm outside money (salary, gifts, money taken out) to make own money and the return exact.',
+      'Most of the money moved in or out is worked out from balances, not confirmed: confirm outside money (salary, gifts, money withdrawn) to make own money and the return exact.',
     );
   if (months.some((m) => m.estimated))
     limitations.push(

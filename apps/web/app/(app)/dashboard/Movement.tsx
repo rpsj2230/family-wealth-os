@@ -188,7 +188,7 @@ export function Movement({
         },
         {
           key: 'fun',
-          label: 'Fund gains and losses',
+          label: 'Fund profit and loss',
           amount: f.earnings.funds,
           signed: true,
           earn: true,
@@ -316,7 +316,7 @@ export function Movement({
           {Math.abs(f.unexplained) >= 1 && (
             <p className="muted small">
               Money that moved with nothing to say what it was is worked out from the balances. It
-              is not counted as profit; say what it was (salary, a gift, money taken out) on{' '}
+              is not counted as profit; say what it was (salary, a gift, money withdrawn) on{' '}
               <MaybeLink href={homeLink('/reconcile', sample)}>Explain movements</MaybeLink>.
             </p>
           )}

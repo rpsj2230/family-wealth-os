@@ -28,11 +28,14 @@ export function GrowthStrip({
   items,
   inflation,
   testId,
+  tone,
 }: {
   title: string;
   items: GrowthItem[];
   inflation: number | null;
   testId?: string;
+  /** on-dark: drawn inside a dark headline panel */
+  tone?: 'on-dark';
 }) {
   const scale = growthScale(
     items.map((i) => i.rate),
@@ -40,7 +43,7 @@ export function GrowthStrip({
   );
   const at = (r: number) => `${Math.max(0, Math.min(1, r / scale)) * 100}%`;
   return (
-    <section className="gs" aria-label={title} data-testid={testId}>
+    <section className={`gs${tone ? ` ${tone}` : ''}`} aria-label={title} data-testid={testId}>
       <div className="gs-head">
         <h3 className="gs-title">{title}</h3>
         <span className="gs-key small muted">
@@ -62,7 +65,7 @@ export function GrowthStrip({
           >
             <div className="gs-label">
               {i.label}
-              {i.why && <Why explain={i.why} />}
+              {i.why && <Why explain={i.why} {...(tone ? { tone } : {})} />}
             </div>
             <div className="gs-rate num">{i.rate === null ? '–' : formatPct(i.rate, 2)}</div>
             <div

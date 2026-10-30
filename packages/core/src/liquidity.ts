@@ -293,7 +293,9 @@ export function buildSources(input: RaiseBuildInput): RaiseSource[] {
         notes: [
           ...(knownCost
             ? []
-            : ['Cost price not recorded: gain is assumed (Settings), so tax is a rough figure.']),
+            : [
+                'Cost price not recorded: the profit is assumed (Settings), so tax is a rough figure.',
+              ]),
           ...(fund?.sipActive
             ? [
                 'An active SIP means some units are recent and taxed as short-term; this is assumed for all of them.',

@@ -10,10 +10,7 @@
   padding: 20px 22px 14px;
   border-radius: var(--radius);
   color: #fff;
-  background:
-    radial-gradient(120% 140% at 100% 0%, rgb(167 139 250 / 0.45) 0%, transparent 55%),
-    linear-gradient(135deg, #1e1b4b 0%, #312e81 52%, #4c1d95 100%);
-  box-shadow: 0 12px 32px rgb(49 46 129 / 0.28);
+  background: linear-gradient(135deg, #2b2370, #3b2f8f 60%, #4a3aa8);
   container-type: inline-size;
 }
 .invhero a {
@@ -21,9 +18,13 @@
 }
 .invhero-top {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) auto minmax(0, 1.1fr);
-  gap: 22px 28px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px 28px;
   align-items: center;
+}
+/* the figure, its pills and the date run across the panel, as on Home; the ring and the chart sit under them */
+.invhero-main {
+  grid-column: 1 / -1;
 }
 .hero-label {
   font-size: 0.78rem;
@@ -50,7 +51,7 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: 12px;
   background: rgb(255 255 255 / 0.12);
   border: 1px solid rgb(255 255 255 / 0.18);
   font-size: 0.92rem;
@@ -264,6 +265,7 @@
 /* a wide table scrolls inside its card instead of widening the page */
 .cmpwrap {
   container-type: inline-size;
+  overflow-x: auto;
 }
 .gainline,
 .narrow-only {

@@ -94,8 +94,8 @@ describe('buildAssetView: deposit', () => {
     expect(v.title).toBe('FD');
     expect(f('Rate')!.value).toBe('7%');
     expect(f('Maturity date')!.note).toBe('365 days left');
-    expect(f('Value today (estimate)')!.value).toMatch(/^₹10,/);
-    expect(f('Value today (estimate)')!.note).toMatch(/interest accrued/);
+    expect(f('Current value (estimate)')!.value).toMatch(/^₹10,/);
+    expect(f('Current value (estimate)')!.note).toMatch(/interest accrued/);
     expect(f('Interest paid')!.value).toBe('Cumulative (paid at maturity)');
     expect(f('Linked savings account')).toMatchObject({
       value: 'Cash-NRE-0266',
@@ -208,7 +208,7 @@ describe('buildAssetView: fund and loan', () => {
         goalNames: ['House'],
       }),
     );
-    expect(v.facts.find((x) => x.label === 'Return a year (XIRR)')!.note).toBe(
+    expect(v.facts.find((x) => x.label === 'XIRR')!.note).toBe(
       'from the fund statement transactions',
     );
     expect(v.facts.find((x) => x.label === 'Goal')!.value).toBe('House');
@@ -374,7 +374,7 @@ describe('how today’s value is worked out', () => {
       'Money in or out since, as you confirmed it',
       'Interest credited by the bank since',
       'Interest earned, not yet credited',
-      'Value today, 2026-10-28',
+      'Current value, 2026-10-28',
     ]);
     expect(t.rows.map((r) => r.cells[2])).toEqual([
       'Actual',

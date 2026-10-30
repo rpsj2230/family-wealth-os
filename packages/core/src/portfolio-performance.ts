@@ -67,7 +67,7 @@ export interface PortfolioPerformance {
   periodGains: Partial<Record<PeriodKey, PeriodGain>>;
   calendar: YearRow[];
   financial: YearRow[];
-  /** the share of today's value in funds whose cash flows are estimated, 0 to 1 */
+  /** the share of current value in funds whose cash flows are estimated, 0 to 1 */
   estimatedShare: number;
   /** the first day an estimated cash flow could matter, or null */
   estimatedSince: string | null;

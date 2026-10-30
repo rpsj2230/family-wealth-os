@@ -18,7 +18,7 @@ const midMonth = (from: string, through: string) => {
 };
 const KIND: Record<string, string> = {
   contribution: 'Money from outside',
-  withdrawal: 'Money taken out',
+  withdrawal: 'Money withdrawn',
   income: 'Earnings the app did not estimate',
 };
 
@@ -118,7 +118,7 @@ export function History({
                       </label>
                       <label className="rc-choice">
                         <input type="radio" name="answer" value="out" defaultChecked={!into} />
-                        Money taken out (spent, given, sent abroad)
+                        Money withdrawn (spent, given, sent abroad)
                       </label>
                       <label className="rc-choice">
                         <input type="radio" name="answer" value="income" />

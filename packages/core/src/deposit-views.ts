@@ -11,7 +11,7 @@ export interface BankShare {
   invested: number;
   current: number;
   maturity: number;
-  /** share of today's value in deposits */
+  /** share of current value in deposits */
   share: number;
   /** average rate, weighted by the amount invested */
   avgRate: number | null;

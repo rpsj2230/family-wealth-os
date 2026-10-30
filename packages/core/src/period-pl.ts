@@ -2,7 +2,7 @@
  * Profit or loss by week, month, quarter, financial year or calendar year, in rupees and per cent, with a running total and the
  * comparisons people ask for (this period against the one before, one person against another, one fund against another).
  *
- * Money put in or taken out is never counted as profit: the profit of a stretch of time is the change in value less the net money
+ * Invested or taken out is never counted as profit: the profit of a stretch of time is the change in value less the net money
  * that went in (see `chainPeriods`), and the per cent is the time-weighted return of the stretch (its sub-periods joined), so a big
  * deposit does not look like a gain and a withdrawal does not look like a loss. Quarters and years follow the Indian financial year
  * (April to March) except the calendar year. Pure.
@@ -30,7 +30,7 @@ export interface PlBucket {
   /** the first and last day the bucket is worked out from */
   from: string;
   to: string;
-  /** rupees: the change in value less the net money put in */
+  /** rupees: the change in value less the money added less withdrawn */
   gain: number;
   /** the time-weighted return of the bucket; null when no money was at work */
   ret: number | null;

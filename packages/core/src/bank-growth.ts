@@ -69,7 +69,7 @@ export function bankGrowth(a: {
   moves: LedgerMove[];
   openingDate?: string | null;
   reinvestDays?: number;
-  /** the running deposits as the page lists them: principal, booking day and today's value */
+  /** the running deposits as the page lists them: principal, booking day and current value */
   deposits: { principal: number; bookedOn: string; value: number }[];
   fdNow: number;
   cashNow: number;

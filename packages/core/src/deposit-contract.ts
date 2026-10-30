@@ -12,7 +12,7 @@
  * day it has matured: it stops earning, and what it paid (its maturity proceeds) is accounted for separately (`proceedsPlan`). A
  * deposit closed before its maturity date (`endedOn` earlier than it) stops on that day; its proceeds are its value then.
  *
- * Maturity proceeds are never reinvested automatically. Until you say where they went (a savings account, a new deposit, taken out)
+ * Maturity proceeds are never reinvested automatically. Until you say where they went (a savings account, a new deposit, withdrawn)
  * they are "awaiting confirmation" and counted once in net worth. When there is evidence they were already placed (a new deposit booked
  * at the same bank for about that amount around the date, or a later balance of the account the deposit is linked to), they are
  * "probably placed" and not counted again, so wealth is never counted twice; you are still asked to confirm. Proceeds older than the

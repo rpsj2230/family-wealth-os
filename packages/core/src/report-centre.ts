@@ -4,7 +4,7 @@
  * terms, the fund ledgers, the daily snapshots, money lent, goals); none asks for new data. Where a template cannot say something
  * (no snapshot reaches back, a sale whose purchase is not on the statement), it says so in its notes instead of showing a zero.
  *
- * Rules kept throughout: mutual funds are never cash; money put in is not profit; gains booked by selling are kept apart from gains
+ * Rules kept throughout: mutual funds are never cash; invested is not profit; booked profit is kept apart from profit
  * not yet booked; deposit principal and interest are apart; each person's money stays with that person; estimates are marked.
  *
  * Pure: no I/O.
@@ -40,7 +40,7 @@ export interface CentreHolding {
   value: number;
   /** in its own currency when that is not rupees */
   native: number | null;
-  /** what was put in (deposit principal, cost of the units held); null when not known */
+  /** what was invested (deposit principal, cost of the units held); null when not known */
   cost: number | null;
   /** the date the figure rests on */
   asOf: string | null;
@@ -233,7 +233,7 @@ export const CENTRE_TEMPLATES: CentreTemplate[] = [
     key: 'holdings',
     label: 'All holdings',
     about:
-      'Everything counted today, one line each: value, cost where known, gain not yet booked, date and basis.',
+      'Everything counted today, one line each: current value, cost where known, profit, date and basis.',
     usesPeriod: false,
     defaultPeriod: 'today',
     groups: ['cls', 'owner', 'bank', 'currency', 'none'],
@@ -272,7 +272,7 @@ export const CENTRE_TEMPLATES: CentreTemplate[] = [
     key: 'funds',
     label: 'Mutual funds',
     about:
-      'Funds held today: units, cost of the units held, value, gain not yet booked; plan, option and index or not.',
+      'Funds held today: units, invested (cost of the units held), current value, profit; plan, option and index or not.',
     usesPeriod: false,
     defaultPeriod: 'today',
     groups: ['amc', 'category', 'plan', 'option', 'owner', 'none'],
@@ -292,7 +292,7 @@ export const CENTRE_TEMPLATES: CentreTemplate[] = [
     key: 'contributions',
     label: 'SIPs and contributions',
     about:
-      'Money put into funds and taken out, by period: confirmed instalments apart from those assumed from the plan.',
+      'Money added to funds and withdrawn, by period: confirmed instalments apart from those assumed from the plan.',
     usesPeriod: true,
     defaultPeriod: 'this-fy',
     groups: ['month', 'quarter', 'fy', 'year', 'fund', 'owner'],
@@ -300,9 +300,9 @@ export const CENTRE_TEMPLATES: CentreTemplate[] = [
   },
   {
     key: 'realised',
-    label: 'Gains booked by selling',
+    label: 'Booked profit',
     about:
-      'Each sale in the period: proceeds, the cost of the units sold (first in, first out), the gain and how long they were held.',
+      'Each sale in the period: proceeds, the cost of the units sold (first in, first out), the booked profit and how long they were held.',
     usesPeriod: true,
     defaultPeriod: 'this-fy',
     groups: ['none', 'fund', 'owner', 'month', 'fy'],
@@ -634,7 +634,7 @@ const PERIOD_GROUPS: Partial<Record<GroupKey, 'month' | 'quarter' | 'fy' | 'year
 const snapAt = (snaps: CentreSnapshot[], on: string) =>
   [...snaps].filter((s) => s.date <= on).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
 
-/** Net worth today, by kind and by person, from the holdings (the same figures as Home). */
+/** Net worth, by kind and by person, from the holdings (the same figures as Home). */
 function nowSnapshot(i: CentreInput): CentreSnapshot {
   const byType: Record<string, number> = {};
   const byOwner: Record<string, number> = {};
@@ -658,7 +658,7 @@ function netWorthReport(i: CentreInput, q: CentreQuery, range: DateRange, prev: 
   const start = valueOn(i, dayBefore(range.from));
   const end = valueOn(i, range.to);
   const notes: string[] = [
-    'The start is net worth at the end of the day before the period begins; the end is the last day of the period (today’s figures when it ends today). The change includes money put in and taken out: it is not profit.',
+    'The start is net worth at the end of the day before the period begins; the end is the last day of the period (today’s figures when it ends today). The change includes money added and withdrawn: it is not profit.',
   ];
   let basis: CentreReport['basis'] = 'A';
   if (!start)
@@ -791,9 +791,9 @@ function holdingsReport(i: CentreInput, q: CentreQuery, onlyCash: boolean) {
         text('cls', 'Kind'),
         text('bank', 'Bank'),
         text('currency', 'Currency'),
-        money('value', 'Value today'),
+        money('value', 'Current value'),
         money('cost', 'Cost'),
-        money('gain', 'Gain not yet booked'),
+        money('gain', 'Profit'),
         date('asOf', 'As of'),
         text('basis', 'Basis'),
       ];
@@ -831,7 +831,7 @@ function holdingsReport(i: CentreInput, q: CentreQuery, onlyCash: boolean) {
         `${detail.title} by ${GROUP_LABEL[g].toLowerCase()}`,
         lines,
         (r) => key(byId.get(r)!),
-        [money('value', 'Value today')],
+        [money('value', 'Current value')],
         GROUP_LABEL[g],
       ),
     );
@@ -1090,9 +1090,9 @@ function fundsReport(i: CentreInput, q: CentreQuery) {
       text('index', 'Index or active'),
       { key: 'units', label: 'Units', kind: 'int' },
       money('cost', 'Cost of units held'),
-      money('value', 'Value today'),
-      money('gain', 'Gain not yet booked'),
-      { key: 'gainPct', label: 'Gain %', kind: 'pct' },
+      money('value', 'Current value'),
+      money('gain', 'Profit'),
+      { key: 'gainPct', label: 'Overall %', kind: 'pct' },
       text('basis', 'Basis'),
     ],
     rows,
@@ -1128,9 +1128,9 @@ function fundsReport(i: CentreInput, q: CentreQuery) {
         rows,
         (r) => key(byRow.get(r)!),
         [
-          money('value', 'Value today'),
+          money('value', 'Current value'),
           money('cost', 'Cost of units held'),
-          money('gain', 'Gain not yet booked'),
+          money('gain', 'Profit'),
         ],
         GROUP_LABEL[g],
       ),
@@ -1139,7 +1139,7 @@ function fundsReport(i: CentreInput, q: CentreQuery) {
   const noStatement = list.filter((f) => !f.hasStatement).length;
   const unknownPlan = list.filter((f) => fundPlan(f) === 'unknown').length;
   const notes = [
-    'Mutual funds are investments, never cash. The cost is what the units still held cost (first in, first out), so the gain here is the gain not yet booked; gains booked by selling are on their own report.',
+    'Mutual funds are investments, never cash. The cost is what the units still held cost (first in, first out), so the profit here is on units still held; booked profit is on its own report.',
     'Plan comes from the statement or the scheme name; option (Growth or IDCW) and index or active come from the scheme name and category.',
   ];
   if (noStatement)
@@ -1153,14 +1153,14 @@ function fundsReport(i: CentreInput, q: CentreQuery) {
   return {
     tables,
     kpis: [
-      { label: 'Value today', value: r2(sum(list.map((f) => f.value))), kind: 'money' as const },
+      { label: 'Current value', value: r2(sum(list.map((f) => f.value))), kind: 'money' as const },
       {
         label: 'Cost of units held',
         value: r2(sum(list.map((f) => f.cost))),
         kind: 'money' as const,
       },
       {
-        label: 'Gain not yet booked',
+        label: 'Profit',
         value: r2(sum(list.map((f) => f.value - f.cost))),
         kind: 'money' as const,
       },
@@ -1249,7 +1249,7 @@ function transactionsReport(
   }
   const assumed = list.filter((x) => x.t.estimated).length;
   const notes = [
-    'Money in is purchases, instalments and switches in; money out is sales and switches out. Neither is profit: gains booked by selling are on their own report.',
+    'Money in is purchases, instalments and switches in; money out is sales and switches out. Neither is profit: booked profit is on its own report.',
   ];
   if (assumed)
     notes.push(
@@ -1261,7 +1261,7 @@ function transactionsReport(
       { label: 'Money in', value: now.in, kind: 'money' as const, previous: before?.in },
       { label: 'Money out', value: now.out, kind: 'money' as const, previous: before?.out },
       {
-        label: 'Net put in',
+        label: 'Added less withdrawn',
         value: r2(now.in - now.out),
         kind: 'money' as const,
         previous: before ? r2(before.in - before.out) : undefined,
@@ -1313,13 +1313,13 @@ function contributionsReport(
   const tot = (k: 'confirmed' | 'assumed' | 'out' | 'net') => r2(sum(rows.map((r) => r[k])));
   const table: ReportTable = {
     id: 'contributions',
-    title: `Money put in and taken out, by ${GROUP_LABEL[g].toLowerCase()}`,
+    title: `Added and withdrawn, by ${GROUP_LABEL[g].toLowerCase()}`,
     columns: [
       text('group', GROUP_LABEL[g]),
-      money('confirmed', 'Put in (confirmed)'),
-      money('assumed', 'Put in (assumed from plan)'),
-      money('out', 'Taken out'),
-      money('net', 'Net put in'),
+      money('confirmed', 'Added (confirmed)'),
+      money('assumed', 'Added (assumed from plan)'),
+      money('out', 'Withdrawn'),
+      money('net', 'Added less withdrawn'),
     ],
     rows,
     total: {
@@ -1342,9 +1342,14 @@ function contributionsReport(
   return {
     tables: [table],
     kpis: [
-      { label: 'Put in, confirmed', value: tot('confirmed'), kind: 'money' as const },
-      { label: 'Put in, assumed from plan', value: tot('assumed'), kind: 'money' as const },
-      { label: 'Net put in', value: tot('net'), kind: 'money' as const, previous: prevNet },
+      { label: 'Added, confirmed', value: tot('confirmed'), kind: 'money' as const },
+      { label: 'Added, assumed from plan', value: tot('assumed'), kind: 'money' as const },
+      {
+        label: 'Added less withdrawn',
+        value: tot('net'),
+        kind: 'money' as const,
+        previous: prevNet,
+      },
     ],
     notes: [
       'Contributions are your own money moving into funds: they are not profit. Instalments assumed from the SIP plan are shown apart until a statement confirms them.',
@@ -1383,7 +1388,7 @@ function realisedReport(i: CentreInput, q: CentreQuery, range: DateRange, prev: 
   const g = q.group ?? 'none';
   const detail: ReportTable = {
     id: 'realised',
-    title: 'Gains booked by selling',
+    title: 'Booked profit',
     columns: [
       date('soldOn', 'Sold'),
       text('fund', 'Fund'),
@@ -1393,7 +1398,7 @@ function realisedReport(i: CentreInput, q: CentreQuery, range: DateRange, prev: 
       { key: 'units', label: 'Units', kind: 'int' },
       money('proceeds', 'Proceeds'),
       money('cost', 'Cost (first in, first out)'),
-      money('gain', 'Gain booked'),
+      money('gain', 'Booked profit'),
     ],
     rows,
     total: {
@@ -1411,7 +1416,7 @@ function realisedReport(i: CentreInput, q: CentreQuery, range: DateRange, prev: 
     tables.unshift(
       groupRows(
         `realised-by-${g}`,
-        `Gains booked by ${GROUP_LABEL[g].toLowerCase()}`,
+        `Booked profit by ${GROUP_LABEL[g].toLowerCase()}`,
         rows,
         (row) => {
           const { f, r } = byRow.get(row)!;
@@ -1420,7 +1425,7 @@ function realisedReport(i: CentreInput, q: CentreQuery, range: DateRange, prev: 
             ? { key: f.id, label: f.name }
             : { key: f.ownerId, label: i.people[f.ownerId] ?? 'Unknown' };
         },
-        [money('gain', 'Gain booked'), money('proceeds', 'Proceeds')],
+        [money('gain', 'Booked profit'), money('proceeds', 'Proceeds')],
         GROUP_LABEL[g],
         !!period,
       ),
@@ -1428,18 +1433,18 @@ function realisedReport(i: CentreInput, q: CentreQuery, range: DateRange, prev: 
   }
   const unknown = list.length - known.length;
   const notes = [
-    'Each sale is matched with the oldest units first, as the tax rules do. The gain here is before tax; short or long term and the tax due are on the Tax page, which applies the rules for each kind of fund.',
+    'Each sale is matched with the oldest units first, as the tax rules do. The booked profit here is before tax; short or long term and the tax due are on the Tax page, which applies the rules for each kind of fund.',
   ];
   if (unknown)
     notes.push(
-      `${unknown} sale${unknown === 1 ? '’s' : 's’'} purchase is not on the statement: proceeds are shown, the cost and gain are left blank rather than guessed.`,
+      `${unknown} sale${unknown === 1 ? '’s' : 's’'} purchase is not on the statement: proceeds are shown, the cost and booked profit are left blank rather than guessed.`,
     );
   return {
     tables,
     kpis: [
       { label: 'Proceeds', value: r2(sum(list.map((x) => x.r.proceeds))), kind: 'money' as const },
       {
-        label: 'Gain booked',
+        label: 'Booked profit',
         value: gain(list),
         kind: 'money' as const,
         previous: q.compare && prev ? gain(realisedRows(i, q, prev)) : undefined,

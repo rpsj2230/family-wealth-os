@@ -63,14 +63,14 @@ Interest earned so far and still held in the deposit (not yet paid out). Interes
 
 ### Maturity value
 
-What the deposit pays on its maturity date on its contract terms (the bank’s own figure when it is on file). A future amount, not part of today’s value.
+What the deposit pays on its maturity date on its contract terms (the bank’s own figure when it is on file). A future amount, not part of current value.
 
 - Kind: Estimate
 - Applies to: The maturity date.
 
 ### Maturity proceeds awaiting confirmation
 
-Money paid out by deposits that matured where you have not yet said where it went (a savings account, a new deposit, taken out). Counted once in net worth; never reinvested automatically.
+Money paid out by deposits that matured where you have not yet said where it went (a savings account, a new deposit, withdrawn). Counted once in net worth; never reinvested automatically.
 
 - Kind: Estimate
 - Applies to: The maturity date of each deposit.
@@ -117,9 +117,9 @@ Savings and current accounts in rupees and in other currencies (converted at the
 - Kind: Estimate
 - Applies to: The valuation date.
 
-### Own money put in (lifetime)
+### Own money
 
-The opening position plus all money that came in from outside the family’s accounts (salary, gifts received, sale of something not tracked) less all money taken out of them. Interest, gains, renewals, reinvestment and transfers between your own accounts never change it.
+The opening position plus all money that came in from outside the family’s accounts (salary, gifts received, sale of something not tracked) less all money withdrawn of them. Interest, profit, renewals, reinvestment and transfers between your own accounts never change it.
 
 - Kind: Past performance
 - Applies to: The valuation date.
@@ -140,18 +140,18 @@ Net worth on the first date with a value for the holdings on record, taken as th
 
 ### Lifetime profit
 
-Net worth less own money put in: interest, fund and share gains, exchange-rate moves and income, after fees and taxes. Changes not yet explained are shown apart and not counted.
+Net worth less own money: interest, fund and share profit, exchange-rate moves and income, after fees and taxes. Changes not yet explained are shown apart and not counted.
 
 - Kind: Past performance
 - Applies to: The valuation date, since the opening date.
 
 ### Lifetime profit (%)
 
-Lifetime profit as a per cent of own money put in.
+Lifetime profit as a per cent of own money.
 
 - Kind: Past performance
 - Applies to: The valuation date, since the opening date.
-- Per cent of: Own money put in (opening position plus net outside money). Not shown when that is zero or negative.
+- Per cent of: Own money (opening position plus net outside money). Not shown when that is zero or negative.
 
 ### Annual return (XIRR)
 
@@ -163,7 +163,7 @@ The yearly rate that turns the opening position and every dated movement of outs
 
 ### Time-weighted return
 
-The growth of the money invested over the period with the effect of money added or taken out removed: each stretch between movements is measured on its own and the stretches are chained.
+The growth of the money invested over the period with the effect of money added or withdrawn removed: each stretch between movements is measured on its own and the stretches are chained.
 
 - Kind: Past performance
 - Applies to: The period shown.
@@ -178,27 +178,27 @@ For funds: the purchase cost of the units still held, matched first-in first-out
 
 ### Cost of current holdings
 
-What the holdings you have today cost: each running deposit’s amount, the last balance of each savings account, and the first-in first-out cost of the fund units still held. A deposit renewed with its interest counts at its new, larger amount, so reinvested interest is inside it. Not the same as own money put in (lifetime).
+What the holdings you have today cost: each running deposit’s amount, the last balance of each savings account, and the first-in first-out cost of the fund units still held. A deposit renewed with its interest counts at its new, larger amount, so reinvested interest is inside it. Not the same as own money.
 
 - Kind: Actual
 - Applies to: Today.
 
-### Gain on current holdings
+### Profit
 
-Value today of the holdings you have now, less what they cost. Interest already rolled into a renewed deposit is part of its cost, so it is not in this gain; the lifetime profit counts it once.
+Current value of the holdings you have now, less what they cost. Interest already rolled into a renewed deposit is part of its cost, so it is not in this profit; the lifetime profit counts it once.
 
 - Kind: Estimate
 - Applies to: Today.
 - Per cent of: Cost of current holdings.
 
-### Realised gain
+### Booked profit
 
 Sale proceeds less the first-in first-out cost of the units sold.
 
 - Kind: Past performance
 - Applies to: The sale dates in the period.
 
-### Unrealised gain
+### Profit
 
 Value of the units still held less their cost.
 
@@ -221,14 +221,14 @@ Dividends and fund payouts (IDCW) received in the period.
 
 ### Not yet explained
 
-The difference between a new actual balance and what the earlier balance, confirmed movements and interest predicted. Never counted as profit or as money put in until you classify it.
+The difference between a new actual balance and what the earlier balance, confirmed movements and interest predicted. Never counted as profit or as invested until you classify it.
 
 - Kind: Estimate
 - Applies to: The date of the balance that showed it.
 
 ### Change in wealth
 
-Net worth at the end of the period less net worth at its start, split into outside money, interest, market gains, income, fees and taxes, and anything not yet explained.
+Net worth at the end of the period less net worth at its start, split into outside money, interest, market profit, income, fees and taxes, and anything not yet explained.
 
 - Kind: Past performance
 - Applies to: The period shown.

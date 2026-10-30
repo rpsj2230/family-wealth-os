@@ -73,10 +73,13 @@ export const liquidityOf = (type: AssetType): Liquidity | null => LIQUIDITY[type
 /** Statuses whose value is still part of wealth. Matured-but-unconfirmed FDs are excluded until confirmed. */
 const COUNTED_STATUS = new Set(['active', 'stopped']);
 
-/** Whether a holding is part of net worth today: a kind that is wealth, in a counted status, with a value. */
+/** Whether a holding is part of net worth: a kind that is wealth, in a counted status, with a value. */
 export function isCounted(a: ValuedAsset): boolean {
   return (
-    LIQUIDITY[a.type] !== null && COUNTED_STATUS.has(a.status) && a.estimate !== null && !a.notCounted
+    LIQUIDITY[a.type] !== null &&
+    COUNTED_STATUS.has(a.status) &&
+    a.estimate !== null &&
+    !a.notCounted
   );
 }
 

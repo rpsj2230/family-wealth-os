@@ -370,7 +370,7 @@ export function BankTable({
                     <th className="mid">Start</th>
                     <th className="mid">Maturity</th>
                     <th className="num">Invested / balance</th>
-                    <th className="num">At maturity</th>
+                    <th className="num">Maturity value</th>
                     <th className="num">Current value</th>
                     <th>Updated</th>
                     <th>Notes</th>

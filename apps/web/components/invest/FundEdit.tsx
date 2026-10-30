@@ -467,7 +467,7 @@ function EditPanel({
             </label>
             {unitsChanged && was.nav === null && (
               <label className="qe-f qe-wide">
-                <span>Value now (₹)</span>
+                <span>Current value (₹)</span>
                 <input
                   value={d.value}
                   onChange={(e) => set({ value: e.target.value })}
@@ -724,7 +724,7 @@ function AddFundPanel({
               />
             </label>
             <label className="qe-f">
-              <span>Value now (₹)</span>
+              <span>Current value (₹)</span>
               <input
                 value={d.value}
                 onChange={(e) => set({ value: e.target.value })}

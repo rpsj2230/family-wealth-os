@@ -7,7 +7,7 @@
  *  - Savings and cash (INR): the last balance recorded on or before D, moved forward to D at the rate the account earns, after the tax
  *    taken at source (the account's own rate, else the rate list for its bank, kind and balance slab, else the assumed rate in
  *    Settings). Basis `rate` ("estimated from the balance recorded on <date>"), or `recorded` on the day of the record. The rate the
- *    records themselves imply is worked out as a pointer only (`observedAnnualRate`): money added or taken out is in those balances.
+ *    records themselves imply is worked out as a pointer only (`observedAnnualRate`): money added or withdrawn is in those balances.
  *  - Fixed deposit: from its terms, accrued to D at the rate that takes the principal to the bank's maturity amount when that is on file
  *    (`fdEffectiveRate`, basis `bank_amount`), else at the stated rate (basis `terms`). Held from its booking date until the day it was
  *    paid out or closed, else until its maturity date: after that it is not counted (the money went somewhere else).
@@ -17,7 +17,7 @@
  *    price up to D, and the SIP instalments the plan made since that value are added, each moved with the price from its own day
  *    (`nav_scaled` or `sheet`, estimated). The day a newer value is on file the figure is that value, so the series steps once, by
  *    exactly what the value differs from the roll-forward: that step is carried apart (`fundTrack`, "unexplained") and is neither
- *    profit nor money put in by the plan. A day before the fund's first value, it is not held. Without any price list the value is
+ *    profit nor invested by the plan. A day before the fund's first value, it is not held. Without any price list the value is
  *    simply the nearest earlier one, unmoved.
  *  - Foreign balances and holdings: the native amount last recorded times the rate of that currency on D (`fx`), so a move in the
  *    exchange rate counts, and says so.
@@ -146,7 +146,7 @@ export interface PosFund {
   units: { units: number; asOf: string } | null;
   /** values taken from statements, oldest first */
   snapshots: { date: string; value: number }[];
-  /** money put in (positive) and taken out (negative): the statement's, or (estimated) rebuilt from the plan */
+  /** invested (positive) and taken out (negative): the statement's, or (estimated) rebuilt from the plan */
   flows: { date: string; amount: number }[];
   hasStatement: boolean;
   /** the first day the fund's figures rest on estimates (no statement, or units assumed from a SIP plan); null when exact */
@@ -202,10 +202,10 @@ export interface PositionConfig {
   slabMethod?: SlabMethod;
 }
 
-/** What the household's own books say a holding is worth today (net worth), for the holdings whose today needs more than a date. */
+/** What the household's own books say a holding is worth now (net worth), for the holdings whose today needs more than a date. */
 export interface CurrentValue {
   value: number;
-  /** counted in net worth today */
+  /** counted in net worth */
   counted: boolean;
 }
 
@@ -248,7 +248,7 @@ export interface ValuedHolding {
   deposit?: DepositDetail;
   /** a savings account: the baseline the estimate starts from and what was added to it */
   savings?: SavingsDetail;
-  /** a fund moved on from a value on file: the SIP instalments assumed since it (money put in by the plan, not confirmed) */
+  /** a fund moved on from a value on file: the SIP instalments assumed since it (invested by the plan, not confirmed) */
   sipAssumed?: { invested: number; count: number };
   /** a fund: what statements confirm and what is projected from the SIP plan, and the price used */
   fundSplit?: FundSplit;
@@ -360,7 +360,7 @@ const niceIso = exDate;
 
 /**
  * The yearly rate the recorded balances of a savings account grow at: for every two balances a month or more apart where the balance
- * did not fall, the growth over the days between, as a yearly figure; the middle one of them. Money added or taken out is part of those
+ * did not fall, the growth over the days between, as a yearly figure; the middle one of them. Money added or withdrawn is part of those
  * balances, so this is a pointer to compare with the rate used, never a figure to value anything with. Null when no two balances
  * qualify.
  */
@@ -463,7 +463,7 @@ const valueSavings: Valuer = (a, on, c, cur) => {
   if (on >= c.today && cur) {
     // today is whatever net worth has (a deposit-style account never needs more than the formula below, but one source keeps them equal)
     return cur.counted
-      ? got(a, cur.value, 'rate', null, true, 'net worth today')
+      ? got(a, cur.value, 'rate', null, true, 'net worth')
       : none(a, 'ended', 'not counted today');
   }
   const ended = endedAfterLastRecord(a, on);
@@ -544,7 +544,7 @@ const valueDeposit: Valuer = (a, on, c, cur) => {
   const d = a.fd;
   if (on >= c.today && cur)
     return cur.counted
-      ? got(a, cur.value, 'terms', d?.bookedOn ?? null, false, 'net worth today')
+      ? got(a, cur.value, 'terms', d?.bookedOn ?? null, false, 'net worth')
       : none(a, 'ended', 'not counted today');
   if (!d || !(d.principal > 0)) return none(a, 'no_data', 'no deposit terms on file');
   if (a.status === 'gifted') return none(a, 'ended', 'gifted');
@@ -934,7 +934,7 @@ export interface FundStep {
 /**
  * What the period figures need to know about a fund with no ledger (null for any other fund):
  *  - from the plan: `flows` are the plan's purchases (the opening purchase and every instalment, with the date and the amount), so the
- *    money put in is the plan's and the profit is the value less that money; `steps` are only what a recorded unit count differs
+ *    invested is the plan's and the profit is the value less that money; `steps` are only what a recorded unit count differs
  *    from the plan's units by on its day, and what net worth's figure for today differs from this rule's. Both are carried apart.
  *  - with no plan (the value on file moved with the price, the last resort): the first value on file is the opening amount, and each
  *    later value's difference from the one before it moved with the price is a step.
@@ -995,7 +995,7 @@ export function fundTrack(
 const valueFund: Valuer = (a, on, c, cur) => {
   if (on >= c.today && cur)
     return cur.counted
-      ? got(a, cur.value, 'units_nav', null, false, 'net worth today')
+      ? got(a, cur.value, 'units_nav', null, false, 'net worth')
       : none(a, 'ended', 'not counted today');
   const f = a.fund;
   const rate = null;
@@ -1127,7 +1127,7 @@ function valueForeign(
 ): ValuedHolding {
   if (on >= c.today && cur)
     return cur.counted
-      ? got(a, cur.value, 'fx', null, true, 'net worth today')
+      ? got(a, cur.value, 'fx', null, true, 'net worth')
       : none(a, 'ended', 'not counted today');
   if (a.status === 'gifted') return none(a, 'ended', 'gifted');
   const ended = endedAfterLastRecord(a, on);
@@ -1168,7 +1168,7 @@ function valueFlat(
           growthOf(a, c) !== 0 ? 'assumed' : 'recorded',
           null,
           growthOf(a, c) !== 0,
-          'net worth today',
+          'net worth',
         )
       : none(a, 'ended', 'not counted today');
   if (a.status === 'gifted') return none(a, 'ended', 'gifted');
@@ -1405,7 +1405,7 @@ export interface PositionGainsInput {
   position: PositionInput;
   /** Settings: Home, "Last N days" */
   recentDays: number;
-  /** the fund's value today per fund and the rest of what net worth says (see PositionInput.current) */
+  /** the fund's current value per fund and the rest of what net worth says (see PositionInput.current) */
   fundValue?: Record<string, number>;
 }
 
@@ -1421,9 +1421,9 @@ export interface HeadlineTile {
   clamped: boolean;
   /** the first day anything can be worked out for */
   dataStarts: string | null;
-  /** rupees earned in the period: interest, price moves, exchange-rate moves, growth assumed; money put in or taken out is not in it */
+  /** rupees earned in the period: interest, price moves, exchange-rate moves, growth assumed; invested or taken out is not in it */
   amount: number;
-  /** of the money at work (the value at the start plus money added, less money taken out, each for the days it was there); null with none */
+  /** of the money at work (the value at the start plus money added, less money withdrawn, each for the days it was there); null with none */
   pct: number | null;
   base: number;
   putIn: number;
@@ -1435,7 +1435,7 @@ export interface HeadlineTile {
   empty: boolean;
   /** of the holdings counted then or now, how many had a value on the first day */
   coverage: { withValue: number; of: number };
-  /** net worth on the first day and on the last, for the note "net worth moved by ... (money added or taken out is part of it)" */
+  /** net worth on the first day and on the last, for the note "net worth moved by ... (money added or withdrawn is part of it)" */
   netWorth: { start: number; end: number; change: number };
   /**
    * What the first day of the period is built from: the dates of the oldest and newest record behind it, how many holdings are the
@@ -1573,7 +1573,7 @@ export function fundsOf(
  * each kind of holding is valued by its own rule (the registry above) at the start and end of the period and the gain is what the
  * holding earned, never a change of balance.
  *
- *  - fixed deposits: interest accrued in the period; a new deposit and a payout are money put in and taken out;
+ *  - fixed deposits: interest accrued in the period; a new deposit and a payout are money added and withdrawn;
  *  - mutual funds: value at the end less value at the start less purchases plus sales;
  *  - savings and cash: the interest the balance earns at its rate (a deposit into or a withdrawal from the account is not a gain);
  *  - foreign balances: the move of the exchange rate on the amount held;

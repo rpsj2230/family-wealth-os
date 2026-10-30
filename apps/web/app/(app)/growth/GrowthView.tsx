@@ -79,7 +79,7 @@ export function growthTables(
     {
       id: 'corpus',
       title: `Corpus year by year, ${p.years} years`,
-      note: 'Interest and gains stay invested; SIPs continue and rise each year.',
+      note: 'Interest and profit stay invested; SIPs continue and rise each year.',
       columns: [
         { key: 'year', label: 'Year', kind: 'int' },
         ...ageNames.map((n, i) => ({ key: `age${i}`, label: `${n}'s age`, kind: 'int' as const })),
@@ -154,7 +154,7 @@ function SlowTab({ work }: { work: MoneyAtWork }) {
         )}
         <p className="small muted">
           Rates come from the <Link href="/rates">Rates</Link> page; the savings buffer, the
-          smallest gain worth a move and the insurance limit are in Settings.
+          smallest improvement worth a move and the insurance limit are in Settings.
         </p>
       </section>
 
@@ -336,7 +336,7 @@ function ProjectionTab({
               <tr>
                 <th>Year</th>
                 <th className="num">Added (SIPs)</th>
-                <th className="num">Growth</th>
+                <th className="num">Earned</th>
                 <th className="num">Deposits</th>
                 <th className="num">Funds</th>
                 <th className="num">Cash</th>
@@ -366,7 +366,7 @@ function ProjectionTab({
         <li>
           Each holding grows at the rate it earns today, after tax: deposits at their own rate
           (renewed at the same rate), savings at their rate, funds at their own yearly return.
-          Interest and gains stay invested every year.
+          Interest and profit stay invested every year.
         </li>
         <li>
           The same pace grows every fund at its actual past return (XIRR)

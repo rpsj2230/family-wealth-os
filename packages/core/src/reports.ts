@@ -5,6 +5,7 @@
  */
 import type { Compounding } from './fd';
 import { depositPeriod, spanBetween } from './period-gains';
+import { returnsFor } from './performance';
 import { fyBoundsOf, fyOf } from './tax';
 
 export type ColKind = 'text' | 'date' | 'int' | 'money' | 'pct' | 'rate';
@@ -113,7 +114,7 @@ const aggFds = (list: ReportFd[]): FdAgg => ({
 });
 
 /**
- * "Maturity summary" (by the date each deposit matures) and "Start summary" (by the date it was booked): the amount put in, the
+ * "Maturity summary" (by the date each deposit matures) and "Start summary" (by the date it was booked): the amount invested, the
  * amount it pays at maturity and the interest, for each date, month, quarter, financial year or year, with a grand total.
  */
 export function fdSummary(
@@ -142,8 +143,8 @@ export function fdSummary(
     title: opts.basis === 'maturity' ? 'Maturity summary' : 'Start summary',
     note:
       opts.basis === 'maturity'
-        ? 'What matures when: the amount put in and what it pays at maturity.'
-        : 'What was booked when: the amount put in and what it will pay at maturity.',
+        ? 'What matures when: the amount invested and what it pays at maturity.'
+        : 'What was booked when: the amount invested and what it will pay at maturity.',
     columns: [
       { key: 'period', label: what, kind: 'text' },
       ...FD_MONEY,
@@ -367,6 +368,30 @@ const weightedXirr = (list: ReportFund[]) => {
 };
 
 /**
+ * One XIRR for a group of funds: every purchase, SIP, sale and payout of all of them together and their value today, the way
+ * Investments works out its XIRR (performance.ts returnsFor), so a group here and the same funds there show the same rate. A fund with
+ * no transactions counts with the flows of its plan.
+ */
+export function pooledXirr(list: ReportFund[], today: string): number | null {
+  return returnsFor(
+    list.map((f) => ({
+      assetId: f.id,
+      ownerId: f.owner,
+      name: f.name,
+      value: f.value,
+      txns: f.txns,
+      plan: {
+        invested: f.invested,
+        startedOn: f.startedOn,
+        sipMonthly: f.sipMonthly,
+        sipStopped: f.sipStopped,
+      },
+    })),
+    today,
+  ).xirr;
+}
+
+/**
  * Funds grouped by fund, person, kind of fund, fund house or the month/year they were started: money in, value, gain, return and
  * share, with a grand total. Start dates are bunched with `period`.
  */
@@ -374,6 +399,8 @@ export function fundSummary(
   funds: ReportFund[],
   by: FundBy,
   period: Period = 'month',
+  /** today: with it, each group's XIRR is pooled over its funds' money (pooledXirr); without it, the value-weighted average */
+  today?: string,
 ): ReportTable {
   const totalValue = sum(funds.map((f) => f.value));
   const goalGroup = (f: ReportFund) => {
@@ -424,7 +451,7 @@ export function fundSummary(
       value,
       gain: r2(value - invested),
       gainPct: invested > 0 ? (value - invested) / invested : null,
-      xirr: weightedXirr(list),
+      xirr: today ? pooledXirr(list, today) : weightedXirr(list),
       share: totalValue > 0 ? value / totalValue : null,
     };
   };
@@ -459,9 +486,9 @@ export function fundSummary(
     columns: [
       ...cols,
       { key: 'invested', label: 'Invested', kind: 'money' },
-      { key: 'value', label: 'Value now', kind: 'money' },
+      { key: 'value', label: 'Current value', kind: 'money' },
       { key: 'gain', label: 'Gain', kind: 'money' },
-      { key: 'gainPct', label: 'Gain %', kind: 'pct' },
+      { key: 'gainPct', label: 'Overall %', kind: 'pct' },
       { key: 'xirr', label: 'XIRR', kind: 'pct' },
       { key: 'share', label: 'Share', kind: 'pct' },
     ],
@@ -525,7 +552,7 @@ export function sipTable(funds: ReportFund[], today: string): ReportTable {
       { key: 'months', label: 'Months', kind: 'int' },
       { key: 'instalments', label: 'Instalments', kind: 'int' },
       { key: 'paid', label: 'Paid so far', kind: 'money' },
-      { key: 'value', label: 'Value now', kind: 'money' },
+      { key: 'value', label: 'Current value', kind: 'money' },
     ],
     rows,
     total: {
@@ -675,13 +702,13 @@ export function fundAge(
   return {
     id: 'mf-age',
     title: 'How long the units have been held',
-    note: 'Value today of the units bought in each age band. “Before the statement” are units whose purchase date is not on file. Lots are from statements or, where marked on the Breakdown tab, estimated.',
+    note: 'Current value of the units bought in each age band. “Before the statement” are units whose purchase date is not on file. Lots are from statements or, where marked on the Breakdown tab, estimated.',
     columns: [
       { key: 'fund', label: 'Fund', kind: 'text' },
       { key: 'owner', label: 'Person', kind: 'text' },
       ...bands.map((b): Col => ({ key: b.key, label: b.label, kind: 'money' })),
       { key: 'before', label: 'Date not known', kind: 'money' },
-      { key: 'total', label: 'Value now', kind: 'money' },
+      { key: 'total', label: 'Current value', kind: 'money' },
     ],
     rows,
     total,

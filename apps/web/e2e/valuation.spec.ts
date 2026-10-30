@@ -11,7 +11,7 @@ test.describe('Investments > Value by period (public sample)', () => {
   test('carries the same note about funds without a ledger as Home', async ({ page }) => {
     await page.goto('/demo/investments?tab=valuation');
     await expect(page.getByTestId('vbp-fund-note')).toContainText(
-      'Fund gains are approximate until you import your fund statements',
+      /Fund profit is approximate until you import your fund statements/,
     );
   });
 
@@ -34,9 +34,9 @@ test.describe('Investments > Value by period (public sample)', () => {
       'Portfolio value (₹)',
       'Change (₹)',
       'Change (%)',
-      'Money put in, net of sales (₹)',
-      'Gain (₹)',
-      'Gain (%)',
+      'Added less withdrawn (₹)',
+      'Profit (₹)',
+      'Profit (%)',
     ]);
     // the default is the last 12 months, newest first, the latest labelled to date
     await expect(rows(page)).toHaveCount(12);
@@ -124,7 +124,7 @@ test.describe('Investments > Value by period (public sample)', () => {
     await page.locator('[data-why="valuation.table"]').first().click();
     const p = page.getByTestId('why-panel');
     await expect(p).toContainText('new money included');
-    await expect(p).toContainText('Gain = change − net money in');
+    await expect(p).toContainText(/Earned = change − added less withdrawn/);
     await page.keyboard.press('Escape');
     await page.locator('[data-why="valuation.chart"]').first().click();
     await expect(page.getByTestId('why-panel')).toContainText('units held on its last day');

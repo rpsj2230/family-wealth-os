@@ -100,3 +100,17 @@
     grid-column: 1 / -1;
   }
 }
+/* inside the dark headline panel of Home and Accounts */
+.gs.on-dark {
+  --gs-bg: rgba(255, 255, 255, 0.07);
+  --gs-track: rgba(255, 255, 255, 0.16);
+  --gs-bar: rgba(255, 255, 255, 0.75);
+  --gs-main: #7ef0b4;
+  --gs-tick: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.gs.on-dark .gs-label,
+.gs.on-dark .gs-key {
+  color: rgba(255, 255, 255, 0.78);
+}

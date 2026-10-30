@@ -312,7 +312,7 @@ export interface AppConfig {
     /** Investments > Match funds: how many schemes are listed for a fund, and how many a name search returns */
     matchChoices: number;
     matchSearchResults: number;
-    /** Home's note "fund gains are approximate until you import your fund statements" shows while more funds than this have no transaction ledger (0 = any) */
+    /** Home's note "fund profit are approximate until you import your fund statements" shows while more funds than this have no transaction ledger (0 = any) */
     noLedgerNoteAbove: number;
     /** a fund with no ledger has its units rebuilt from its SIP plan; the plan's money in may differ from the amount invested by this share before it is adjusted (0.02 = 2%) */
     planTolerance: number;

@@ -163,7 +163,7 @@ export function TaxPanel({
                     <th>Bought</th>
                     <th className="num">Units</th>
                     <th className="num">Cost</th>
-                    <th className="num">Value today</th>
+                    <th className="num">Current value</th>
                     <th className="num">Gain</th>
                     <th className="num">Days held</th>
                     <th className="num">Exit-load free from</th>
@@ -183,7 +183,7 @@ export function TaxPanel({
                       <td className="num" data-label="Cost">
                         {r.cost === null ? '–' : inr(r.cost)}
                       </td>
-                      <td className="num" data-label="Value today">
+                      <td className="num" data-label="Current value">
                         {r.value === null ? '–' : inr(r.value)}
                       </td>
                       <td className={`num ${tone(r.gain)}`} data-label="Gain">
@@ -227,7 +227,7 @@ export function TaxPanel({
                         ? '–'
                         : inr(p.rows.reduce((a, r) => a + (r.cost ?? 0), 0))}
                     </td>
-                    <td className="num" data-label="Value today">
+                    <td className="num" data-label="Current value">
                       {inr(p.rows.reduce((a, r) => a + (r.value ?? 0), 0))}
                     </td>
                     <td className="num" data-label="Gain">

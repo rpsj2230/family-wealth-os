@@ -16,7 +16,7 @@
  * applies to, never the day the e-mail arrived).
  *
  * Reconciliation (`reconcileBalance`): what the old baseline, the confirmed movements and the interest predicted for the date of a new
- * actual balance is compared with it. A difference is never treated as profit or as money put in: it is an "unexplained adjustment",
+ * actual balance is compared with it. A difference is never treated as profit or as invested: it is an "unexplained adjustment",
  * kept apart until it is classified.
  *
  * Pure: dates are YYYY-MM-DD text; no I/O.
@@ -236,7 +236,7 @@ export interface Reconciliation {
  * Compare a new actual balance with what was predicted for its date. `tolerance` is in rupees (Settings); a difference within it, or
  * within the interest the account could have earned beyond the estimate (a credit on a different day), is explained. `candidates` are
  * known events that could explain a difference (maturity proceeds awaiting confirmation, payouts due to this account); any one within
- * 2% of the difference is offered first. Otherwise the difference is offered as outside money in, or money taken out.
+ * 2% of the difference is offered first. Otherwise the difference is offered as outside money in, or money withdrawn.
  */
 export function reconcileBalance(args: {
   baseline: { date: string; amount: number };
@@ -273,7 +273,7 @@ export function reconcileBalance(args: {
             amount: difference,
             label: 'Money added from outside (salary, a gift, a sale)',
           }
-        : { kind: 'money_out', amount: difference, label: 'Money taken out or spent' },
+        : { kind: 'money_out', amount: difference, label: 'Money withdrawn or spent' },
     );
   }
   return {

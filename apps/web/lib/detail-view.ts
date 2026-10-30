@@ -3,6 +3,7 @@
  * only draw what this returns, so the same figures appear everywhere and are tested without a database.
  */
 import {
+  TERMS,
   DEFAULT_CONFIG,
   describeAudit,
   fdInterestForFy,
@@ -355,7 +356,7 @@ function fdTable(i: AssetViewInput): DetailTableData | null {
 export const VALUE_TABLE = 'How today’s value is worked out';
 
 /**
- * How a savings account's value today is worked out, step by step: the last balance you or the bank confirmed, the money moved since
+ * How a savings account's current value is worked out, step by step: the last balance you or the bank confirmed, the money moved since
  * that you confirmed, and the interest since (credited by the bank, then accrued and not yet credited), after tax at source. Each line
  * says whether it is an actual figure or an estimate. The next actual balance replaces the estimate; a difference goes to Explain
  * movements, never to profit.
@@ -378,7 +379,7 @@ export function savingsBreakdown(
     { cells: ['Interest earned, not yet credited', signed(s.accrued), 'Estimate'] },
     {
       cells: [
-        `Value today, ${today}`,
+        `Current value, ${today}`,
         inr(value ?? s.baseline.amount + s.moved + s.interest),
         s.interest === 0 && s.moved === 0 ? 'Actual' : 'Estimate',
       ],
@@ -395,7 +396,7 @@ export function savingsBreakdown(
 }
 
 /**
- * How a fund's value today is worked out: the units a fund statement confirmed, at the latest official price (NAV), and apart from them
+ * How a fund's current value is worked out: the units a fund statement confirmed, at the latest official price (NAV), and apart from them
  * the SIP instalments bought since that no statement has confirmed yet (projected). Each line says which it is, and an old price says so.
  */
 export function fundBreakdown(
@@ -419,7 +420,7 @@ export function fundBreakdown(
   if (f.projectedCount > 0 || f.projectedUnits > 0)
     rows.push({
       cells: [
-        `SIP instalments since, not yet on a statement: ${f.projectedCount} (${inr(f.projectedInvested)} put in, ${f.projectedUnits.toFixed(3)} units)`,
+        `SIP instalments since, not yet on a statement: ${f.projectedCount} (${inr(f.projectedInvested)} invested, ${f.projectedUnits.toFixed(3)} units)`,
         inr(f.projectedValue),
         'Projected',
       ],
@@ -434,7 +435,7 @@ export function fundBreakdown(
     });
   rows.push({
     cells: [
-      `Value today, ${today}`,
+      `Current value, ${today}`,
       inr(value),
       f.confirmedUnits !== null && f.projectedUnits === 0
         ? 'Actual units × market price'
@@ -499,7 +500,7 @@ function fundTables(i: AssetViewInput, value: number | null) {
       hint: res.reconciled
         ? 'Each purchase that still has units. Sales use the oldest units first.'
         : 'The statement history does not add up to the units held, so these lots may be incomplete.',
-      columns: ['Bought', 'Units', 'Cost', 'Value today', 'Gain'],
+      columns: ['Bought', 'Units', 'Invested', 'Current value', 'Profit'],
       numeric: [1, 2, 3, 4],
       rows: res.lots.map((l) => {
         const v = unit === null ? null : l.units * unit;
@@ -517,7 +518,7 @@ function fundTables(i: AssetViewInput, value: number | null) {
     });
     tables.push({
       title: 'Sales and the purchases they used',
-      columns: ['Sold', 'Bought', 'Units', 'Sale value', 'Cost', 'Gain'],
+      columns: ['Sold', 'Bought', 'Units', 'Sale value', 'Invested', 'Booked profit'],
       numeric: [2, 3, 4, 5],
       rows: [...res.realised].reverse().map((r) => ({
         cells: [
@@ -548,7 +549,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
   const facts: Fact[] = [];
   const cur = i.current;
   facts.push({
-    label: 'Value today',
+    label: 'Current value',
     value: inr(cur.amount),
     note: cur.basis
       ? `${BASIS[cur.basis] ?? cur.basis}${cur.ageDays !== null ? `, ${cur.ageDays} day${cur.ageDays === 1 ? '' : 's'} since the last recorded value` : ''}`
@@ -623,7 +624,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
             : 'at the rate on the deposit',
       },
       {
-        label: 'At maturity',
+        label: 'Maturity value',
         value: inr(atMaturity),
         note: fd.bank_maturity_amount
           ? 'as stated by the bank (a future amount, not part of today’s value)'
@@ -631,7 +632,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
       },
       now.state === 'running'
         ? {
-            label: 'Value today (estimate)',
+            label: 'Current value (estimate)',
             value: inr(now.held),
             note: `${inr(now.accrued)} interest accrued and held in the deposit${now.paidOut > 0 ? `; ${inr(now.paidOut)} already paid out` : ''}`,
           }
@@ -696,9 +697,9 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     const worth = now.state === 'running' ? now.held : (now.proceeds ?? 0);
     kpis.push(
       {
-        label: now.state === 'running' ? 'Worth today' : 'Proceeds',
+        label: now.state === 'running' ? 'Current value' : 'Proceeds',
         value: inr(worth),
-        note: `${inr(now.earned)} interest earned so far${now.paidOut > 0 ? ` (${inr(now.paidOut)} paid out)` : ''}`,
+        note: `${TERMS.profitInterest.label} ${inr(Math.max(0, now.earned - now.paidOut))}${now.paidOut > 0 ? ` · ${TERMS.booked.label} ${inr(now.paidOut)} (paid out)` : ''}`,
         tone: 'gain',
       },
       {
@@ -707,7 +708,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
         note: `until ${fd.maturity_on}`,
       },
       {
-        label: 'Total interest over the term',
+        label: TERMS.totalInterest.label,
         value: inr(now.termInterest),
         note: `${pct(contract.rate)} a year on ${inr(fd.principal)}`,
       },
@@ -818,9 +819,9 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     );
     facts.push(
       { label: 'Invested', value: inr(p.invested) },
-      { label: 'Gain', value: value === null ? '–' : inr(value - p.invested) },
+      { label: 'Profit', value: value === null ? '–' : inr(value - p.invested) },
       {
-        label: 'Return a year (XIRR)',
+        label: 'XIRR',
         value: r.xirr === null ? '–' : pct(r.xirr),
         note:
           r.xirr === null
@@ -891,7 +892,7 @@ export function buildAssetView(i: AssetViewInput): AssetView {
     related: (i.related ?? []).map((r) => ({
       label: r.label,
       href: `/asset/${r.id}`,
-      value: r.ended || r.value === null ? (r.endedNote ?? 'No value now') : inr(r.value),
+      value: r.ended || r.value === null ? (r.endedNote ?? 'No current value') : inr(r.value),
       note: r.note ?? null,
       ended: !!r.ended,
     })),

@@ -516,3 +516,18 @@ abbr.bv-est {
 .bv-items li {
   padding: 0.15rem 0;
 }
+
+/* the dark headline (money words v6) above the detail card of Accounts and Deposits */
+.bv-wrap {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 16px;
+  min-width: 0;
+}
+.bv-wrap > .bv {
+  margin: 0;
+}
+.hl .fxc,
+.hl .fxc * {
+  color: inherit;
+}

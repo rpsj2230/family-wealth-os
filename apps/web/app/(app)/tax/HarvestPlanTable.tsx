@@ -44,7 +44,7 @@ export function HarvestPlanTable({ t }: { t: HarvestTable }) {
                 <th className="num">Units to sell</th>
                 <th className="num">Price used</th>
                 <th className="num">Cost</th>
-                <th className="num">Value now</th>
+                <th className="num">Current value</th>
                 <th className="num">Long-term gain</th>
                 <th className="num">Short-term gain</th>
                 <th className="num">Exit load</th>
@@ -79,7 +79,7 @@ export function HarvestPlanTable({ t }: { t: HarvestTable }) {
                   <td className="num" data-label="Cost">
                     {inr(r.cost)}
                   </td>
-                  <td className="num" data-label="Value now">
+                  <td className="num" data-label="Current value">
                     {inr(r.value)}
                   </td>
                   <td

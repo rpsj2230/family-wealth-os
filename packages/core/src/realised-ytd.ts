@@ -1,5 +1,5 @@
 /**
- * Gains already booked by selling this financial year, split short- and long-term by the same clock the lots use (a sale is
+ * Booked profit this financial year, split short- and long-term by the same clock the lots use (a sale is
  * long-term only the day AFTER the holding period ends), so the yearly tax-free allowance left is worked out with the same rule
  * that decides whether a unit is ready to sell. Pure.
  */

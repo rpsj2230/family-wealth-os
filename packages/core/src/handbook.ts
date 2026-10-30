@@ -375,7 +375,7 @@ export function buildHandbook(i: HandbookInput): Handbook {
       ...[...byOwner.entries()].map(([owner, fs]) => ({
         title: owner,
         table: {
-          headers: ['Fund', 'Value (est.)', 'Put in', 'Monthly investment'],
+          headers: ['Fund', 'Value (est.)', 'Added', 'Monthly investment'],
           rows: fs
             .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
             .map((f) => [

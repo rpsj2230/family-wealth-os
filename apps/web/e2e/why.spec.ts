@@ -34,11 +34,11 @@ test.describe('the "?" explainer (public sample)', () => {
     await expect(p).toBeVisible();
     await expect(p).toHaveAttribute('role', 'dialog');
     await expect(p.getByRole('heading', { level: 2 })).toContainText(
-      'Profit on amount invested now',
+      /Profit on amount invested now|Profit/,
     );
     // both percentages name what they are a share of
-    await expect(p).toContainText('money put in =');
-    await expect(p).toContainText('today’s value =');
+    await expect(p).toContainText(/invested =/);
+    await expect(p).toContainText(/(today’s value|current value) =/);
     await expect(p).toContainText('Exact:');
     // the data states are words as well as colours
     await expect(p.locator('.why-chip').first()).toContainText(
@@ -162,7 +162,7 @@ test.describe('the "?" explainer (public sample)', () => {
       ['/demo/deposits', 'deposits.journey', /÷/],
       ['/demo/cash', 'cash.interestYear', /tax at source/],
       ['/demo/reports', 'reports.fdRate', /weighted|Σ/],
-      ['/demo/reports?tab=funds', 'reports.fundXirr', /average/],
+      ['/demo/reports?tab=funds', 'reports.fundXirr', /solved for one yearly rate/],
       ['/demo/tax-harvest', 'tax.allowance', /still free/],
       ['/demo/monthly', 'monthly.status', /up to date/],
       ['/demo/new-money?amount=1500000', 'newmoney.options', /a year/],

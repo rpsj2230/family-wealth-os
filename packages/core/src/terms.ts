@@ -26,7 +26,7 @@ export const TERMS = {
   ),
   ownMoney: t(
     'Own money',
-    'Money that came into the family from outside (transfers from abroad, salary, gifts, and what you held on the first day of records), less money taken out to spend. Interest and profit are never part of it.',
+    'Money that came into the family from outside (transfers from abroad, salary, gifts, and what you held on the first day of records), less money withdrawn to spend. Interest and profit are never part of it.',
   ),
   lifetimeProfit: t(
     'Lifetime profit',
@@ -45,7 +45,7 @@ export const TERMS = {
     'What all your money earns a year at today’s rates: deposits and funds at their XIRR, savings at the rate earned this year, money lent at 0%.',
   ),
   // holdings
-  currentValue: t('Current value', 'What it is worth today.'),
+  currentValue: t('Current value', 'What it is worth now.'),
   invested: t(
     'Invested',
     'What the deposits and fund units you hold today cost. Units you sold are not in it. A deposit renewed with its interest counts at its new amount.',
@@ -82,11 +82,11 @@ export const TERMS = {
   ),
   earned: t(
     'Earned',
-    'Profit made in the period shown, with money added or taken out left out. Profit from sales in the period is included.',
+    'Profit made in the period shown, with money added or withdrawn left out. Profit from sales in the period is included.',
   ),
   earnedFy: t(
     'Earned this FY',
-    'Profit made since 1 April, with money added or taken out left out: interest, fund gains, exchange-rate moves and other income.',
+    'Profit made since 1 April, with money added or withdrawn left out: interest, fund gains, exchange-rate moves and other income.',
   ),
   added: t('Added', 'Money that went in during the period.'),
   withdrawn: t('Withdrawn', 'Money that came out during the period.'),

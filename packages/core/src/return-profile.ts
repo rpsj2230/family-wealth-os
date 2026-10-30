@@ -23,7 +23,7 @@ export interface IndexPoint {
   value: number;
 }
 
-/** A cash flow of the person: positive for money put in (purchases), negative for money taken out (sales). */
+/** A cash flow of the person: positive for invested (purchases), negative for money withdrawn (sales). */
 export interface Flow {
   date: string;
   amount: number;
@@ -41,7 +41,7 @@ export interface PerfPeriod {
   to: string;
   startValue: number;
   endValue: number;
-  /** money put in less money taken out, inside the period */
+  /** invested less money withdrawn, inside the period */
   flow: number;
   /** what the market added: end value less start value less the net flow */
   gain: number;
@@ -54,7 +54,7 @@ export interface PerfPeriod {
 /**
  * Cuts the history into the periods between consecutive dated values and works out each one's return, counting every cash flow for
  * the fraction of the period it was invested (Modified Dietz). Chaining these periods gives the time-weighted return.
- * Money put in before the first value starts the history from nothing, on the day before the first flow.
+ * Invested before the first value starts the history from nothing, on the day before the first flow.
  */
 export function chainPeriods(
   points: IndexPoint[],

@@ -107,7 +107,7 @@ export function Recent({
                             </option>
                           ))}
                       </optgroup>
-                      <option value="out">Taken out of the family (spent, given)</option>
+                      <option value="out">Withdrawn from the family (spent, given)</option>
                     </select>
                   </label>
                   {p.suggestion && (

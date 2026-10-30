@@ -164,7 +164,7 @@ export function FundDetailPanel({
       note: sip.instalments === null ? 'needs a fund statement' : `${sip.instalments} instalments`,
     },
     {
-      label: 'Gains booked by selling',
+      label: 'Booked profit',
       value:
         d.realised.sales === 0
           ? 'None'

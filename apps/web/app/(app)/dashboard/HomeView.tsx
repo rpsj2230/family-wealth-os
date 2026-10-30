@@ -9,6 +9,7 @@ import './money.css';
 import { ComingUp, Needs } from './Attention';
 import { Classes } from './Classes';
 import { Goals } from './GoalsRisks';
+import { HomeHeadline } from './Headline';
 import { Hero } from './Hero';
 import { Movement } from './Movement';
 import { Position } from './Position';
@@ -29,6 +30,7 @@ export function HomeView({ m, sample = false }: { m: HomeModel; sample?: boolean
   const base = sample ? '/demo/dashboard' : '/';
   return (
     <div className="hm">
+      <HomeHeadline m={m} sample={sample} ex={ex} />
       <Hero m={m} sample={sample} ex={ex} />
       <Position m={m} sample={sample} />
       <Movement m={m} base={base} range={m.trend.range} sample={sample} ex={ex} />

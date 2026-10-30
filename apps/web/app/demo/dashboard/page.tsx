@@ -31,7 +31,7 @@ export default async function DemoDashboard({
     <DemoShell>
       <PageHead
         title="Family wealth"
-        subtitle="What the family is worth today, what changed, and what needs you."
+        subtitle="Net worth, how the money is growing, and what needs you."
         pills={[
           { label: `values as of ${niceDate(home.asOf ?? home.today)}`, tone: 'info' },
           home.attention.length === 0

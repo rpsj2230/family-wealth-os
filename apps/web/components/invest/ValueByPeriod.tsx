@@ -104,7 +104,7 @@ function Bars({ rows }: { rows: ValuationRow[] }) {
 /**
  * Investments > Value by period: a bar chart of the total valuation and a table of how it changed. Weeks, months, quarters and years
  * and the range are links, so each choice has an address and works without scripts. The first two change columns are the plain change
- * in value (new money included, as a fund statement shows it); the last two take the money put in out, so a big purchase never reads
+ * in value (new money included, as a fund statement shows it); the last two take the money added out, so a big purchase never reads
  * as a good month.
  */
 export function ValueByPeriod({
@@ -155,7 +155,7 @@ export function ValueByPeriod({
       </WhyHead>
       <p className="muted small">
         What {who === 'everyone' ? 'all the mutual funds' : `${who}’s funds`} were worth at the end
-        of each {noun.noun}, and how much of each change was new money and how much was a gain.
+        of each {noun.noun}, and how much of each change was new money and how much was profit.
         {demo ? ' Invented funds for this sample.' : ''}
       </p>
 
@@ -241,13 +241,13 @@ export function ValueByPeriod({
                     Change (%)
                   </th>
                   <th scope="col" className="num">
-                    Money put in, net of sales (₹)
+                    Added less withdrawn (₹)
                   </th>
                   <th scope="col" className="num">
-                    Gain (₹)
+                    Profit (₹)
                   </th>
                   <th scope="col" className="num">
-                    Gain (%)
+                    Profit (%)
                   </th>
                 </tr>
               </thead>
@@ -283,17 +283,17 @@ export function ValueByPeriod({
                     <td className="num" data-label="Change (%)">
                       <Signed n={r.changePct} pct />
                     </td>
-                    <td className="num" data-label="Money put in, net of sales (₹)">
+                    <td className="num" data-label="Added less withdrawn (₹)">
                       {r.value === null ? (
                         <span className="vbp-nil">–</span>
                       ) : (
                         signedRupees(r.netIn, false)
                       )}
                     </td>
-                    <td className="num" data-label="Gain (₹)">
+                    <td className="num" data-label="Profit (₹)">
                       <Signed n={r.gain} />
                     </td>
-                    <td className="num" data-label="Gain (%)">
+                    <td className="num" data-label="Profit (%)">
                       <Signed n={r.gainPct} pct />
                     </td>
                   </tr>
@@ -303,7 +303,7 @@ export function ValueByPeriod({
           </div>
           <p className="cardnote">
             Change is the plain move in value, as a fund statement shows it, so it includes money
-            you put in. Gain takes that money out: the change less purchases plus sales, as a share
+            you added. Profit takes that money out: the change less purchases plus sales, as a share
             of the money at work in the period. The latest row stops at today (
             {h.today.split('-').reverse().join('/')}) and says “to date”; “no data” means no price
             or record was near the end of that period. Values are the units held times the price on

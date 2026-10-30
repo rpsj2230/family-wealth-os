@@ -295,7 +295,7 @@ describe('runReport', () => {
     expect(r.kpis.map((k) => [k.label, k.value, k.previous])).toEqual([
       ['Money in', 20_000, 8_000],
       ['Money out', 5_000, 0],
-      ['Net put in', 15_000, 8_000],
+      ['Added less withdrawn', 15_000, 8_000],
     ]);
     expect(r.tables[0]!.rows.filter((x) => x.basis === 'Assumed from the SIP plan')).toHaveLength(
       1,

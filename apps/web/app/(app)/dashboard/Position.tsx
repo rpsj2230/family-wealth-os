@@ -151,7 +151,7 @@ export function Position({ m, sample }: { m: HomeModel; sample: boolean }) {
       <p className="small muted">
         Each kind of money on its own: mutual funds are never counted as cash, and deposit interest
         is kept apart from the principal. Changes (1M, 3M, 1Y) compare with the daily snapshot of
-        that day: they are moves in value, including money put in or taken out, not profit.
+        that day: they are moves in value, including money added or withdrawn, not profit.
       </p>
       <ul className="hm-class-grid hm-pos-grid">
         {m.position.map((c) => (

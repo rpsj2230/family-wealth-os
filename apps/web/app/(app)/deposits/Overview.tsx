@@ -12,23 +12,16 @@ import {
   type MaturityYear,
   type PersonStyle,
 } from '@fwos/core';
-import {
-  Delta,
-  SplitBar,
-  Stat,
-  plural,
-  signedPct,
-  signedShort,
-  whole,
-} from '@/app/(app)/accounts/BankOverview';
+import { SplitBar, plural, signedShort, whole } from '@/app/(app)/accounts/BankOverview';
 import '@/app/(app)/accounts/bankoverview.css';
 import './overview.css';
+import { Extra, Extras, HeadlinePanel, Pill, Tile } from '@/components/MoneyHeadline';
 import { PersonBadge } from '@/components/Person';
 import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 
 /**
- * The overview at the top of Deposits: what the fixed deposits are worth, what was put in, what they pay at maturity, the profit and
+ * The overview at the top of Deposits: what the fixed deposits are worth, what was invested, what they pay at maturity, the profit and
  * today's change, which bank holds how much, and what falls due in which year. Every figure is computed in @fwos/core
  * (bankOverview over the deposits alone, depositsByBank, maturityLadder); this only draws them.
  */
@@ -70,42 +63,147 @@ export function DepositOverviewPanel({
     .join(', ');
 
   return (
-    <section className="card bv dv" aria-label="Fixed deposits overview">
-      <div className="bv-top">
-        <div className="bv-hero">
-          <WhyHead why={ex['deposits.total']}>
-            <h2 className="bv-eyebrow">
-              {TERMS.currentValue.label} of fixed deposits{scope ? ` · ${scope}` : ''}
-            </h2>
-          </WhyHead>
-          <div className="bv-big" data-testid="dv-current">
-            {formatInrCompact(o.current)}
-          </div>
-          <div className="bv-exact">{whole(o.current)}</div>
-          <p className="bv-count">
-            {empty
-              ? 'No deposit is running.'
-              : `${plural(o.deposits, 'running deposit')}${kinds ? ` (${kinds})` : ''} in ${plural(banks.length, 'bank')} · est.`}
-          </p>
-          <div className="bv-deltas">
-            <Delta
-              label={TERMS.profitInterest.label}
-              amount={o.profit}
-              pct={o.profitPct}
-              note={`current value less invested; % overall${growth?.fd ? ` · ${TERMS.xirr.label} ${formatPct(growth.fd.rate, 2)} a year` : ''}`}
-              why={ex['deposits.profit']}
-            />
-            <Delta
-              label={TERMS.todayChange.label}
-              amount={o.today.change}
-              pct={o.today.changePct}
-              note="since yesterday, at each rate; % of yesterday’s value"
-              estimate
-              why={ex['deposits.today']}
-            />
-          </div>
+    <section className="bv-wrap" aria-label="Fixed deposits overview">
+      <HeadlinePanel
+        label={`${TERMS.currentValue.label} of fixed deposits${scope ? ` · ${scope}` : ''}`}
+        value={o.current}
+        why={ex['deposits.total']}
+        ariaLabel="Current value of fixed deposits"
+        testId="dv-current"
+      >
+        <div className="hl-pills">
+          <Pill
+            amount={o.profit}
+            pct={o.profitPct}
+            label={TERMS.profitInterest.label}
+            why={ex['deposits.profit']}
+            testId="dv-profit"
+          />
+          <Pill
+            amount={o.today.change}
+            pct={o.today.changePct}
+            label={TERMS.todayChange.label}
+            why={ex['deposits.today']}
+            testId="dv-today"
+          />
         </div>
+        <p className="hl-asof">
+          {empty
+            ? 'No deposit is running.'
+            : `${plural(o.deposits, 'running deposit')}${kinds ? ` (${kinds})` : ''} in ${plural(banks.length, 'bank')} · est.`}
+        </p>
+        <ul className="hl-tiles" aria-label="The deposits in figures">
+          <Tile
+            label={TERMS.investedPrincipal.label}
+            value={formatInr(Math.round(o.invested))}
+            sub={`${plural(o.deposits, 'running deposit')}`}
+            why={ex['deposits.invested']}
+            testId="dv-tile-invested"
+          />
+          <Tile
+            label={TERMS.maturityValue.label}
+            value={formatInr(Math.round(o.maturity))}
+            sub={`${TERMS.totalInterest.label} ${formatInrCompact(o.interest.total)}${o.interest.journey !== null ? ` · ${formatPct(o.interest.journey, 0)} earned so far` : ''}`}
+            why={ex['deposits.maturity']}
+            testId="dv-tile-maturity"
+          />
+          <Tile
+            label={TERMS.interestToCome.label}
+            value={formatInr(Math.round(o.interest.toEarn))}
+            sub="until every deposit matures"
+            why={ex['deposits.toEarn']}
+            testId="dv-tile-tocome"
+          />
+          <Tile
+            label={`${TERMS.interestEarned.label} this FY`}
+            value={growth?.interestFy ? signedShort(growth.interestFy.deposits) : '–'}
+            sub={r?.nro ? 'NRO part taxable · NRE tax-free' : 'since 1 April'}
+            why={ex['deposits.interestFy']}
+            testId="dv-tile-fy"
+          />
+          <Tile
+            label={TERMS.averageRate.label}
+            value={typeof r?.all === 'number' ? `${formatPct(r.all, 2)} a year` : '–'}
+            sub={
+              [
+                r?.nre ? `NRE ${formatPct(r.nre.rate, 2)}` : null,
+                r?.nro
+                  ? `NRO ${formatPct(r.nro.rate, 2)} (≈ ${formatPct(r.nro.afterTax, 1)} after tax)`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'no deposit is running'
+            }
+            href={to('/rates')}
+            why={ex['deposits.avgRate']}
+            testId="dv-tile-rate"
+          />
+          <Tile
+            label={`Maturing in ${plural(o.soon.days, 'day')}`}
+            value={o.soon.count === 0 ? 'None' : formatInr(Math.round(o.soon.amount))}
+            sub={o.soon.count === 0 ? 'nothing falls due soon' : plural(o.soon.count, 'deposit')}
+            href={to('/deposits?tab=maturities')}
+            why={ex['deposits.soon']}
+            testId="dv-tile-soon"
+          />
+        </ul>
+        <Extras>
+          <Extra
+            label="Above insured limit"
+            value={cover.uninsured > 0 ? formatInrCompact(cover.uninsured) : 'None'}
+            sub={
+              cover.uninsured > 0
+                ? `deposits and savings, in ${plural(cover.banksOver, 'bank')}`
+                : `all within ${formatInr(cover.limit)} per bank and name`
+            }
+            warn={cover.uninsured > 0}
+            href={to('/deposits?tab=cover')}
+            why={ex['deposits.cover']}
+            testId="dv-x-insured"
+          />
+          <Extra
+            label={TERMS.xirr.label}
+            value={growth?.fd ? `${formatPct(growth.fd.rate, 2)} a year` : '–'}
+            sub="from each booking date to today"
+            why={ex['deposits.xirr']}
+            testId="dv-x-xirr"
+          />
+          <Extra
+            label="Next maturity"
+            value={o.next ? formatInrCompact(o.next.amount) : '–'}
+            sub={
+              o.next
+                ? `${niceDate(o.next.date)} · ${o.next.days === 0 ? 'today' : `in ${plural(o.next.days, 'day')}`} · ${o.next.bank}${o.next.count > 1 ? ` and ${o.next.count - 1} more` : ''}`
+                : 'no deposit is running'
+            }
+            href={to('/deposits?tab=maturities')}
+            why={ex['deposits.next']}
+            testId="dv-x-next"
+          />
+          <Extra
+            label="To confirm"
+            value={toConfirm === 0 ? 'None' : String(toConfirm)}
+            sub={toConfirm === 0 ? 'nothing waiting' : 'matured: say where the money went'}
+            warn={toConfirm > 0}
+            href={to('/deposits?tab=maturities')}
+            why={ex['deposits.toConfirm']}
+            testId="dv-x-confirm"
+          />
+          <Extra
+            label="Largest bank"
+            value={banks[0] ? formatPct(banks[0].share, 0) : '–'}
+            sub={
+              banks[0]
+                ? `${banks[0].bank} holds ${formatInrCompact(banks[0].current)}`
+                : 'no bank yet'
+            }
+            why={ex['deposits.largest']}
+            testId="dv-x-largest"
+          />
+        </Extras>
+      </HeadlinePanel>
 
+      <div className="card bv dv">
         <div className="bv-journey">
           <WhyHead why={ex['deposits.journey']}>
             <h3 className="bv-h">
@@ -148,239 +246,141 @@ export function DepositOverviewPanel({
             </>
           )}
         </div>
-      </div>
 
-      {!empty && (
-        <div className="dv-pair">
-          <div className="dv-banks">
-            <div className="dv-headrow">
-              <WhyHead why={ex['deposits.banks']}>
-                <h3 className="bv-h">Which bank holds how much</h3>
-              </WhyHead>
-              <Link className="small" href={to('/deposits?g=bank')}>
-                Group the list by bank
-              </Link>
-            </div>
-            <ol className="dv-list" data-testid="dv-banks">
-              {banks.map((b) => (
-                <li key={b.bankId}>
-                  <div className="dv-line">
-                    <span className="dv-name">{b.bank}</span>
-                    <strong className="dv-amt">{formatInrCompact(b.current)}</strong>
-                    <span className="dv-pct">{formatPct(b.share, 0)}</span>
-                  </div>
-                  <div className="dv-bar" aria-hidden="true">
-                    <span style={{ width: `${(b.share / topShare) * 100}%` }} />
-                  </div>
-                  <div className="dv-sub">
-                    {plural(b.count, 'deposit')} · {formatInrCompact(b.invested)} invested
-                    {b.avgRate !== null ? ` · ${formatPct(b.avgRate, 2)}` : ''}
-                    {b.next
-                      ? ` · next ${niceDate(b.next.date)} (${formatInrCompact(b.next.amount)})`
-                      : ''}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className="dv-ladder">
-            <WhyHead why={ex['deposits.ladder']}>
-              <h3 className="bv-h">What matures, year by year</h3>
-            </WhyHead>
-            <ol className="dv-list" data-testid="dv-ladder">
-              {ladder.map((s) => (
-                <li key={s.year}>
-                  <div className="dv-line">
-                    <span className="dv-name">{s.year}</span>
-                    <strong className="dv-amt">{formatInrCompact(s.amount)}</strong>
-                    <span className="dv-pct">{plural(s.count, 'deposit')}</span>
-                  </div>
-                  <div className="dv-bar alt" aria-hidden="true">
-                    <span style={{ width: `${(s.amount / biggest) * 100}%` }} />
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <p className="muted small">What each deposit pays on its date, including interest.</p>
-          </div>
-        </div>
-      )}
-
-      <dl className="bv-grid" aria-label="More figures">
-        <Stat
-          label={TERMS.investedPrincipal.label}
-          value={formatInrCompact(o.invested)}
-          sub={`${plural(o.deposits, 'running deposit')} · ${TERMS.profit.label} ${signedShort(o.profit)}${o.profitPct !== null ? ` (${signedPct(o.profitPct)} overall)` : ''}`}
-          why={ex['deposits.invested']}
-        />
-        <Stat
-          label={TERMS.maturityValue.label}
-          value={formatInrCompact(o.maturity)}
-          sub={`${TERMS.totalInterest.label} ${formatInrCompact(o.interest.total)}${o.interest.journey !== null ? ` · ${formatPct(o.interest.journey, 0)} earned so far` : ''}`}
-          why={ex['deposits.maturity']}
-        />
-        <Stat
-          label={TERMS.interestToCome.label}
-          value={formatInrCompact(o.interest.toEarn)}
-          sub="until every deposit matures"
-          why={ex['deposits.toEarn']}
-        />
-        <Stat
-          label={`${TERMS.interestEarned.label} this FY`}
-          value={growth?.interestFy ? signedShort(growth.interestFy.deposits) : '–'}
-          sub={r?.nro ? 'NRO part taxable · NRE tax-free' : 'since 1 April'}
-          why={ex['deposits.interestFy']}
-        />
-        <Stat
-          label={TERMS.averageRate.label}
-          value={typeof r?.all === 'number' ? `${formatPct(r.all, 2)} a year` : '–'}
-          sub={
-            [
-              r?.nre ? `NRE ${formatPct(r.nre.rate, 2)}` : null,
-              r?.nro
-                ? `NRO ${formatPct(r.nro.rate, 2)} (≈ ${formatPct(r.nro.afterTax, 1)} after tax)`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(' · ') || 'no deposit is running'
-          }
-          href={to('/rates')}
-          why={ex['deposits.avgRate']}
-        />
-        <Stat
-          label={TERMS.xirr.label}
-          value={growth?.fd ? `${formatPct(growth.fd.rate, 2)} a year` : '–'}
-          sub="from each booking date to today"
-          why={ex['deposits.xirr']}
-        />
-        <Stat
-          label="Next maturity"
-          value={o.next ? formatInrCompact(o.next.amount) : '–'}
-          sub={
-            o.next
-              ? `${niceDate(o.next.date)} · ${o.next.days === 0 ? 'today' : `in ${plural(o.next.days, 'day')}`} · ${o.next.bank}${o.next.count > 1 ? ` and ${o.next.count - 1} more` : ''}`
-              : 'no deposit is running'
-          }
-          href={to('/deposits?tab=maturities')}
-          why={ex['deposits.next']}
-        />
-        <Stat
-          label={`Maturing in ${plural(o.soon.days, 'day')}`}
-          value={o.soon.count === 0 ? 'None' : formatInrCompact(o.soon.amount)}
-          sub={o.soon.count === 0 ? 'nothing falls due soon' : plural(o.soon.count, 'deposit')}
-          tone={o.soon.count > 0 ? 'warn' : undefined}
-          href={to('/deposits?tab=maturities')}
-          why={ex['deposits.soon']}
-        />
-        <Stat
-          label="To confirm"
-          value={toConfirm === 0 ? 'None' : toConfirm}
-          sub={toConfirm === 0 ? 'nothing waiting' : 'matured: say where the money went'}
-          tone={toConfirm > 0 ? 'warn' : undefined}
-          href={to('/deposits?tab=maturities')}
-          why={ex['deposits.toConfirm']}
-        />
-        <Stat
-          label="Largest bank"
-          value={banks[0] ? formatPct(banks[0].share, 0) : '–'}
-          sub={
-            banks[0]
-              ? `${banks[0].bank} holds ${formatInrCompact(banks[0].current)} of the deposits`
-              : 'no bank yet'
-          }
-          why={ex['deposits.largest']}
-        />
-        <Stat
-          label={TERMS.aboveInsured.label}
-          value={cover.uninsured > 0 ? formatInrCompact(cover.uninsured) : 'None'}
-          sub={
-            cover.uninsured > 0
-              ? `in ${plural(cover.banksOver, 'bank')} · limit ${formatInr(cover.limit)} per bank and name`
-              : `all within ${formatInr(cover.limit)} per bank and name`
-          }
-          tone={cover.uninsured > 0 ? 'warn' : undefined}
-          href={to('/deposits?tab=cover')}
-          why={ex['deposits.cover']}
-        />
-      </dl>
-
-      {(people.length > 1 || o.accountTypes.length > 0) && !empty && (
-        <div className="bv-splits">
-          {people.length > 1 && (
-            <div className="bv-split">
-              <WhyHead why={ex['deposits.people']}>
-                <h3 className="bv-h">Whose deposits</h3>
-              </WhyHead>
-              <SplitBar
-                caption="Whose deposits"
-                parts={people.map((p) => ({
-                  key: p.ownerId,
-                  label: p.style?.name ?? 'Unknown',
-                  share: p.share,
-                  className: 'person',
-                  style: { background: p.style?.colour ?? 'var(--muted)' },
-                }))}
-              />
-              <ul className="bv-legend plain">
-                {people.map((p) => (
-                  <li key={p.ownerId}>
-                    <PersonBadge p={p.style} size={18} />
-                    <span className="bv-lname">{p.style?.name ?? 'Unknown'}</span>
-                    <strong className="bv-lamt">{formatInrCompact(p.current)}</strong>
-                    <span className="bv-lpct">
-                      {formatPct(p.share, 0)} ·{' '}
-                      <span className={p.profit < 0 ? 'bv-neg' : 'bv-pos'}>
-                        {p.profit < 0 ? '▼ ' : '▲ '}
-                        {formatInrCompact(Math.abs(p.profit))}
-                      </span>
-                    </span>
+        {!empty && (
+          <div className="dv-pair">
+            <div className="dv-banks">
+              <div className="dv-headrow">
+                <WhyHead why={ex['deposits.banks']}>
+                  <h3 className="bv-h">Which bank holds how much</h3>
+                </WhyHead>
+                <Link className="small" href={to('/deposits?g=bank')}>
+                  Group the list by bank
+                </Link>
+              </div>
+              <ol className="dv-list" data-testid="dv-banks">
+                {banks.map((b) => (
+                  <li key={b.bankId}>
+                    <div className="dv-line">
+                      <span className="dv-name">{b.bank}</span>
+                      <strong className="dv-amt">{formatInrCompact(b.current)}</strong>
+                      <span className="dv-pct">{formatPct(b.share, 0)}</span>
+                    </div>
+                    <div className="dv-bar" aria-hidden="true">
+                      <span style={{ width: `${(b.share / topShare) * 100}%` }} />
+                    </div>
+                    <div className="dv-sub">
+                      {plural(b.count, 'deposit')} · {formatInrCompact(b.invested)} invested
+                      {b.avgRate !== null ? ` · ${formatPct(b.avgRate, 2)}` : ''}
+                      {b.next
+                        ? ` · next ${niceDate(b.next.date)} (${formatInrCompact(b.next.amount)})`
+                        : ''}
+                    </div>
                   </li>
                 ))}
-              </ul>
+              </ol>
             </div>
-          )}
-          {o.accountTypes.length > 0 && (
-            <div className="bv-split">
-              <WhyHead why={ex['deposits.types']}>
-                <h3 className="bv-h">NRE and NRO</h3>
-              </WhyHead>
-              <SplitBar
-                caption="NRE and NRO"
-                parts={o.accountTypes.map((t) => ({
-                  key: t.key,
-                  label: t.label,
-                  share: t.share,
-                  className: `type-${t.key}`,
-                }))}
-              />
-              <TypeLegend types={o.accountTypes} names={typeNames} sample={sample} />
-            </div>
-          )}
-        </div>
-      )}
 
-      <details className="bv-how">
-        <summary>How these figures are worked out</summary>
-        <ul className="list small muted">
-          <li>
-            Invested (principal) is the amount each running deposit was booked with; a deposit
-            renewed with its interest counts at its new amount, so earlier interest can be inside
-            it. Current value is what each is worth today on its own rate and terms; maturity value
-            is what it pays on its date. Profit (interest earned) is current value less invested;
-            interest already paid out to your account is booked profit and is not in it.
-          </li>
-          <li>
-            Today’s change is an estimate: the difference between each deposit’s value today and
-            yesterday on its own terms. A deposit past its date, or waiting for you to confirm where
-            the money went, is left out.
-          </li>
-          <li>
-            The insured limit is counted per bank and per name across every deposit and savings
-            account, so it can differ from the deposits alone. Foreign banks are left out of it.
-          </li>
-        </ul>
-      </details>
+            <div className="dv-ladder">
+              <WhyHead why={ex['deposits.ladder']}>
+                <h3 className="bv-h">What matures, year by year</h3>
+              </WhyHead>
+              <ol className="dv-list" data-testid="dv-ladder">
+                {ladder.map((s) => (
+                  <li key={s.year}>
+                    <div className="dv-line">
+                      <span className="dv-name">{s.year}</span>
+                      <strong className="dv-amt">{formatInrCompact(s.amount)}</strong>
+                      <span className="dv-pct">{plural(s.count, 'deposit')}</span>
+                    </div>
+                    <div className="dv-bar alt" aria-hidden="true">
+                      <span style={{ width: `${(s.amount / biggest) * 100}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="muted small">What each deposit pays on its date, including interest.</p>
+            </div>
+          </div>
+        )}
+
+        {(people.length > 1 || o.accountTypes.length > 0) && !empty && (
+          <div className="bv-splits">
+            {people.length > 1 && (
+              <div className="bv-split">
+                <WhyHead why={ex['deposits.people']}>
+                  <h3 className="bv-h">Whose deposits</h3>
+                </WhyHead>
+                <SplitBar
+                  caption="Whose deposits"
+                  parts={people.map((p) => ({
+                    key: p.ownerId,
+                    label: p.style?.name ?? 'Unknown',
+                    share: p.share,
+                    className: 'person',
+                    style: { background: p.style?.colour ?? 'var(--muted)' },
+                  }))}
+                />
+                <ul className="bv-legend plain">
+                  {people.map((p) => (
+                    <li key={p.ownerId}>
+                      <PersonBadge p={p.style} size={18} />
+                      <span className="bv-lname">{p.style?.name ?? 'Unknown'}</span>
+                      <strong className="bv-lamt">{formatInrCompact(p.current)}</strong>
+                      <span className="bv-lpct">
+                        {formatPct(p.share, 0)} ·{' '}
+                        <span className={p.profit < 0 ? 'bv-neg' : 'bv-pos'}>
+                          {p.profit < 0 ? '▼ ' : '▲ '}
+                          {formatInrCompact(Math.abs(p.profit))}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {o.accountTypes.length > 0 && (
+              <div className="bv-split">
+                <WhyHead why={ex['deposits.types']}>
+                  <h3 className="bv-h">NRE and NRO</h3>
+                </WhyHead>
+                <SplitBar
+                  caption="NRE and NRO"
+                  parts={o.accountTypes.map((t) => ({
+                    key: t.key,
+                    label: t.label,
+                    share: t.share,
+                    className: `type-${t.key}`,
+                  }))}
+                />
+                <TypeLegend types={o.accountTypes} names={typeNames} sample={sample} />
+              </div>
+            )}
+          </div>
+        )}
+
+        <details className="bv-how">
+          <summary>How these figures are worked out</summary>
+          <ul className="list small muted">
+            <li>
+              Invested (principal) is the amount each running deposit was booked with; a deposit
+              renewed with its interest counts at its new amount, so earlier interest can be inside
+              it. Current value is what each is worth now on its own rate and terms; maturity value
+              is what it pays on its date. Profit (interest earned) is current value less invested;
+              interest already paid out to your account is booked profit and is not in it.
+            </li>
+            <li>
+              Today’s change is an estimate: the difference between each deposit’s current value and
+              yesterday on its own terms. A deposit past its date, or waiting for you to confirm
+              where the money went, is left out.
+            </li>
+            <li>
+              The insured limit is counted per bank and per name across every deposit and savings
+              account, so it can differ from the deposits alone. Foreign banks are left out of it.
+            </li>
+          </ul>
+        </details>
+      </div>
     </section>
   );
 }

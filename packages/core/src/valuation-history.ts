@@ -1,10 +1,10 @@
 /**
  * Portfolio value by period (Investments > Value by period): what the mutual funds were worth at the end of every week, month,
- * quarter or financial year, how that changed, how much of the change was new money and how much was a real gain.
+ * quarter or financial year, how that changed, how much of the change was new money and how much was real profit.
  *
  * The value at the end of a period is the position engine's (position.ts): the units held on that day times the price on or just
  * before it, or the nearest earlier record moved forward when there is no ledger (marked estimated). The gain of a period is the one
- * shared function of the period figures (`fundPeriod` in period-gains.ts): the change in value less the money put in plus the money
+ * shared function of the period figures (`fundPeriod` in period-gains.ts): the change in value less the amount invested plus the money
  * taken out, so Home, Investments and the summaries cannot disagree. The plain change in value (as a statement shows it) and the
  * gain are both here, apart, so a month with a big purchase never reads as a good month.
  *
@@ -207,9 +207,9 @@ export interface ValuationRow {
   /** against the end of the period before, as a statement shows it, new money included; null when there is no earlier value */
   change: number | null;
   changePct: number | null;
-  /** money put in less money taken out in the period */
+  /** invested less money withdrawn in the period */
   netIn: number;
-  /** what the funds earned: the change less the money put in plus the money taken out; null with no data */
+  /** what the funds earned: the change less the amount invested plus the money withdrawn; null with no data */
   gain: number | null;
   /** the gain as a share of the money at work in the period */
   gainPct: number | null;
@@ -359,9 +359,9 @@ export const VALUATION_CSV_HEAD = [
   'Portfolio value (INR)',
   'Change (INR)',
   'Change (%)',
-  'Money put in, net of sales (INR)',
-  'Gain (INR)',
-  'Gain (%)',
+  'Added less withdrawn (INR)',
+  'Profit (INR)',
+  'Overall return (%)',
   'Basis',
 ];
 

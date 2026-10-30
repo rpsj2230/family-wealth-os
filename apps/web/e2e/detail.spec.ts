@@ -14,7 +14,7 @@ test('sample deposit: facts, value chart, interest by year and the activity log'
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   const facts = page.getByRole('region', { name: 'Key facts' });
   await expect(facts).toContainText('7.25%');
-  await expect(facts).toContainText('At maturity');
+  await expect(facts).toContainText('Maturity value');
   await expect(facts.getByRole('link', { name: /Cash-NRE-1100/ })).toHaveAttribute(
     'href',
     '/asset/s1',
@@ -50,10 +50,10 @@ test('sample fund: headline, figures, graphs and every tab', async ({ page }) =>
   await noSideways(page);
 
   const tabs = page.getByRole('navigation', { name: 'Sections' });
-  // lots and gains: purchases still held with their age, sales with the gain they booked
-  await tabs.getByRole('link', { name: 'Lots and gains' }).click();
+  // lots and profit: purchases still held with their age, sales with the profit they booked
+  await tabs.getByRole('link', { name: 'Lots and profit' }).click();
   await expect(page.getByRole('heading', { name: 'Units still held' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Gains booked by selling' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Booked profit', exact: true })).toBeVisible();
   await expect(page.getByText('Switch out').first()).toBeVisible();
   await noSideways(page);
 
@@ -78,7 +78,7 @@ test('sample fund: the returns tab shows the periods, the benchmark, years, mont
 }) => {
   await page.goto('/demo/asset?kind=fund&tab=returns');
   await expect(page.getByRole('heading', { name: 'Return over each period' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: /Benchmark \(proxy\)/ })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Benchmark', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Month by month' })).toBeVisible();
   await expect(page.getByRole('table', { name: /Return in each month/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Fall from the highest price' })).toBeVisible();

@@ -3,6 +3,8 @@
  * the Grand total row adds, how a percentage or an average is weighted). Pure: it reads the same ReportFd and ReportFund rows the
  * report tables are built from, so a total here is the total in the sheet.
  */
+import { pooledXirr } from './reports';
+import { TERMS } from './terms';
 import {
   explain,
   exDate,
@@ -60,10 +62,7 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
   const value = sum(funds.map((f) => f.value));
   const sip = sum(funds.filter((f) => !f.sipStopped).map((f) => f.sipMonthly ?? 0));
   const withX = funds.filter((f) => f.xirr !== null && f.value > 0);
-  const xirr =
-    withX.length > 0
-      ? sum(withX.map((f) => f.value * (f.xirr as number))) / sum(withX.map((f) => f.value))
-      : null;
+  const xirr = funds.length > 0 ? pooledXirr(funds, i.today) : null;
   const noStatement = funds.filter((f) => !f.hasStatement).length;
   const whose = i.scope ? ` for ${i.scope}` : '';
   const fdBasis = { from: d.from, to: d.to } as const;
@@ -84,9 +83,9 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
     }),
     'reports.fdPrincipal': explain({
       id: 'reports.fdPrincipal',
-      title: 'Amount put in',
+      title: 'Invested',
       exact: exInr(d.principal),
-      what: 'The principal of the deposits counted: what was put in, without interest.',
+      what: 'The principal of the deposits counted: what was invested, without interest.',
       how: `Principal of each of ${exPlural(i.fds.length, 'deposit')} added = ${exInr(d.principal)}.`,
       inputs: [
         {
@@ -126,15 +125,15 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
       id: 'reports.fdInterest',
       title: 'Interest still to earn',
       exact: exInr(d.maturity - d.principal),
-      what: 'Maturity amount less the amount put in. Its sub-line says “from booking to maturity”: it is the interest over the whole life of the deposits.',
-      how: `${exInr(d.maturity)} pays at maturity − ${exInr(d.principal)} put in = ${exInr(d.maturity - d.principal)}.`,
+      what: 'Maturity amount less the amount invested. Its sub-line says “from booking to maturity”: it is the interest over the whole life of the deposits.',
+      how: `${exInr(d.maturity)} pays at maturity − ${exInr(d.principal)} invested = ${exInr(d.maturity - d.principal)}.`,
       inputs: [
         { label: 'Pays at maturity', value: exInr(d.maturity), basis: 'calculated', to: d.to },
-        { label: 'Amount put in', value: exInr(d.principal), basis: 'recorded', from: d.from },
+        { label: 'Invested', value: exInr(d.principal), basis: 'recorded', from: d.from },
       ],
       level: fdLevel,
       completeness:
-        'Calculated, but note the label: it is the interest over each deposit’s whole life, from booking to maturity, including interest already earned. The overview on Deposits uses “interest still to earn” for maturity less today’s value, which is smaller.',
+        'Calculated, but note the label: it is the interest over each deposit’s whole life, from booking to maturity, including interest already earned. The overview on Deposits uses “interest still to earn” for maturity less current value, which is smaller.',
       notes: [],
     }),
     'reports.fdRate': explain({
@@ -221,11 +220,11 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
         noStatement === 0
           ? 'From statement transactions.'
           : `${noStatement} fund(s) use the amount entered by hand as their cost.`,
-      notes: ['It is the same “money put in” as on the Investments page.'],
+      notes: ['It is the same “invested” as on the Investments page.'],
     }),
     'reports.fundValue': explain({
       id: 'reports.fundValue',
-      title: 'Value now',
+      title: 'Current value',
       exact: exInr(value),
       what: 'What the funds are worth now.',
       how: `Units × latest price of each of ${exPlural(funds.length, 'fund')}, added = ${exInr(value)}.`,
@@ -248,10 +247,10 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
       id: 'reports.fundGain',
       title: 'Gain',
       exact: exSigned(value - invested),
-      what: 'Value now less what is invested, on the units still held.',
+      what: 'Current value less invested, on the units still held.',
       how: `${exInr(value)} value − ${exInr(invested)} invested = ${exSigned(value - invested)}${invested > 0 ? `; as a share of what is invested: ${exSignedPct((value - invested) / invested, 1)} (÷ ${exInr(invested)} invested)` : ''}.`,
       inputs: [
-        { label: 'Value now', value: exInr(value), basis: 'calculated', to: i.today },
+        { label: 'Current value', value: exInr(value), basis: 'calculated', to: i.today },
         {
           label: 'Invested',
           value: exInr(invested),
@@ -263,17 +262,17 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
         noStatement === 0
           ? 'Every fund’s cost is from a statement.'
           : `${noStatement} fund(s) rest on a cost entered by hand.`,
-      notes: ['Gains already booked by selling are not included.'],
+      notes: ['Booked profit (from units sold) is not included.'],
     }),
     'reports.fundXirr': explain({
       id: 'reports.fundXirr',
-      title: 'Return a year',
-      exact: xirr === null ? undefined : exSignedPct(xirr, 1),
-      what: 'The average of the funds’ annual returns, each weighted by its value. Not the household’s own return.',
+      title: TERMS.xirr.label,
+      exact: xirr === null ? undefined : `${exPct(xirr, 2)} a year`,
+      what: `${TERMS.xirr.hint} One rate for all the funds shown together.`,
       how:
         xirr === null
-          ? 'No fund has an annual return.'
-          : `Σ (fund value × its annual return) ÷ Σ value over ${exPlural(withX.length, 'fund')} with a return = ${exSignedPct(xirr, 1)}. It is an average of per-fund returns, so it differs from the portfolio annual return (XIRR) on Investments, which solves for all cash flows together.`,
+          ? 'No fund has dated money in and out yet.'
+          : `Every purchase, SIP, sale and payout of the ${exPlural(funds.length, 'fund')} together, and their current value, solved for one yearly rate: ${exPct(xirr, 2)} a year. The same rule as Investments, so the same funds show the same XIRR there.`,
       inputs: [
         {
           label: 'Funds with an annual return',
@@ -287,7 +286,9 @@ export function buildReportsExplain(i: ReportsExplainInput): ExplainSet<'reports
       completeness:
         xirr === null
           ? 'Missing: no fund has a return yet.'
-          : 'A weighted average of fund returns, some of which are estimated from a start date and SIP; use the Investments page for the portfolio’s own annual return.',
+          : noStatement === 0
+            ? 'From the funds’ own transactions.'
+            : `${noStatement} fund(s) have no statement: their money in is worked out from the start date and SIP.`,
       notes: [],
       fix: { label: 'Open Investments', href: i.links.investments },
     }),
@@ -321,7 +322,7 @@ function tableGuide(i: ReportsExplainInput): Explain {
     id: 'reports.table',
     title: 'How to read a report table',
     what: 'Each report is a sheet: one row per group, with a Grand total row at the bottom and a CSV download that holds the same figures.',
-    how: 'The Grand total adds the rows of every money and count column. A rate or a percentage on the total row is worked out again over everything, not added: an average rate is weighted by amount, a Gain % is the gain ÷ the amount invested, and a share is a row’s part of the total value.',
+    how: 'The Grand total adds the rows of every money and count column. A rate or a percentage on the total row is worked out again over everything, not added: an average rate is weighted by amount, an overall % is the profit ÷ the amount invested, and a share is a row’s part of the total value.',
     inputs: [
       { label: 'Deposits', value: String(i.fds.length), basis: 'recorded' },
       { label: 'Funds', value: String(i.funds.length), basis: 'recorded', to: i.today },
@@ -345,22 +346,22 @@ export function reportTableExplain(
   const isFund = t.id.startsWith('mf-');
   const how: Record<string, string> = {
     'fd-maturity':
-      'Each deposit is put in the group its maturity date falls in. Amount = principal, Maturity = what it pays, Interest = Maturity − Amount; “Maturity so far” is the running total of Maturity down the rows.',
+      'Each deposit goes in the group its maturity date falls in. Amount = principal, Maturity = what it pays, Interest = Maturity − Amount; “Maturity so far” is the running total of Maturity down the rows.',
     'fd-start':
-      'Each deposit is put in the group its start (booking) date falls in. Amount = principal, Maturity = what it pays, Interest = Maturity − Amount; “Amount so far” is the running total of Amount.',
+      'Each deposit goes in the group its start (booking) date falls in. Amount = principal, Maturity = what it pays, Interest = Maturity − Amount; “Amount so far” is the running total of Amount.',
     'fd-interest-fy':
       'For each financial year (1 April to 31 March) and each person: the interest each deposit earns inside the days of that year it is running, worked out from its rate, dates and how interest is added. A year not yet over includes interest still to come.',
     'mf-sip':
-      'One row per fund with a SIP or SIP instalments: per month = the amount set on the fund; first and latest instalment, months, instalments and paid so far come from the statement lines of kind SIP; value now = units × latest price. The total adds the running SIPs and the paid and value columns.',
+      'One row per fund with a SIP or SIP instalments: per month = the amount set on the fund; first and latest instalment, months, instalments and paid so far come from the statement lines of kind SIP; current value = units × latest price. The total adds the running SIPs and the paid and value columns.',
     'mf-flow':
-      'Each purchase and sale line on the statements is put in the period its date falls in: SIP + one-time buys − sold = net invested. Funds with no transactions are not counted.',
+      'Each purchase and sale line on the statements is placed in the period its date falls in: SIP + one-time buys − sold = net invested. Funds with no transactions are not counted.',
     'mf-age':
-      'Each purchase still held is valued at today’s price (units × latest price) and put in the age band its purchase date falls in; units whose purchase date is not on file go in “Date not known”.',
+      'Each purchase still held is valued at today’s price (units × latest price) and placed in the age band its purchase date falls in; units whose purchase date is not on file go in “Date not known”.',
   };
   const generic = t.id.startsWith('fd-by-')
     ? `Deposits are grouped by ${groupWord(t).toLowerCase()}. Share = a group’s amount ÷ the total amount; Avg rate is weighted by amount; First and Last maturity are the earliest and latest maturity date in the group.`
     : t.id.startsWith('mf-by-')
-      ? `Funds are grouped by ${groupWord(t).toLowerCase()}. Gain = Value now − Invested; Gain % = Gain ÷ Invested; XIRR is the value-weighted average of the funds’ annual returns (not a combined XIRR); Share = Value now ÷ the total value.`
+      ? `Funds are grouped by ${groupWord(t).toLowerCase()}. Profit = Current value − Invested; Overall % = Profit ÷ Invested; XIRR is one rate over all the group’s purchases, sales and current value together; Share = Current value ÷ the total value.`
       : 'Each row is a group; the total row adds them.';
   const withData = t.rows.length > 0;
   return explain({
