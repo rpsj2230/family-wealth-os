@@ -230,7 +230,7 @@ async function afterImport(
   const stored = await loadStatements(db, hh);
   const all = classifyLines(
     stmtLinesOf(stored.lines, loaded),
-    classifyContext(loaded, config, stored.remittances),
+    classifyContext(loaded, config, stored.remittances, stored.rules),
   );
   for (const { assetId, label } of done) {
     const mine = stmtLinesOf(

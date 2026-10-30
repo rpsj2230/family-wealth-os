@@ -103,7 +103,7 @@ export async function loadNeeds(
       pre?.toAnswer ??
       classifyLines(
         stmtLinesOf(stored.lines, loaded),
-        classifyContext(loaded, config, stored.remittances),
+        classifyContext(loaded, config, stored.remittances, stored.rules),
       ).filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out').length,
     ownershipFrom: config.capital.ownershipFrom,
   });

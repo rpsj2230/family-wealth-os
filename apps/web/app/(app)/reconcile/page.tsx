@@ -227,6 +227,12 @@ export default async function Reconcile({
           interest={statements.picture.interest}
           labels={labels}
           covered={statements.covered}
+          rules={statements.stored.rules}
+          holdings={loaded.assetRows
+            .filter((a) => a.status !== 'gifted' && a.status !== 'merged')
+            .map((a) => ({ id: a.id, label: labels[a.id]!, type: a.type }))
+            .sort((x, y) => x.label.localeCompare(y.label))}
+          ownNames={[...loaded.ownerName.values()]}
         />
       ) : interest ? (
         <Interest

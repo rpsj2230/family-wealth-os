@@ -90,6 +90,11 @@ export interface ClassifyContext {
     amount: number;
     side: 'buy' | 'sell';
   }[];
+  /**
+   * What you have said about a person or words (Explain movements > Bank statements > Rules), for every line that names them, past
+   * and future. Applied straight after the answers you gave for single lines.
+   */
+  rules?: StatementRule[];
   /** the people you lend to (a "Loan to …" record each): money to them is lent, money from them is them paying it back */
   borrowers?: { assetId: string; name: string }[];
   rentWords: string[];
@@ -105,6 +110,36 @@ export interface ClassifyContext {
     toAssetId: string | null;
     fromAssetId: string | null;
   }[];
+}
+
+/** A rule for statement lines (statement_rules). */
+export interface StatementRule {
+  id: string;
+  /** the person or words, several spellings joined with " / " */
+  name: string;
+  match: 'name' | 'words';
+  action: 'own' | 'loan' | 'out' | 'outside' | 'income' | 'rent';
+  /** the holding money moves to or from (own), or the loan record (loan) */
+  assetId: string | null;
+  direction: 'in' | 'out' | 'any';
+  /** a loan that pays interest: a small payment from them while money is owed is their interest */
+  interest: boolean;
+}
+
+/** Whether a rule is about this line: its direction, and its person (by the bank's spelling) or its words. */
+export function ruleMatches(r: StatementRule, l: { amount: number; narration: string }): boolean {
+  if (r.direction === 'in' && l.amount <= 0) return false;
+  if (r.direction === 'out' && l.amount >= 0) return false;
+  if (r.match === 'name') return personNamed(l.narration, [{ name: r.name }]) !== null;
+  const text = l.narration.toLowerCase();
+  return r.name
+    .split('/')
+    .map((w) => w.trim().toLowerCase())
+    .some(
+      (w) =>
+        w.length >= 2 &&
+        new RegExp(`(^|[^a-z])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z]|$)`).test(text),
+    );
 }
 
 export interface Classified {
@@ -232,6 +267,57 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     out: 'spent',
   };
   for (const l of sorted) if (l.answer) set(l, ANSWER[l.answer], 'Your answer');
+
+  // 1b. your rules: every line naming the person or carrying the words, in date order. A loan with interest: while money is owed, a
+  // payment from them of at most a tenth of what is owed is their interest (earnings); a larger one pays the loan back.
+  if (ctx.rules?.length) {
+    const owed = new Map<string, number>();
+    const RULE: Record<'out' | 'outside' | 'income' | 'rent', LineClass> = {
+      out: 'spent',
+      outside: 'outside_in',
+      income: 'income',
+      rent: 'rent',
+    };
+    for (const l of sorted) {
+      if (!open(l)) continue;
+      const r = ctx.rules.find((x) => ruleMatches(x, l));
+      if (!r) continue;
+      const why = `Your rule: ${r.name}`;
+      if (r.action === 'own') set(l, 'own_transfer', why, r.assetId);
+      else if (r.action === 'loan') {
+        const k = r.assetId ?? r.id;
+        const o = owed.get(k) ?? 0;
+        if (l.amount < 0) owed.set(k, o - l.amount);
+        else if (r.interest && o > 0 && l.amount <= o * 0.1) {
+          set(l, 'income', `${why}: interest on the money lent`);
+          continue;
+        } else owed.set(k, Math.max(0, o - l.amount));
+        set(
+          l,
+          'own_transfer',
+          l.amount < 0 ? `${why}: money lent` : `${why}: paid back`,
+          r.assetId,
+        );
+      } else set(l, RULE[r.action], why);
+    }
+  }
+
+  // 1c. a cheque paid in and returned unpaid ("CHQ DEP - REV"): the same sum in and back out of one account within three days, one
+  // of them marked as a reversal. Nothing came in: the credit is counted as money from outside and its reversal as money going back.
+  const REVERSAL = /\b(rev|reversal|reversed|return(ed)?|bounced?|unpaid|dishono(u)?red)\b/i;
+  for (const l of sorted) {
+    if (!open(l) || l.amount >= 0 || !REVERSAL.test(l.narration)) continue;
+    const back = sorted.find(
+      (m) =>
+        open(m) &&
+        m.assetId === l.assetId &&
+        Math.abs(m.amount + l.amount) < 0.5 &&
+        daysApart(m.date, l.date) <= 3,
+    );
+    if (!back) continue;
+    set(back, 'outside_in', 'A cheque paid in and then returned unpaid (its reversal follows)');
+    set(l, 'spent', 'The cheque returned unpaid: the money paid in goes back');
+  }
 
   // 2. interest and the tax on it
   const interestDays = new Set<string>();

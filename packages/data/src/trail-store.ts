@@ -79,7 +79,7 @@ export async function loadMoneyTrail(
     remitsP,
   ]);
   const lines = stmtLinesOf(stored.lines, loaded);
-  const ctx = classifyContext(loaded, config, stored.remittances);
+  const ctx = classifyContext(loaded, config, stored.remittances, stored.rules);
   const classified = classifyLines(lines, ctx);
   const tl: TrailLine[] = trailLines(lines, classified);
 

@@ -15,6 +15,13 @@ describe('a name as banks spell it', () => {
     expect(personNamed('IMPS-SHYAM VIR SINGH-SBIN', [{ name: 'Shyamvir Singh' }])?.name).toBe(
       'Shyamvir Singh',
     );
+    // a name run together with the rest, and a second spelling or person after " / "
+    expect(personNamed('IMPS-2499-SHELENDRAPRATAPSINGH-UTIB', [{ name: 'Shalender' }])?.name).toBe(
+      'Shalender',
+    );
+    expect(
+      personNamed('NEFT CR-SWATI KRUNALKUMAR', [{ name: 'Krunal D / Swati K' }]),
+    ).not.toBeNull();
     // "singh" alone is not Omveer, and a narration word is not a name by accident
     expect(personNamed('NEFT DR-RAM SINGH', people)).toBeNull();
     expect(personNamed('TRANSFER TO OWN ACCOUNT', people)).toBeNull();

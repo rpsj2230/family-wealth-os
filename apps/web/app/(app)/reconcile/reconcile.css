@@ -89,3 +89,28 @@
 .rc-nolines {
   margin-top: 6px;
 }
+
+/* rules for a person or words */
+.rc-rules {
+  margin: 0 0 10px;
+  padding-left: 1.1em;
+}
+.rc-rules li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.rc-inline {
+  display: inline;
+  margin-left: 6px;
+}
+.rc-remember {
+  display: grid;
+  gap: 4px;
+}
+.rc-remember input[name='name'] {
+  max-width: 100%;
+}
+.rc-addrule > summary {
+  cursor: pointer;
+  margin: 4px 0 8px;
+}

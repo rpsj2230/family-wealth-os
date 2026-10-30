@@ -130,7 +130,7 @@ export async function previewStatement(
   }));
   const classified = classifyLines(
     [...stmtLinesOf(stored.lines, loaded), ...preview],
-    classifyContext(loaded, config, stored.remittances),
+    classifyContext(loaded, config, stored.remittances, stored.rules),
   ).filter((c) => c.id.startsWith('new:'));
   const amountOf = new Map(preview.map((p) => [p.id, p.amount]));
   const by = new Map<LineClass, { count: number; total: number }>();
@@ -231,6 +231,34 @@ export async function answerLine(f: FormData): Promise<void> {
     back('Choose what the line was.');
   const { supabase, householdId } = await loadContext();
   if (!householdId) back('Create your household first.');
+  // "remember": the answer becomes a rule for every line naming the same person or words, past and future
+  const remember = f.get('remember') === 'on';
+  const name = String(f.get('name') ?? '')
+    .trim()
+    .slice(0, 160);
+  const holding = String(f.get('holding') ?? '');
+  if (remember && answer) {
+    if (name.length < 2) back('Write the name or words to remember, as they appear on the line.');
+    const { data: line } = await supabase
+      .from('statement_lines')
+      .select('amount')
+      .eq('id', id)
+      .eq('household_id', householdId!)
+      .maybeSingle();
+    const into = Number((line as { amount: number } | null)?.amount ?? 0) > 0;
+    const rule = await ruleRow(supabase as unknown as SupabaseClient, householdId!, {
+      name,
+      match: f.get('match') === 'words' ? 'words' : 'name',
+      answer,
+      holding,
+      direction: into ? 'in' : 'out',
+      interest: false,
+    });
+    if ('error' in rule) back(rule.error);
+    const { error } = await supabase.from('statement_rules').insert(rule.row);
+    if (error) back(`The rule could not be saved: ${error.message}`);
+    await rebuildOrSay(`Saved as a rule: every line naming “${name}” is placed the same way.`);
+  }
   const { error } = await supabase
     .from('statement_lines')
     .update({ answer: answer || null })
@@ -238,6 +266,95 @@ export async function answerLine(f: FormData): Promise<void> {
     .eq('household_id', householdId!);
   if (error) back(`That could not be saved: ${error.message}`);
   await rebuildOrSay(answer ? 'Saved.' : 'Answer taken back.');
+}
+
+/**
+ * A rule's row from an answer: spending, money from outside and earnings stand alone; money to or from a holding needs the holding
+ * (a "Loan to …" makes it a loan: money lent and paid back).
+ */
+async function ruleRow(
+  db: SupabaseClient,
+  householdId: string,
+  r: {
+    name: string;
+    match: 'name' | 'words';
+    answer: string;
+    holding: string;
+    direction: 'in' | 'out' | 'any';
+    interest: boolean;
+  },
+): Promise<{ row: Record<string, unknown> } | { error: string }> {
+  const plain: Record<string, string> = {
+    out: 'out',
+    outside: 'outside',
+    income: 'income',
+    rent: 'rent',
+  };
+  let action = plain[r.answer];
+  let assetId: string | null = null;
+  if (r.answer === 'own') {
+    if (!UUID.test(r.holding))
+      return { error: 'Choose the holding the money went to or came from, to remember it.' };
+    const { data } = await db
+      .from('assets')
+      .select('id, type')
+      .eq('id', r.holding)
+      .eq('household_id', householdId)
+      .maybeSingle();
+    if (!data) return { error: 'That holding was not found.' };
+    assetId = r.holding;
+    action = (data as { type: string }).type === 'receivable' ? 'loan' : 'own';
+  }
+  if (!action) return { error: 'Choose what the line was.' };
+  return {
+    row: {
+      household_id: householdId,
+      name: r.name,
+      match: r.match,
+      action,
+      asset_id: assetId,
+      direction: r.direction,
+      interest: r.interest,
+    },
+  };
+}
+
+/** A rule added by hand (Rules on the Bank statements tab). */
+export async function addRule(f: FormData): Promise<void> {
+  const name = String(f.get('name') ?? '')
+    .trim()
+    .slice(0, 160);
+  if (name.length < 2) back('Write the name or words the lines carry.');
+  const direction = String(f.get('direction') ?? 'any');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) back('Create your household first.');
+  const rule = await ruleRow(supabase as unknown as SupabaseClient, householdId!, {
+    name,
+    match: f.get('match') === 'words' ? 'words' : 'name',
+    answer: String(f.get('answer') ?? ''),
+    holding: String(f.get('holding') ?? ''),
+    direction: direction === 'in' || direction === 'out' ? direction : 'any',
+    interest: f.get('interest') === 'on',
+  });
+  if ('error' in rule) back(rule.error);
+  const { error } = await supabase.from('statement_rules').insert(rule.row);
+  if (error) back(`The rule could not be saved: ${error.message}`);
+  await rebuildOrSay(`Rule saved: every line naming “${name}” is placed by it, now and in future.`);
+}
+
+/** Removes a rule; its lines are sorted again without it. */
+export async function deleteRule(f: FormData): Promise<void> {
+  const id = String(f.get('rule') ?? '');
+  if (!UUID.test(id)) back('That rule was not found.');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) back('Create your household first.');
+  const { error } = await supabase
+    .from('statement_rules')
+    .delete()
+    .eq('id', id)
+    .eq('household_id', householdId!);
+  if (error) back(`That could not be removed: ${error.message}`);
+  await rebuildOrSay('Rule removed; its lines are sorted again without it.');
 }
 
 /** Removes an imported statement and its lines; the balances it recorded stay (they are what the bank showed). */

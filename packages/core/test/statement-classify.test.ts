@@ -398,3 +398,75 @@ describe('several deposits booked one day and kept as one record', () => {
     );
   });
 });
+
+describe('your rules for a person or words', () => {
+  const ruled: ClassifyContext = {
+    ...ctx,
+    deposits: [],
+    fundTxns: [],
+    rules: [
+      {
+        id: 'r1',
+        name: 'Arjun',
+        match: 'name',
+        action: 'own',
+        assetId: 'flat',
+        direction: 'out',
+        interest: false,
+      },
+      {
+        id: 'r2',
+        name: 'Krunal Dhansukhlal / Swati Krunalkumar',
+        match: 'name',
+        action: 'loan',
+        assetId: 'loan-k',
+        direction: 'any',
+        interest: true,
+      },
+      {
+        id: 'r3',
+        name: 'autopay',
+        match: 'words',
+        action: 'out',
+        assetId: null,
+        direction: 'out',
+        interest: false,
+      },
+    ],
+  };
+  const ls = [
+    line('a', '2023-08-21', -250_000, 'NEFT DR-SBIN0001-ARJUN KUMAR SINGH-NETBANK-FLAT DEPOSIT'),
+    line('a', '2023-01-05', -400_000, 'NEFT DR-KRUNAL DHANSUKHLA'),
+    line('a', '2023-04-05', 9_000, 'NEFT CR-SWATI KRUNALKUMAR'),
+    line('a', '2024-01-05', 400_000, 'NEFT CR-KRUNAL DHANSUKHLA'),
+    line('a', '2023-05-02', -9_500, 'CC 4111XXXX AUTOPAY SI-TAD'),
+  ];
+  const cs = classifyLines(ls, ruled);
+  it('moves money to the holding named, for every line naming the person', () => {
+    expect([cs[0]!.cls, cs[0]!.counterpart]).toEqual(['own_transfer', 'flat']);
+    expect(cs[0]!.reason).toBe('Your rule: Arjun');
+  });
+  it('a loan with interest: lent, the quarterly interest earned, the principal paid back; any spelling of the names', () => {
+    expect(cs.slice(1, 4).map((c) => [c.cls, c.counterpart])).toEqual([
+      ['own_transfer', 'loan-k'],
+      ['income', null],
+      ['own_transfer', 'loan-k'],
+    ]);
+  });
+  it('words: credit card autopay is spending', () => {
+    expect(cs[4]!.cls).toBe('spent');
+  });
+});
+
+describe('a cheque paid in and returned unpaid', () => {
+  it('counts in and back out, never as two lines to answer', () => {
+    const cs = classifyLines(
+      [
+        line('a', '2026-06-30', 200_000, 'CHQ DEP - CTS CLG1 - SAMPLE TOWN'),
+        line('a', '2026-06-30', -200_000, 'CHQ DEP - REV'),
+      ],
+      { ...ctx, deposits: [], fundTxns: [] },
+    );
+    expect(cs.map((c) => c.cls)).toEqual(['outside_in', 'spent']);
+  });
+});

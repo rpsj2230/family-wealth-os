@@ -12,6 +12,7 @@ import {
   type PositionInput,
   type StatementInterestRow,
   type StatementMove,
+  type StatementRule,
   type StmtLine,
 } from '@fwos/core';
 import type { LoadedPortfolio } from './index';
@@ -146,10 +147,12 @@ export async function loadStatements(
   lines: StoredLine[];
   statements: StoredBankStatement[];
   remittances: StoredRemittance[];
+  /** your rules for statement lines (statement_rules) */
+  rules: StatementRule[];
 }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the query builders of three tables, narrowed alike
   const scoped = (q: any) => (householdId ? q.eq('household_id', householdId) : q);
-  const [lines, statements, remits] = await Promise.all([
+  const [lines, statements, remits, rules] = await Promise.all([
     pageAll<StoredLine>((from, to) =>
       scoped(
         supabase
@@ -187,6 +190,16 @@ export async function loadStatements(
         .order('received_on')
         .range(from, to),
     ),
+    // before the table existed (an older database) there are simply no rules
+    (async () => {
+      const { data, error } = await scoped(
+        supabase
+          .from('statement_rules')
+          .select('id, name, match, action, asset_id, direction, interest')
+          .order('created_at'),
+      );
+      return error ? [] : ((data ?? []) as Record<string, unknown>[]);
+    })(),
   ]);
   return {
     remittances: remits.map((r) => ({
@@ -203,6 +216,15 @@ export async function loadStatements(
       balance: l.balance === null ? null : Number(l.balance),
     })),
     statements,
+    rules: rules.map((r) => ({
+      id: String(r.id),
+      name: String(r.name),
+      match: r.match === 'words' ? 'words' : 'name',
+      action: r.action as StatementRule['action'],
+      assetId: (r.asset_id as string | null) ?? null,
+      direction: (r.direction as StatementRule['direction']) ?? 'any',
+      interest: !!r.interest,
+    })),
   };
 }
 
@@ -234,6 +256,7 @@ export function classifyContext(
   loaded: LoadedPortfolio,
   config: AppConfig,
   remittances: StoredRemittance[] = [],
+  rules: StatementRule[] = [],
 ): ClassifyContext {
   const owner = new Map(loaded.assetRows.map((a) => [a.id, a.owner_id]));
   const bankOf = new Map(
@@ -292,6 +315,7 @@ export function classifyContext(
     borrowers: loaded.assetRows
       .filter((a) => a.type === 'receivable' && a.status !== 'gifted' && a.status !== 'merged')
       .map((a) => ({ assetId: a.id, name: a.nickname.replace(/^(loan|money lent)\s+to\s+/i, '') })),
+    rules,
     rentWords: config.statements.rentWords,
     remittanceWords: config.statements.remittanceWords,
     reviewAbove: config.statements.reviewAbove,
@@ -328,13 +352,17 @@ export function statementPicture(
     lines: StoredLine[];
     statements: StoredBankStatement[];
     remittances: StoredRemittance[];
+    rules?: StatementRule[];
   },
   loaded: LoadedPortfolio,
   config: AppConfig,
   position: PositionInput,
 ): StatementPicture {
   const lines = stmtLinesOf(stored.lines, loaded);
-  const classified = classifyLines(lines, classifyContext(loaded, config, stored.remittances));
+  const classified = classifyLines(
+    lines,
+    classifyContext(loaded, config, stored.remittances, stored.rules ?? []),
+  );
   const interest = statementInterest({
     lines,
     classified,

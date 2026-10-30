@@ -20,7 +20,8 @@ const NOT_NAMES = new Set(
 
 /**
  * The person a narration names, of those given: the first word of a name (four letters or more) written the same way, or with
- * the vowels changed. Null when none is named.
+ * the vowels changed, or run together with the words after it. A name may list several spellings or people joined by " / "
+ * ("Krunal Dhansukhlal / Swati Krunalkumar"). Null when none is named.
  */
 export function personNamed<T extends { name: string }>(narration: string, people: T[]): T | null {
   // each word, and each two neighbouring words written as one ("SHYAM VIR" is "Shyamvir")
@@ -31,11 +32,16 @@ export function personNamed<T extends { name: string }>(narration: string, peopl
       .map(nameKey)
       .filter((k) => k.length >= 3 && !NOT_NAMES.has(k)),
   );
-  for (const p of people) {
-    const first = p.name.trim().split(/\s+/)[0] ?? '';
-    const k = nameKey(first);
-    if (first.length >= 4 && k.length >= 3 && words.has(k)) return p;
-  }
+  for (const p of people)
+    for (const alias of p.name.split('/')) {
+      const first = alias.trim().split(/\s+/)[0] ?? '';
+      const k = nameKey(first);
+      if (first.length < 4 || k.length < 3) continue;
+      if (words.has(k)) return p;
+      // a name the bank ran together with the next ones ("SHELENDRAPRATAPSINGH"): a long enough name at the start of a word
+      if (k.length >= 5)
+        for (const w of words) if (w.length > k.length + 1 && w.startsWith(k)) return p;
+    }
   return null;
 }
 

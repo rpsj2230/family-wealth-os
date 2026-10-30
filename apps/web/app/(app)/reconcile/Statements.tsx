@@ -5,11 +5,20 @@ import {
   type Classified,
   type LineClass,
   type StatementInterestRow,
+  type StatementRule,
   type StmtLine,
 } from '@fwos/core';
 import { niceDate } from '@/lib/dates';
 import type { StoredBankStatement } from '@fwos/data';
-import { answerLine, deleteStatement, rebuildStatements, removeCovered } from './statement-actions';
+import { lineNameGuess } from '@/lib/line-name';
+import {
+  addRule,
+  answerLine,
+  deleteRule,
+  deleteStatement,
+  rebuildStatements,
+  removeCovered,
+} from './statement-actions';
 
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
 const fyOf = (date: string) => {
@@ -47,6 +56,60 @@ export interface StatementsAct {
   remove: (f: FormData) => Promise<void>;
   rebuild: (f: FormData) => Promise<void>;
   covered: (f: FormData) => Promise<void>;
+  addRule?: (f: FormData) => Promise<void>;
+  deleteRule?: (f: FormData) => Promise<void>;
+}
+
+/** A holding a rule can send money to: an account, a deposit, a fund, a loan, a property. */
+export interface RuleHolding {
+  id: string;
+  label: string;
+  type: string;
+}
+
+const RULE_ACTION: Record<StatementRule['action'], string> = {
+  own: 'Moved to or from',
+  loan: 'Lent to, or paid back by',
+  out: 'Spending or money out',
+  outside: 'Money from outside',
+  income: 'Earnings',
+  rent: 'Rent',
+};
+const DIRECTION: Record<StatementRule['direction'], string> = {
+  in: 'money in',
+  out: 'money out',
+  any: 'money in and out',
+};
+
+/** The holdings, grouped for a select: loans first (money lent), then property, accounts, deposits and funds. */
+function HoldingOptions({ holdings }: { holdings: RuleHolding[] }) {
+  const groups: [string, string[]][] = [
+    ['Money lent (a “Loan to …”)', ['receivable']],
+    ['Property', ['property']],
+    ['Accounts', ['bank_account']],
+    ['Deposits', ['fixed_deposit']],
+    [
+      'Funds and other',
+      ['mutual_fund', 'stock', 'policy', 'ulip', 'nps', 'third_party_held', 'other'],
+    ],
+  ];
+  return (
+    <>
+      <option value="">which one…</option>
+      {groups.map(([label, types]) => {
+        const hs = holdings.filter((h) => types.includes(h.type));
+        return hs.length ? (
+          <optgroup key={label} label={label}>
+            {hs.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : null;
+      })}
+    </>
+  );
 }
 
 /**
@@ -66,8 +129,13 @@ export function Statements({
     remove: deleteStatement,
     rebuild: rebuildStatements,
     covered: removeCovered,
+    addRule,
+    deleteRule,
   },
   sample = false,
+  rules = [],
+  holdings = [],
+  ownNames = [],
 }: {
   statements: StoredBankStatement[];
   lines: StmtLine[];
@@ -77,6 +145,12 @@ export function Statements({
   covered: CoveredMove[];
   act?: StatementsAct;
   sample?: boolean;
+  /** your rules for a person or words */
+  rules?: StatementRule[];
+  /** the holdings a line or a rule can send money to */
+  holdings?: RuleHolding[];
+  /** the household's names, left out of a line's name guess */
+  ownNames?: string[];
 }) {
   const cls = new Map(classified.map((c) => [c.id, c]));
   const label = (id: string) => labels[id] ?? 'An account';
@@ -271,6 +345,35 @@ export function Statements({
                           </label>
                         ))}
                       </fieldset>
+                      {holdings.length > 0 && (
+                        <label className="small">
+                          {into ? 'From' : 'To'} which holding (a loan, a property, an account)
+                          <select name="holding" defaultValue="">
+                            <HoldingOptions holdings={holdings} />
+                          </select>
+                        </label>
+                      )}
+                      {act.addRule && (
+                        <div className="rc-remember small">
+                          <label className="rc-choice">
+                            <input
+                              type="checkbox"
+                              name="remember"
+                              defaultChecked={lineNameGuess(l.narration, ownNames) !== ''}
+                            />
+                            Remember for every line naming
+                          </label>
+                          <input
+                            name="name"
+                            defaultValue={lineNameGuess(l.narration, ownNames)}
+                            aria-label="The name or words to remember"
+                            placeholder="name or words on the line"
+                          />
+                          <span className="muted">
+                            Past and future lines with this name are placed the same way.
+                          </span>
+                        </div>
+                      )}
                       <button className="btn primary">Save</button>
                     </form>
                   </li>
@@ -281,6 +384,89 @@ export function Statements({
           {ask.length > 40 && (
             <p className="muted small">The next {ask.length - 40} appear as these are answered.</p>
           )}
+        </section>
+      )}
+
+      {act.addRule && (
+        <section className="card rc" aria-labelledby="rc-sr" data-testid="rc-rules">
+          <h2 id="rc-sr">Rules</h2>
+          <p className="muted small">
+            What you have said about a person or words. Every statement line that names them, from
+            the past and from the bank alerts to come, is placed by the rule without asking. A name
+            matches the bank’s spellings (Shalender and SHELENDRA); several are joined with “ / ”.
+          </p>
+          {rules.length === 0 ? (
+            <p className="small">No rules yet.</p>
+          ) : (
+            <ul className="rc-rules">
+              {rules.map((r) => (
+                <li key={r.id}>
+                  <strong>{r.name}</strong>{' '}
+                  <span className="muted small">
+                    ({r.match === 'words' ? 'words' : 'name'}, {DIRECTION[r.direction]})
+                  </span>{' '}
+                  → {RULE_ACTION[r.action]}
+                  {r.assetId ? ` ${labels[r.assetId] ?? 'a holding'}` : ''}
+                  {r.interest ? ', with interest' : ''}
+                  {act.deleteRule && (
+                    <form action={act.deleteRule} className="rc-inline">
+                      <input type="hidden" name="rule" value={r.id} />
+                      <button className="btn small">Remove</button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <details className="rc-addrule">
+            <summary className="small">Add a rule</summary>
+            <form action={act.addRule} className="rc-form">
+              <label>
+                Name or words on the lines
+                <input name="name" required minLength={2} placeholder="Arjun / Arjun Kumar" />
+              </label>
+              <label>
+                Match
+                <select name="match" defaultValue="name">
+                  <option value="name">a person’s name (any spelling)</option>
+                  <option value="words">these exact words</option>
+                </select>
+              </label>
+              <label>
+                For
+                <select name="direction" defaultValue="any">
+                  <option value="any">money in and out</option>
+                  <option value="out">money out</option>
+                  <option value="in">money in</option>
+                </select>
+              </label>
+              <label>
+                It is
+                <select name="answer" defaultValue="own">
+                  <option value="own">
+                    to or from one of our holdings (a loan, property, account)
+                  </option>
+                  <option value="out">spending or money out</option>
+                  <option value="outside">money from outside</option>
+                  <option value="income">earnings</option>
+                  <option value="rent">rent</option>
+                </select>
+              </label>
+              {holdings.length > 0 && (
+                <label>
+                  Holding
+                  <select name="holding" defaultValue="">
+                    <HoldingOptions holdings={holdings} />
+                  </select>
+                </label>
+              )}
+              <label className="rc-choice">
+                <input type="checkbox" name="interest" /> A loan that pays interest (small payments
+                from them are earnings)
+              </label>
+              <button className="btn primary">Save the rule</button>
+            </form>
+          </details>
         </section>
       )}
 
