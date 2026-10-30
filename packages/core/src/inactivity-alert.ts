@@ -1,30 +1,37 @@
 /**
  * The inactivity alert (docs/USER-GUIDE.md, "If you stop using the portal"). When nobody from the household has used the portal for
- * `warnDays`, the members get one e-mail: "Are you all right? Sign in to postpone". At `alertDays` (the same number of days after which
- * the read-only family login may open the handbook), the people the owner chose are told the portal exists and how to sign in, by
- * e-mail and, where they activated it, WhatsApp; the members get a copy. Each message goes at most once per absence: a member using
- * the portal again clears both stamps (touch_member_activity).
+ * `warnDays`, the members get one e-mail: "Are you all right? Sign in to postpone", with an "I'm fine — postpone" link. At
+ * `alertDays` (the same number of days after which the read-only family login may open the handbook) the people the owner chose are
+ * told, one at a time in the owner's order: the first person gets a message with an "I have received this" link; without a
+ * confirmation they are reminded `reminders` times, `remindEveryDays` apart, and then the next person is told the same way. The chain
+ * stops when anyone confirms (the members get a short note), when a member uses the portal again (a new absence starts a new chain),
+ * or when the list is used up with nobody confirming.
  *
- * Pure: the daily job reads the row, asks `inactivityDecision`, builds the texts here and stamps what it sent. The texts carry no
- * amounts, no account numbers and no password: only where the owner wrote the passwords are kept.
+ * Pure: the daily job reads the row and this absence's log, asks `inactivityStep` for one step, builds the texts here, sends and
+ * records. The texts carry no amounts, no account numbers and no password: only where the owner wrote the passwords are kept.
  */
 import { esc, niceDate } from './digest-format';
 
 export type InactivityMode = 'always' | 'inactive' | 'manual';
-export type InactivityDecision = 'none' | 'warn' | 'alert';
 
-/** At most this many people are told. */
-export const MAX_ALERT_CONTACTS = 5;
-/** The warning may come this early or this late. */
+/** At most this many people are told, in order. */
+export const MAX_ALERT_CONTACTS = 10;
 export const WARN_DAYS_MIN = 3;
 export const WARN_DAYS_MAX = 365;
 export const DEFAULT_WARN_DAYS = 20;
+export const REMINDERS_MAX = 10;
+export const DEFAULT_REMINDERS = 3;
+export const REMIND_EVERY_MIN = 1;
+export const REMIND_EVERY_MAX = 14;
+export const DEFAULT_REMIND_EVERY = 2;
 
 const DAY = 86_400_000;
 /** The daily job starts at 00:30 UTC (.github/workflows/digest.yml), 08:30 in Singapore. */
 const JOB_MINUTE_UTC = 30;
+/** A run that starts a few minutes earlier than yesterday's still counts as a day later. */
+const GRACE = 6 * 3_600_000;
 
-/** A person who is told, as kept in emergency_access.alert_contacts. `whatsappKey` is write-only: never sent to a page. */
+/** A person who is told, as kept in emergency_access.alert_contacts (in priority order). `whatsappKey` never goes to a page. */
 export interface StoredAlertContact {
   /** a short id so a saved key stays with its person when rows are removed or reordered */
   id: string;
@@ -62,7 +69,7 @@ export const isEmail = (s: string): boolean => EMAIL.test(s.trim());
 /** CallMeBot keys are short codes of letters and digits. */
 export const isWhatsAppKey = (s: string): boolean => /^[A-Za-z0-9]{4,64}$/.test(s.trim());
 
-/** The saved list, cleaned: unknown keys and broken entries dropped, at most MAX_ALERT_CONTACTS. */
+/** The saved list, cleaned and in order: broken entries dropped, at most MAX_ALERT_CONTACTS. */
 export function alertContactsFromJson(raw: unknown): StoredAlertContact[] {
   if (!Array.isArray(raw)) return [];
   const out: StoredAlertContact[] = [];
@@ -99,21 +106,49 @@ export const alertContactView = (c: StoredAlertContact): AlertContactView => ({
 export const whatsAppNotActivated = (cs: readonly AlertContactView[]): string[] =>
   cs.filter((c) => c.phone && !c.keySaved).map((c) => c.name);
 
+/** People the portal cannot reach at all: no e-mail and no activated WhatsApp. */
+export const unreachable = (cs: readonly AlertContactView[]): string[] =>
+  cs.filter((c) => !c.email && !(c.phone && c.keySaved)).map((c) => c.name);
+
+/** One person's line in this absence's chain (emergency_alert_log). */
+export interface ChainEntry {
+  /** last_member_seen when the chain began */
+  absenceFrom: string;
+  /** 0 = the first person in the list */
+  pos: number;
+  /** messages sent to this person: 1 = the first, then one per reminder */
+  sends: number;
+  firstSentAt: string | null;
+  lastSentAt: string | null;
+  confirmedAt: string | null;
+}
+
 export interface InactivityState {
   /** when a member last used the portal (ISO timestamp) */
   lastMemberSeen: string;
   warnDays: number;
-  /** emergency_access.inactive_days: the family is told then, the day the handbook opens to the family login */
+  /** emergency_access.inactive_days: the first person is told then, the day the handbook opens to the family login */
   alertDays: number;
+  reminders: number;
+  remindEveryDays: number;
   warnedAt: string | null;
+  /** when this absence's chain was closed (a confirmation noted, or the list used up); null while it runs */
   alertedAt: string | null;
-  mode: InactivityMode;
-  released: boolean;
+  /** people in the list; with none saved the alert is off */
+  contacts: number;
   /** now (ISO timestamp) */
   now: string;
-  /** people to tell; with none saved the alert is switched off and nothing is sent */
-  contacts: number;
 }
+
+export type InactivityStep =
+  | { kind: 'none'; why: 'off' | 'active' | 'closed' | 'waiting' }
+  | { kind: 'warn' }
+  /** a message to the person at `pos`: send 1 is the first, 2 and up are reminders */
+  | { kind: 'tell'; pos: number; send: number }
+  /** someone confirmed: note it for the members once and close the chain */
+  | { kind: 'confirmed'; pos: number; at: string }
+  /** everybody was told and reminded and nobody confirmed: close the chain */
+  | { kind: 'exhausted' };
 
 /** Whole days since a member last used the portal. */
 export function daysAbsent(lastMemberSeen: string, now: string): number {
@@ -125,27 +160,50 @@ export function daysAbsent(lastMemberSeen: string, now: string): number {
 const current = (stamp: string | null, seen: string): boolean =>
   !!stamp && Date.parse(stamp) >= Date.parse(seen);
 
-/**
- * What today's run sends. At most one of each per absence. The alert needs more than `alertDays` full days, exactly when the
- * handbook opens to the family login in "inactive" mode (emergency_open), so the family can sign in when they are told. An alert
- * that is due goes even if the job missed days or the warning was never sent (then only the alert goes; the members get its copy).
- */
-export function inactivityDecision(s: InactivityState): InactivityDecision {
-  if (s.contacts <= 0) return 'none';
-  const seen = Date.parse(s.lastMemberSeen);
-  const now = Date.parse(s.now);
-  if (!Number.isFinite(seen) || !Number.isFinite(now)) return 'none';
-  if (current(s.alertedAt, s.lastMemberSeen)) return 'none';
-  const gone = now - seen;
-  if (gone > s.alertDays * DAY) return 'alert';
-  if (s.warnDays < s.alertDays && gone > s.warnDays * DAY && !current(s.warnedAt, s.lastMemberSeen))
-    return 'warn';
-  return 'none';
+/** This absence's entries: the chain that began at `lastMemberSeen`, ordered by position. */
+export function chainOf(log: readonly ChainEntry[], lastMemberSeen: string): ChainEntry[] {
+  const key = Date.parse(lastMemberSeen);
+  return log.filter((e) => Date.parse(e.absenceFrom) === key).sort((a, b) => a.pos - b.pos);
 }
 
-/** The date (YYYY-MM-DD, UTC, the same day in Singapore) of the first daily run that sends the alert. */
-export function alertDueDate(lastMemberSeen: string, alertDays: number): string {
-  const due = Date.parse(lastMemberSeen) + alertDays * DAY;
+/**
+ * The one thing today's run does for a household. At most one message to at most one person per run, so missed job days never
+ * bunch messages together and never skip a person: each later run takes the next step.
+ */
+export function inactivityStep(s: InactivityState, log: readonly ChainEntry[]): InactivityStep {
+  const seen = Date.parse(s.lastMemberSeen);
+  const now = Date.parse(s.now);
+  if (s.contacts <= 0 || !Number.isFinite(seen) || !Number.isFinite(now))
+    return { kind: 'none', why: 'off' };
+  if (current(s.alertedAt, s.lastMemberSeen)) return { kind: 'none', why: 'closed' };
+  const chain = chainOf(log, s.lastMemberSeen);
+  const yes = chain.find((e) => e.confirmedAt);
+  if (yes) return { kind: 'confirmed', pos: yes.pos, at: yes.confirmedAt! };
+  const gone = now - seen;
+  if (chain.length === 0) {
+    // more than alertDays: exactly when the handbook opens to the family login in "inactive" mode (emergency_open)
+    if (gone > s.alertDays * DAY) return { kind: 'tell', pos: 0, send: 1 };
+    if (
+      s.warnDays < s.alertDays &&
+      gone > s.warnDays * DAY &&
+      !current(s.warnedAt, s.lastMemberSeen)
+    )
+      return { kind: 'warn' };
+    return { kind: 'none', why: 'active' };
+  }
+  const last = chain[chain.length - 1]!;
+  const since = Date.parse(last.lastSentAt ?? last.firstSentAt ?? '');
+  const every = Math.max(1, s.remindEveryDays) * DAY - GRACE;
+  if (Number.isFinite(since) && now - since < every) return { kind: 'none', why: 'waiting' };
+  if (last.sends - 1 < Math.max(0, s.reminders))
+    return { kind: 'tell', pos: last.pos, send: last.sends + 1 };
+  if (last.pos + 1 < s.contacts) return { kind: 'tell', pos: last.pos + 1, send: 1 };
+  return { kind: 'exhausted' };
+}
+
+/** The date (YYYY-MM-DD, UTC, the same day in Singapore) of the first daily run after `days` full days from `from`. */
+export function runDateAfter(from: string, days: number): string {
+  const due = Date.parse(from) + days * DAY;
   const d = new Date(due);
   let run = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, JOB_MINUTE_UTC);
   if (run <= due) run += DAY;
@@ -159,17 +217,26 @@ export function peopleList(names: readonly string[]): string {
   return `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
 }
 
-/** Settings > Access: the rules for the two numbers, as a message, or null when they are fine. */
-export function warnDaysProblem(warnDays: number | null, alertDays: number): string | null {
-  if (
-    warnDays === null ||
-    !Number.isInteger(warnDays) ||
-    warnDays < WARN_DAYS_MIN ||
-    warnDays > WARN_DAYS_MAX
-  )
+/** Days from telling one person to telling the next, when nobody confirms. */
+export const escalationDays = (reminders: number, remindEveryDays: number): number =>
+  (Math.max(0, reminders) + 1) * Math.max(1, remindEveryDays);
+
+const whole = (n: number | null, lo: number, hi: number) =>
+  n !== null && Number.isInteger(n) && n >= lo && n <= hi;
+
+/** Settings > Access: the numbers of the alert, as a message, or null when they are fine. */
+export function alertSettingsProblem(
+  v: { warnDays: number | null; reminders: number | null; remindEveryDays: number | null },
+  alertDays: number,
+): string | null {
+  if (!whole(v.warnDays, WARN_DAYS_MIN, WARN_DAYS_MAX))
     return `Warn me after: a whole number of days from ${WARN_DAYS_MIN} to ${WARN_DAYS_MAX}.`;
-  if (warnDays >= alertDays)
-    return `Warn me after: it must be fewer than the ${alertDays} days after which the family is told.`;
+  if (v.warnDays! >= alertDays)
+    return `Warn me after: it must be fewer than the ${alertDays} days after which the first person is told.`;
+  if (!whole(v.reminders, 0, REMINDERS_MAX))
+    return `Reminders: a whole number from 0 to ${REMINDERS_MAX}.`;
+  if (!whole(v.remindEveryDays, REMIND_EVERY_MIN, REMIND_EVERY_MAX))
+    return `Days between reminders: a whole number from ${REMIND_EVERY_MIN} to ${REMIND_EVERY_MAX}.`;
   return null;
 }
 
@@ -180,7 +247,11 @@ export interface InactivityMail {
 }
 
 const base = (u: string) => u.replace(/\/+$/, '');
-const signInUrl = (appUrl: string) => `${base(appUrl)}/login`;
+export const signInUrl = (appUrl: string): string => `${base(appUrl)}/login`;
+export const confirmUrl = (appUrl: string, token: string): string =>
+  `${base(appUrl)}/confirm/${encodeURIComponent(token)}`;
+export const postponeUrl = (appUrl: string, token: string): string =>
+  `${base(appUrl)}/postpone/${encodeURIComponent(token)}`;
 
 const htmlPage = (paras: string[]): string =>
   `<!doctype html><html><body style="margin:0;padding:16px;background:#f1f4f8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1b2433">` +
@@ -191,35 +262,66 @@ const p = (inner: string, style = '') =>
   `<p style="margin:0 0 14px${style ? `;${style}` : ''}">${inner}</p>`;
 const link = (u: string, label = u) =>
   `<a href="${esc(u)}" style="color:#1d4ed8">${esc(label)}</a>`;
+const button = (u: string, label: string) =>
+  `<p style="margin:0 0 14px"><a href="${esc(u)}" style="display:inline-block;padding:10px 16px;background:#1d4ed8;color:#f8f9fb;border-radius:6px;text-decoration:none;font-weight:600">${esc(label)}</a></p>`;
 
 export interface WarningInput {
   daysAbsent: number;
-  /** YYYY-MM-DD: when the family is told (alertDueDate) */
+  /** YYYY-MM-DD: when the first person is told */
   alertDate: string;
+  /** the people in order; the first is told first */
   contactNames: string[];
+  reminders: number;
+  remindEveryDays: number;
   appUrl: string;
+  /** the "I'm fine — postpone" link's token */
+  postponeToken: string;
 }
 
 /** The e-mail to the members after `warnDays`. */
 export function inactivityWarning(i: WarningInput): InactivityMail {
-  const who = peopleList(i.contactNames) || 'the people you chose';
+  const first = i.contactNames[0] || 'the first person on your list';
   const lead = 'Are you all right?';
   const body =
     `Nobody has used the family portal for ${i.daysAbsent} days. Sign in to postpone — otherwise on ` +
-    `${niceDate(i.alertDate)} ${who} will be told how to open the family handbook.`;
+    `${niceDate(i.alertDate)} ${first} will be told how to open the family handbook.`;
+  const gap = escalationDays(i.reminders, i.remindEveryDays);
+  const reminded =
+    i.reminders > 0
+      ? `is reminded ${i.reminders === 1 ? 'once' : `${i.reminders} times`}, ${i.remindEveryDays === 1 ? 'a day' : `${i.remindEveryDays} days`} apart, and `
+      : '';
+  const next = i.contactNames[1];
+  const chain = next
+    ? `If ${first} does not confirm receiving it, ${first} ${reminded}${gap} days after the first message ${next} is told the same way, and so on down your list.`
+    : `If ${first} does not confirm receiving it, ${first} ${reminded || 'is told only once, and '}nobody else is told: the list has one person.`;
+  const stop =
+    'Everything stops as soon as someone confirms, or anyone from the household signs in or presses the link below.';
+  const postpone = postponeUrl(i.appUrl, i.postponeToken);
   const url = signInUrl(i.appUrl);
-  const after =
-    'Signing in once is enough: nothing is sent to anyone, and this message does not come again until the next long absence.';
   const foot =
     'You receive this because you are a member of the household. The days and the people are in Settings > Emergency and access.';
   return {
     subject: 'Are you all right? Sign in to the family portal to postpone',
-    text: [lead, '', body, '', `Sign in: ${url}`, '', after, '', foot].join('\n'),
+    text: [
+      lead,
+      '',
+      body,
+      '',
+      `I'm fine — postpone: ${postpone}`,
+      `Or sign in: ${url}`,
+      '',
+      chain,
+      stop,
+      '',
+      foot,
+    ].join('\n'),
     html: htmlPage([
       p(`<b>${esc(lead)}</b>`, 'font-size:18px'),
       p(esc(body)),
-      p(link(url, 'Sign in to postpone')),
-      p(esc(after)),
+      button(postpone, "I'm fine — postpone"),
+      p(`Or ${link(url, 'sign in')}.`),
+      p(esc(chain)),
+      p(esc(stop)),
       p(esc(foot), 'font-size:13px;color:#4b5565'),
     ]),
   };
@@ -243,10 +345,16 @@ export interface FamilyAlertInput {
 }
 
 export interface FamilyAlertOptions {
-  /** the person this copy is for ("Dear Ragini") */
+  /** the person this message is for ("Dear Ragini") */
   recipientName?: string;
-  /** the members' copy: the names of the people it went to */
-  copyOf?: string[];
+  /** the "I have received this" link's token */
+  confirmToken?: string;
+  /** 1 = the first message; 2 and up are reminders */
+  send?: number;
+  /** how many reminders there are in all */
+  reminders?: number;
+  /** the members' copy: the name of the person it went to */
+  copyOf?: string;
   /** Settings > "Send a test": the member's own copy, marked TEST */
   test?: boolean;
   /** the person also gets the e-mail: the WhatsApp version then leaves where the password is kept to the e-mail */
@@ -260,19 +368,29 @@ export interface FamilyAlert extends InactivityMail {
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
-/** The message to the people the owner chose, at `alertDays`. Short and calm: what this is, the link, how to sign in, who to call. */
+/** The message to one person on the list. Short and calm: what this is, "I have received this", the link, how to sign in, who to call. */
 export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): FamilyAlert {
   const owner = i.ownerName.trim() || 'the household';
+  const Owner = `${owner.charAt(0).toUpperCase()}${owner.slice(1)}`;
   const url = signInUrl(i.appUrl);
   const locked = i.mode === 'manual' && !i.released;
+  const send = Math.max(1, o.send ?? 1);
+  const reminder = send > 1;
   const greet = o.recipientName ? `Dear ${o.recipientName},` : 'Hello,';
+  const nth = reminder
+    ? `Reminder ${send - 1}${o.reminders ? ` of ${o.reminders}` : ''}: nobody has confirmed this message yet.`
+    : '';
   const why =
     `This is an automatic message from ${owner}'s family portal. Nobody from the household has signed in to it for ` +
     `${i.daysAbsent} days, so it is sending the message ${owner} asked it to send. It may be nothing, such as a long trip, ` +
     'but please read it.';
   const what =
-    `${owner} kept the family's money records (bank accounts, deposits, investments, insurance) in a private portal, ` +
+    `${Owner} kept the family's money records (bank accounts, deposits, investments, insurance) in a private portal, ` +
     'and wrote a family handbook there that tells you what to do, step by step.';
+  const confirm = o.confirmToken ? confirmUrl(i.appUrl, o.confirmToken) : '';
+  const ask = confirm
+    ? `Please let the portal know you have received this: ${confirm} (press "I have received this" on that page). Until someone does, it reminds you and then tells the next person ${owner} chose.`
+    : '';
   const login =
     i.familyLogins.length === 0
       ? `Sign in with the family login ${owner} set up for you (an e-mail address and a password).`
@@ -292,9 +410,9 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
     : '';
   const fine = `If ${owner} is fine, nothing needs doing: as soon as anyone from the household signs in, these messages stop.`;
   const head = o.test
-    ? 'TEST: this is a test sent only to you. Nobody else received it. Below is exactly what the people you chose will receive.'
+    ? 'TEST: this is a test sent only to you. Nobody else received it. Below is exactly what the first person on your list will receive.'
     : o.copyOf
-      ? `A copy for the household: the message below went to ${peopleList(o.copyOf) || 'the people you chose'} today. Signing in stops any more messages.`
+      ? `A copy for the household: the message below went to ${o.copyOf} today${reminder ? ` (reminder ${send - 1})` : ''}. Signing in stops any more messages.`
       : '';
   const steps = [
     `1. Open the portal: ${url}`,
@@ -306,8 +424,10 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
     ...(head ? [head, '', '----', ''] : []),
     greet,
     '',
+    ...(nth ? [nth, ''] : []),
     why,
     '',
+    ...(ask ? [ask, ''] : []),
     what,
     '',
     ...steps,
@@ -325,7 +445,19 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
         ]
       : []),
     p(esc(greet)),
+    ...(nth ? [p(`<b>${esc(nth)}</b>`)] : []),
     p(esc(why)),
+    ...(confirm
+      ? [
+          button(confirm, 'I have received this'),
+          p(
+            esc(
+              `Until someone presses it, the portal reminds you and then tells the next person ${owner} chose.`,
+            ),
+            'font-size:14px;color:#4b5565',
+          ),
+        ]
+      : []),
     p(esc(what)),
     `<ol style="margin:0 0 14px;padding-left:22px">` +
       `<li style="margin-bottom:8px">Open the portal: ${link(url)}</li>` +
@@ -337,8 +469,10 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
   const chat = [
     ...(o.test ? ['TEST (sent only to you)', ''] : []),
     greet,
+    ...(nth ? [nth] : []),
     `This is an automatic message from ${owner}'s family portal: nobody from the household has signed in for ${i.daysAbsent} days.`,
-    `${owner} kept the family's money records there, with a handbook that says what to do, step by step.`,
+    `${Owner} kept the family's money records there, with a handbook that says what to do, step by step.`,
+    ...(confirm ? [`Please confirm you have received this: ${confirm}`] : []),
     `Open: ${url}`,
     i.familyLogins.length
       ? `Sign in with the family login ${i.familyLogins.join(' or ')}.`
@@ -354,6 +488,57 @@ export function familyAlert(i: FamilyAlertInput, o: FamilyAlertOptions = {}): Fa
     ...(call ? [call] : []),
     fine,
   ].join('\n');
-  const subject = `${o.test ? '[TEST] ' : o.copyOf ? 'Copy: ' : ''}${owner.charAt(0).toUpperCase()}${owner.slice(1)}'s family portal: how to open the family handbook`;
+  const subject = `${o.test ? '[TEST] ' : o.copyOf ? 'Copy: ' : ''}${reminder ? 'Reminder: ' : ''}${Owner}'s family portal: how to open the family handbook`;
   return { subject, text, html, chat };
+}
+
+/** The note to the members when someone confirmed: the chain stops. */
+export function confirmedNote(i: { name: string; at: string; appUrl: string }): InactivityMail {
+  const day = niceDate(i.at.slice(0, 10));
+  const lead = `${i.name} confirmed on ${day} that they received the message about the family handbook.`;
+  const rest = 'Nobody else will be told during this absence.';
+  const url = signInUrl(i.appUrl);
+  const back = `When you can, sign in to the portal: the next long absence then starts afresh. ${url}`;
+  return {
+    subject: `${i.name} confirmed the family portal message`,
+    text: ['For the record:', '', lead, rest, '', back].join('\n'),
+    html: htmlPage([
+      p('For the record:'),
+      p(`<b>${esc(lead)}</b>`),
+      p(esc(rest)),
+      p(
+        `When you can, ${link(url, 'sign in to the portal')}: the next long absence then starts afresh.`,
+      ),
+    ]),
+  };
+}
+
+/** Settings > "Last alert": one line per person told in the latest chain. */
+export interface ChainView {
+  name: string;
+  sends: number;
+  firstSentAt: string | null;
+  lastSentAt: string | null;
+  confirmedAt: string | null;
+}
+
+/** The latest chain with names from the current list ("no longer on the list" when a person was removed). */
+export function lastChain(
+  log: readonly ChainEntry[],
+  names: readonly string[],
+): { absenceFrom: string; people: ChainView[] } | null {
+  if (log.length === 0) return null;
+  const latest = log.reduce((a, b) =>
+    Date.parse(b.absenceFrom) > Date.parse(a.absenceFrom) ? b : a,
+  );
+  return {
+    absenceFrom: latest.absenceFrom,
+    people: chainOf(log, latest.absenceFrom).map((e) => ({
+      name: names[e.pos] ?? `Person ${e.pos + 1} (no longer on the list)`,
+      sends: e.sends,
+      firstSentAt: e.firstSentAt,
+      lastSentAt: e.lastSentAt,
+      confirmedAt: e.confirmedAt,
+    })),
+  };
 }

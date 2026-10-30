@@ -57,6 +57,8 @@ grant execute on function public.touch_member_activity(uuid) to authenticated;
 -- person is told the same way. The chain stops when anyone confirms, or when a member uses the portal again (a new absence starts a
 -- new chain). The owner's warning carries a link "I'm fine" that postpones without signing in.
 alter table public.emergency_access
+  -- the owner is reminded from warn_days until the trusted people are told (inactive_days), this many days apart (1 = every day)
+  add column warn_every_days     int not null default 1 check (warn_every_days between 1 and 14),
   add column remind_every_days   int not null default 2 check (remind_every_days between 1 and 14),
   add column reminders           int not null default 3 check (reminders between 0 and 10),
   add column postpone_token_hash text;

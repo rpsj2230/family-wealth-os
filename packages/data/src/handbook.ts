@@ -1,6 +1,7 @@
 import {
   buildBankBlocks,
   buildHandbook,
+  fundHouseOf,
   profileFromJson,
   receivableStatus,
   withoutHiddenDeposits,
@@ -9,6 +10,47 @@ import {
 } from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData } from './index';
+
+/**
+ * Reads that may run before the database update that adds their column or table (nominee notes, helplines): a missing column, a
+ * missing table or any other error gives an empty answer, so the handbook still builds.
+ */
+async function optional<T>(q: PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {
+  try {
+    const r = await q;
+    return r.error ? [] : ((r.data ?? []) as T[]);
+  } catch {
+    return [];
+  }
+}
+
+/** Who is registered as nominee on each account, deposit and fund, by asset id (assets.nominee_note). */
+export async function loadNominees(
+  db: SupabaseClient,
+  householdId?: string,
+): Promise<Record<string, string>> {
+  const q = db.from('assets').select('id, nominee_note').not('nominee_note', 'is', null);
+  const rows = await optional<{ id: string; nominee_note: string | null }>(
+    householdId ? q.eq('household_id', householdId) : q,
+  );
+  return Object.fromEntries(
+    rows.filter((r) => r.nominee_note?.trim()).map((r) => [r.id, r.nominee_note!.trim()]),
+  );
+}
+
+/** The helpline of each bank or other institution, by id (institutions.helpline). */
+export async function loadHelplines(
+  db: SupabaseClient,
+  householdId?: string,
+): Promise<Record<string, string>> {
+  const q = db.from('institutions').select('id, helpline').not('helpline', 'is', null);
+  const rows = await optional<{ id: string; helpline: string | null }>(
+    householdId ? q.eq('household_id', householdId) : q,
+  );
+  return Object.fromEntries(
+    rows.filter((r) => r.helpline?.trim()).map((r) => [r.id, r.helpline!.trim()]),
+  );
+}
 
 /** Reads everything the handbook describes. Works with a member's client (row-level security) or the service role. */
 export async function loadHandbookInput(
@@ -33,7 +75,7 @@ export async function loadHandbookInput(
     opts.householdId
       ? db.from('households').select('name').eq('id', opts.householdId).maybeSingle()
       : db.from('households').select('name').limit(1).maybeSingle(),
-    scoped('mf_positions', 'asset_id, fund_name, invested, sip_monthly, sip_stopped'),
+    scoped('mf_positions', 'asset_id, fund_name, invested, sip_monthly, sip_stopped, amfi_code'),
     scoped(
       'policies',
       'id, kind, insurer, coverage_text, paid_by, renewal_on, expires_on, nominee_note, documents_note',
@@ -51,6 +93,25 @@ export async function loadHandbookInput(
     pan_last4: string | null;
     tax_residency: string | null;
   }[];
+  const positions = (pos.data ?? []) as unknown as {
+    asset_id: string;
+    fund_name: string;
+    invested: number | null;
+    sip_monthly: number | null;
+    sip_stopped: boolean;
+    amfi_code: string | null;
+  }[];
+  const codes = [...new Set(positions.map((p) => p.amfi_code).filter((c): c is string => !!c))];
+  const [nominees, helplines, schemes] = await Promise.all([
+    loadNominees(db, opts.householdId),
+    loadHelplines(db, opts.householdId),
+    codes.length
+      ? optional<{ code: string; amc: string | null }>(
+          db.from('amfi_schemes').select('code, amc').in('code', codes),
+        )
+      : Promise.resolve([]),
+  ]);
+  const amcOf = new Map(schemes.map((x) => [x.code, x.amc]));
   const ownerName: Record<string, string> = Object.fromEntries(
     owners.map((o) => [o.id, o.display_name]),
   );
@@ -133,17 +194,11 @@ export async function loadHandbookInput(
     profile: profileFromJson((prof.data as { content: unknown } | null)?.content),
     banks,
     ownerName,
-    funds: (
-      (pos.data ?? []) as unknown as {
-        asset_id: string;
-        fund_name: string;
-        invested: number | null;
-        sip_monthly: number | null;
-        sip_stopped: boolean;
-      }[]
-    ).map((f) => ({
+    funds: positions.map((f) => ({
       owner: ownerName[assetBy.get(f.asset_id)?.owner_id ?? ''] ?? '',
       fund: f.fund_name,
+      assetId: f.asset_id,
+      house: fundHouseOf(f.fund_name, f.amfi_code ? amcOf.get(f.amfi_code) : null),
       value: value.get(f.asset_id) ?? null,
       invested: f.invested === null ? null : Number(f.invested),
       sipMonthly: f.sip_monthly === null ? null : Number(f.sip_monthly),
@@ -175,6 +230,7 @@ export async function loadHandbookInput(
         documents_note: string | null;
       }[]
     ).map((p) => ({
+      id: p.id,
       kind: p.kind,
       insurer: p.insurer,
       coverage: p.coverage_text ?? '',
@@ -187,6 +243,12 @@ export async function loadHandbookInput(
     })),
     property: other(['property', 'ulip', 'nps', 'other']),
     owedToUs: owed,
+    nominees,
+    institutions: ((inst.data ?? []) as unknown as { id: string; name: string }[]).map((x) => ({
+      id: x.id,
+      name: x.name,
+      helpline: helplines[x.id] ?? null,
+    })),
   };
 }
 
@@ -195,4 +257,22 @@ export async function buildHandbookDoc(
   opts: { householdId?: string; today?: Date } = {},
 ): Promise<Handbook> {
   return buildHandbook(await loadHandbookInput(db, opts));
+}
+
+/** One ticked step of the handbook: who ticked it and when. */
+export interface HandbookTick {
+  key: string;
+  doneBy: string | null;
+  doneAt: string;
+}
+
+/**
+ * The steps the family has ticked (emergency_progress), shared by everyone who may open the handbook. Before the database update
+ * that adds the table has run, nothing is ticked.
+ */
+export async function loadHandbookTicks(db: SupabaseClient): Promise<HandbookTick[]> {
+  const rows = await optional<{ step_key: string; done_by: string | null; done_at: string }>(
+    db.from('emergency_progress').select('step_key, done_by, done_at').limit(2000),
+  );
+  return rows.map((r) => ({ key: r.step_key, doneBy: r.done_by, doneAt: r.done_at }));
 }

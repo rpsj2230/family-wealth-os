@@ -125,9 +125,7 @@ export const HB_TEXT = {
       const parts = [
         n(p, 'banks') ? en1(n(p, 'banks'), 'bank', 'banks') : '',
         n(p, 'funds') ? en1(n(p, 'funds'), 'fund', 'funds') : '',
-        n(p, 'policies')
-          ? en1(n(p, 'policies'), 'insurance policy', 'insurance policies')
-          : '',
+        n(p, 'policies') ? en1(n(p, 'policies'), 'insurance policy', 'insurance policies') : '',
       ].filter(Boolean);
       if (parts.length === 0) return 'No accounts, funds or policies are recorded yet.';
       return n(p, 'total') > 0
@@ -202,15 +200,15 @@ export const HB_TEXT = {
         ? `Find the will (${s(p, 'where')}) and read who is named as executor and guardian.`
         : 'Find the will, if there is one, and read who is named as executor and guardian. Ask a lawyer if there is none.',
     enPlain: (p) =>
-      s(p, 'where') ? `Find the will (${s(p, 'where')}).` : 'Look for a will. If none, ask a lawyer.',
+      s(p, 'where')
+        ? `Find the will (${s(p, 'where')}).`
+        : 'Look for a will. If none, ask a lawyer.',
     hi: (p) =>
       s(p, 'where')
         ? `वसीयत ढूँढें (${s(p, 'where')}) और देखें कि उसमें एग्ज़ीक्यूटर और अभिभावक किसे बनाया गया है।`
         : 'अगर वसीयत है तो उसे ढूँढें और देखें कि उसमें एग्ज़ीक्यूटर और अभिभावक किसे बनाया गया है। वसीयत न हो तो किसी वकील से पूछें।',
     hiPlain: (p) =>
-      s(p, 'where')
-        ? `वसीयत ढूँढें (${s(p, 'where')})।`
-        : 'वसीयत ढूँढें। न मिले तो वकील से पूछें।',
+      s(p, 'where') ? `वसीयत ढूँढें (${s(p, 'where')})।` : 'वसीयत ढूँढें। न मिले तो वकील से पूछें।',
   },
   'step.guardian': {
     en: (p, f) =>
@@ -393,12 +391,16 @@ export const HB_TEXT = {
     hiPlain: 'जल्दी क्लेम करें। पहले जीवन (टर्म) बीमा।',
   },
   'h.savings': {
-    en: (p) => `Savings account${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
-    hi: (p) => `बचत खाता${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
+    en: (p) =>
+      `Savings account${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
+    hi: (p) =>
+      `बचत खाता${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
   },
   'h.fd': {
-    en: (p) => `Fixed deposit${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
-    hi: (p) => `फ़िक्स्ड डिपॉज़िट${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
+    en: (p) =>
+      `Fixed deposit${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
+    hi: (p) =>
+      `फ़िक्स्ड डिपॉज़िट${s(p, 'kind') ? ` (${s(p, 'kind')})` : ''}${s(p, 'last4') ? ` …${s(p, 'last4')}` : ''}`,
   },
   'h.fdTerms': {
     en: (p, f) =>
@@ -706,19 +708,23 @@ export const HB_TEXT = {
   'gap.nomineeAccounts': {
     en: (p) =>
       `${en1(n(p, 'count'), 'account or deposit has', 'accounts and deposits have')} no nominee recorded`,
-    hi: (p) => `${n(p, 'count')} ${n(p, 'count') === 1 ? 'खाते या एफ़डी' : 'खातों और एफ़डी'} में नॉमिनी दर्ज नहीं है`,
+    hi: (p) =>
+      `${n(p, 'count')} ${n(p, 'count') === 1 ? 'खाते या एफ़डी' : 'खातों और एफ़डी'} में नॉमिनी दर्ज नहीं है`,
   },
   'gap.nomineeFunds': {
     en: (p) => `${en1(n(p, 'count'), 'fund has', 'funds have')} no nominee recorded`,
-    hi: (p) => `${n(p, 'count')} ${n(p, 'count') === 1 ? 'फ़ंड' : 'फ़ंडों'} में नॉमिनी दर्ज नहीं है`,
+    hi: (p) =>
+      `${n(p, 'count')} ${n(p, 'count') === 1 ? 'फ़ंड' : 'फ़ंडों'} में नॉमिनी दर्ज नहीं है`,
   },
   'gap.nomineePolicies': {
     en: (p) => `${en1(n(p, 'count'), 'policy has', 'policies have')} no nominee recorded`,
-    hi: (p) => `${n(p, 'count')} ${n(p, 'count') === 1 ? 'पॉलिसी' : 'पॉलिसियों'} में नॉमिनी दर्ज नहीं है`,
+    hi: (p) =>
+      `${n(p, 'count')} ${n(p, 'count') === 1 ? 'पॉलिसी' : 'पॉलिसियों'} में नॉमिनी दर्ज नहीं है`,
   },
   'gap.helpline': {
     en: (p) => `${en1(n(p, 'count'), 'bank has', 'banks have')} no helpline`,
-    hi: (p) => `${n(p, 'count')} ${n(p, 'count') === 1 ? 'बैंक' : 'बैंकों'} की हेल्पलाइन दर्ज नहीं है`,
+    hi: (p) =>
+      `${n(p, 'count')} ${n(p, 'count') === 1 ? 'बैंक' : 'बैंकों'} की हेल्पलाइन दर्ज नहीं है`,
   },
   'gap.will': {
     en: 'Where is the will? Not written down yet',
