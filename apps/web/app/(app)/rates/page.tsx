@@ -224,7 +224,7 @@ export default async function RatesPage({
             <div className="rt-note bad" role="alert" style={{ marginBottom: 14 }}>
               <p>
                 <b>
-                  The monthly refresh could not read the rates of {unreadable.length} bank
+                  The last sync could not read the rates of {unreadable.length} bank
                   {unreadable.length === 1 ? '' : 's'}:
                 </b>{' '}
                 {unreadable.map((c, i) => (
@@ -373,8 +373,9 @@ export default async function RatesPage({
             <h2 id="paste-h">Paste your notes</h2>
             <p className="muted small">
               Paste your list as you keep it and the app reads the slabs and terms. Every figure is
-              marked as typed by you. The Monday refresh keeps banks that have a rate page up to
-              date, for savings and NRE deposits only, and never overwrites a rate you typed.
+              marked as typed by you. Sync rates updates banks that have a rate page, for savings
+              and NRE deposits only, and never overwrites a rate you typed. Rates change only when
+              you press Sync rates.
             </p>
             <ImportNotes example={NOTES_EXAMPLE} />
           </section>

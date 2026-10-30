@@ -148,7 +148,7 @@ export async function loadRateEvents(
     .filter((e) => !bank || sameBank(e.bank, bank));
 }
 
-/** The pages the monthly refresh reads, with how the last read went. */
+/** The pages Sync rates reads, with how the last read went. */
 export async function loadRateSources(supabase: Ctx['supabase']): Promise<RateSourceRow[]> {
   const r = await supabase
     .from('rate_sources')

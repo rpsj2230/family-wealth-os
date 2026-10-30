@@ -201,7 +201,7 @@ export const THIRD_PARTY_NOTE = 'Reference only';
 export const isThirdPartyNote = (note: string | null | undefined): boolean =>
   !!note && note.startsWith(THIRD_PARTY_NOTE);
 
-// ---- did the monthly refresh read the bank's page? -------------------------------------------------------------------
+// ---- did the last sync read the bank's page? -------------------------------------------------------------------
 
 export interface RateSourceRow {
   bank: string;
@@ -249,7 +249,7 @@ export function sourceStatus(
       headline: 'No rate page is listed for this bank, so nothing is read automatically.',
       detail: null,
       fix: {
-        text: 'Add the page where the bank publishes its rates and the Monday refresh reads it.',
+        text: 'Add the page where the bank publishes its rates; Sync rates then reads it.',
         href: '/settings#rates',
         hrefLabel: 'Add a rate page in Settings',
       },
@@ -435,7 +435,7 @@ export function sourceStatus(
   };
 }
 
-/** Marks a read that succeeded long ago as needing a look: the Monday job may have stopped. */
+/** Marks a read that succeeded long ago as needing a look: rates change only when Sync rates is pressed. */
 export function withRunAge(s: SourceStatus, today: string, staleRunDays = 10): SourceStatus {
   if (!s.ranOn || s.health === 'idle') return s;
   const old = daysBetween(s.ranOn, today);
@@ -445,7 +445,9 @@ export function withRunAge(s: SourceStatus, today: string, staleRunDays = 10): S
     health: s.health === 'ok' ? 'warn' : s.health,
     headline: `${s.headline} Last tried ${old} days ago.`,
     fix: s.fix ?? {
-      text: 'The Monday refresh seems to have stopped. Check “Refresh interest rates” under GitHub > Actions.',
+      text: 'Rates are read only when you press Sync rates. Press it to read this page again.',
+      href: '/rates/sync',
+      hrefLabel: 'Sync rates',
     },
   };
 }

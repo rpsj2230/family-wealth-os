@@ -259,8 +259,8 @@ export function RateBoard({
     return (
       <p className="empty">
         No rates on file for these banks yet. Paste your notes under Add or import, or list each
-        bank&apos;s rate page in <Link href="/settings#rates">Settings</Link> and the Monday refresh
-        reads it.
+        bank&apos;s rate page in <Link href="/settings#rates">Settings</Link> and Sync rates reads
+        it.
       </p>
     );
   return (

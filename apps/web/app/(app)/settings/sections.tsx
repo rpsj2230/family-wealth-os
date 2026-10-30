@@ -523,8 +523,8 @@ export function ConnectionsSection({
         )}
         {sources.length === 0 ? (
           <p className="empty">
-            No rate pages yet. Add the first one below; the Rates page then fills itself every
-            Monday.
+            No rate pages yet. Add the first one below; press Sync rates on the Rates page to read
+            it.
           </p>
         ) : (
           <table className="tbl lines responsive">

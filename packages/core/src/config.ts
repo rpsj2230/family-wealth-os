@@ -127,7 +127,7 @@ export interface AppConfig {
     forwardUtcOffsetHours: number;
   };
   rates: {
-    /** an offer not checked within this many days is shown as old (rates are read once a month, so this is longer than a month) */
+    /** an offer not checked within this many days is shown as old (rates change only when you press Sync rates) */
     staleDays: number;
     /** the day of the month the bank rate pages are read; in a month without that day, the last day */
     syncDay: number;

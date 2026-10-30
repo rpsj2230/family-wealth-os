@@ -26,7 +26,7 @@ test.describe('Rates board (public sample)', () => {
     await noSideScroll(page);
   });
 
-  test('says when the monthly refresh could not read a bank page, why, and what to do', async ({
+  test('says when the last sync could not read a bank page, why, and what to do', async ({
     page,
   }) => {
     await page.goto('/demo/rates?view=all');

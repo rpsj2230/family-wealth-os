@@ -162,7 +162,7 @@ function checklist(f: SetupFacts): SetupItem[] {
       href: '/settings?tab=connections#rates',
       hint:
         f.rateSources > 0
-          ? `${f.rateSources} ${f.rateSources === 1 ? 'page is' : 'pages are'} read every Monday.`
+          ? `${f.rateSources} ${f.rateSources === 1 ? 'page is' : 'pages are'} read when you press Sync rates.`
           : 'Without them the Rates page only has rates you type.',
     },
     {

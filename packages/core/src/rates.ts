@@ -461,7 +461,7 @@ export function placeNewMoney(args: {
     );
   if (args.offers.length === 0)
     notes.push(
-      'No rates are on file yet. Add them on this page or let the monthly refresh read your banks’ rate pages.',
+      'No rates are on file yet. Add them on this page or press Sync rates to read your banks’ rate pages.',
     );
   if (kind === 'NRO')
     notes.push('Rates are shown after tax: interest on NRO accounts is taxed in India.');
