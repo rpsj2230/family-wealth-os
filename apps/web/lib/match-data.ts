@@ -1,6 +1,13 @@
-import type { Proposal } from '@fwos/core';
+import { addDaysIso, type Proposal } from '@fwos/core';
 import { columnExists, loadSettings } from '@fwos/data';
-import { schemeProposal, suggestSchemes, type KnownIsin, type SchemeCertainty } from '@fwos/ingest';
+import {
+  parseHistory,
+  schemeProposal,
+  suggestSchemes,
+  type FundPrice,
+  type KnownIsin,
+  type SchemeCertainty,
+} from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Ctx } from './data';
 import { schemesForFund } from './scheme-pool';
@@ -147,7 +154,32 @@ export async function loadMatchView(supabase: Ctx['supabase']): Promise<MatchVie
         name: base.name,
         isins: known.map((k) => k.isin),
       });
-      const s = suggestSchemes(fund, pool, { maxChoices: cfg.matchChoices });
+      let s = suggestSchemes(fund, pool, { maxChoices: cfg.matchChoices });
+      // the name fits several schemes: the price a unit of the value last recorded tells them apart
+      const last = lastValue.get(id);
+      const price: FundPrice | null =
+        last && base.units && base.units > 0
+          ? { asOf: last.asOf, value: last.amount, units: base.units }
+          : null;
+      if (!s.recommended && price && s.choices.length > 1) {
+        const from = addDaysIso(price.asOf, -cfg.matchPriceDays);
+        const navs = new Map(
+          await Promise.all(
+            s.choices.map(
+              async (c) =>
+                [
+                  c.scheme.code,
+                  await navsBetween(supabase, c.scheme.code, from, price.asOf),
+                ] as const,
+            ),
+          ),
+        );
+        s = suggestSchemes({ ...fund, price }, pool, {
+          maxChoices: cfg.matchChoices,
+          navsNear: (code) => navs.get(code) ?? [],
+          priceTolerance: cfg.matchPriceTolerance,
+        });
+      }
       return {
         ...base,
         proposal: schemeProposal(fund, s),
@@ -156,4 +188,37 @@ export async function loadMatchView(supabase: Ctx['supabase']): Promise<MatchVie
     }),
   );
   return { rows, haveList, canMark };
+}
+
+/**
+ * A scheme's official prices between two days: those already stored, else the public price list the nightly job reads (kept for a
+ * day). Nothing when neither answers: the suggestion then simply does not use prices.
+ */
+async function navsBetween(
+  supabase: Ctx['supabase'],
+  code: string,
+  from: string,
+  to: string,
+): Promise<{ date: string; nav: number }[]> {
+  const stored = await supabase
+    .from('mf_navs')
+    .select('nav_date, nav')
+    .eq('amfi_code', code)
+    .gte('nav_date', from)
+    .lte('nav_date', to);
+  const rows = (stored.data ?? []) as { nav_date: string; nav: number }[];
+  if (!stored.error && rows.length)
+    return rows.map((r) => ({ date: r.nav_date, nav: Number(r.nav) }));
+  try {
+    const res = await fetch(`https://api.mfapi.in/mf/${code}`, {
+      next: { revalidate: 86_400 },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    return parseHistory(await res.json(), code, from)
+      .filter((r) => r.nav_date <= to)
+      .map((r) => ({ date: r.nav_date, nav: r.nav }));
+  } catch {
+    return [];
+  }
 }

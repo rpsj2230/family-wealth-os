@@ -37,6 +37,8 @@ describe('settings fields', () => {
       valuationPeriods: '12',
       financialQuarters: true,
       noLedgerNoteAbove: '0',
+      matchPriceTolerance: '0.2',
+      matchPriceDays: '7',
       planTolerance: '2',
     });
     const ok = parseGroup(
@@ -49,6 +51,8 @@ describe('settings fields', () => {
         valuationPeriods: '12',
         financialQuarters: 'on',
         noLedgerNoteAbove: '2',
+        matchPriceTolerance: '0.5',
+        matchPriceDays: '10',
         planTolerance: '3',
       }),
     );
@@ -63,6 +67,8 @@ describe('settings fields', () => {
           valuationPeriods: 12,
           financialQuarters: true,
           noLedgerNoteAbove: 2,
+          matchPriceTolerance: 0.005,
+          matchPriceDays: 10,
           planTolerance: 0.03,
         },
       },

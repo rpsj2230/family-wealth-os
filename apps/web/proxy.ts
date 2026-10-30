@@ -35,6 +35,12 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims?.sub ? data.claims : null;
 
+  // a password-reset link that Supabase sent to the site's home page: on to the page that checks it
+  if (!user && pathname === '/' && request.nextUrl.searchParams.has('code')) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login/reset/confirm';
+    return NextResponse.redirect(url);
+  }
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';

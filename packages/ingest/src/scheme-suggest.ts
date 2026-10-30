@@ -29,6 +29,15 @@ export interface FundToMatch {
   isins: KnownIsin[];
   /** the plan saved on the fund when its name does not say */
   planType?: 'direct' | 'regular' | 'regular_or_unknown' | null;
+  /** the value last recorded for it with its units: the price a unit it implies tells schemes apart */
+  price?: FundPrice | null;
+}
+
+export interface FundPrice {
+  /** the day of the recorded value */
+  asOf: string;
+  value: number;
+  units: number;
 }
 
 export interface SchemeChoice {
@@ -55,6 +64,10 @@ export interface SchemeSuggestion {
 export interface SuggestOptions {
   /** how many schemes to list at most (Settings: funds.matchChoices) */
   maxChoices: number;
+  /** a scheme's official prices in the days up to the recorded value (empty when not known) */
+  navsNear?: (code: string) => { date: string; nav: number }[];
+  /** a price this close (a share) to the recorded value's price a unit is the same price (Settings: funds.matchPriceTolerance) */
+  priceTolerance?: number;
 }
 
 const WHERE: Record<KnownIsin['source'], string> = {
@@ -254,7 +267,64 @@ export function suggestSchemes(
     named.recommended = { ...named.recommended, reason: isinNote + named.recommended.reason };
     return finish(named.recommended, named.rest, '');
   }
+  // 5. the price: the recorded value over its units is one scheme's official price, and no other's
+  const byPrice = priceChoice(fund, named.rest, opts);
+  if (byPrice) {
+    return finish(
+      { ...byPrice, reason: isinNote + byPrice.reason },
+      named.rest.filter((c) => c.scheme.code !== byPrice.scheme.code),
+      '',
+    );
+  }
   return finish(null, named.rest, isinNote + named.note);
+}
+
+const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const dayText = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
+/**
+ * The one scheme whose official price, on a day up to the recorded value, is the price a unit that value works out to; null when none
+ * is, or more than one is close.
+ */
+function priceChoice(
+  fund: FundToMatch,
+  choices: SchemeChoice[],
+  opts: SuggestOptions,
+): SchemeChoice | null {
+  const p = fund.price;
+  if (!p || !opts.navsNear || choices.length < 2 || !(p.units > 0) || !(p.value > 0)) return null;
+  const tol = opts.priceTolerance ?? 0.005;
+  const perUnit = p.value / p.units;
+  const fits = choices.map((c) => {
+    let best: { date: string; nav: number; gap: number } | null = null;
+    for (const n of opts.navsNear!(c.scheme.code)) {
+      const gap = Math.abs(n.nav / perUnit - 1);
+      if (!best || gap < best.gap) best = { ...n, gap };
+    }
+    return { c, best };
+  });
+  const hits = fits.filter((f) => f.best && f.best.gap <= tol);
+  if (hits.length !== 1) return null;
+  const hit = hits[0]!;
+  // the others must be clearly apart, not just outside the tolerance
+  if (fits.some((f) => f !== hit && f.best && f.best.gap <= tol * 3)) return null;
+  const others = fits
+    .filter((f) => f !== hit && f.best)
+    .map((f) => `${inr(Math.round(f.best!.nav * 100) / 100)} for ${f.c.scheme.code}`);
+  return {
+    ...hit.c,
+    certainty: 'high',
+    reason:
+      `The value you recorded, ${inr(Math.round(p.value))} for ${p.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units on ${dayText(p.asOf)}, ` +
+      `is ${inr(Math.round(perUnit * 100) / 100)} a unit, and this scheme's official price on ${dayText(hit.best!.date)} was ${inr(Math.round(hit.best!.nav * 10000) / 10000)}` +
+      (others.length ? `; the other schemes were at ${others.join(', ')}.` : '.'),
+  };
 }
 
 /** The schemes (other than `skip`) that the name alone makes plausible, as alternatives to an ISIN match. */

@@ -312,6 +312,10 @@ export interface AppConfig {
     noLedgerNoteAbove: number;
     /** a fund with no ledger has its units rebuilt from its SIP plan; the plan's money in may differ from the amount invested by this share before it is adjusted (0.02 = 2%) */
     planTolerance: number;
+    /** matching a fund to a scheme: an official price this close (a share) to the price a unit of its recorded value is the same */
+    matchPriceTolerance: number;
+    /** and the official prices of this many days up to the recorded value are compared */
+    matchPriceDays: number;
   };
   /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
   sheetSync: {
@@ -507,6 +511,8 @@ export const DEFAULT_CONFIG: AppConfig = {
     matchSearchResults: 10,
     noLedgerNoteAbove: 0,
     planTolerance: 0.02,
+    matchPriceTolerance: 0.002,
+    matchPriceDays: 7,
   },
   sheetSync: {
     timeZone: 'Asia/Singapore',
@@ -969,6 +975,8 @@ export function configFromJson(raw: unknown): AppConfig {
       ),
       noLedgerNoteAbove: Math.round(num(fun.noLedgerNoteAbove, d.funds.noLedgerNoteAbove, 0, 1000)),
       planTolerance: num(fun.planTolerance, d.funds.planTolerance, 0, 0.5),
+      matchPriceTolerance: num(fun.matchPriceTolerance, d.funds.matchPriceTolerance, 0, 0.05),
+      matchPriceDays: Math.round(num(fun.matchPriceDays, d.funds.matchPriceDays, 1, 31)),
     },
     sheetSync: (() => {
       const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));

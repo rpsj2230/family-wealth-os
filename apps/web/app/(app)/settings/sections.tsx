@@ -620,6 +620,17 @@ export function AccessSection({
         family login can open it without seeing anything else.
       </SectionIntro>
       <div id="emergency">
+        <section className="card" id="password" aria-labelledby="password-h">
+          <div className="sectionhead">
+            <h3 id="password-h">Your password</h3>
+            <Link className="btn compact" href="/login/reset/new" data-testid="change-password">
+              Change your password
+            </Link>
+          </div>
+          <p className="muted small">
+            Forgot it? On the sign-in page, “Forgot your password?” emails a link to set a new one.
+          </p>
+        </section>
         <section className="card" id="access" aria-labelledby="access-h">
           <div className="sectionhead">
             <h3 id="access-h">Who can open the handbook, and when</h3>

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { supabaseEnv } from '@/lib/supabase/env';
 import { signIn } from './actions';
 
@@ -37,6 +38,9 @@ export default async function LoginPage({
           Sign in
         </button>
       </form>
+      <p className="small">
+        <Link href="/login/forgot">Forgot your password?</Link>
+      </p>
       <p className="muted small">Private household system. Access is by invitation only.</p>
     </main>
   );

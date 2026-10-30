@@ -226,6 +226,45 @@ describe('the name alone', () => {
     expect(p.approve).toBeNull();
     expect(p.recommended).toBeNull();
   });
+  it('the same two, told apart by the price a unit of the value last recorded', () => {
+    const price = { asOf: '2026-10-27', value: 242_169, units: 2229.82 };
+    const navs: Record<string, { date: string; nav: number }[]> = {
+      '127042': [
+        { date: '2026-10-23', nav: 108.6049 },
+        { date: '2026-10-27', nav: 110.8049 },
+      ],
+      '127044': [{ date: '2026-10-23', nav: 44.9 }],
+    };
+    const s = suggestSchemes(fund('Motilal Oswal Midcap Growth Direct Plan', { price }), LIST, {
+      maxChoices: 3,
+      navsNear: (code) => navs[code] ?? [],
+      priceTolerance: 0.002,
+    });
+    expect(codeOf(s)).toBe('127042');
+    expect(s.recommended?.certainty).toBe('high');
+    expect(s.recommended?.reason).toContain('₹108.6 a unit');
+    expect(s.recommended?.reason).toContain('23 Oct 2026');
+    const p = schemeProposal(
+      { ...fund('Motilal Oswal Midcap Growth Direct Plan'), folioLast4: '4863' },
+      s,
+    );
+    expect(p.approve).toContain('127042');
+  });
+  it('does not use prices when two schemes are both close, or none is', () => {
+    const price = { asOf: '2026-10-27', value: 242_169, units: 2229.82 };
+    const both = suggestSchemes(fund('Motilal Oswal Midcap Growth Direct Plan', { price }), LIST, {
+      maxChoices: 3,
+      navsNear: () => [{ date: '2026-10-23', nav: 108.61 }],
+      priceTolerance: 0.002,
+    });
+    expect(both.recommended).toBeNull();
+    const none = suggestSchemes(fund('Motilal Oswal Midcap Growth Direct Plan', { price }), LIST, {
+      maxChoices: 3,
+      navsNear: () => [{ date: '2026-10-23', nav: 90 }],
+      priceTolerance: 0.002,
+    });
+    expect(none.recommended).toBeNull();
+  });
   it('lists at most the number asked for', () => {
     const s = suggestSchemes(fund('Axis Large Cap Fund'), LIST, { maxChoices: 2 });
     expect(s.choices).toHaveLength(2);
