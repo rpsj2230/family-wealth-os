@@ -89,6 +89,63 @@ async function main() {
       );
     }
 
+  // a Fincare deposit record that is the same money as deposits now on file from the AU statements (several deposits kept as one
+  // row) is kept as history, counted nowhere, like the other records the statements split
+  if (au.length === 1) {
+    const fds = must(
+      await db
+        .from('fixed_deposits')
+        .select('asset_id, principal, booked_on')
+        .eq('household_id', hh),
+      'deposits',
+    ) as { asset_id: string; principal: number; booked_on: string }[];
+    const fdOf = new Map(fds.map((f) => [f.asset_id, f]));
+    const atAu = (a: (typeof assets)[number]) =>
+      a.institution_id === au[0]!.id || fincare.some((f) => f.id === a.institution_id);
+    const days = (x: string, y: string) => Math.abs(Date.parse(x) - Date.parse(y)) / 86_400_000;
+    for (const r of assets.filter(
+      (a) =>
+        a.type === 'fixed_deposit' &&
+        a.status !== 'merged' &&
+        fincare.some((f) => f.id === a.institution_id),
+    )) {
+      const rf = fdOf.get(r.id);
+      if (!rf) continue;
+      const parts = assets.filter((a) => {
+        const f = fdOf.get(a.id);
+        return (
+          a.id !== r.id &&
+          a.type === 'fixed_deposit' &&
+          a.owner_id === r.owner_id &&
+          atAu(a) &&
+          a.status !== 'merged' &&
+          /^FD …\d{4}$/.test(a.nickname) &&
+          f &&
+          days(f.booked_on, rf.booked_on) <= 3
+        );
+      });
+      const sum = parts.reduce((t, a) => t + Number(fdOf.get(a.id)!.principal), 0);
+      const same =
+        parts.length > 0 && Math.abs(sum - Number(rf.principal)) <= Number(rf.principal) * 0.005;
+      console.log(
+        `  ${owners.get(r.owner_id)} "${r.nickname}": ${parts.length} deposits from the AU statements booked within 3 days${same ? `, adding up to it — kept as history (${parts.map((a) => a.nickname).join(', ')})` : ' — not the same money, left as it is'}`,
+      );
+      if (!write || !same) continue;
+      must(
+        await db
+          .from('assets')
+          .update({
+            status: 'merged',
+            notes: `Stood for ${parts.length} deposits on the AU statements (${parts.map((a) => a.nickname.replace('FD ', '')).join(' ')}), now on file one by one.`,
+          })
+          .eq('household_id', hh)
+          .eq('id', r.id)
+          .select('id'),
+        'record kept as history',
+      );
+    }
+  }
+
   // 2. FCNR accounts at DBS and UOB that never held anything
   console.log('\n== FCNR accounts at DBS and UOB, opened and closed the same day');
   const fcnr = assets.filter(
