@@ -594,7 +594,15 @@ async function main() {
     // what is still needed from the household, as the tasks say it
     const needs = await loadNeeds(db, String((hh.data ?? [])[0]?.id ?? ''));
     console.log(`\nNeeded from you: ${needs.length}`);
-    for (const n of needs) console.log(`  - ${n.title}`);
+    // the feed checks name amounts per account: only how many of each kind
+    const feed = needs.filter((n) => n.key.startsWith('feed-'));
+    for (const n of needs.filter((x) => !x.key.startsWith('feed-'))) console.log(`  - ${n.title}`);
+    const kinds = new Map<string, number>();
+    for (const n of feed)
+      kinds.set(n.key.split(':')[0]!, (kinds.get(n.key.split(':')[0]!) ?? 0) + 1);
+    console.log(
+      `  The banks’ e-mail feed: ${[...kinds].map(([k, c]) => `${k.replace('feed-', '')} ${c}`).join(', ') || 'nothing missing'}`,
+    );
     const clubbed = [...t.trails.values()].flatMap((x) => x.clubbed);
     console.log(
       `  Clubbing (since ${t.ownershipFrom || 'not set'}): ${clubbed.length} items, ${lakh(clubbed.reduce((s, c) => s + c.amount, 0))}`,

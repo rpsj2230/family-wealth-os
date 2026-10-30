@@ -98,6 +98,42 @@ describe('runInbox: the movement an alert reports becomes a statement line', () 
   });
 });
 
+describe('runInbox: a movement alert that gives no balance', () => {
+  const upi =
+    'Rs.2500.00 has been debited from account **7240 to VPA samplefriend@okaxis SAMPLE FRIEND on 25-10-26. Your UPI transaction reference number is 123456789012.';
+  it('still becomes a line of the account, with no balance', async () => {
+    const lines: unknown[] = [];
+    const { io, rows, applied } = fakeIo({ addAlertLine: async (l) => void lines.push(l) });
+    const r = await runInbox([msg({ text: upi })], io, cfgNoAi);
+    expect(lines).toEqual([
+      {
+        assetId: 'hdfc1',
+        date: '2026-10-25',
+        amount: -2500,
+        balance: null,
+        words: 'samplefriend@okaxis SAMPLE FRIEND',
+        messageId: 'm1',
+      },
+    ]);
+    expect(applied).toHaveLength(0);
+    expect(r.applied).toBe(1);
+    expect(rows[0]!.reason).not.toMatch(/\d/);
+  });
+  it('not from a look-alike sender, nor for an account not on record', async () => {
+    const lines: unknown[] = [];
+    const { io } = fakeIo({ addAlertLine: async (l) => void lines.push(l) });
+    await runInbox(
+      [
+        msg({ text: upi, from: 'alerts@hdfcbank.bank.in.evil.example' }),
+        msg({ messageId: 'm2', text: upi.replace('**7240', '**9999') }),
+      ],
+      io,
+      cfgNoAi,
+    );
+    expect(lines).toEqual([]);
+  });
+});
+
 describe('runInbox: rule-based alerts', () => {
   it('records the HDFC balance when the sender and one account match, and logs it as applied', async () => {
     const { io, rows, applied } = fakeIo();

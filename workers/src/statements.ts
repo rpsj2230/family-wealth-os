@@ -323,7 +323,26 @@ async function main() {
   let bankLines = 0;
   const bankKey = (id: string) => `bank-statement:${id}`;
   const bankIo: StatementIo = {
-    seen: (id) => io.seen(bankKey(id)),
+    // one that waits for a password or an account's last four digits is tried again on every scan, so it goes in by itself once
+    // they are saved
+    async seen(id) {
+      const r = must(
+        await db
+          .from('inbox_messages')
+          .select('outcome, reason')
+          .eq('household_id', hh)
+          .eq('message_id', bankKey(id))
+          .limit(1),
+        'seen check',
+      ) as { outcome: 'applied' | 'needs_review' | 'ignored' | 'error'; reason: string | null }[];
+      if (!r[0]) return null;
+      if (
+        r[0].outcome === 'needs_review' &&
+        /saved passwords|No account ending/i.test(r[0].reason ?? '')
+      )
+        return null;
+      return { outcome: r[0].outcome };
+    },
     record: (row) => io.record({ ...row, messageId: bankKey(row.messageId) }),
     async importPdf(m) {
       const r = await importBankStatementMail(db, hh, m);

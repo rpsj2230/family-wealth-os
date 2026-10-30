@@ -201,6 +201,34 @@ export function bankForDomain(domain: string): string | null {
   return null;
 }
 
+/**
+ * The account and day of a movement alert that gives no balance ("Rs.2500.00 debited from a/c **1234 on 30-10-26 to VPA …"): read
+ * only from a bank's own address, by rule, never by the AI. The reading's amount is 0 (there is no balance); it is used to find the
+ * account, the movement itself comes from alertMovement. Null when the sender is not a known bank or no account number is printed.
+ */
+export function movementAlertAccount(e: EmailInput): BalanceReading | null {
+  const bank = bankForDomain(senderDomain(e.from));
+  if (!bank) return null;
+  const text = e.text.replace(/\s+/g, ' ');
+  const acct =
+    /\b(?:a\/c|acct|account)(?:\s*(?:no\.?|number|ending(?:\s+with)?))?\s*[:#]?\s*[Xx*]*(\d{3,6})\b/i.exec(
+      text,
+    );
+  if (!acct) return null;
+  const on = /\bon\s+(\d{1,2}[-/\s](?:[A-Za-z]{3,9}|\d{1,2})[-/\s]\d{2,4})\b/i.exec(text);
+  const asOf = (on && parseBankDate(on[1]!)) || e.receivedOn || null;
+  if (!asOf) return null;
+  return {
+    bank: BANK_NAMES[bank] ?? bank,
+    last4: acct[1]!.slice(-4),
+    amount: 0,
+    currency: bank === 'DBS' || bank === 'OCBC' || bank === 'UOB' ? 'SGD' : 'INR',
+    asOf,
+    source: 'rule',
+    senderVerified: true,
+  };
+}
+
 /** True when the sender domain belongs to the bank named in the reading (loose name match). */
 export function senderMatchesBank(domain: string, bankName: string): boolean {
   const b = bankForDomain(domain);

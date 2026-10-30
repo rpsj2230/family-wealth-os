@@ -1,8 +1,16 @@
-import { classifyLines, neededFromYou, type AppConfig, type Need } from '@fwos/core';
+import {
+  classifyLines,
+  feedNeeds,
+  neededFromYou,
+  type AppConfig,
+  type FeedPoint,
+  type Need,
+} from '@fwos/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData, type LoadedPortfolio } from './index';
 import { pageAll } from './paging';
 import { loadSettings } from './settings';
+import { ALERTS_FILE } from './statement-save';
 import { classifyContext, loadStatements, stmtLinesOf } from './statement-store';
 
 const PREFIX = 'needed:';
@@ -76,7 +84,8 @@ export async function loadNeeds(
         ...(unbalanced.get(l.asset_id) ?? []),
         { date: l.txn_on, amount: Number(l.amount) },
       ]);
-  return neededFromYou({
+  const feed = await feedHealth(db, householdId, accounts, stored, recorded, config);
+  const needs = neededFromYou({
     accounts,
     statements: stored.statements.map((s) => ({
       assetId: s.asset_id,
@@ -106,6 +115,85 @@ export async function loadNeeds(
         classifyContext(loaded, config, stored.remittances, stored.rules),
       ).filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out').length,
     ownershipFrom: config.capital.ownershipFrom,
+  });
+  return [...needs, ...feed].sort((x, y) => x.rank - y.rank || x.title.localeCompare(y.title));
+}
+
+/** The gaps in what the banks tell us by e-mail, now that statements are not uploaded (core feed-health.ts). */
+async function feedHealth(
+  db: SupabaseClient,
+  householdId: string,
+  accounts: Parameters<typeof feedNeeds>[0]['accounts'],
+  stored: Awaited<ReturnType<typeof loadStatements>>,
+  recorded: { asset_id: string; as_of: string; amount: number; source: string }[],
+  config: AppConfig,
+): Promise<Need[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const alertFiles = new Set(
+    stored.statements.filter((s) => s.file_label === ALERTS_FILE).map((s) => s.id),
+  );
+  const lastHeard = new Map<string, string>();
+  const heard = (id: string, d: string) => {
+    if (d > (lastHeard.get(id) ?? '')) lastHeard.set(id, d);
+  };
+  for (const s of stored.statements) heard(s.asset_id, s.to_on);
+  for (const r of recorded) if (r.source === 'email') heard(r.asset_id, r.as_of);
+  const from = new Date(Date.now() - config.statementMail.gapDays * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const points = new Map<string, FeedPoint[]>();
+  const add = (id: string, p: FeedPoint) => points.set(id, [...(points.get(id) ?? []), p]);
+  // the bank's own order of lines (loadStatements keeps date, then id), and the balances alone from the bank's e-mails
+  for (const l of stored.lines)
+    if (l.txn_on >= from)
+      add(l.asset_id, {
+        date: l.txn_on,
+        amount: Number(l.amount),
+        balance: l.balance === null ? null : Number(l.balance),
+        fromAlert: alertFiles.has(l.statement_id),
+      });
+  for (const r of recorded)
+    if (r.source === 'email' && r.as_of >= from)
+      add(r.asset_id, {
+        date: r.as_of,
+        amount: 0,
+        balance: Number(r.amount),
+        fromAlert: true,
+        balanceOnly: true,
+      });
+  for (const [id, ps] of points)
+    points.set(
+      id,
+      ps.sort((a, b) => a.date.localeCompare(b.date)),
+    );
+  // statements the banks e-mailed that could not be saved, for a reason you can fix
+  const { data: failed } = await db
+    .from('inbox_messages')
+    .select('received_on, from_domain, reason')
+    .eq('household_id', householdId)
+    .like('message_id', 'bank-statement:%')
+    .eq('outcome', 'needs_review');
+  const locked = (
+    (failed ?? []) as { received_on: string; from_domain: string; reason: string | null }[]
+  )
+    .map((m) => {
+      const r = m.reason ?? '';
+      if (/saved passwords/i.test(r))
+        return { sender: m.from_domain, date: m.received_on, why: 'password' as const };
+      const acct = /No account ending (\d{4})/i.exec(r);
+      return acct
+        ? { sender: m.from_domain, date: m.received_on, why: 'account' as const, last4: acct[1]! }
+        : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  return feedNeeds({
+    today,
+    silentDays: config.statementMail.silentDays,
+    gapDays: config.statementMail.gapDays,
+    accounts,
+    lastHeard,
+    points,
+    locked,
   });
 }
 

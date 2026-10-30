@@ -364,6 +364,10 @@ export interface AppConfig {
     banksEnabled: boolean;
     /** who a bank statement may come from: a domain or one full address, as for the fund statements */
     bankSenders: string[];
+    /** an account in use that sends no alert, e-statement or balance for this many days is flagged */
+    silentDays: number;
+    /** the balances of the last this many days are checked for movements no alert reported */
+    gapDays: number;
   };
 }
 
@@ -618,6 +622,8 @@ export const DEFAULT_CONFIG: AppConfig = {
       'equitasbank.com',
       'janabank.com',
     ],
+    silentDays: 100,
+    gapDays: 120,
   },
 };
 
@@ -1104,6 +1110,8 @@ export function configFromJson(raw: unknown): AppConfig {
             ),
           ].slice(0, 40)
         : d.statementMail.bankSenders,
+      silentDays: Math.round(num(stm.silentDays, d.statementMail.silentDays, 7, 400)),
+      gapDays: Math.round(num(stm.gapDays, d.statementMail.gapDays, 7, 400)),
       firstDays: Math.round(num(stm.firstDays, d.statementMail.firstDays, 1, 1500)),
       regularDays: Math.round(num(stm.regularDays, d.statementMail.regularDays, 1, 400)),
       maxMb: num(stm.maxMb, d.statementMail.maxMb, 1, 40),

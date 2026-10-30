@@ -20,6 +20,7 @@ import {
   matchAccount,
   parseAiResponse,
   mentionsBalance,
+  movementAlertAccount,
   parseBankEmail,
   senderDomain,
   senderMatchesBank,
@@ -98,8 +99,8 @@ export interface InboxIo {
     date: string;
     /** + in, − out */
     amount: number;
-    /** the balance after it, from the same alert */
-    balance: number;
+    /** the balance after it, from the same alert; null when the alert gives none */
+    balance: number | null;
     words: string;
     messageId: string;
   }): Promise<void>;
@@ -241,6 +242,37 @@ export async function runInbox(
         attachments: m.attachments.map((a) => a.filename),
         receivedOn: m.receivedOn,
       });
+
+      // a movement alert that gives no balance (many UPI and card alerts): the movement still becomes a line of the account, by rule
+      if (parsed.kind === 'unknown' && io.addAlertLine) {
+        const mv = alertMovement(m.text);
+        const at = mv
+          ? movementAlertAccount({
+              from,
+              subject: m.subject,
+              text: m.text,
+              receivedOn: m.receivedOn,
+            })
+          : null;
+        const match = at ? matchAccount(at, accounts) : null;
+        if (mv && at && match?.status === 'matched' && match.autoApply) {
+          await io.addAlertLine({
+            assetId: match.assetId,
+            date: at.asOf,
+            amount: mv.amount,
+            balance: null,
+            words: mv.words,
+            messageId: m.messageId,
+          });
+          await log({
+            outcome: 'applied',
+            reason: `money ${mv.amount < 0 ? 'out' : 'in'} saved as a line of the account (this alert gives no balance)`,
+            reading: null,
+            assetId: match.assetId,
+          });
+          continue;
+        }
+      }
 
       let readings: BalanceReading[] = [];
       let source: 'email' | 'statement' = 'email';

@@ -273,6 +273,13 @@ export async function saveBankStatement(
 /** The file name of the lines bank alerts made: one per account, its days widened as alerts arrive. */
 export const ALERTS_FILE = 'Bank alerts';
 
+/** A short, steady tag for a Message-ID (FNV-1a), so the line key stays short. */
+function messageKey(id: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(36);
+}
+
 /**
  * A movement a bank alert reported, as a statement line of the account, the day the alert arrives: so the rules, the trail and the
  * figures follow it without waiting for a statement. Its key is a statement line's (day, amount, balance after), so the same alert
@@ -281,7 +288,16 @@ export const ALERTS_FILE = 'Bank alerts';
 export async function saveAlertLine(
   db: SupabaseClient,
   householdId: string,
-  l: { assetId: string; date: string; amount: number; balance: number; words: string },
+  l: {
+    assetId: string;
+    date: string;
+    amount: number;
+    /** null when the alert gives no balance */
+    balance: number | null;
+    words: string;
+    /** the alert's Message-ID: a line with no balance is told apart from another of the same day and amount by it */
+    messageId?: string;
+  },
 ): Promise<boolean> {
   if (!l.amount) return false;
   const { data: covering } = await db
@@ -323,7 +339,7 @@ export async function saveAlertLine(
     if (error || !data) throw new Error(`alerts file: ${error?.message ?? ''}`);
     st = data as AlertFile;
   }
-  const [key] = lineKeys([
+  const [balanceKey] = lineKeys([
     {
       date: l.date,
       narration: '',
@@ -333,6 +349,12 @@ export async function saveAlertLine(
       balance: l.balance,
     },
   ]);
+  // with no balance, two payments of one amount on one day would share a key: the alert's own id keeps them apart, and the same
+  // alert read twice still adds one line
+  const key =
+    l.balance === null && l.messageId
+      ? `${balanceKey!.replace(/\|\d+$/, '')}|m${messageKey(l.messageId)}`
+      : balanceKey!;
   const { data: added, error } = await db
     .from('statement_lines')
     .upsert(
@@ -344,7 +366,7 @@ export async function saveAlertLine(
         amount: Math.round(l.amount * 100) / 100,
         balance: l.balance,
         narration: cleanNarration(`ALERT ${l.amount < 0 ? 'DEBIT' : 'CREDIT'} ${l.words}`),
-        line_key: key!,
+        line_key: key,
       },
       { onConflict: 'household_id,asset_id,line_key', ignoreDuplicates: true },
     )
@@ -357,7 +379,7 @@ export async function saveAlertLine(
       from_on: l.date < st!.from_on ? l.date : st!.from_on,
       to_on: l.date > st!.to_on ? l.date : st!.to_on,
       line_count: st!.line_count + 1,
-      ...(l.date >= st!.to_on ? { closing: l.balance } : {}),
+      ...(l.date >= st!.to_on && l.balance !== null ? { closing: l.balance } : {}),
     })
     .eq('id', st!.id);
   return true;

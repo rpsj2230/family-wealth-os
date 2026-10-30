@@ -137,8 +137,9 @@ async function main() {
       );
     },
     // the movement an alert reports, as a statement line of the account (a later statement takes its place)
-    async addAlertLine({ assetId, date, amount, balance, words }) {
-      if (await saveAlertLine(db, hh, { assetId, date, amount, balance, words })) alertLines++;
+    async addAlertLine({ assetId, date, amount, balance, words, messageId }) {
+      if (await saveAlertLine(db, hh, { assetId, date, amount, balance, words, messageId }))
+        alertLines++;
     },
     async apply({ assetId, reading, messageId, source, receivedAt, replaceSameDay }) {
       let fx: number | null = null;

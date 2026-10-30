@@ -115,6 +115,7 @@ export * from './money-chain';
 export * from './money-flow';
 export * from './sankey-layout';
 export * from './needed-from-you';
+export * from './feed-health';
 export * from './money-position';
 export * from './money-at-work';
 export * from './balance-changes';
