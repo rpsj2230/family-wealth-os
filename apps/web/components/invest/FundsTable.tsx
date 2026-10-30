@@ -107,6 +107,7 @@ function Row({
     `${l.categoryLabel}${l.categoryCertain ? '' : ' (guessed from the name)'}`,
     l.amc,
     l.plan !== 'unknown' ? `${l.plan} plan` : null,
+    l.platform ? `held on ${l.platform}` : null,
     ...sub,
     l.avgCost !== null ? `average cost ${money2(l.avgCost)}` : null,
     `value: ${l.valueBasis}`,
@@ -196,16 +197,7 @@ function Row({
         </span>
       </td>
       <td className="num c-sip" data-label="SIP a month">
-        {l.sipMonthly ? (
-          l.sipStopped ? (
-            <span className="muted">stopped</span>
-          ) : (
-            inr(l.sipMonthly)
-          )
-        ) : (
-          '–'
-        )}
-        <span className="fl-s">{l.sipMonthly && !l.sipStopped ? 'running' : ''}</span>
+        <SipCell l={l} />
       </td>
       <td className="c-act">
         <EditFundButton id={l.assetId} name={l.name} />
@@ -215,8 +207,50 @@ function Row({
 }
 
 /**
+ * The SIP column: the amount while it runs; "stopped" when it is marked stopped, or when no amount is saved but the purchases on file
+ * came regularly and then two due dates passed with nothing (with the month of the last one); "none" for a fund bought in one go.
+ */
+function SipCell({ l }: { l: FundLine }) {
+  if (l.sipStopped)
+    return (
+      <>
+        <span className="muted">stopped</span>
+        <span className="fl-s">{l.sipSeen ? `last ${niceMonth(l.sipSeen.last)}` : ''}</span>
+      </>
+    );
+  if (l.sipMonthly)
+    return (
+      <>
+        {inr(l.sipMonthly)}
+        <span className="fl-s">running</span>
+      </>
+    );
+  if (l.sipSeen?.state === 'stopped')
+    return (
+      <span
+        title={`No SIP amount is saved for this fund. Its purchases came regularly until ${niceMonth(l.sipSeen.last)} and none since, so it reads as stopped. Press Edit to mark it stopped.`}
+      >
+        <span className="muted">stopped</span>
+        <span className="fl-s">last {niceMonth(l.sipSeen.last)}</span>
+      </span>
+    );
+  if (l.sipSeen)
+    return (
+      <span title="No SIP amount is saved for this fund; its purchases show a SIP running. Press Edit to save the amount.">
+        <span className="muted">{l.sipSeen.amount ? inr(l.sipSeen.amount) : 'running'}</span>
+        <span className="fl-s">from statement</span>
+      </span>
+    );
+  return (
+    <span className="muted" title="No SIP: bought in one go, or no SIP saved">
+      none
+    </span>
+  );
+}
+
+/**
  * The funds, one compact row each (name and a slim second line on the left, the figures right-aligned), grouped by person, goal,
- * kind of fund or fund house with a heading row of totals per group and a grand total. Search and sort work on the page. On a phone
+ * kind of fund, fund house, plan or platform with a heading row of totals per group and a grand total. Search and sort work on the page. On a phone
  * each fund is a small card. The grouping itself is chosen by link so it has an address.
  */
 export function FundsTable({
@@ -278,6 +312,8 @@ export function FundsTable({
         'Person',
         'Kind',
         'Fund house',
+        'Type',
+        'Platform',
         'Invested',
         'Value',
         'Profit or loss',
@@ -299,6 +335,8 @@ export function FundsTable({
           l.ownerName,
           l.categoryLabel,
           l.amc ?? '',
+          l.plan === 'unknown' ? '' : l.plan === 'direct' ? 'Direct' : 'Regular',
+          l.platform ?? '',
           n(l.invested),
           n(l.value),
           n(l.gain),
@@ -308,7 +346,9 @@ export function FundsTable({
           n(l.xirr === null ? null : l.xirr * 100),
           n(l.ret1y === null ? null : l.ret1y * 100),
           n(l.share * 100),
-          n(l.sipStopped ? null : l.sipMonthly),
+          l.sipStopped || (!l.sipMonthly && l.sipSeen?.state === 'stopped')
+            ? 'stopped'
+            : n(l.sipMonthly),
         ]);
     const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');

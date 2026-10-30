@@ -30,6 +30,7 @@ import {
   type TxnDraft,
 } from '@/lib/fund-edit';
 import { Sheet } from '@/components/Sheet';
+import { niceMonth } from '@/lib/dates';
 import '@/components/quickedit.css';
 import './invest.css';
 
@@ -481,16 +482,18 @@ function EditPanel({
               <span>SIP a month (₹)</span>
               <input
                 value={d.sip}
-                onChange={(e) =>
-                  set({
-                    sip: e.target.value,
-                    ...(e.target.value.trim() === '' ? { sipStopped: false } : {}),
-                  })
-                }
+                onChange={(e) => set({ sip: e.target.value })}
                 inputMode="decimal"
                 autoComplete="off"
                 placeholder="none"
               />
+              {was.sipMonthly === null && was.sipSeen && (
+                <small className="muted" data-testid="fe-sipseen">
+                  {was.sipSeen.state === 'stopped'
+                    ? `Its purchases came regularly until ${niceMonth(was.sipSeen.last)} and none since: tick Stopped.`
+                    : `Its purchases show a SIP${was.sipSeen.amount ? ` of ${formatInr(was.sipSeen.amount)}` : ''} running.`}
+                </small>
+              )}
             </label>
             <div className="qe-f qe-check">
               <span>SIP</span>
@@ -498,7 +501,6 @@ function EditPanel({
                 <input
                   type="checkbox"
                   checked={d.sipStopped}
-                  disabled={d.sip.trim() === ''}
                   onChange={(e) => set({ sipStopped: e.target.checked })}
                 />{' '}
                 Stopped
@@ -585,6 +587,14 @@ function EditPanel({
             <Link href={linkBase.demo ? `/demo/asset?kind=fund&id=${was.id}` : `/asset/${was.id}`}>
               Open the fund page
             </Link>
+            {!linkBase.demo && (
+              <>
+                {' · '}
+                <Link href={`/asset/${was.id}?tab=sip`} data-testid="fe-siplink">
+                  Change, pause or stop the SIP from a date
+                </Link>
+              </>
+            )}
             {!was.amfiCode && (
               <>
                 {' · '}

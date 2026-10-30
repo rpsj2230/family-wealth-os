@@ -1,3 +1,4 @@
+import type { SipSeen } from '@fwos/core';
 import { parseExitLoad } from './match-funds';
 
 /**
@@ -20,6 +21,8 @@ export interface FundEditRow {
   invested: number;
   sipMonthly: number | null;
   sipStopped: boolean;
+  /** for a fund with no SIP amount saved: the SIP its purchases show, if any */
+  sipSeen?: SipSeen | null;
   /** YYYY-MM-DD or '' */
   startedOn: string;
   plan: 'direct' | 'regular' | 'unknown';
@@ -151,7 +154,8 @@ export function buildFundSave(was: FundEditRow, d: FundDraft, today: string): Fu
       p.sipMonthly = sip;
       changes.push('SIP');
     }
-    const stopped = sip === null ? false : d.sipStopped;
+    // a fund with no SIP amount saved can still be marked stopped (its SIP ran, by its statement, and has ended)
+    const stopped = d.sipStopped;
     if (stopped !== was.sipStopped) {
       p.sipStopped = stopped;
       if (!changes.includes('SIP')) changes.push(stopped ? 'SIP stopped' : 'SIP running');

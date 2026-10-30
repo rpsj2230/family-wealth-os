@@ -42,6 +42,7 @@ export function fundEditRow(f: FundRow, ownerName: string): FundEditRow {
     invested: f.invested,
     sipMonthly: f.sipMonthly,
     sipStopped: f.sipStopped,
+    sipSeen: f.sipSeen,
     startedOn: f.startedOn ?? '',
     plan: f.plan,
     goalIds: f.goalIds,

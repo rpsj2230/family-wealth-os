@@ -193,6 +193,44 @@ test.describe('Investments (public sample)', () => {
     await noSideways(page);
   });
 
+  test('funds: group by Type (Direct or Regular) and by Platform', async ({ page }) => {
+    await page.goto('/demo/investments?tab=funds');
+    const group = page.getByRole('navigation', { name: 'Group by' });
+    await group.getByRole('link', { name: 'Type' }).click();
+    await expect(page).toHaveURL(/group=plan/);
+    const heads = page.locator('tr.fl-grouphead');
+    await expect(heads.filter({ hasText: 'Direct plans' })).toHaveCount(1);
+    await expect(heads.filter({ hasText: 'Regular plans' })).toHaveCount(1);
+    await group.getByRole('link', { name: 'Platform' }).click();
+    await expect(page).toHaveURL(/group=platform/);
+    await expect(heads.filter({ hasText: 'Sample App' })).toHaveCount(1);
+    await expect(heads.filter({ hasText: 'Sample Broker' })).toHaveCount(1);
+    // the one Regular plan sits with the broker, and keeps its Regular tag
+    const broker = page.locator('tbody').filter({ hasText: 'Sample Broker' });
+    await expect(broker.locator('tr.fl-row')).toHaveCount(1);
+    await expect(broker.locator('.plantag')).toHaveText('Regular');
+    await noSideways(page);
+  });
+
+  test('funds: a fund with no SIP amount can be marked stopped, and the SIP plan is a link away', async ({
+    page,
+  }) => {
+    await page.goto('/demo/investments?tab=funds');
+    await expect(
+      page
+        .locator('td.c-sip')
+        .filter({ hasText: /^(none|stopped)/ })
+        .first(),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Edit Sample Gold Fund' }).click();
+    const panel = page.getByRole('dialog');
+    await panel.getByLabel('SIP a month (₹)').fill('');
+    const stopped = panel.getByRole('checkbox', { name: 'Stopped' });
+    await expect(stopped).toBeEnabled();
+    await stopped.check();
+    await expect(panel.getByText(/Changed: .*SIP/)).toBeVisible();
+  });
+
   test('funds: the person filter keeps the tab and the grouping', async ({ page }) => {
     await page.goto('/demo/investments?tab=funds&group=kind');
     await page

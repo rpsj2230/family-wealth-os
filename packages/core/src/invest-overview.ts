@@ -4,8 +4,9 @@
  * funds table with its groupings and totals, how old the units are, and the next monthly instalments. Pure; the page only formats.
  */
 import { BEFORE_STATEMENT, type RealisedSummary, type StatFund } from './fund-stats';
-import { addMonthsIso } from './harvest-lots';
+import { addDaysIso, addMonthsIso } from './harvest-lots';
 import { sipSummary } from './fund-timeline';
+import { readSip, sipStanding } from './fund-import-diff';
 import type { LedgerStatus, LedgerVerdict } from './ledger-check';
 
 // ------------------------------------------------------------------------------------------------
@@ -116,6 +117,8 @@ export interface FundLine {
   categoryCertain: boolean;
   amc: string | null;
   plan: 'direct' | 'regular' | 'unknown';
+  /** where the fund is bought and held (an investment app, a broker's demat account), from the rules in Settings; null when none fits */
+  platform: string | null;
   invested: number;
   value: number;
   gain: number;
@@ -132,6 +135,8 @@ export interface FundLine {
   share: number;
   sipMonthly: number | null;
   sipStopped: boolean;
+  /** the SIP as its own instalments show it, for a fund with no SIP amount saved (see sipSeenOf) */
+  sipSeen: SipSeen | null;
   units: number | null;
   nav: number | null;
   avgCost: number | null;
@@ -149,14 +154,76 @@ export interface FundLine {
   figuresEstimated: boolean;
 }
 
-export type GroupBy = 'person' | 'goal' | 'kind' | 'house' | 'none';
+export type GroupBy = 'person' | 'goal' | 'kind' | 'house' | 'plan' | 'platform' | 'none';
 export const GROUP_BYS: { key: GroupBy; label: string }[] = [
   { key: 'person', label: 'Person' },
   { key: 'goal', label: 'Goal' },
   { key: 'kind', label: 'Kind of fund' },
   { key: 'house', label: 'Fund house' },
+  { key: 'plan', label: 'Type' },
+  { key: 'platform', label: 'Platform' },
   { key: 'none', label: 'No grouping' },
 ];
+
+/** The headings of the Type grouping. */
+export const PLAN_GROUP: Record<FundLine['plan'], string> = {
+  direct: 'Direct plans',
+  regular: 'Regular plans',
+  unknown: 'Plan not known',
+};
+
+/**
+ * Direct or Regular: the plan saved on the fund when it says; otherwise the plan of the official scheme it is matched to; otherwise
+ * the word "Direct" or "Regular" in the scheme's or the fund's name. Unknown when none of them says.
+ */
+export function fundPlanOf(
+  saved: string | null,
+  schemePlan: string | null,
+  names: (string | null | undefined)[],
+): FundLine['plan'] {
+  if (saved === 'direct' || saved === 'regular') return saved;
+  const said = (s: string | null | undefined): FundLine['plan'] | null =>
+    !s ? null : /\bdirect\b/i.test(s) ? 'direct' : /\bregular\b/i.test(s) ? 'regular' : null;
+  return said(schemePlan) ?? names.map(said).find((x) => x !== null) ?? 'unknown';
+}
+
+/** The SIP of a fund read from its own instalments: the last one, the usual amount, and whether the next was due and never came. */
+export interface SipSeen {
+  last: string;
+  amount: number | null;
+  /** 'stopped': the instalments came regularly and then two due dates (with their usual lateness) passed with none */
+  state: 'running' | 'stopped';
+}
+
+/**
+ * For a fund with no SIP amount saved: its SIP as the purchases on file show it. Purchases that came regularly (at least `minRun` in a
+ * row, one cadence apart) are a SIP; it is running while the next one is not yet overdue, stopped once it is. Null when the purchases
+ * show no regular pattern (one-off investments). It counts as stopped only once two due dates have passed with nothing.
+ */
+export function sipSeenOf(
+  lines: {
+    date: string;
+    kind?: string | null | undefined;
+    amount: number;
+    source?: string | null | undefined;
+  }[],
+  today: string,
+  rules: { sipMinInstalments: number; moneyTolerance: number },
+): SipSeen | null {
+  const buys = lines
+    .filter((l) => (l.kind === 'sip' || l.kind === 'purchase') && l.source !== 'estimate')
+    .map((l) => ({ date: l.date, kind: 'sip', amount: Math.abs(l.amount) }));
+  const read = readSip([], buys, rules);
+  if (!read.cadence || !read.last || read.runLength < Math.max(2, rules.sipMinInstalments))
+    return null;
+  // stopped only once two due dates have gone by with nothing, so a statement that is a few weeks old does not read as a stop
+  const st = sipStanding(read, addDaysIso(today, -read.cadence.days));
+  return {
+    last: read.last,
+    amount: read.amount,
+    state: st?.state === 'missed' ? 'stopped' : 'running',
+  };
+}
 
 export const parseGroupBy = (v: string | null | undefined): GroupBy =>
   GROUP_BYS.some((g) => g.key === v) ? (v as GroupBy) : 'person';
@@ -217,7 +284,7 @@ export const NO_GOAL = { key: '__nogoal', label: 'No goal' };
 export const MANY_GOALS = { key: '__manygoals', label: 'Split between goals' };
 
 /**
- * Groups the lines by person, goal, kind of fund or fund house (or not at all), largest group first, each with its totals. A fund
+ * Groups the lines by person, goal, kind of fund, fund house, plan or platform (or not at all), largest group first, each with its totals. A fund
  * counts under its goal when it has exactly one; funds with none go under "No goal" and funds split between goals under their own
  * heading (their split is on the Goals page), which is placed last.
  */
@@ -235,13 +302,17 @@ export function groupLines(
         ? [l.categoryKey, l.categoryLabel]
         : by === 'house'
           ? [l.amc ?? '__none', l.amc ?? 'Fund house not known']
-          : by === 'goal'
-            ? l.goalIds.length === 0
-              ? [NO_GOAL.key, NO_GOAL.label]
-              : l.goalIds.length > 1
-                ? [MANY_GOALS.key, MANY_GOALS.label]
-                : [l.goalIds[0]!, goals.find((g) => g.id === l.goalIds[0])?.name ?? 'A goal']
-            : ['all', 'All funds'];
+          : by === 'plan'
+            ? [l.plan, PLAN_GROUP[l.plan]]
+            : by === 'platform'
+              ? [l.platform ?? '__none', l.platform ?? 'Platform not set']
+              : by === 'goal'
+                ? l.goalIds.length === 0
+                  ? [NO_GOAL.key, NO_GOAL.label]
+                  : l.goalIds.length > 1
+                    ? [MANY_GOALS.key, MANY_GOALS.label]
+                    : [l.goalIds[0]!, goals.find((g) => g.id === l.goalIds[0])?.name ?? 'A goal']
+                : ['all', 'All funds'];
   const map = new Map<string, FundGroup>();
   for (const l of lines) {
     const [key, label] = keyOf(l);
@@ -256,9 +327,17 @@ export function groupLines(
       totals: totalsOfLines(g.lines, everything, xirrOf),
     }))
     .sort((a, b) => {
-      // the goalless and the split groups come last, so the goals read first
+      // the goalless and the split groups come last, so the goals read first; so do the funds whose house, plan or platform is not known
       const rank = (g: FundGroup) =>
-        by === 'goal' ? (g.key === NO_GOAL.key ? 2 : g.key === MANY_GOALS.key ? 1 : 0) : 0;
+        by === 'goal'
+          ? g.key === NO_GOAL.key
+            ? 2
+            : g.key === MANY_GOALS.key
+              ? 1
+              : 0
+          : g.key === '__none' || (by === 'plan' && g.key === 'unknown')
+            ? 1
+            : 0;
       return rank(a) - rank(b) || b.totals.value - a.totals.value;
     });
 }
@@ -310,7 +389,7 @@ export function searchLines(lines: FundLine[], q: string): FundLine[] {
   if (words.length === 0) return lines;
   return lines.filter((l) => {
     const hay =
-      `${l.name} ${l.categoryLabel} ${l.amc ?? ''} ${l.ownerName} ${l.plan}`.toLowerCase();
+      `${l.name} ${l.categoryLabel} ${l.amc ?? ''} ${l.ownerName} ${l.plan} ${l.platform ?? ''}`.toLowerCase();
     return words.every((w) => hay.includes(w));
   });
 }

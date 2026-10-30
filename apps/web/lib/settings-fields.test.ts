@@ -39,6 +39,7 @@ describe('settings fields', () => {
       noLedgerNoteAbove: '0',
       matchPriceTolerance: '0.2',
       matchPriceDays: '7',
+      platformRules: 'in hdfc = HDFC Securities\n* = Kuvera',
       planTolerance: '2',
     });
     const ok = parseGroup(
@@ -53,6 +54,7 @@ describe('settings fields', () => {
         noLedgerNoteAbove: '2',
         matchPriceTolerance: '0.5',
         matchPriceDays: '10',
+        platformRules: ' In HDFC = HDFC Securities \n\n* = Kuvera',
         planTolerance: '3',
       }),
     );
@@ -69,10 +71,28 @@ describe('settings fields', () => {
           noLedgerNoteAbove: 2,
           matchPriceTolerance: 0.005,
           matchPriceDays: 10,
+          platformRules: ['In HDFC = HDFC Securities', '* = Kuvera'],
           planTolerance: 0.03,
         },
       },
     });
+    const noEquals = parseGroup(
+      group('funds'),
+      form({
+        historyFrom: '2019-04-01',
+        navStaleDays: '5',
+        unitTolerance: '0.002',
+        moneyTolerance: '2',
+        valuationPeriods: '12',
+        noLedgerNoteAbove: '2',
+        matchPriceTolerance: '0.5',
+        matchPriceDays: '10',
+        platformRules: 'HDFC Securities',
+        planTolerance: '3',
+      }),
+    );
+    expect(noEquals).toMatchObject({ ok: false });
+    expect(noEquals.ok ? '' : noEquals.message).toMatch(/words in the fund's name = platform/);
     const bad = parseGroup(
       group('funds'),
       form({ historyFrom: '2019-02-30', unitTolerance: '0.002', moneyTolerance: '2' }),

@@ -119,6 +119,15 @@ describe('buildFundSave', () => {
     ).toEqual(['SIP running']);
   });
 
+  it('marks a fund with no SIP amount saved as stopped', () => {
+    const none = { ...row, sipMonthly: null };
+    const r = buildFundSave(none, { ...draftOf(none), sipStopped: true }, TODAY);
+    expect(r.problems).toEqual([]);
+    expect(r.payload).toMatchObject({ sipStopped: true });
+    expect(r.payload?.sipMonthly).toBeUndefined();
+    expect(r.changes).toEqual(['SIP stopped']);
+  });
+
   it('marks a fund sold or closed, and active again', () => {
     expect(buildFundSave(row, { ...draftOf(row), closed: true }, TODAY).payload).toMatchObject({
       status: 'closed',

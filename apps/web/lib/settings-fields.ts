@@ -3,7 +3,13 @@
  * "what this changes", how the value is typed and where it lives in the saved configuration. The form, the save action and
  * the "still on built-in numbers" marker all read this, so they cannot drift apart. Pure: no database, no React.
  */
-import { cleanSender, DEFAULT_CONFIG, parsePriceLine, type AppConfig } from '@fwos/core';
+import {
+  cleanSender,
+  DEFAULT_CONFIG,
+  parsePlatformRule,
+  parsePriceLine,
+  type AppConfig,
+} from '@fwos/core';
 
 export type FieldKind =
   | 'int'
@@ -14,6 +20,7 @@ export type FieldKind =
   | 'emails'
   | 'lines'
   | 'senders'
+  | 'platforms'
   | 'words'
   | 'check'
   | 'date'
@@ -1016,6 +1023,14 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         max: 31,
       },
       {
+        name: 'platformRules',
+        label: 'Where each fund is held (the Platform grouping on Investments)',
+        hint: 'One rule a line: words in the fund’s name = the platform. The first rule whose words are in the fund’s statement name or the name you gave it wins; “* = platform” covers every other fund. Example: “in hdfc = HDFC Securities” then “* = Kuvera”.',
+        kind: 'platforms',
+        path: ['funds', 'platformRules'],
+        unit: 'one rule per line',
+      },
+      {
         name: 'planTolerance',
         label: 'A fund’s SIP plan may differ from the amount invested by',
         hint: 'A fund with no transactions has its units rebuilt from its start date and SIP plan. When the money the plan puts in differs from the amount invested you recorded by more than this share, the plan is adjusted to agree: an opening purchase is added, or the instalments are scaled down.',
@@ -1042,6 +1057,7 @@ function valueAt(c: AppConfig, f: FieldSpec): string | boolean {
       return Array.isArray(v) ? v.join(', ') : '';
     case 'lines':
     case 'senders':
+    case 'platforms':
     case 'words':
       return Array.isArray(v) ? v.join('\n') : '';
     case 'date':
@@ -1132,6 +1148,19 @@ export function parseGroup(group: GroupSpec, get: (name: string) => string | nul
       }
       if (rows.length === 0 || rows.length > 40)
         return { ok: false, message: `${f.label}: between 1 and 40 lines.` };
+      bucket[key] = rows;
+      continue;
+    }
+    if (f.kind === 'platforms') {
+      const rows = (get(f.name) ?? '')
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      for (const row of rows) {
+        const p = parsePlatformRule(row);
+        if ('error' in p) return { ok: false, message: `${f.label}: ${p.error}.` };
+      }
+      if (rows.length > 40) return { ok: false, message: `${f.label}: at most 40 rules.` };
       bucket[key] = rows;
       continue;
     }

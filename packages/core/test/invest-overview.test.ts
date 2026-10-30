@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { fundCategory } from '../src/fund-category';
 import type { StatFund } from '../src/fund-stats';
+import { fundPlatform, parsePlatformRule } from '../src/fund-platform';
 import {
+  fundPlanOf,
   groupLines,
+  sipSeenOf,
   heroModel,
   lotAgeing,
   parseGroupBy,
@@ -23,6 +26,7 @@ const line = (o: Partial<FundLine> & { assetId: string }): FundLine => ({
   categoryCertain: true,
   amc: 'Alpha',
   plan: 'direct',
+  platform: 'App',
   invested: 100,
   value: 150,
   gain: 50,
@@ -36,6 +40,7 @@ const line = (o: Partial<FundLine> & { assetId: string }): FundLine => ({
   share: 0.5,
   sipMonthly: 10,
   sipStopped: false,
+  sipSeen: null,
   units: 1,
   nav: 1,
   avgCost: 1,
@@ -214,6 +219,105 @@ const fund = (o: Partial<StatFund>): StatFund => ({
   lotsBasis: 'statement',
   realised: [],
   ...o,
+});
+
+describe('Type and Platform groupings', () => {
+  const lines = [
+    line({ assetId: 'a', value: 300, plan: 'direct', platform: 'App' }),
+    line({ assetId: 'b', value: 100, plan: 'regular', platform: 'Broker' }),
+    line({ assetId: 'c', value: 50, plan: 'unknown', platform: null }),
+    line({ assetId: 'd', value: 20, plan: 'regular', platform: 'Broker' }),
+  ];
+  it('groups by plan, with the plan not known last', () => {
+    const g = groupLines(lines, 'plan', xirrOf);
+    expect(g.map((x) => [x.label, x.lines.length])).toEqual([
+      ['Direct plans', 1],
+      ['Regular plans', 2],
+      ['Plan not known', 1],
+    ]);
+    expect(g[1]!.totals.value).toBe(120);
+    expect(parseGroupBy('plan')).toBe('plan');
+  });
+  it('groups by platform, with the platform not set last', () => {
+    const g = groupLines(lines, 'platform', xirrOf);
+    expect(g.map((x) => x.label)).toEqual(['App', 'Broker', 'Platform not set']);
+    expect(parseGroupBy('platform')).toBe('platform');
+  });
+  it('finds a fund by its platform', () => {
+    expect(searchLines(lines, 'broker').map((l) => l.assetId)).toEqual(['b', 'd']);
+  });
+});
+
+describe('fundPlatform', () => {
+  const rules = ['in hdfc = HDFC Securities', '* = Kuvera'];
+  it('applies the first rule whose words are in either name, else the * rule', () => {
+    expect(fundPlatform(['Nippon India small cap fund (In HDFC)', null], rules)).toBe(
+      'HDFC Securities',
+    );
+    expect(fundPlatform(['Nippon India Small Cap Growth', 'Mid Cap (in  HDFC)'], rules)).toBe(
+      'HDFC Securities',
+    );
+    expect(fundPlatform(['Parag Parikh Flexi Cap Direct Growth'], rules)).toBe('Kuvera');
+  });
+  it('is null with no rule that fits and no * rule, and skips a broken rule', () => {
+    expect(fundPlatform(['Axis Large Cap'], ['in hdfc = HDFC Securities'])).toBeNull();
+    expect(fundPlatform(['Axis Large Cap'], ['no equals sign', '* = App'])).toBe('App');
+  });
+  it('reads a rule and says what is wrong with a bad one', () => {
+    expect(parsePlatformRule('  In  HDFC = HDFC  Securities ')).toEqual({
+      words: 'in hdfc',
+      platform: 'HDFC Securities',
+    });
+    expect('error' in parsePlatformRule('HDFC Securities')).toBe(true);
+    expect('error' in parsePlatformRule('x = y')).toBe(true);
+  });
+});
+
+describe('fundPlanOf', () => {
+  it('keeps a saved plan, else the scheme plan, else a word in a name', () => {
+    expect(fundPlanOf('regular', 'Direct', ['X Direct'])).toBe('regular');
+    expect(fundPlanOf('regular_or_unknown', 'Regular', ['Nippon (In HDFC)'])).toBe('regular');
+    expect(fundPlanOf(null, 'Other', ['Quant Small Cap Growth Direct Plan'])).toBe('direct');
+    expect(fundPlanOf(null, null, ['Nippon India Small Cap Fund - Regular Plan'])).toBe('regular');
+    expect(fundPlanOf('regular_or_unknown', null, ['Nippon (In HDFC)', null])).toBe('unknown');
+  });
+  it('does not read "directly" or a word inside another as a plan', () => {
+    expect(fundPlanOf(null, null, ['Bought directly'])).toBe('unknown');
+  });
+});
+
+describe('sipSeenOf', () => {
+  const rules = { sipMinInstalments: 3, moneyTolerance: 1 };
+  const monthly = (from: number, n: number, kind = 'sip') =>
+    Array.from({ length: n }, (_, i) => {
+      const m = from + i;
+      const y = 2025 + Math.floor((m - 1) / 12);
+      const mm = String(((m - 1) % 12) + 1).padStart(2, '0');
+      return { date: `${y}-${mm}-05`, kind, amount: 5000, source: 'cas' };
+    });
+  it('reads a stopped SIP: regular instalments, then the next one overdue', () => {
+    const s = sipSeenOf(monthly(1, 6), '2026-10-30', rules);
+    expect(s).toEqual({ last: '2025-06-05', amount: 5000, state: 'stopped' });
+  });
+  it('reads a running SIP from purchases too', () => {
+    const s = sipSeenOf(monthly(15, 6, 'purchase'), '2026-09-10', rules);
+    expect(s?.state).toBe('running');
+    expect(s?.last).toBe('2026-08-05');
+    // one due date missed is not yet a stop; two are
+    expect(sipSeenOf(monthly(15, 6, 'purchase'), '2026-09-30', rules)?.state).toBe('running');
+    expect(sipSeenOf(monthly(15, 6, 'purchase'), '2026-10-12', rules)?.state).toBe('stopped');
+  });
+  it('sees no SIP in one-off buys or assumed instalments', () => {
+    expect(sipSeenOf(monthly(1, 2), '2026-10-30', rules)).toBeNull();
+    expect(
+      sipSeenOf(
+        monthly(1, 6).map((x) => ({ ...x, source: 'estimate' })),
+        '2026-10-30',
+        rules,
+      ),
+    ).toBeNull();
+    expect(sipSeenOf(monthly(1, 6, 'redemption'), '2026-10-30', rules)).toBeNull();
+  });
 });
 
 describe('splitByPlan', () => {

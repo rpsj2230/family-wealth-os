@@ -5,6 +5,7 @@
  */
 import {
   amcLabel,
+  sipSeenOf,
   chartDates,
   combineSeries,
   estimateLots,
@@ -485,6 +486,15 @@ function buildRow(
     exitLoadPct: s.id === 'f2' ? 0.01 : null,
     exitLoadDays: s.id === 'f2' ? 365 : null,
     plan: s.plan ?? 'unknown',
+    // the sample's one Regular plan is bought through a broker; the rest through an investment app
+    platform: s.plan === 'regular' ? 'Sample Broker' : 'Sample App',
+    sipSeen:
+      sipMonthly === null || sipMonthly <= 0
+        ? sipSeenOf(lines, DEMO_TODAY, {
+            sipMinInstalments: DEFAULT_CONFIG.estimates.sipMinInstalments,
+            moneyTolerance: config.moneyTolerance,
+          })
+        : null,
     navReturns:
       navLine.length >= 2
         ? trailingTable(navLine, DEMO_TODAY, {

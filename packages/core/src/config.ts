@@ -5,6 +5,7 @@
  */
 import { RULES, fyBoundsOf, type TaxRuleSet } from './tax';
 import { parsePriceLine } from './ai-cost';
+import { parsePlatformRule } from './fund-platform';
 import { LIQUIDITY_KINDS, type LiquidityKind } from './liquidity-kinds';
 export { effectiveRules, fyBoundsOf, type EffectiveRules } from './tax';
 
@@ -316,6 +317,8 @@ export interface AppConfig {
     matchPriceTolerance: number;
     /** and the official prices of this many days up to the recorded value are compared */
     matchPriceDays: number;
+    /** where each fund is held, one rule a line: "words in the fund's name = platform"; "* = platform" for every other fund */
+    platformRules: string[];
   };
   /** the Google Sheet sync: which month the sheet is for, where its register sits and how the safety copy is named */
   sheetSync: {
@@ -513,6 +516,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     planTolerance: 0.02,
     matchPriceTolerance: 0.002,
     matchPriceDays: 7,
+    platformRules: ['in hdfc = HDFC Securities', '* = Kuvera'],
   },
   sheetSync: {
     timeZone: 'Asia/Singapore',
@@ -977,6 +981,13 @@ export function configFromJson(raw: unknown): AppConfig {
       planTolerance: num(fun.planTolerance, d.funds.planTolerance, 0, 0.5),
       matchPriceTolerance: num(fun.matchPriceTolerance, d.funds.matchPriceTolerance, 0, 0.05),
       matchPriceDays: Math.round(num(fun.matchPriceDays, d.funds.matchPriceDays, 1, 31)),
+      platformRules: Array.isArray(fun.platformRules)
+        ? (fun.platformRules as unknown[])
+            .filter((x): x is string => typeof x === 'string')
+            .map((x) => x.trim())
+            .filter((x) => x !== '' && !('error' in parsePlatformRule(x)))
+            .slice(0, 40)
+        : d.funds.platformRules,
     },
     sheetSync: (() => {
       const first = Math.round(num(sheet.firstRow, d.sheetSync.firstRow, 1, 500));

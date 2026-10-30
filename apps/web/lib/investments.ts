@@ -1,5 +1,9 @@
 import {
   amcLabel,
+  fundPlatform,
+  fundPlanOf,
+  sipSeenOf,
+  type SipSeen,
   chartDates,
   combineSeries,
   estimateLots,
@@ -97,8 +101,12 @@ export interface FundRow {
   /** this fund's own exit load as a fraction and in days; null = the default in Settings */
   exitLoadPct: number | null;
   exitLoadDays: number | null;
-  /** Direct or Regular plan, from the saved position (unknown until a statement or the scheme list says) */
+  /** Direct or Regular plan: the saved position, else the matched scheme, else the name (unknown when none says) */
   plan: 'direct' | 'regular' | 'unknown';
+  /** where the fund is held (Kuvera, a broker's demat account), by the platform rules in Settings */
+  platform: string | null;
+  /** the SIP as the purchases on file show it (for a fund with no SIP amount saved) */
+  sipSeen: SipSeen | null;
   /** the fund's own price return over each period, from its published prices; empty without a price history */
   navReturns: { def: PeriodDef; r: TrailingReturn | null }[];
   /** the fund valued on every month end, the start of each period and today: the input of the performance figures */
@@ -271,7 +279,7 @@ export async function loadInvestmentView(
       supabase.from('owners').select('id, display_name, pan_last4').order('created_at'),
       codes.length === 0
         ? Promise.resolve({ data: [] as unknown[] })
-        : supabase.from('amfi_schemes').select('code, category, amc').in('code', codes),
+        : supabase.from('amfi_schemes').select('code, name, plan, category, amc').in('code', codes),
       loadSettings(supabase as unknown as SupabaseClient),
     ]);
   const today = l.today.toISOString().slice(0, 10);
@@ -315,6 +323,8 @@ export async function loadInvestmentView(
     (
       (schemes.data ?? []) as unknown as {
         code: string;
+        name: string | null;
+        plan: string | null;
         category: string | null;
         amc: string | null;
       }[]
@@ -579,7 +589,22 @@ export async function loadInvestmentView(
       status: assetOf.get(p.asset_id)?.status ?? 'active',
       exitLoadPct: p.exit_load_pct === null ? null : Number(p.exit_load_pct),
       exitLoadDays: p.exit_load_days === null ? null : Number(p.exit_load_days),
-      plan: p.plan_type === 'direct' || p.plan_type === 'regular' ? p.plan_type : 'unknown',
+      plan: fundPlanOf(p.plan_type, scheme?.plan ?? null, [
+        scheme?.name,
+        p.fund_name,
+        assetOf.get(p.asset_id)?.label,
+      ]),
+      platform: fundPlatform(
+        [p.fund_name, assetOf.get(p.asset_id)?.label],
+        settings.config.funds.platformRules,
+      ),
+      sipSeen:
+        p.sip_monthly === null || Number(p.sip_monthly) <= 0
+          ? sipSeenOf(cas, today, {
+              sipMinInstalments: settings.config.estimates.sipMinInstalments,
+              moneyTolerance: settings.config.funds.moneyTolerance,
+            })
+          : null,
       navReturns:
         navLine.length >= 2
           ? trailingTable(navLine, today, {
