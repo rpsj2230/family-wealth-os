@@ -1,0 +1,45 @@
+name: Money lent from statements (by hand)
+# Run by hand only. For the people named, payments to them of at least the limit are loans and what came back from them is them
+# paying back. "plan" writes nothing; "apply" records a "Loan to …" for each person not on file yet and rebuilds the movements.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      names:
+        description: the people you lent to, comma separated (as you write them)
+        required: true
+        type: string
+      review_above:
+        description: 'optional: set the limit (₹) for asking about a line no rule places; smaller payments count as spending'
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: bank-statements-import
+  cancel-in-progress: false
+jobs:
+  lending:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+      NAMES: ${{ inputs.names }}
+      REVIEW_ABOVE: ${{ inputs.review_above }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers lending

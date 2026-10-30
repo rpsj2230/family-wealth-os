@@ -23,6 +23,7 @@
  * Pure: no I/O.
  */
 import { addDaysIso } from './harvest-lots';
+import { personNamed } from './statement-lending';
 
 export type LineClass =
   | 'interest'
@@ -82,6 +83,8 @@ export interface ClassifyContext {
     amount: number;
     side: 'buy' | 'sell';
   }[];
+  /** the people you lend to (a "Loan to …" record each): money to them is lent, money from them is them paying it back */
+  borrowers?: { assetId: string; name: string }[];
   rentWords: string[];
   remittanceWords: string[];
   reviewAbove: number;
@@ -286,6 +289,22 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
       } else set(l, 'outside_in', 'Money sent from abroad: the narration has a remittance word');
     }
   }
+
+  // 4b. money lent to someone you have a loan record for, and their paying it back: the narration names them. A payment to them
+  // below the asking limit is spending (a small payment to the same person), not a loan. Before the pairing below, so a payment to
+  // them is never taken for a transfer of the same sum between your own accounts.
+  if (ctx.borrowers?.length)
+    for (const l of sorted) {
+      if (!open(l)) continue;
+      const b = personNamed(l.narration, ctx.borrowers);
+      if (!b || (l.amount < 0 && -l.amount < ctx.reviewAbove)) continue;
+      set(
+        l,
+        'own_transfer',
+        l.amount < 0 ? `Money lent to ${b.name}` : `${b.name} paying back money you lent`,
+        b.assetId,
+      );
+    }
 
   // 5. transfers between your own accounts: the closest line of the opposite sign and the same sum in another account. On a day
   // with several transfers of one sum (five of ₹5 L between six banks), the bank codes the narrations print decide: "RTGS Cr-ESMF…"

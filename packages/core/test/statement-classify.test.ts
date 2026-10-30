@@ -314,3 +314,31 @@ describe('several transfers of one sum on one day', () => {
     expect(only.map((c) => c.cls)).toEqual(['ask_out', 'ask_in']);
   });
 });
+
+describe('money lent to someone with a loan record', () => {
+  const lend: ClassifyContext = {
+    ...ctx,
+    borrowers: [{ assetId: 'loan-s', name: 'Shalender' }],
+    deposits: [],
+    fundTxns: [],
+  };
+  const ls = [
+    line('a', '2021-09-29', 300_000, 'IMPS-123-SHELENDRA PRATAP SIN-HDFC'),
+    line('a', '2021-09-28', -300_000, 'IMPS-456-SHELENDRA PRATAP SIN'),
+    line('b', '2021-09-28', 300_000, 'IMPS CR SAMPLE'),
+    line('a', '2021-10-02', -2_000, 'UPI-SHELENDRA'),
+  ];
+  const cs = classifyLines(ls, lend);
+  it('is lent when paid to them and paid back when it comes from them, before any pairing', () => {
+    expect(cs.slice(0, 2).map((c) => [c.cls, c.counterpart])).toEqual([
+      ['own_transfer', 'loan-s'],
+      ['own_transfer', 'loan-s'],
+    ]);
+    expect(cs[1]!.reason).toBe('Money lent to Shalender');
+    // the same sum arriving in your other account is not taken for the loan: it waits for an answer
+    expect(cs[2]!.cls).toBe('ask_in');
+  });
+  it('a small payment to them is spending', () => {
+    expect(cs[3]!.cls).toBe('spent');
+  });
+});

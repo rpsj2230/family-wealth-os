@@ -129,3 +129,4 @@ export * from './holding-headline';
 export * from './explain-holding';
 export * from './inactivity-alert';
 export * from './statement-deposits';
+export * from './statement-lending';

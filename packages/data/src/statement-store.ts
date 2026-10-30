@@ -278,6 +278,10 @@ export function classifyContext(
       maturityAmount: f.bank_maturity_amount === null ? null : Number(f.bank_maturity_amount),
     })),
     fundTxns,
+    // the people money was lent to, by their "Loan to …" records (a gift is spending, not a loan)
+    borrowers: loaded.assetRows
+      .filter((a) => a.type === 'receivable' && a.status !== 'gifted' && a.status !== 'merged')
+      .map((a) => ({ assetId: a.id, name: a.nickname.replace(/^(loan|money lent)\s+to\s+/i, '') })),
     rentWords: config.statements.rentWords,
     remittanceWords: config.statements.remittanceWords,
     reviewAbove: config.statements.reviewAbove,
