@@ -358,7 +358,7 @@ export function inactivityWarning(i: WarningInput): InactivityMail {
     ? `If ${first} does not confirm receiving it, ${first} ${reminded}${gap} days after the first message ${next} is told the same way, and so on down your list.`
     : `If ${first} does not confirm receiving it, ${first} ${reminded || 'is told only once, and '}nobody else is told: the list has one person.`;
   const stop =
-    'Everything stops as soon as someone confirms, or anyone from the household signs in or presses the link below.';
+    'Everything stops as soon as someone confirms, or anyone from the household signs in or presses "I\'m fine — postpone".';
   const postpone = postponeUrl(i.appUrl, i.postponeToken);
   const url = signInUrl(i.appUrl);
   const foot =
