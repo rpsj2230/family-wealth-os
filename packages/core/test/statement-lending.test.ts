@@ -12,6 +12,9 @@ describe('a name as banks spell it', () => {
     const people = [{ name: 'Shalender' }, { name: 'Omveer Singh' }, { name: 'Atul' }];
     expect(personNamed('IMPS-123-SHELENDRA PRATAP SIN-HDFC', people)?.name).toBe('Shalender');
     expect(personNamed('NEFT DR-PUNB0001-OMVIR SINGH-NETBANK', people)?.name).toBe('Omveer Singh');
+    expect(personNamed('IMPS-SHYAM VIR SINGH-SBIN', [{ name: 'Shyamvir Singh' }])?.name).toBe(
+      'Shyamvir Singh',
+    );
     // "singh" alone is not Omveer, and a narration word is not a name by accident
     expect(personNamed('NEFT DR-RAM SINGH', people)).toBeNull();
     expect(personNamed('TRANSFER TO OWN ACCOUNT', people)).toBeNull();

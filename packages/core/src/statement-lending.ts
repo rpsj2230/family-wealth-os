@@ -23,9 +23,10 @@ const NOT_NAMES = new Set(
  * the vowels changed. Null when none is named.
  */
 export function personNamed<T extends { name: string }>(narration: string, people: T[]): T | null {
+  // each word, and each two neighbouring words written as one ("SHYAM VIR" is "Shyamvir")
+  const parts = narration.split(/[^A-Za-z]+/).filter(Boolean);
   const words = new Set(
-    narration
-      .split(/[^A-Za-z]+/)
+    [...parts, ...parts.slice(1).map((w, i) => parts[i]! + w)]
       .filter((w) => w.length >= 4)
       .map(nameKey)
       .filter((k) => k.length >= 3 && !NOT_NAMES.has(k)),
