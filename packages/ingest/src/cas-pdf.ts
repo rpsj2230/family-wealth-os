@@ -53,6 +53,23 @@ export function pageLines(pieces: TextPiece[]): string[] {
 }
 
 /**
+ * A piece placed as if its page were upright. Some statements (IndusInd's) are printed on a landscape page drawn sideways: every
+ * piece of text is turned a quarter turn, so it reads along the page's y axis and its lines step along x. Read as drawn, a whole
+ * column of amounts falls on one "line". Turned back, each row of the table is a line again.
+ */
+export function uprightPiece(str: string, t: number[], width: number, height: number): TextPiece {
+  const [a = 1, b = 0, , , e = 0, f = 0] = t;
+  // text turned a quarter turn anticlockwise (reads upwards) or clockwise (reads downwards)
+  if (Math.abs(b) > Math.abs(a)) {
+    const size = Math.abs(b);
+    return b > 0
+      ? { str, x: f, y: -e, width, height: height || size }
+      : { str, x: -f, y: e, width, height: height || size };
+  }
+  return { str, x: e, y: f, width, height };
+}
+
+/**
  * Text of a PDF in reading order, one line per visual line, opened with a password when it is protected (a fund statement's
  * password is the holder's PAN unless the holder chose another).
  */
@@ -64,13 +81,7 @@ export async function casPdfText(content: Uint8Array, password?: string): Promis
     const pieces: TextPiece[] = [];
     for (const it of content.items) {
       if (!('str' in it)) continue;
-      pieces.push({
-        str: it.str,
-        x: it.transform[4] as number,
-        y: it.transform[5] as number,
-        width: it.width,
-        height: it.height,
-      });
+      pieces.push(uprightPiece(it.str, it.transform as number[], it.width, it.height));
     }
     pages.push(pageLines(pieces).join('\n'));
   }

@@ -445,11 +445,21 @@ export function readStatementText(textLines: string[]): BankStatement {
     const second = LEAD_DATE.exec(rest);
     if (second && statementDate(second[1]!)) rest = rest.slice(second[0].length);
     const found = [...rest.matchAll(MONEY)];
-    if (found.length === 0) continue;
+    const carried = /^(opening|closing) balance|^b\/f|^brought forward/i;
+    if (found.length === 0) {
+      // a balance brought forward written in whole rupees with its side ("Brought Forward 0 Dr", IndusInd)
+      const whole = /(\d[\d,]*)\s*(Cr|Dr)\.?\s*$/i.exec(rest);
+      if (whole && carried.test(rest.trim())) prev = statementAmount(`${whole[1]} ${whole[2]}`);
+      continue;
+    }
     const amounts = found.map((f) => statementAmount(f[0])!).filter((x) => x !== null);
     const narration = rest.slice(0, found[0]!.index).trim();
-    if (/^(opening|closing) balance|^b\/f|^brought forward/i.test(narration)) {
-      if (prev === null && amounts.length > 0) prev = amounts[amounts.length - 1]!;
+    if (carried.test(narration)) {
+      // the latest balance brought forward wins: a statement may print one at its start and another later (ESAF prints "B/F ...
+      // 0.00" for the opening day, then "B/F ON 01-04-25 - MIGRATION" with the balance moved over from its old system). A closing
+      // balance sets nothing: some statements print it above the table.
+      if (amounts.length > 0 && (prev === null || !/^closing/i.test(narration)))
+        prev = amounts[amounts.length - 1]!;
       continue;
     }
     raws.push({ date, narration, amounts });
@@ -460,7 +470,9 @@ export function readStatementText(textLines: string[]): BankStatement {
   let unsure = 0;
   for (const r of raws) {
     const balance = r.amounts[r.amounts.length - 1]!;
-    const printed = r.amounts.length > 1 ? Math.abs(r.amounts[r.amounts.length - 2]!) : null;
+    // the amount printed: with separate debit and credit columns the empty one may print 0.00, so the one that is not zero
+    const others = r.amounts.slice(0, -1).map(Math.abs);
+    const printed = others.length ? (others.filter((x) => x > 0).pop() ?? 0) : null;
     let debit = 0;
     let credit = 0;
     if (prev !== null) {

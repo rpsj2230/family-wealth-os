@@ -152,12 +152,14 @@ async function importOne(
     if (!write) {
       const wrong = await conflictingBalances(db, assetId, s);
       if (opened && s === opened && wrong.length)
-        // the gap (recorded less summed) at each recorded balance, in thousands: a step shows where a line is missing
+        // the gap (recorded less summed) at each recorded balance, in thousands, with where the recorded figure came from (diary or
+        // workbook, a bank e-mail, a statement, typed by hand): a step shows where a line is missing
         console.log(
           `  gap by date (thousands): ${[...wrong]
             .sort((a, b) => a.as_of.localeCompare(b.as_of))
             .map(
-              (w) => `${w.as_of.slice(0, 7)} ${Math.round((Number(w.amount) - w.proved!) / 1000)}`,
+              (w) =>
+                `${w.as_of.slice(0, 7)} ${Math.round((Number(w.amount) - w.proved!) / 1000)} (${w.source})`,
             )
             .join(', ')}`,
         );

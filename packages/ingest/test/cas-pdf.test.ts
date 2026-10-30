@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { casPdfText, pageLines } from '../src/cas-pdf';
+import { casPdfText, pageLines, uprightPiece } from '../src/cas-pdf';
 import { parseCas } from '../src/cas';
 
 /** A one-page PDF whose text pieces are drawn in the order given (each at its own position). Invented content only. */
@@ -128,5 +128,31 @@ describe('a scheme name that is really statement text', () => {
     );
     expect(st.schemes[0]!.name.length).toBeLessThan(130);
     expect(st.warnings.some((w) => /could not be read cleanly/.test(w))).toBe(true);
+  });
+});
+
+describe('a statement printed on a page turned sideways', () => {
+  it('turns each piece back upright, so a table row is one line again', () => {
+    // a quarter turn anticlockwise: [0, 10, -10, 0, e, f] — lines step down the page along e, text reads along f
+    const turned = (str: string, e: number, f: number) =>
+      uprightPiece(str, [0, 10, -10, 0, e, f], str.length * 5, 10);
+    const lines = pageLines([
+      turned('600.00 Cr', 728, 700),
+      turned('1000.00 Cr', 708, 700),
+      turned('19-DEC-20', 708, 40),
+      turned('29-DEC-20', 728, 40),
+      turned('Sample payer', 708, 100),
+      turned('To FD', 728, 100),
+    ]);
+    expect(lines).toEqual(['19-DEC-20 Sample payer 1000.00 Cr', '29-DEC-20 To FD 600.00 Cr']);
+  });
+  it('leaves upright text as drawn', () => {
+    expect(uprightPiece('a', [1, 0, 0, 1, 30, 700], 5, 9)).toEqual({
+      str: 'a',
+      x: 30,
+      y: 700,
+      width: 5,
+      height: 9,
+    });
   });
 });

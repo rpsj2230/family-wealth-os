@@ -216,6 +216,46 @@ describe('a statement read from PDF text', () => {
     expect(s.warnings).toEqual([]);
   });
 
+  it('reads separate debit and credit columns that print 0.00, and a later balance brought forward', () => {
+    // laid out like a small finance bank's statement: an opening "B/F" of nothing, then the balance moved over from its old system
+    const s = readStatementText([
+      'Account No : 50000000001234',
+      'TRANS DATE VALUE DATE REFF DESCRIPTION DEBITS CREDITS BALANCE',
+      '11-AUG-2021 11-AUG-2021 B/F ... 0.00 0.00 0.00',
+      '01-APR-2025 01-APR-2025 B/F ON 01-04-25 - 0.00 0.64 0.64',
+      'MIGRATION',
+      '22-APR-2025 22-APR-2025 DEP 0.00 591,598.00 5,91,598.64',
+      'FDMAT/10000000000001/2',
+      '11-MAY-2025 11-MAY-2025 WTHDRL 500,000.00 0.00 91,598.64',
+      'NEFT/SAMPLE PERSON',
+    ]);
+    expect(s.last4).toBe('1234');
+    expect(s.opening).toBe(0.64);
+    expect(s.lines.map((l) => [l.debit, l.credit])).toEqual([
+      [0, 591598],
+      [500000, 0],
+    ]);
+    expect(s.warnings).toEqual([]);
+  });
+
+  it('reads a balance brought forward in whole rupees with its side', () => {
+    const s = readStatementText([
+      'Account Number : 100000005678',
+      'DATE PARTICULARS CHQ.NO. WITHDRAWALS DEPOSITS BALANCE',
+      '24-NOV-20 Brought Forward 0 Dr',
+      '19-DEC-20 IMPS SAMPLE PAYER 1000.00 Cr 1000.00 Cr',
+      '29-DEC-20 TransferDebit for FD Ac 300000000001 400.00 Dr 600.00 Cr',
+      '29-OCT-26 Carried Forward 600.00 Cr',
+    ]);
+    expect(s.last4).toBe('5678');
+    expect(s.lines.map((l) => [l.date, l.debit, l.credit, l.balance])).toEqual([
+      ['2020-12-19', 0, 1000, 1000],
+      ['2020-12-29', 400, 0, 600],
+    ]);
+    // no "read from its wording" guess: the opening is known
+    expect(s.warnings).toEqual([]);
+  });
+
   it('reports a line whose printed amount does not match the balance', () => {
     const s = readStatementText([
       'Opening Balance 1,000.00',

@@ -7,13 +7,13 @@ import { balanceOn, lineKeys, monthBalances } from './statement-store';
 export async function conflictingBalances(db: SupabaseClient, assetId: string, s: BankStatement) {
   const { data } = await db
     .from('observations')
-    .select('id, as_of, amount')
+    .select('id, as_of, amount, source')
     .eq('asset_id', assetId)
     .eq('kind', 'balance')
     .is('superseded_by', null)
     .gte('as_of', s.from!)
     .lte('as_of', s.to!);
-  return ((data ?? []) as { id: string; as_of: string; amount: number }[])
+  return ((data ?? []) as { id: string; as_of: string; amount: number; source: string }[])
     .map((o) => ({ ...o, proved: balanceOn(s, o.as_of) }))
     .filter((o) => o.proved !== null && Math.abs(Number(o.amount) - o.proved) > 1);
 }
