@@ -71,7 +71,10 @@ async function main() {
               )
             : [];
     if (kind === 'new') return { assetId: null, why: 'a new "Loan to …" record' };
-    if (pick.length === 1) return { assetId: pick[0]!.id, why: label(pick[0]!.id) };
+    // several of one person's loans: the one whose name holds the words as written ("somesh pratap (2025-06-20)")
+    const exact =
+      pick.length > 1 ? pick.filter((a) => a.nickname.toLowerCase().includes(words)) : pick;
+    if (exact.length === 1) return { assetId: exact[0]!.id, why: label(exact[0]!.id) };
     return {
       assetId: null,
       why: `${pick.length} holdings match "${r.target}": ${pick.map((a) => label(a.id)).join('; ') || 'none'}`,
