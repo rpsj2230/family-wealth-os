@@ -72,7 +72,13 @@ export function DepositOverviewPanel({
   const biggest = Math.max(1, ...ladder.map((s) => s.amount));
   const topShare = Math.max(0.0001, banks[0]?.share ?? 0);
   const r = growth?.rates;
-  const kinds = [r?.nre ? `${r.nre.count} NRE` : null, r?.nro ? `${r.nro.count} NRO` : null]
+  // every running deposit is named: NRE, NRO, and those whose type is not set yet
+  const typed = (r?.nre?.count ?? 0) + (r?.nro?.count ?? 0);
+  const kinds = [
+    r?.nre ? `${r.nre.count} NRE` : null,
+    r?.nro ? `${r.nro.count} NRO` : null,
+    r && o.deposits > typed ? `${o.deposits - typed} type not set` : null,
+  ]
     .filter(Boolean)
     .join(', ');
 

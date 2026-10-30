@@ -126,8 +126,11 @@ export function InvestShell({
   actions,
   position,
   taxFree = null,
+  earnedFy,
   children,
 }: {
+  /** this FY's fund earnings as Home's ledger counts them (core fundsEarnedThisFy); when not given, worked out from the funds' series */
+  earnedFy?: number | null | undefined;
   /** the yearly tax-free allowance on long-term equity gains and what each person has left of it this FY (the Tax page's figures) */
   taxFree?: { exemption: number; people: { name: string; left: number }[] } | null;
   /** '/investments' or '/demo/investments' */
@@ -319,7 +322,10 @@ export function InvestShell({
                     xirr: perf.whatIf?.xirr ?? null,
                   }
                 : null,
-              earnedFy: earnedSince(view.series, fyBoundsOf(fyOf(view.today))!.from)?.gain ?? null,
+              earnedFy:
+                earnedFy !== undefined
+                  ? earnedFy
+                  : (earnedSince(view.series, fyBoundsOf(fyOf(view.today))!.from)?.gain ?? null),
             }}
             base={base}
             tabLinks={{

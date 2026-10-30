@@ -573,8 +573,8 @@ function FiguresTable({
   rows: BankFiguresRow[];
 }) {
   return (
-    <div className="xlwrap">
-      <table className="tbl lines bv-bytable">
+    <div>
+      <table className="tbl lines responsive bv-bytable">
         <caption className="bv-h">{caption}</caption>
         <thead>
           <tr>

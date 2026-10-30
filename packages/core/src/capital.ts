@@ -614,3 +614,22 @@ export function wealthMovement(
   }
   return { key, label, from: start, to, figures, twr: any ? chain - 1 : null, clamped };
 }
+
+/**
+ * What the funds earned this financial year, exactly as Home's "Earned this FY" splits it: the family ledger's fund earnings for the
+ * financial year (each month's change in value with money added or withdrawn left out). Investments shows this figure so the two pages
+ * agree to the rupee. Money moved in or out of the family does not change fund earnings, so no moves are needed. Null before records.
+ */
+export function fundsEarnedThisFy(
+  position: PositionInput,
+  openingDate: string | null,
+  reinvestDays?: number,
+): number | null {
+  const ledger = capitalLedger({
+    position,
+    moves: [],
+    openingDate,
+    ...(reinvestDays !== undefined ? { reinvestDays } : {}),
+  });
+  return wealthMovement(ledger, 'fy', position.config.today).figures?.earnings.funds ?? null;
+}

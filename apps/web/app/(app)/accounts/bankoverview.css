@@ -549,3 +549,14 @@ abbr.bv-est {
 .bv-bytable .neg {
   color: var(--fail);
 }
+@media (max-width: 719px) {
+  .bv-bytable th[scope='row'] {
+    display: block;
+    border: 0;
+    padding: 4px 0 2px;
+    font-weight: 600;
+  }
+  .bv-bytable caption {
+    display: block;
+  }
+}

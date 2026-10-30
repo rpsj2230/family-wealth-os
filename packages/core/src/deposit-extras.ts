@@ -40,7 +40,8 @@ export function depositInterestThisFy(
   for (const d of deposits) {
     const held = [{ assetId: d.id, ...d, held: true }];
     total += depositPeriod(held, spanBetween(b.from, end, b.to), today).profit;
-    if (today > b.from) earned += depositPeriod(held, spanBetween(b.from, today, today), today).profit;
+    if (today > b.from)
+      earned += depositPeriod(held, spanBetween(b.from, today, today), today).profit;
   }
   return { fy, earned, total };
 }

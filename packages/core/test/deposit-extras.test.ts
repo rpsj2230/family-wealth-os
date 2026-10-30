@@ -47,7 +47,11 @@ describe('deposit extras', () => {
   });
 
   it('compares each deposit with the best offer for its own term, after tax', () => {
-    const v = depositsVsBest([dep], [offer('Other Bank', 0.075), offer('Far Bank', 0.09, 24, 36)], 0.3);
+    const v = depositsVsBest(
+      [dep],
+      [offer('Other Bank', 0.075), offer('Far Bank', 0.09, 24, 36)],
+      0.3,
+    );
     expect(v.compared).toBe(1);
     expect(v.below).toBe(1);
     expect(Math.round(v.moreAYear)).toBe(5000);
