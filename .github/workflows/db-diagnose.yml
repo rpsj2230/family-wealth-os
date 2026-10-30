@@ -2,6 +2,11 @@ name: Database check (read-only)
 # Manual: prints row counts and basic state of the live database. Changes nothing; shows no secrets or balances.
 on:
   workflow_dispatch:
+    inputs:
+      expected:
+        description: 'Optional: a platform''s own figures as JSON {"name pattern": {"units": n, "cost": n}}; only ratios are printed'
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -138,6 +143,26 @@ jobs:
                    where a2.owner_id = a.owner_id and p2.folio_last4 = p.folio_last4 and a2.id <> a.id) as same_folio
             from public.mf_positions p join public.assets a on a.id = p.asset_id join public.owners o on o.id = a.owner_id
            where p.amfi_code is null and a.status <> 'merged';
-          \echo '== Motilal Oswal Midcap schemes in the official list'
-          select code, name, plan, option, isin_growth, isin_reinvest from public.amfi_schemes where name ilike '%motilal%mid%cap%' order by code;
+          \echo '== funds: plan saved, plan of the matched scheme, SIP saved or stopped, purchases on file (no amounts)'
+          select o.display_name as owner, coalesce(a.label, '') as label, p.fund_name, a.status, p.plan_type, a.amfi_code,
+                 s.plan as scheme_plan, p.sip_monthly is not null as sip_saved, p.sip_stopped,
+                 (select count(*) from public.mf_transactions t where t.asset_id = a.id and t.kind in ('sip','purchase') and coalesce(t.source,'') <> 'estimate') as buys,
+                 (select max(txn_on) from public.mf_transactions t where t.asset_id = a.id and t.kind in ('sip','purchase') and coalesce(t.source,'') <> 'estimate') as last_buy
+            from public.mf_positions p join public.assets a on a.id = p.asset_id join public.owners o on o.id = a.owner_id
+            left join public.amfi_schemes s on s.code = a.amfi_code
+           order by 1, 3;
+          SQL
+      - name: Compare with a platform's own figures (ratios only)
+        if: inputs.expected != ''
+        env:
+          EXPECTED: ${{ inputs.expected }}
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=0 -v exp="$EXPECTED" <<'SQL'
+          with e as (select key as pat, (value->>'units')::numeric as u, (value->>'cost')::numeric as c from jsonb_each(:'exp'::jsonb))
+          select e.pat, coalesce(a.label, '') as label, p.fund_name, a.status,
+                 round(p.units / nullif(e.u, 0), 4) as units_ratio, round(p.invested / nullif(e.c, 0), 4) as invested_ratio
+            from e join public.assets a on lower(coalesce(a.label, '') || ' ' || coalesce(a.nickname, '')) like e.pat
+                   join public.mf_positions p on p.asset_id = a.id
+           order by 1;
           SQL
