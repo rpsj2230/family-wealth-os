@@ -93,3 +93,4 @@ export * from './cas-open';
 export * from './bank-statement';
 export * from './xls-binary';
 export * from './diary-history';
+export * from './alert-line';

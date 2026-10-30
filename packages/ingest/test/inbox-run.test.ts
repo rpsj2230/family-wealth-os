@@ -66,6 +66,38 @@ function fakeIo(
 
 const cfgNoAi = { today: '2026-10-26', ai: null };
 
+describe('runInbox: the movement an alert reports becomes a statement line', () => {
+  it('saves the amount, its direction, the words and the balance after it, for the matched account', async () => {
+    const lines: unknown[] = [];
+    const { io } = fakeIo({ addAlertLine: async (l) => void lines.push(l) });
+    await runInbox(
+      [
+        msg({
+          text: `Rs.2500.00 has been debited from account **7240 to VPA samplefriend@okaxis SAMPLE FRIEND on 25-10-26. ${HDFC}`,
+        }),
+      ],
+      io,
+      cfgNoAi,
+    );
+    expect(lines).toEqual([
+      {
+        assetId: 'hdfc1',
+        date: '2026-10-25',
+        amount: -2500,
+        balance: 10711.96,
+        words: 'samplefriend@okaxis SAMPLE FRIEND',
+        messageId: 'm1',
+      },
+    ]);
+  });
+  it('a balance-only alert makes no line', async () => {
+    const lines: unknown[] = [];
+    const { io } = fakeIo({ addAlertLine: async (l) => void lines.push(l) });
+    await runInbox([msg()], io, cfgNoAi);
+    expect(lines).toEqual([]);
+  });
+});
+
 describe('runInbox: rule-based alerts', () => {
   it('records the HDFC balance when the sender and one account match, and logs it as applied', async () => {
     const { io, rows, applied } = fakeIo();

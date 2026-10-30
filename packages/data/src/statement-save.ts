@@ -1,5 +1,5 @@
 import { addDaysIso } from '@fwos/core';
-import type { BankStatement } from '@fwos/ingest';
+import { cleanNarration, type BankStatement } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { balanceLessTwins, balanceOn, lineKeys, monthBalances } from './statement-store';
 
@@ -178,6 +178,10 @@ export async function saveBankStatement(
     added += data?.length ?? 0;
   }
 
+  // lines from bank alerts on the days this statement covers: the statement has them now, in the bank's own words. An answer given
+  // for an alert line moves to the statement's line of the same day and amount; then the alert lines go.
+  if (s.from && s.to) await replaceAlertLines(db, householdId, assetId, s.from, s.to, statementId);
+
   // the balances the statement proves, and the recorded ones it shows to be different
   const wrong = await conflictingBalances(db, assetId, s);
   const { data: existing } = await db
@@ -264,4 +268,154 @@ export async function saveBankStatement(
     }
   }
   return { statementId, lines: added, adopted, balances, opened };
+}
+
+/** The file name of the lines bank alerts made: one per account, its days widened as alerts arrive. */
+export const ALERTS_FILE = 'Bank alerts';
+
+/**
+ * A movement a bank alert reported, as a statement line of the account, the day the alert arrives: so the rules, the trail and the
+ * figures follow it without waiting for a statement. Its key is a statement line's (day, amount, balance after), so the same alert
+ * read twice adds nothing; a day a statement already covers takes nothing from an alert. Returns whether a line was added.
+ */
+export async function saveAlertLine(
+  db: SupabaseClient,
+  householdId: string,
+  l: { assetId: string; date: string; amount: number; balance: number; words: string },
+): Promise<boolean> {
+  if (!l.amount) return false;
+  const { data: covering } = await db
+    .from('bank_statements')
+    .select('id')
+    .eq('household_id', householdId)
+    .eq('asset_id', l.assetId)
+    .neq('file_label', ALERTS_FILE)
+    .lte('from_on', l.date)
+    .gte('to_on', l.date)
+    .limit(1);
+  if ((covering ?? []).length) return false;
+  const { data: found } = await db
+    .from('bank_statements')
+    .select('id, from_on, to_on, line_count, closing')
+    .eq('household_id', householdId)
+    .eq('asset_id', l.assetId)
+    .eq('file_label', ALERTS_FILE)
+    .maybeSingle();
+  type AlertFile = { id: string; from_on: string; to_on: string; line_count: number };
+  let st = found as AlertFile | null;
+  if (!st) {
+    const { data, error } = await db
+      .from('bank_statements')
+      .insert({
+        household_id: householdId,
+        asset_id: l.assetId,
+        from_on: l.date,
+        to_on: l.date,
+        opening: null,
+        closing: l.balance,
+        line_count: 0,
+        layout: 'balance-moves',
+        breaks: 0,
+        file_label: ALERTS_FILE,
+      })
+      .select('id, from_on, to_on, line_count')
+      .single();
+    if (error || !data) throw new Error(`alerts file: ${error?.message ?? ''}`);
+    st = data as AlertFile;
+  }
+  const [key] = lineKeys([
+    {
+      date: l.date,
+      narration: '',
+      ref: null,
+      debit: l.amount < 0 ? -l.amount : 0,
+      credit: l.amount > 0 ? l.amount : 0,
+      balance: l.balance,
+    },
+  ]);
+  const { data: added, error } = await db
+    .from('statement_lines')
+    .upsert(
+      {
+        household_id: householdId,
+        statement_id: st!.id,
+        asset_id: l.assetId,
+        txn_on: l.date,
+        amount: Math.round(l.amount * 100) / 100,
+        balance: l.balance,
+        narration: cleanNarration(`ALERT ${l.amount < 0 ? 'DEBIT' : 'CREDIT'} ${l.words}`),
+        line_key: key!,
+      },
+      { onConflict: 'household_id,asset_id,line_key', ignoreDuplicates: true },
+    )
+    .select('id');
+  if (error) throw new Error(`alert line: ${error.message}`);
+  if (!added?.length) return false;
+  await db
+    .from('bank_statements')
+    .update({
+      from_on: l.date < st!.from_on ? l.date : st!.from_on,
+      to_on: l.date > st!.to_on ? l.date : st!.to_on,
+      line_count: st!.line_count + 1,
+      ...(l.date >= st!.to_on ? { closing: l.balance } : {}),
+    })
+    .eq('id', st!.id);
+  return true;
+}
+
+/** Removes the alert lines of the days a statement covers, moving any answer to the statement's line of the same day and amount. */
+async function replaceAlertLines(
+  db: SupabaseClient,
+  householdId: string,
+  assetId: string,
+  from: string,
+  to: string,
+  statementId: string,
+) {
+  const { data: alertFile } = await db
+    .from('bank_statements')
+    .select('id, line_count')
+    .eq('household_id', householdId)
+    .eq('asset_id', assetId)
+    .eq('file_label', ALERTS_FILE)
+    .maybeSingle();
+  if (!alertFile) return;
+  const af = alertFile as { id: string; line_count: number };
+  const { data: alerts } = await db
+    .from('statement_lines')
+    .select('id, txn_on, amount, narration, answer')
+    .eq('statement_id', af.id)
+    .gte('txn_on', from)
+    .lte('txn_on', to);
+  const rows = (
+    (alerts ?? []) as {
+      id: string;
+      txn_on: string;
+      amount: number;
+      narration: string;
+      answer: string | null;
+    }[]
+  ).map((r) => ({ ...r, amount: Number(r.amount) }));
+  if (!rows.length) return;
+  const answered = rows.filter((r) => r.answer);
+  if (answered.length) {
+    const { data: mine } = await db
+      .from('statement_lines')
+      .select('id, txn_on, amount, narration, answer')
+      .eq('statement_id', statementId);
+    const theirs = ((mine ?? []) as typeof rows).map((r) => ({ ...r, amount: Number(r.amount) }));
+    for (const [alert, line] of balanceLessTwins(answered, theirs))
+      if (!line.answer)
+        await db.from('statement_lines').update({ answer: alert.answer }).eq('id', line.id);
+  }
+  await db
+    .from('statement_lines')
+    .delete()
+    .in(
+      'id',
+      rows.map((r) => r.id),
+    );
+  const left = af.line_count - rows.length;
+  if (left > 0) await db.from('bank_statements').update({ line_count: left }).eq('id', af.id);
+  else await db.from('bank_statements').delete().eq('id', af.id);
 }

@@ -16,7 +16,14 @@ import {
   type InboxMessage,
   type KnownAccount,
 } from '@fwos/ingest';
-import { aiChainFor, importCasAttachments, importTaxFile, loadSettings } from '@fwos/data';
+import {
+  aiChainFor,
+  importCasAttachments,
+  importTaxFile,
+  loadSettings,
+  rebuildStatementMoves,
+  saveAlertLine,
+} from '@fwos/data';
 
 const db = connectDb();
 
@@ -53,6 +60,7 @@ async function main() {
       : `AI keys, in order: ${ai.keys.map((k) => PROVIDER_SHORT[k.provider]).join(', ')}.`,
   );
 
+  let alertLines = 0;
   const io: InboxIo = {
     async accounts() {
       const assets = must(
@@ -127,6 +135,10 @@ async function main() {
         ),
         'log message',
       );
+    },
+    // the movement an alert reports, as a statement line of the account (a later statement takes its place)
+    async addAlertLine({ assetId, date, amount, balance, words }) {
+      if (await saveAlertLine(db, hh, { assetId, date, amount, balance, words })) alertLines++;
     },
     async apply({ assetId, reading, messageId, source, receivedAt, replaceSameDay }) {
       let fx: number | null = null;
@@ -305,6 +317,13 @@ async function main() {
     `Inbox: ${report.seen} messages (${report.skipped} already handled): applied ${report.applied}, to review ${report.needsReview}, ignored ${report.ignored}, errors ${report.errors}`,
   );
   for (const l of report.lines) console.log(' -', l);
+  // lines from alerts are sorted at once by the rules, so the trail and the figures follow them today
+  if (alertLines > 0) {
+    const rb = await rebuildStatementMoves(db, hh);
+    console.log(
+      `Statement lines from bank alerts: ${alertLines}. Movements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}.`,
+    );
+  }
   if (report.errors > 0) process.exitCode = 1;
 }
 

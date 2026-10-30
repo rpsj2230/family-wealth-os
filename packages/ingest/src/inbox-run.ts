@@ -11,6 +11,7 @@
  *
  * The AI is a chain of keys (see `ai-chain`): when one fails the next is asked, and a key refused earlier in the run is not asked again.
  */
+import { alertMovement } from './alert-line';
 import { answeredBy, callAi, type AiChain } from './ai-chain';
 import type { AiPurpose } from './ai-usage';
 import {
@@ -91,6 +92,17 @@ export interface InboxIo {
   taxImport?(m: InboxMessage): Promise<{ outcome: 'imported' | 'failed'; reason: string }>;
   /** Text of a PDF; throws if it is encrypted or unreadable. */
   pdfText(content: Uint8Array): Promise<string>;
+  /** Saves the movement a bank alert reports as a statement line of the account; absent when this run does not keep lines. */
+  addAlertLine?(line: {
+    assetId: string;
+    date: string;
+    /** + in, − out */
+    amount: number;
+    /** the balance after it, from the same alert */
+    balance: number;
+    words: string;
+    messageId: string;
+  }): Promise<void>;
 }
 
 export interface InboxReport {
@@ -335,6 +347,20 @@ ${m.text}`,
             assetId: null,
           });
           continue;
+        }
+        // the movement the alert reports becomes a statement line the day it arrives (a later statement takes its place): only from
+        // the bank's own rule-read alert, matched to one account, never from an AI reading or a statement
+        if (io.addAlertLine && r.source === 'rule' && match.autoApply && source === 'email') {
+          const mv = alertMovement(m.text);
+          if (mv)
+            await io.addAlertLine({
+              assetId: match.assetId,
+              date: r.asOf,
+              amount: mv.amount,
+              balance: r.amount,
+              words: mv.words,
+              messageId: m.messageId,
+            });
         }
         const latest = await io.latestObservation(match.assetId);
         // a value from the bank that is newer is never replaced; a value you typed or imported that is newer is replaced when you asked for this reading
