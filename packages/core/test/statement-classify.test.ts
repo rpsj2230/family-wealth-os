@@ -342,3 +342,30 @@ describe('money lent to someone with a loan record', () => {
     expect(cs[3]!.cls).toBe('spent');
   });
 });
+
+describe('an account of yours held in someone else’s name', () => {
+  const held: ClassifyContext = {
+    ...ctx,
+    accounts: [
+      { assetId: 'hdfc', ownerId: 'r', last4: '1111', bank: 'HDFC Bank' },
+      { assetId: 'atul', ownerId: 'r', last4: null, bank: 'IDFC First Bank', heldBy: 'Atul' },
+    ],
+    deposits: [],
+    fundTxns: [],
+  };
+  const ls = [
+    line('hdfc', '2021-12-23', -200_000, 'NEFT DR-IDFB0040101-ATUL SAMPLE-NETBANK'),
+    line('hdfc', '2022-03-01', 2_000, 'IMPS ATUL SAMPLE IDFC FIRST BANK'),
+    // an Atul at another bank is someone else
+    line('hdfc', '2022-04-01', -80_000, 'NEFT DR-PUNB0000001-ATUL OTHER'),
+  ];
+  const cs = classifyLines(ls, held);
+  it('moves money to and from it, whatever the amount, when the narration names them and its bank', () => {
+    expect(cs.slice(0, 2).map((c) => [c.cls, c.counterpart])).toEqual([
+      ['own_transfer', 'atul'],
+      ['own_transfer', 'atul'],
+    ]);
+    expect(cs[0]!.reason).toBe("To your IDFC First Bank account in Atul's name");
+    expect(cs[2]!.cls).toBe('ask_out');
+  });
+});

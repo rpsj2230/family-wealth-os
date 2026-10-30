@@ -1,6 +1,7 @@
 import {
   addDaysIso,
   classifyLines,
+  personNamed,
   statementInterest,
   statementInterestMoves,
   statementMoves,
@@ -205,6 +206,13 @@ export async function loadStatements(
   };
 }
 
+/** The name an account is held in, when it is not one of the household's people (whose own names banks also print). */
+function heldByOther(holder: string | null, loaded: LoadedPortfolio): string | null {
+  if (!holder?.trim()) return null;
+  const people = [...loaded.ownerName.values()].map((name) => ({ name }));
+  return personNamed(holder, people) ? null : holder.trim();
+}
+
 /** The Singapore account money sent to India leaves: the one most transfers on file come from, else the only Singapore DBS account. */
 function singaporeOf(loaded: LoadedPortfolio, remittances: StoredRemittance[]): string | null {
   const count = new Map<string, number>();
@@ -259,6 +267,8 @@ export function classifyContext(
         ownerId: a.owner_id,
         last4: a.identifier_last4 ?? null,
         bank: a.institution_id ? (loaded.institutionName?.get(a.institution_id) ?? null) : null,
+        // held in the name of someone outside the household (an account you use in a relative's name)
+        heldBy: heldByOther(a.holder_name ?? null, loaded),
       })),
     // the household's people by their first names, as banks write them in narrations
     people: [...loaded.ownerName].map(([ownerId, name]) => ({

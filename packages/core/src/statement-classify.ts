@@ -58,7 +58,14 @@ export interface StmtLine {
 }
 
 export interface ClassifyContext {
-  accounts: { assetId: string; ownerId: string; last4: string | null; bank?: string | null }[];
+  accounts: {
+    assetId: string;
+    ownerId: string;
+    last4: string | null;
+    bank?: string | null;
+    /** an account of yours held in someone else's name ("the IDFC account in Atul's name"): their name */
+    heldBy?: string | null;
+  }[];
   /** the household's people, by the names a bank writes them in a narration (first names; a one-letter slip is still them) */
   people?: { ownerId: string; names: string[] }[];
   /** the Singapore account money from abroad leaves (a Wise or DBS remittance moves money out of it) */
@@ -287,6 +294,34 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
         );
         out.get(l.id)!.fromSingapore = true;
       } else set(l, 'outside_in', 'Money sent from abroad: the narration has a remittance word');
+    }
+  }
+
+  // 4a. money moved to or from an account of yours held in someone else's name: the narration names them and that account's bank
+  // ("IMPS-…-ATUL …-IDFC FIRST BANK"). Any amount: it is your own money moving.
+  for (const held of ctx.accounts.filter((a) => a.heldBy)) {
+    const bank = bankWord(held.bank ?? '');
+    const first = bank.split(' ')[0] ?? '';
+    for (const l of sorted) {
+      if (!open(l) || l.assetId === held.assetId) continue;
+      if (!personNamed(l.narration, [{ name: held.heldBy! }])) continue;
+      const codes = [...l.narration.toUpperCase().matchAll(/\b([A-Z]{4})(?:0|…)/g)].map(
+        (m) => IFSC_BANK[m[1]!],
+      );
+      const atBank =
+        !first ||
+        codes.some((c) => c && bank.startsWith(c)) ||
+        new RegExp(`\\b${first}\\b`, 'i').test(l.narration);
+      if (!atBank) continue;
+      set(
+        l,
+        'own_transfer',
+        `${l.amount < 0 ? 'To' : 'From'} your ${held.bank ?? ''} account in ${held.heldBy}'s name`.replace(
+          /\s+/g,
+          ' ',
+        ),
+        held.assetId,
+      );
     }
   }
 
