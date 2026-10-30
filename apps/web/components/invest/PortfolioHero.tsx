@@ -418,7 +418,7 @@ export function PortfolioHero({
               </div>
               <div className="hl-xs">
                 {extras.regular.count > 0
-                  ? `${extras.regular.count} fund${extras.regular.count === 1 ? '' : 's'} pay a yearly commission; Direct does not`
+                  ? `${extras.regular.count} ${extras.regular.count === 1 ? 'fund pays' : 'funds pay'} a yearly commission; Direct does not`
                   : 'every fund is a Direct plan'}
               </div>
             </li>
