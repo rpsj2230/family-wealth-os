@@ -31,18 +31,19 @@ test.describe('Investments (public sample)', () => {
     const hero = page.getByRole('region', { name: 'Mutual funds at a glance' });
     for (const label of [
       'Current value of mutual funds',
-      'Amount invested now',
-      'Profit on amount invested now',
-      'Yearly return on amount invested (XIRR)',
-      'Profit booked by selling',
-      'SIP a month',
+      'Invested',
+      'Profit',
+      'XIRR',
+      'Booked profit',
+      'Total profit',
+      'SIP status',
       'Long-term share',
     ])
       await expect(hero).toContainText(label);
     await expect(hero).toContainText('Maturity value: not applicable');
-    await expect(hero.getByRole('img', { name: /is the money put in/ })).toBeVisible();
+    await expect(hero.getByRole('img', { name: /% is invested and \d+% is profit/ })).toBeVisible();
     await expect(tabs(page).getByRole('link')).toHaveCount(8);
-    await expect(page.getByRole('heading', { name: 'Value and money put in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Current value and invested' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Return over time' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Goal by goal' })).toBeVisible();
     await expect(page.getByRole('list', { name: 'Value by goal' })).toBeVisible();
@@ -75,7 +76,7 @@ test.describe('Investments (public sample)', () => {
     await expect(
       page.getByRole('heading', { name: 'The same money in the index fund' }),
     ).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Value and money put in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Current value and invested' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'If you carry on like this' })).toBeVisible();
     await noSideways(page);
   });
@@ -133,7 +134,7 @@ test.describe('Investments (public sample)', () => {
   }) => {
     await page.goto('/demo/investments?tab=performance&range=1y');
     const chart = page.getByRole('img', {
-      name: /Value of mutual funds against the money put in/,
+      name: /Current value of mutual funds against invested/,
     });
     await chart.focus();
     await page.keyboard.press('ArrowLeft');

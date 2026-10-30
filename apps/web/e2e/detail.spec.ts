@@ -33,17 +33,17 @@ test('sample deposit: facts, value chart, interest by year and the activity log'
 test('sample fund: headline, figures, graphs and every tab', async ({ page }) => {
   await page.goto('/demo/asset?kind=fund');
   const hero = page.getByRole('region', { name: 'This fund at a glance' });
-  await expect(hero).toContainText('Value today');
-  await expect(hero).toContainText('Yearly return on amount invested (XIRR)');
-  await expect(hero).toContainText('Profit on amount invested now');
+  await expect(hero).toContainText('Current value');
+  await expect(hero).toContainText(/XIRR\s*(-?\d+\.\d\d% a year|–)/);
+  await expect(hero).toContainText('Profit');
+  await expect(hero).toContainText('Booked profit');
+  await expect(hero).not.toContainText('Compound growth');
   // overview: the figures and the graphs
-  await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText(
-    'Average cost per unit',
-  );
+  await expect(page.getByRole('region', { name: 'Fund in numbers' })).toContainText('Average cost');
   await expect(
     page.getByRole('img', { name: /price per unit with purchases and average cost/ }),
   ).toBeVisible();
-  await expect(page.getByRole('img', { name: /value against money put in/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /current value against invested/ })).toBeVisible();
   await expect(page.getByRole('img', { name: /units held after each transaction/ })).toBeVisible();
   await expect(page.getByRole('list', { name: /monthly investment by month/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'How much is long-term' })).toBeVisible();

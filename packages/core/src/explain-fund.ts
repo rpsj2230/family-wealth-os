@@ -101,7 +101,6 @@ type FundIds =
   | 'fund.today'
   | 'fund.xirr'
   | 'fund.sip'
-  | 'fund.cagr'
   | 'fund.units'
   | 'fund.tax'
   | 'fund.booked'
@@ -397,49 +396,6 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     also: histAlso,
   });
 
-  const cagr = i.cagr
-    ? explain({
-        id: 'fund.cagr',
-        title: 'Compound growth',
-        what: 'The yearly rate that turns the money put in into today’s value, when it all went in on one day.',
-        how: `(${exInr(i.value)} value ÷ ${exInr(i.invested)} money put in) raised to 1 ÷ the years since ${exDate(i.cagr.from)} − 1 = ${exSignedPct(i.cagr.rate, 1)} a year.`,
-        inputs: [
-          {
-            label: 'Single investment date',
-            value: exDate(i.cagr.from),
-            basis: i.hasStatement ? 'statement' : 'recorded',
-            to: i.cagr.from,
-          },
-          {
-            label: 'Value now',
-            value: exInr(i.value),
-            basis: 'calculated',
-            to: i.navDate ?? i.today,
-          },
-          {
-            label: 'Money put in',
-            value: exInr(i.invested),
-            basis: i.hasStatement && reconciled ? 'statement' : 'recorded',
-          },
-        ],
-        level: histLevel,
-        completeness: histText,
-        notes: [
-          'With several payments (a SIP) this simple rate is not meaningful; the annual return (XIRR) is used instead.',
-        ],
-        fix: histFix,
-      })
-    : explain({
-        id: 'fund.cagr',
-        title: 'Compound growth',
-        what: 'The yearly rate that turns the money put in into today’s value, when it all went in on one day.',
-        how: 'Not shown: the money went in on several dates, so the annual return (XIRR) is the right measure.',
-        inputs: [{ label: 'Single investment date', value: 'several dates', basis: 'missing' }],
-        level: 'missing',
-        completeness: 'Not applicable to a fund with several payments.',
-        notes: [],
-      });
-
   const t = i.tax;
   const tax = explain({
     id: 'fund.tax',
@@ -614,7 +570,6 @@ export function buildFundExplain(i: FundExplainInput): ExplainSet<'fund'> {
     'fund.xirr': xirr,
     'fund.sip': sip,
     'fund.units': units,
-    'fund.cagr': cagr,
     'fund.tax': tax,
     'fund.booked': booked,
     'fund.returns': returns,

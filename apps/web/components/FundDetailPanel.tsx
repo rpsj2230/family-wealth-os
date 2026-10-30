@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatInr, formatInrCompact, type ExplainSet } from '@fwos/core';
+import { TERMS, formatInr, formatInrCompact, type ExplainSet } from '@fwos/core';
 import type { FundDetail, DetailFund } from '@/lib/fund-detail-model';
 import { niceDate } from '@/lib/dates';
 import {
@@ -33,7 +33,7 @@ const monthsText = (n: number) => {
 
 /**
  * Everything the fund page adds for a mutual fund: the figures that describe it, then the graphs (price with every purchase and
- * the average cost, value against money put in, units, money per month, the SIP calendar and how much is long-term).
+ * the average cost, current value against invested, units, money per month, the SIP calendar and how much is long-term).
  */
 export function FundDetailPanel({
   fund,
@@ -61,20 +61,20 @@ export function FundDetailPanel({
   const hold = d.holding;
   const stats: Stat[] = [
     {
-      label: 'Gain on units held',
+      label: TERMS.profit.label,
       value: f.invested > 0 ? rupees(d.unrealised) : '–',
       note:
         d.unrealisedPct === null
           ? 'no cost recorded'
-          : `${pct(d.unrealisedPct, 1)} on the ${formatInrCompact(f.invested)} put in`,
+          : `${pct(d.unrealisedPct, 1)} overall on ${formatInrCompact(f.invested)} invested`,
       tone: f.invested > 0 ? tone(d.unrealised) : null,
       why: ex?.['fund.profit'],
     },
     {
-      label: 'Return a year (XIRR)',
+      label: TERMS.xirr.label,
       value: (
         <>
-          {f.xirr === null ? '–' : pct(f.xirr, 1)}
+          {f.xirr === null ? '–' : `${pct(f.xirr, 2).replace(/^\+/, '')} a year`}
           {f.xirr !== null && <BasisChip real={!f.xirrEstimated} />}
         </>
       ),
@@ -88,25 +88,29 @@ export function FundDetailPanel({
       why: ex?.['fund.xirr'],
     },
     {
-      label: 'Compound growth (CAGR)',
-      value: d.cagr === null ? '–' : pct(d.cagr, 1),
+      label: TERMS.booked.label,
+      value:
+        d.realised.sales === 0
+          ? 'None'
+          : rupees(d.realised.stcg + d.realised.ltcg + d.realised.other),
       note:
-        d.cagr !== null
-          ? `single investment on ${niceDate(d.cagrFrom!)}`
-          : 'single investments only; with a SIP see XIRR',
-      tone: tone(d.cagr),
-      why: ex?.['fund.cagr'],
+        d.realised.sales === 0
+          ? 'no sale on file'
+          : `from ${d.realised.sales} sale${d.realised.sales === 1 ? '' : 's'}`,
+      tone:
+        d.realised.sales === 0 ? null : tone(d.realised.stcg + d.realised.ltcg + d.realised.other),
+      why: ex?.['fund.booked'],
     },
     {
-      label: 'Average cost per unit',
+      label: TERMS.averageCost.label,
       value: d.avgCost === null ? '–' : price(d.avgCost),
       note:
         d.avgCost === null
-          ? 'needs units and money put in'
-          : `${d.avgCostBasis === 'statement' ? 'from statement purchases' : d.avgCostBasis === 'estimated' ? 'estimated from the SIP plan' : 'money put in over units'}`,
+          ? 'needs units and the amount invested'
+          : `${d.avgCostBasis === 'statement' ? 'from statement purchases' : d.avgCostBasis === 'estimated' ? 'estimated from the SIP plan' : 'invested ÷ units'}`,
     },
     {
-      label: 'Price now',
+      label: TERMS.nav.label,
       value: f.nav === null ? '–' : price(f.nav),
       note:
         d.priceVsCost === null
@@ -117,7 +121,7 @@ export function FundDetailPanel({
       tone: tone(d.priceVsCost),
     },
     {
-      label: 'Units held',
+      label: TERMS.units.label,
       value: f.units === null ? '–' : f.units.toLocaleString('en-IN', { maximumFractionDigits: 3 }),
       note: f.folioLast4 ? `folio …${f.folioLast4}` : undefined,
       why: ex?.['fund.units'],
@@ -128,7 +132,7 @@ export function FundDetailPanel({
       note: d.firstOn ? 'first purchase' : 'no start date recorded',
     },
     {
-      label: 'Today',
+      label: TERMS.todayChange.label,
       value: f.dayAmount === null ? '–' : rupees(f.dayAmount),
       note: f.dayPct === null ? 'no price change yet' : `${pct(f.dayPct)} on yesterday’s value`,
       tone: tone(f.dayAmount),
@@ -265,7 +269,7 @@ export function FundDetailPanel({
               }
               note={
                 !real
-                  ? 'No fund statement is imported, so purchases are not shown and the average cost is money put in over units.'
+                  ? 'No fund statement is imported, so purchases are not shown and the average cost is invested ÷ units.'
                   : d.nav.buys.length === 0 && d.nav.sells.length === 0
                     ? 'No purchase or sale in this period.'
                     : undefined
@@ -273,13 +277,13 @@ export function FundDetailPanel({
             />
           </div>
           <div className="vizblock">
-            <h3 className="subhead">Value against money put in</h3>
+            <h3 className="subhead">Current value against invested</h3>
             <PlotChart
               unit="inr"
-              caption={`${f.name}: value against money put in, ${d.rangeWords}`}
+              caption={`${f.name}: current value against invested, ${d.rangeWords}`}
               series={[
                 { key: 'value', name: 'Value', colour, area: true, points: valuePts },
-                { key: 'in', name: 'Money put in', colour: 'var(--viz-line)', points: inPts },
+                { key: 'in', name: TERMS.invested.label, colour: 'var(--viz-line)', points: inPts },
               ]}
               note={[
                 d.startsLate ? 'History starts later than this range.' : '',
@@ -331,11 +335,8 @@ export function FundDetailPanel({
           )}
           {real && (
             <div className="vizblock">
-              <h3 className="subhead">Money put in each month</h3>
-              <MonthColumns
-                months={d.contributions}
-                caption={`${f.name}: money put in each month`}
-              />
+              <h3 className="subhead">Invested each month</h3>
+              <MonthColumns months={d.contributions} caption={`${f.name}: invested each month`} />
             </div>
           )}
           {d.calendar.basis !== 'none' && (

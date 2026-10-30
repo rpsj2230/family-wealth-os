@@ -107,9 +107,12 @@ describe('the Investments explainers', () => {
       '₹8,03,737 profit ÷ ₹51,04,737 today’s value = 15.7%',
     );
     expect(set['invest.profit'].exact).toBe('+₹8,03,737');
-    expect(set['invest.ring'].how).toContain('₹8,03,737 growth ÷ ₹51,04,737 today’s value = 15.7%');
-    expect(set['invest.ring'].how).toContain('rounds to 16%');
-    expect(set['invest.ring'].notes.join(' ')).toContain('+18.7%');
+    expect(set['invest.ring'].how).toContain(
+      '₹8,03,737 profit ÷ ₹51,04,737 current value = 15.7% of the current value',
+    );
+    expect(set['invest.ring'].how).toContain(
+      '₹8,03,737 profit ÷ ₹43,01,000 invested = 18.7% overall (+18.7%)',
+    );
   });
 
   it('says which NAV date and how many funds are on the latest price', () => {

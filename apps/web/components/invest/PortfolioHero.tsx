@@ -1,11 +1,17 @@
 import Link from 'next/link';
-import { formatInr, formatInrCompact, type Explain, type Hero, type SeriesPoint } from '@fwos/core';
+import {
+  TERMS,
+  formatInr,
+  formatInrCompact,
+  type Explain,
+  type Hero,
+  type SeriesPoint,
+} from '@fwos/core';
 import { Est, LEDGER_EST_TITLE } from '@/components/Est';
 import { pct, rupees, tone } from '@/components/InvestHeadline';
 import { Why } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import './invest.css';
-import { MONEY_WORDS as W } from '@/lib/money-words';
 
 /** The explainers the hero carries: one for each headline figure. */
 export interface HeroExplain {
@@ -30,8 +36,11 @@ export interface HeroProjection {
 
 const SIZE = 132;
 
-/** A ring: the share of today's value that is the money put in, and the share that is growth. Text beside it says the same in words. */
-function Ring({ cost, growth }: { cost: number; growth: number }) {
+/**
+ * A ring: the share of today's value that is Invested and the share that is Profit, with the overall return (Profit ÷ Invested) in
+ * the centre. Text beside it says the same in words.
+ */
+function Ring({ cost, growth, overall }: { cost: number; growth: number; overall: number | null }) {
   const r = 52;
   const c = 2 * Math.PI * r;
   return (
@@ -41,7 +50,7 @@ function Ring({ cost, growth }: { cost: number; growth: number }) {
       width={SIZE}
       height={SIZE}
       role="img"
-      aria-label={`Of today's value, ${Math.round(cost * 100)}% is the money put in and ${Math.round(growth * 100)}% is growth`}
+      aria-label={`Of the current value, ${Math.round(cost * 100)}% is invested and ${Math.round(growth * 100)}% is profit${overall === null ? '' : `: ${overall < 0 ? '−' : '+'}${Math.abs(overall * 100).toFixed(1)}% overall`}`}
     >
       <circle cx={SIZE / 2} cy={SIZE / 2} r={r} className="ring-track" />
       <circle
@@ -64,16 +73,18 @@ function Ring({ cost, growth }: { cost: number; growth: number }) {
         />
       )}
       <text x="50%" y="47%" textAnchor="middle" className="ring-big">
-        {Math.round(growth * 100)}%
+        {overall === null
+          ? '–'
+          : `${overall < 0 ? '−' : '+'}${Math.abs(overall * 100).toFixed(1)}%`}
       </text>
       <text x="50%" y="62%" textAnchor="middle" className="ring-sm">
-        {growth > 0 ? 'is growth' : 'no growth yet'}
+        overall
       </text>
     </svg>
   );
 }
 
-/** Value against money put in over the whole history: two lines and a filled area, drawn from the monthly series. */
+/** Current value against Invested over the whole history: two lines and a filled area, drawn from the monthly series. */
 function Spark({ points }: { points: SeriesPoint[] }) {
   const pts = points.filter((p) => Number.isFinite(p.value));
   if (pts.length < 2) return null;
@@ -98,7 +109,7 @@ function Spark({ points }: { points: SeriesPoint[] }) {
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
       role="img"
-      aria-label={`Value against money put in, ${niceDate(pts[0]!.date)} to ${niceDate(last.date)}`}
+      aria-label={`Current value against invested, ${niceDate(pts[0]!.date)} to ${niceDate(last.date)}`}
     >
       <defs>
         <linearGradient id="heroFill" x1="0" x2="0" y1="0" y2="1">
@@ -208,7 +219,7 @@ export function PortfolioHero({
       <div className="invhero-top">
         <div className="invhero-main">
           <div className="hero-label">
-            Current value of mutual funds
+            {TERMS.currentValue.label} of mutual funds
             <Why explain={ex['invest.value']} tone="on-dark" />
           </div>
           <div className="hero-value">
@@ -224,10 +235,11 @@ export function PortfolioHero({
               {h.unrealisedPct !== null && <b>{pct(h.unrealisedPct, 1)}</b>}
               {h.unreconciled > 0 && <Est title={LEDGER_EST_TITLE} />}
               <span className="hp-sub">
-                {h.unrealised >= 0 ? 'profit' : 'loss'}
-                {h.unrealisedPct !== null
-                  ? ` on ${formatInrCompact(h.invested)} invested`
-                  : ' on units held'}
+                {h.unrealisedPct !== null ? 'overall · ' : ''}
+                {TERMS.profit.label}
+                {h.xirr !== null
+                  ? ` · ${TERMS.xirr.label} ${pct(h.xirr, 2).replace(/^\+/, '')} a year`
+                  : ''}
               </span>
               <Why explain={ex['invest.profit']} tone="on-dark" />
             </span>
@@ -239,7 +251,7 @@ export function PortfolioHero({
                   <span aria-hidden="true">{day >= 0 ? '▲' : '▼'}</span>
                   {rupees(day)}
                   <b>{pct(h.dayPct!)}</b>
-                  <span className="hp-sub">today, on yesterday’s value</span>
+                  <span className="hp-sub">{TERMS.todayChange.label}</span>
                 </>
               )}
               <Why explain={ex['invest.today']} tone="on-dark" />
@@ -253,25 +265,25 @@ export function PortfolioHero({
         <div className="invhero-ring">
           {h.split ? (
             <>
-              <Ring cost={h.split.cost} growth={h.split.growth} />
+              <Ring cost={h.split.cost} growth={h.split.growth} overall={h.unrealisedPct} />
               <div className="hero-keybox">
                 <p className="ring-cap">
                   {h.value >= h.invested
-                    ? `${Math.round(h.split.growth * 100)}% of today’s value is growth`
-                    : `${Math.round(h.split.cost * 100)}% of your money is left`}
+                    ? `Invested ${Math.round(h.split.cost * 100)}% and profit ${Math.round(h.split.growth * 100)}% of the current value`
+                    : `${Math.round(h.split.cost * 100)}% of what was invested is left`}
                   <Why explain={ex['invest.ring']} tone="on-dark" />
                 </p>
                 <ul className="hero-key">
                   <li>
                     <span className="sw cost" aria-hidden="true" />
-                    <span>Your money</span>
+                    <span>{TERMS.invested.label}</span>
                     <b title={formatInr(Math.round(Math.min(h.invested, h.value)))}>
                       {formatInrCompact(Math.min(h.invested, h.value))}
                     </b>
                   </li>
                   <li>
                     <span className="sw growth" aria-hidden="true" />
-                    <span>{h.value >= h.invested ? 'Growth' : 'Shortfall'}</span>
+                    <span>{h.value >= h.invested ? TERMS.profit.label : 'Loss'}</span>
                     <b title={formatInr(Math.round(Math.abs(h.value - h.invested)))}>
                       {formatInrCompact(Math.abs(h.value - h.invested))}
                     </b>
@@ -280,17 +292,17 @@ export function PortfolioHero({
               </div>
             </>
           ) : (
-            <p className="hero-note">The money put in is needed to split the value.</p>
+            <p className="hero-note">What was invested is needed to split the value.</p>
           )}
         </div>
         <div className="invhero-spark">
           <Spark points={history} />
           <div className="spark-key">
             <span>
-              <i className="ln" aria-hidden="true" /> Value
+              <i className="ln" aria-hidden="true" /> {TERMS.currentValue.label}
             </span>
             <span>
-              <i className="ln dash" aria-hidden="true" /> Amount invested
+              <i className="ln dash" aria-hidden="true" /> {TERMS.invested.label}
             </span>
             <Link href={tabLinks.performance}>See performance</Link>
           </div>
@@ -299,7 +311,7 @@ export function PortfolioHero({
 
       <dl className="invhero-grid">
         <Cell
-          label={W.investedNow}
+          label={TERMS.invested.label}
           value={formatInrCompact(h.invested)}
           exact={formatInr(Math.round(h.invested))}
           sub="cost of the units still held"
@@ -307,26 +319,22 @@ export function PortfolioHero({
           why={ex['invest.moneyIn']}
         />
         <Cell
-          label={W.profitOnInvested}
+          label={TERMS.profit.label}
           value={rupees(h.unrealised)}
-          sub={
-            h.unrealisedPct === null
-              ? 'no cost recorded'
-              : `${pct(h.unrealisedPct, 1)} on the ${formatInrCompact(h.invested)} invested now`
-          }
+          sub={h.unrealisedPct === null ? 'no cost recorded' : `${pct(h.unrealisedPct, 1)} overall`}
           cls={tone(h.unrealised)}
           est={h.unreconciled > 0}
           why={ex['invest.profit']}
         />
         <Cell
-          label={W.xirrInvested}
-          value={h.xirr === null ? '–' : pct(h.xirr, 1)}
+          label={TERMS.xirr.label}
+          value={h.xirr === null ? '–' : `${pct(h.xirr, 2).replace(/^\+/, '')} a year`}
           sub={
             h.xirr === null
               ? 'needs a start date or statement'
               : h.xirrEstimated
-                ? 'partly estimated'
-                : 'from statement transactions'
+                ? 'all purchases and sales · partly estimated'
+                : 'all purchases and sales'
           }
           cls={tone(h.xirr)}
           href={tabLinks.performance}
@@ -334,34 +342,34 @@ export function PortfolioHero({
           why={ex['invest.xirr']}
         />
         <Cell
-          label={W.booked}
+          label={TERMS.booked.label}
           value={h.realised.sales === 0 ? 'None' : rupees(h.realised.total)}
           sub={
             h.realised.sales === 0
               ? 'no sale on statements'
-              : `${h.realised.sales} sale line${h.realised.sales === 1 ? '' : 's'}${h.realised.unknown ? `, ${h.realised.unknown} cost unknown` : ''}`
+              : `from ${h.realised.sales} sale${h.realised.sales === 1 ? '' : 's'}${h.realised.unknown ? `, ${h.realised.unknown} cost unknown` : ''}`
           }
           cls={h.realised.sales === 0 ? null : tone(h.realised.total)}
           href={tabLinks.breakdown}
           why={ex['invest.booked']}
         />
         <Cell
-          label={W.profitAll}
+          label={TERMS.totalProfit.label}
           value={rupees(h.totalGain)}
-          sub="held plus booked"
+          sub="Profit + Booked profit"
           cls={tone(h.totalGain)}
           est={h.unreconciled > 0}
           why={ex['invest.totalGain']}
         />
         <Cell
-          label="SIP a month"
+          label={TERMS.sip.label}
           value={h.sipMonthly > 0 ? formatInrCompact(h.sipMonthly) : 'None'}
           {...(h.sipMonthly > 0 ? { exact: formatInr(Math.round(h.sipMonthly)) } : {})}
-          sub={h.sipMonthly > 0 ? 'running instalments' : 'no running SIP'}
+          sub={h.sipMonthly > 0 ? 'a month, running instalments' : 'no running SIP'}
           why={ex['invest.sip']}
         />
         <Cell
-          label="Long-term share"
+          label={TERMS.longTermShare.label}
           value={h.longShare === null ? '–' : `${Math.round(h.longShare * 100)}%`}
           sub={
             h.longShare === null
@@ -390,7 +398,8 @@ export function PortfolioHero({
       </dl>
 
       <p className="invhero-foot">
-        <b>Maturity value:</b> not applicable, because mutual funds have no fixed end date.
+        <b>{TERMS.maturityValue.label}:</b> not applicable, because mutual funds have no fixed end
+        date.
         {projection.length > 0 && (
           <>
             {' '}

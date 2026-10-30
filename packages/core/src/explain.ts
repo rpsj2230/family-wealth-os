@@ -279,7 +279,6 @@ export const FIGURES = {
     'fund.today',
     'fund.xirr',
     'fund.sip',
-    'fund.cagr',
     'fund.units',
     'fund.tax',
     'fund.booked',

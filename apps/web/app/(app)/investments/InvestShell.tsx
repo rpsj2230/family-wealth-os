@@ -517,7 +517,7 @@ function OverviewBody({
         <section className="card" aria-labelledby="ov-v">
           <div className="cardhead">
             <WhyHead why={ex['invest.valueChart']}>
-              <h2 id="ov-v">Value and money put in</h2>
+              <h2 id="ov-v">Current value and invested</h2>
             </WhyHead>
             <Link className="sectionlink" href={tabHref('performance')}>
               Performance
@@ -525,7 +525,7 @@ function OverviewBody({
           </div>
           <PlotChart
             unit="inr"
-            caption="Value of mutual funds against the money put in, whole history"
+            caption="Current value of mutual funds against invested, whole history"
             series={[
               {
                 key: 'value',

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  TERMS,
   clipSeries,
   formatInr,
   formatInrCompact,
@@ -152,7 +153,7 @@ export function PerformanceTab({
           why: ex['invest.chgChange'],
         },
     {
-      label: 'New money put in',
+      label: 'Added less withdrawn',
       value: c?.netIn === null || c?.netIn === undefined ? '–' : rupees(c.netIn),
       note:
         c?.netIn === null || c?.netIn === undefined
@@ -161,7 +162,7 @@ export function PerformanceTab({
       why: ex['invest.chgNewMoney'],
     },
     {
-      label: 'Made by the market',
+      label: TERMS.earned.label,
       value: c?.gain === null || c?.gain === undefined ? '–' : rupees(c.gain),
       note:
         c?.returnPct === null || c?.returnPct === undefined
@@ -326,7 +327,7 @@ export function PerformanceTab({
 
       <section className="card wide" aria-labelledby="gr">
         <div className="cardhead">
-          <h2 id="gr">Value and money put in</h2>
+          <h2 id="gr">Current value and invested</h2>
           <span className="small muted">{growth.rangeWords}</span>
         </div>
         <RangeSwitch
@@ -337,7 +338,7 @@ export function PerformanceTab({
         <div style={{ height: 14 }} />
         <PlotChart
           unit="inr"
-          caption={`Value of mutual funds against the money put in, ${growth.rangeWords}`}
+          caption={`Current value of mutual funds against invested, ${growth.rangeWords}`}
           series={[
             { key: 'value', name: 'Value', points: valuePoints, colour, area: true },
             { key: 'in', name: 'Money put in', points: investedPoints, colour: 'var(--viz-line)' },

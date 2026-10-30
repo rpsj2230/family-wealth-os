@@ -17,13 +17,13 @@ export function FundChart({
 }) {
   const series: TrendSeries[] = [
     {
-      name: 'Value',
+      name: 'Current value',
       colour: 'var(--primary, #4f46e5)',
       area: true,
       points: history.map((p) => ({ date: p.date, value: p.value })),
     },
     {
-      name: 'Money put in',
+      name: 'Invested',
       colour: '#64748b',
       points: history
         .filter((p) => p.invested !== null)

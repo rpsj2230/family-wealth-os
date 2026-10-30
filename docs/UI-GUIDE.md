@@ -194,7 +194,7 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Investments, Overview cards and Funds | `invest.dataCheck`, `invest.valueChart`, `invest.returns`, `invest.goals`, `invest.mix`, `invest.movers`, `invest.nextSips`, `invest.people`, `invest.fundsTable` |
 | Investments, Performance | `invest.pl`, `invest.monthGrid`, `invest.growth100`, `invest.drawdown`, `invest.risk`, `invest.rolling`, `invest.whatIf`, `invest.chgValue`, `invest.chgChange`, `invest.chgNewMoney`, `invest.chgMarket`, `invest.contrib`, `invest.pace` |
 | Investments, Breakdown | `invest.byKind`, `invest.byHouse`, `invest.byFund`, `invest.keyFigures`, `invest.plans`, `invest.ageing`, `invest.gainByFund`, `invest.longTermCard`, `invest.sipCard`, `invest.bookedCard` |
-| A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.cagr`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns` |
+| A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns` |
 | Investments, Value by period | `valuation.chart`, `valuation.table` |
 | Home, hero | `home.netWorth`, `home.today`, `home.earnedFy`, `home.ownMoney`, `home.profitSoFar`, `home.movement`, `home.verified` |
 | Home, How is my money growing? | `home.earningRate`, `home.fundsXirr`, `home.depositsXirr`, `home.savingsRate`, `home.xirr` |

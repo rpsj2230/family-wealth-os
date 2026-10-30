@@ -102,14 +102,14 @@ test.describe('the "?" explainer (public sample)', () => {
   }) => {
     await page.goto('/demo/investments');
     const hero = page.getByRole('region', { name: 'Mutual funds at a glance' });
-    await expect(hero).toContainText(/\d+% of today’s value is growth/);
-    await expect(hero).toContainText(/on ₹[\d.]+ (L|Cr) invested/);
+    await expect(hero).toContainText(/Invested \d+% and profit \d+% of the current value/);
+    await expect(hero).toContainText(/[+−][\d.]+%\s*overall/);
     // the rounded amounts carry the exact rupees
     await expect(hero.locator('dd.v[title^="₹"]').first()).toHaveAttribute('title', /₹[\d,]+/);
     await btn(page, 'invest.ring').scrollIntoViewIfNeeded();
     await btn(page, 'invest.ring').click();
-    await expect(panel(page)).toContainText('today’s value is growth');
-    await expect(panel(page)).toContainText('money put in');
+    await expect(panel(page)).toContainText('of the current value');
+    await expect(panel(page)).toContainText('overall');
     await inside(page);
   });
 

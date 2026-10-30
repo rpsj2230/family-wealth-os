@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
+  TERMS,
   addMonthsIso,
   formatInr,
   formatInrCompact,
@@ -38,7 +39,6 @@ import {
   type PeriodRow,
 } from './PerfParts';
 import './invest.css';
-import { MONEY_WORDS as W } from '@/lib/money-words';
 
 export const FUND_TABS = ['overview', 'returns', 'transactions', 'sip', 'lots', 'records'] as const;
 export type FundTab = (typeof FUND_TABS)[number];
@@ -122,13 +122,13 @@ function OwnPeriods({ rows }: { rows: FundReturns['own'] }) {
               Value at the start
             </th>
             <th scope="col" className="num">
-              Put in
+              {TERMS.added.label}
             </th>
             <th scope="col" className="num">
-              Taken out
+              {TERMS.withdrawn.label}
             </th>
             <th scope="col" className="num">
-              Value now
+              {TERMS.currentValue.label}
             </th>
             <th scope="col" className="num">
               Profit
@@ -148,13 +148,13 @@ function OwnPeriods({ rows }: { rows: FundReturns['own'] }) {
               <td className="num" data-label="Value at the start">
                 {r.sinceFirst ? '–' : inr(r.startValue)}
               </td>
-              <td className="num" data-label="Put in">
+              <td className="num" data-label={TERMS.added.label}>
                 {r.putIn > 0 ? inr(r.putIn) : '–'}
               </td>
-              <td className="num" data-label="Taken out">
+              <td className="num" data-label={TERMS.withdrawn.label}>
                 {r.takenOut > 0 ? inr(r.takenOut) : '–'}
               </td>
-              <td className="num" data-label="Value now">
+              <td className="num" data-label={TERMS.currentValue.label}>
                 {inr(r.endValue)}
               </td>
               <td className={`num ${tone(r.gain)}`} data-label="Profit">
@@ -262,7 +262,7 @@ export function FundPage({
       value={f.value}
       nav={f.nav}
       navDate={f.navDate}
-      sourceNote={`Value now: ${f.valueBasis}.`}
+      sourceNote={`${TERMS.currentValue.label}: ${f.valueBasis}.`}
     />
   );
 
@@ -272,7 +272,7 @@ export function FundPage({
         <Tile
           main
           why={ex['fund.value']}
-          label={W.valueToday}
+          label={TERMS.currentValue.label}
           value={
             <>
               {f.value ? inr(f.value) : '–'}
@@ -297,18 +297,22 @@ export function FundPage({
         />
         <Tile
           why={ex['fund.moneyIn']}
-          label={W.investedNow}
+          label={TERMS.invested.label}
           value={
             <>
               {f.invested ? inr(f.invested) : '–'}
               {f.invested ? estMark : null}
             </>
           }
-          sub={d.avgCost === null ? 'cost of the units held' : `average cost ${price(d.avgCost)}`}
+          sub={
+            d.avgCost === null
+              ? 'cost of the units held'
+              : `${TERMS.averageCost.label} ${price(d.avgCost)}`
+          }
         />
         <Tile
           why={ex['fund.profit']}
-          label={W.profitOnInvested}
+          label={TERMS.profit.label}
           value={
             <>
               {f.invested ? rupees(gain) : '–'}
@@ -316,18 +320,14 @@ export function FundPage({
             </>
           }
           cls={f.invested ? tone(gain) : null}
-          sub={
-            gainPct === null
-              ? 'no cost recorded'
-              : `${pct(gainPct, 1)} on the ${formatInrCompact(f.invested)} invested now`
-          }
+          sub={gainPct === null ? 'no cost recorded' : `${pct(gainPct, 1)} overall`}
         />
         <Tile
           why={ex['fund.xirr']}
-          label={W.xirrInvested}
+          label={TERMS.xirr.label}
           value={
             <>
-              {f.xirr === null ? '–' : pct(f.xirr, 1)}
+              {f.xirr === null ? '–' : `${pct(f.xirr, 2).replace(/^\+/, '')} a year`}
               {f.xirr !== null ? estMark : null}
             </>
           }
@@ -341,30 +341,24 @@ export function FundPage({
           }
         />
         <Tile
-          why={d.cagr !== null ? ex['fund.cagr'] : ex['fund.booked']}
-          label={d.cagr !== null ? 'Compound growth' : 'Booked by selling'}
+          why={ex['fund.booked']}
+          label={TERMS.booked.label}
           value={
-            d.cagr !== null
-              ? pct(d.cagr, 1)
-              : d.realised.sales === 0
-                ? 'None'
-                : rupees(d.realised.stcg + d.realised.ltcg + d.realised.other)
+            d.realised.sales === 0
+              ? 'None'
+              : rupees(d.realised.stcg + d.realised.ltcg + d.realised.other)
           }
           cls={
-            d.cagr !== null
-              ? tone(d.cagr)
-              : d.realised.sales === 0
-                ? null
-                : tone(d.realised.stcg + d.realised.ltcg + d.realised.other)
+            d.realised.sales === 0
+              ? null
+              : tone(d.realised.stcg + d.realised.ltcg + d.realised.other)
           }
           sub={
-            d.cagr !== null
-              ? `single investment on ${niceDate(d.cagrFrom)}`
-              : d.realised.sales === 0
-                ? f.hasStatement
-                  ? 'no sale on the statement'
-                  : 'needs a fund statement'
-                : `${d.realised.sales} sale line${d.realised.sales === 1 ? '' : 's'}`
+            d.realised.sales === 0
+              ? f.hasStatement
+                ? 'no sale on the statement'
+                : 'needs a fund statement'
+              : `from ${d.realised.sales} sale${d.realised.sales === 1 ? '' : 's'}`
           }
         />
         <Tile
@@ -503,7 +497,7 @@ export function FundPage({
               </div>
               <PlotChart
                 unit="inr"
-                caption={`${f.name}: your value against the money you put in${benchNow ? ' and the same money in the benchmark' : ''}`}
+                caption={`${f.name}: current value against invested${benchNow ? ' and the same money in the benchmark' : ''}`}
                 series={[
                   { key: 'value', name: 'Current value', colour, area: true, points: sh.value },
                   {
@@ -530,7 +524,7 @@ export function FundPage({
                   text: xirrWords(x, ret.since, x.date, valueOn.get(x.date), investedOn(x.date)),
                 }))}
                 note={[
-                  'Current value: what your units are worth on the day. Invested: the money you put in, less any taken out.',
+                  'Current value: what your units are worth on the day. Invested: the money added, less any withdrawn.',
                   sh.bench.length >= 2
                     ? `Benchmark: ${benchWords}, with every purchase and sale of yours made in it on the same day for the same amount.${ret.benchFrom ? ` Its prices start on ${niceDate(ret.benchFrom)}, so it starts then with your holding's value on that day.` : ''}`
                     : '',
@@ -549,10 +543,10 @@ export function FundPage({
           <p className="fundnote">
             {ret.basis === 'price'
               ? mine
-                ? `The figures below are the fund’s price return (the price of one unit) while your money has been in it, from your first purchase on ${niceDate(ret.since!)}. They ignore how much you put in and when; your own return is in the table above.`
+                ? `The figures below are the fund’s price return (the price of one unit) while your money has been in it, from your first purchase on ${niceDate(ret.since!)}. They ignore how much you invested and when; your own return is in the table above.`
                 : 'These are the fund’s own returns from its published prices over its whole history, including the years before you invested. They are not your return.'
-              : 'No published prices are loaded for this fund, so these returns are worked out from the values you recorded and the money put in'}
-            {ret.estimated && ', with the money put in estimated from the start date and SIP'}
+              : 'No published prices are loaded for this fund, so these returns are worked out from the values you recorded and the amounts invested'}
+            {ret.estimated && ', with the amounts invested estimated from the start date and SIP'}
             {ret.basis === 'values' ? '.' : ''}
           </p>
           <section className="card wide" aria-labelledby="fr">
@@ -689,9 +683,9 @@ export function FundPage({
                     <th>Bought</th>
                     <th className="num">Held for</th>
                     <th className="num">Units left</th>
-                    <th className="num">Cost</th>
-                    <th className="num">Value now</th>
-                    <th className="num">Gain</th>
+                    <th className="num">{TERMS.invested.label}</th>
+                    <th className="num">{TERMS.currentValue.label}</th>
+                    <th className="num">{TERMS.profit.label}</th>
                     {holdingMonths !== null && <th>Long-term from</th>}
                   </tr>
                 </thead>
@@ -711,13 +705,13 @@ export function FundPage({
                           <td className="num" data-label="Units left">
                             {units(r.unitsLeft!)}
                           </td>
-                          <td className="num" data-label="Cost">
+                          <td className="num" data-label={TERMS.invested.label}>
                             {r.gainNow === null ? '–' : inr(cost)}
                           </td>
-                          <td className="num" data-label={W.valueToday}>
+                          <td className="num" data-label={TERMS.currentValue.label}>
                             {inr(r.valueNow!)}
                           </td>
-                          <td className={`num ${tone(r.gainNow)}`} data-label="Gain">
+                          <td className={`num ${tone(r.gainNow)}`} data-label={TERMS.profit.label}>
                             {r.gainNow === null ? '–' : rupees(r.gainNow)}
                             <span className="fl-s">
                               {r.gainNowPct === null ? '' : pct(r.gainNowPct, 1)}
@@ -747,9 +741,9 @@ export function FundPage({
                   <tr>
                     <th>Bought</th>
                     <th className="num">Units</th>
-                    <th className="num">Cost</th>
-                    <th className="num">Value now</th>
-                    <th className="num">Gain</th>
+                    <th className="num">{TERMS.invested.label}</th>
+                    <th className="num">{TERMS.currentValue.label}</th>
+                    <th className="num">{TERMS.profit.label}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -767,13 +761,13 @@ export function FundPage({
                         <td className="num" data-label="Units">
                           {units(l.units)}
                         </td>
-                        <td className="num" data-label="Cost">
+                        <td className="num" data-label={TERMS.invested.label}>
                           {l.cost === null ? '–' : inr(l.cost)}
                         </td>
-                        <td className="num" data-label={W.valueToday}>
+                        <td className="num" data-label={TERMS.currentValue.label}>
                           {v === null ? '–' : inr(v)}
                         </td>
-                        <td className="num" data-label="Gain">
+                        <td className="num" data-label={TERMS.profit.label}>
                           {v === null || l.cost === null ? '–' : rupees(v - l.cost)}
                         </td>
                       </tr>
@@ -952,7 +946,7 @@ export function FundPage({
                     note: `${niceDate(t.firstOn)} to ${niceDate(t.lastOn)}`,
                   },
                   {
-                    label: 'Put in',
+                    label: TERMS.added.label,
                     value: inr(t.boughtAmount),
                     note: `${units(t.boughtUnits)} units`,
                   },

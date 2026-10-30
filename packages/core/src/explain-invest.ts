@@ -4,6 +4,7 @@
  * under them. Pure: the page passes the numbers and flags it already holds (the hero, the statistics block, the ledger verdicts,
  * lots basis, flows estimated); this file only puts them into words and never decides a figure differently.
  */
+import { TERMS } from './terms';
 import {
   explain,
   exDate,
@@ -394,41 +395,39 @@ function ringExplain(i: InvestExplainInput, c: Coverage): Explain {
   if (!h.split)
     return explain({
       id: 'invest.ring',
-      title: 'Your money and its growth',
-      what: 'How today’s value splits between the money you put in and what it has grown by.',
-      how: 'Not drawn: the money put in is needed to split the value, and it is not recorded.',
-      inputs: [{ label: 'Money put in', value: 'not recorded', basis: 'missing' }],
+      title: `${TERMS.invested.label} and ${TERMS.profit.label}`,
+      what: 'How the current value splits between what was invested and the profit on it.',
+      how: 'Not drawn: the amount invested is needed to split the value, and it is not recorded.',
+      inputs: [{ label: TERMS.invested.label, value: 'not recorded', basis: 'missing' }],
       level: 'missing',
-      completeness: 'Missing: the money put in (cost of the units held).',
+      completeness: 'Missing: the amount invested (cost of the units held).',
       fix: { label: 'Import a fund statement', href: i.links.import },
     });
-  const growth = Math.max(0, h.value - h.invested);
+  const profit = Math.max(0, h.value - h.invested);
   const loss = h.value < h.invested;
   return explain({
     id: 'invest.ring',
-    title: loss ? 'Your money and the shortfall' : 'Your money and its growth',
+    title: loss
+      ? `${TERMS.invested.label} and the loss`
+      : `${TERMS.invested.label} and ${TERMS.profit.label}`,
     exact: exInr(Math.abs(h.value - h.invested)),
     shown: compactIfBig(Math.abs(h.value - h.invested)),
-    what: 'How today’s value splits between the money you put in and the growth on it. The percentages are shares of today’s value.',
+    what: `How the current value splits between what was invested and the profit on it. The two shares are of the current value; the figure in the centre is the ${TERMS.overall.label.toLowerCase()}: ${TERMS.overall.hint}`,
     how: loss
-      ? `Money put in ${exInr(h.invested)} is more than today’s value ${exInr(h.value)}: no growth, a shortfall of ${exInr(h.invested - h.value)}. ${ratioHow({ label: 'value', amount: h.value }, { label: 'money put in', amount: h.invested }, 0, false)} of your money is left.`
-      : `${exPct(h.split.growth, 1)} of today’s value is growth: ${ratioHow({ label: 'growth', amount: growth }, { label: 'today’s value', amount: h.value }, 1, false)}. The other ${exPct(h.split.cost, 1)} is your money: ${ratioHow({ label: 'money put in', amount: h.invested }, { label: 'today’s value', amount: h.value }, 1, false)}. The ring rounds to ${Math.round(h.split.growth * 100)}%.`,
+      ? `Invested ${exInr(h.invested)} is more than the current value ${exInr(h.value)}: a loss of ${exInr(h.invested - h.value)}. ${ratioHow({ label: 'current value', amount: h.value }, { label: 'invested', amount: h.invested }, 0, false)} of what was invested is left.`
+      : `Profit: ${ratioHow({ label: 'profit', amount: profit }, { label: 'current value', amount: h.value }, 1, false)} of the current value. Invested: ${ratioHow({ label: 'invested', amount: h.invested }, { label: 'current value', amount: h.value }, 1, false)}. In the centre, the overall return: ${ratioHow({ label: 'profit', amount: profit }, { label: 'invested', amount: h.invested }, 1, false)} overall (${exSignedPct(h.unrealisedPct ?? 0, 1)}).`,
     inputs: [
-      { label: 'Today’s value', value: exInr(h.value), basis: 'calculated', to: i.today },
+      { label: TERMS.currentValue.label, value: exInr(h.value), basis: 'calculated', to: i.today },
       {
-        label: 'Money put in',
+        label: TERMS.invested.label,
         value: exInr(h.invested),
         basis: historyLevel(c) === 'complete' ? 'statement' : 'estimated',
       },
-      { label: 'Growth', value: exInr(growth), basis: 'calculated' },
+      { label: TERMS.profit.label, value: exInr(profit), basis: 'calculated' },
     ],
     level: historyLevel(c),
     completeness: historyText(c),
-    notes: [
-      loss
-        ? null
-        : `The headline percentage next to the profit is the same growth measured against the money put in (${exSignedPct(h.unrealisedPct ?? 0, 1)}), not against today’s value, so it is bigger than the ring’s ${Math.round(h.split.growth * 100)}%.`,
-    ],
+    notes: ['The overall return is total growth, however long it took; XIRR is the yearly rate.'],
     fix: fixFor(c, i.links),
   });
 }
