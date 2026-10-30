@@ -175,6 +175,29 @@ jobs:
                  round(sum(invested) / 1e5, 2) as cost_lakh, min(nav_on) as oldest_price, max(nav_on) as newest_price
             from n group by rollup (owner, platform, goals) order by owner nulls last, platform nulls last, goals nulls last;
           SQL
+      - name: Running deposits (totals only)
+        run: |
+          url="$(scripts/db-url.sh)"
+          psql "$url" -v ON_ERROR_STOP=0 <<'SQL'
+          \echo '== running fixed deposits: principal, maturity value (bank figure, else from the terms), weighted rate, by kind and by when they mature (totals)'
+          with d as (
+            select a.account_kind, f.principal, f.rate, f.maturity_on, f.payout, f.bank_maturity_amount,
+                   coalesce(f.bank_maturity_amount,
+                     case when f.payout <> 'cumulative' then f.principal
+                          when f.compounding = 'simple' then f.principal * (1 + f.rate * (f.maturity_on - f.booked_on) / 365.0)
+                          else f.principal * power(1 + f.rate / (case f.compounding when 'monthly' then 12 when 'quarterly' then 4 when 'half_yearly' then 2 else 1 end),
+                                                   (case f.compounding when 'monthly' then 12 when 'quarterly' then 4 when 'half_yearly' then 2 else 1 end) * (f.maturity_on - f.booked_on) / 365.0) end) as at_maturity
+              from public.fixed_deposits f join public.assets a on a.id = f.asset_id
+             where a.status = 'active' and f.maturity_on >= current_date
+          )
+          select coalesce(account_kind, '(not set)') as kind, count(*) as deposits, round(sum(principal) / 1e5, 2) as principal_lakh,
+                 round(sum(at_maturity) / 1e5, 2) as maturity_lakh, count(bank_maturity_amount) as bank_figure_entered,
+                 round(100 * sum(principal * rate) / nullif(sum(principal), 0), 2) as avg_rate_pct,
+                 round(sum(principal) filter (where maturity_on <= current_date + 30) / 1e5, 2) as matures_30d_lakh,
+                 round(sum(principal) filter (where maturity_on <= current_date + 90) / 1e5, 2) as matures_90d_lakh,
+                 round(sum(principal) filter (where maturity_on <= current_date + 365) / 1e5, 2) as matures_1y_lakh
+            from d group by rollup (account_kind) order by 1;
+          SQL
       - name: Compare with a platform's own figures (ratios only)
         if: inputs.expected != ''
         env:
