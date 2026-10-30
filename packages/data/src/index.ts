@@ -599,3 +599,4 @@ export * from './statement-save';
 export * from './remittance-store';
 export * from './trail-store';
 export * from './needed-store';
+export * from './household-client';

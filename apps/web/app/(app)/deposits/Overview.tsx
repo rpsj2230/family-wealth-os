@@ -5,17 +5,19 @@ import {
   formatInr,
   formatInrCompact,
   formatPct,
+  LADDER_DAYS,
   type BankGrowth,
+  type DepositsVsBest,
   type BankOverview as Overview,
   type BankShare,
   type ExplainSet,
   type MaturityYear,
   type PersonStyle,
 } from '@fwos/core';
-import { SplitBar, plural, signedShort, whole } from '@/app/(app)/accounts/BankOverview';
+import { SplitBar, Stat, plural, whole } from '@/app/(app)/accounts/BankOverview';
 import '@/app/(app)/accounts/bankoverview.css';
 import './overview.css';
-import { Extra, Extras, HeadlinePanel, Pill, Tile } from '@/components/MoneyHeadline';
+import { Extra, Extras, HeadlinePanel, Pill, Tile, signed } from '@/components/MoneyHeadline';
 import { PersonBadge } from '@/components/Person';
 import { WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
@@ -36,7 +38,13 @@ export function DepositOverviewPanel({
   sample = false,
   ex,
   growth = null,
+  fyInterest = null,
+  vsBest = null,
 }: {
+  /** interest of the running deposits in this financial year, earned and to come (core deposit-extras.ts) */
+  fyInterest?: { fy: string; earned: number; total: number } | null;
+  /** each running deposit against today's best offer for the same term (core deposit-extras.ts) */
+  vsBest?: DepositsVsBest | null;
   ex: ExplainSet<'deposits'>;
   /** the deposits' XIRR, interest this FY and average rates (core bank-growth.ts); null draws the page without them */
   growth?: BankGrowth | null;
@@ -44,7 +52,13 @@ export function DepositOverviewPanel({
   banks: BankShare[];
   ladder: MaturityYear[];
   /** insurance position of the whole household (the person filter does not narrow it) */
-  cover: { limit: number; uninsured: number; banksOver: number };
+  cover: {
+    limit: number;
+    uninsured: number;
+    banksOver: number;
+    holdings: number;
+    holdingsOver: number;
+  };
   toConfirm: number;
   styles: Record<string, PersonStyle>;
   scope?: string | null;
@@ -58,7 +72,13 @@ export function DepositOverviewPanel({
   const biggest = Math.max(1, ...ladder.map((s) => s.amount));
   const topShare = Math.max(0.0001, banks[0]?.share ?? 0);
   const r = growth?.rates;
-  const kinds = [r?.nre ? `${r.nre.count} NRE` : null, r?.nro ? `${r.nro.count} NRO` : null]
+  // every running deposit is named: NRE, NRO, and those whose type is not set yet
+  const typed = (r?.nre?.count ?? 0) + (r?.nro?.count ?? 0);
+  const kinds = [
+    r?.nre ? `${r.nre.count} NRE` : null,
+    r?.nro ? `${r.nro.count} NRO` : null,
+    r && o.deposits > typed ? `${o.deposits - typed} type not set` : null,
+  ]
     .filter(Boolean)
     .join(', ');
 
@@ -75,49 +95,49 @@ export function DepositOverviewPanel({
           <Pill
             amount={o.profit}
             pct={o.profitPct}
+            pctNote="overall"
             label={TERMS.profitInterest.label}
+            extra={
+              growth?.fd
+                ? ` · ${TERMS.xirr.label} ${formatPct(growth.fd.rate, 2)} a year`
+                : undefined
+            }
             why={ex['deposits.profit']}
+            extraWhy={ex['deposits.xirr']}
             testId="dv-profit"
-          />
-          <Pill
-            amount={o.today.change}
-            pct={o.today.changePct}
-            label={TERMS.todayChange.label}
-            why={ex['deposits.today']}
-            testId="dv-today"
           />
         </div>
         <p className="hl-asof">
           {empty
             ? 'No deposit is running.'
-            : `${plural(o.deposits, 'running deposit')}${kinds ? ` (${kinds})` : ''} in ${plural(banks.length, 'bank')} · est.`}
+            : `${plural(o.deposits, 'running deposit')}${kinds ? ` (${kinds})` : ''} · est. · maturity amounts from the bank for ${o.maturityFromBank === o.deposits ? `all ${o.deposits}` : `${o.maturityFromBank} of ${o.deposits}, the rest worked out from their terms`}`}
         </p>
         <ul className="hl-tiles" aria-label="The deposits in figures">
           <Tile
             label={TERMS.investedPrincipal.label}
             value={formatInr(Math.round(o.invested))}
-            sub={`${plural(o.deposits, 'running deposit')}`}
+            sub={null}
             why={ex['deposits.invested']}
             testId="dv-tile-invested"
           />
           <Tile
             label={TERMS.maturityValue.label}
             value={formatInr(Math.round(o.maturity))}
-            sub={`${TERMS.totalInterest.label} ${formatInrCompact(o.interest.total)}${o.interest.journey !== null ? ` · ${formatPct(o.interest.journey, 0)} earned so far` : ''}`}
+            sub={`${TERMS.totalInterest.label} ${formatInr(Math.round(o.interest.total))}${o.interest.journey !== null ? ` · ${formatPct(o.interest.journey, 0)} earned so far` : ''}`}
             why={ex['deposits.maturity']}
             testId="dv-tile-maturity"
           />
           <Tile
             label={TERMS.interestToCome.label}
             value={formatInr(Math.round(o.interest.toEarn))}
-            sub="until every deposit matures"
+            sub={null}
             why={ex['deposits.toEarn']}
             testId="dv-tile-tocome"
           />
           <Tile
             label={`${TERMS.interestEarned.label} this FY`}
-            value={growth?.interestFy ? signedShort(growth.interestFy.deposits) : '–'}
-            sub={r?.nro ? 'NRO part taxable · NRE tax-free' : 'since 1 April'}
+            value={growth?.interestFy ? signed(growth.interestFy.deposits) : '–'}
+            sub={r?.nro ? 'NRO part taxable' : 'NRE interest is tax-free'}
             why={ex['deposits.interestFy']}
             testId="dv-tile-fy"
           />
@@ -139,9 +159,9 @@ export function DepositOverviewPanel({
             testId="dv-tile-rate"
           />
           <Tile
-            label={`Maturing in ${plural(o.soon.days, 'day')}`}
-            value={o.soon.count === 0 ? 'None' : formatInr(Math.round(o.soon.amount))}
-            sub={o.soon.count === 0 ? 'nothing falls due soon' : plural(o.soon.count, 'deposit')}
+            label="Maturing"
+            value={formatInrCompact(o.maturingPrincipal.d30)}
+            sub={`${LADDER_DAYS.d30} days · ${formatInrCompact(o.maturingPrincipal.d90)} in ${LADDER_DAYS.d90} days · ${formatInrCompact(o.maturingPrincipal.d365)} in a year`}
             href={to('/deposits?tab=maturities')}
             why={ex['deposits.soon']}
             testId="dv-tile-soon"
@@ -153,7 +173,7 @@ export function DepositOverviewPanel({
             value={cover.uninsured > 0 ? formatInrCompact(cover.uninsured) : 'None'}
             sub={
               cover.uninsured > 0
-                ? `deposits and savings, in ${plural(cover.banksOver, 'bank')}`
+                ? `deposits and savings, ${cover.holdingsOver} of ${cover.holdings} holdings`
                 : `all within ${formatInr(cover.limit)} per bank and name`
             }
             warn={cover.uninsured > 0}
@@ -162,43 +182,35 @@ export function DepositOverviewPanel({
             testId="dv-x-insured"
           />
           <Extra
-            label={TERMS.xirr.label}
-            value={growth?.fd ? `${formatPct(growth.fd.rate, 2)} a year` : '–'}
-            sub="from each booking date to today"
-            why={ex['deposits.xirr']}
-            testId="dv-x-xirr"
-          />
-          <Extra
-            label="Next maturity"
-            value={o.next ? formatInrCompact(o.next.amount) : '–'}
+            label="Interest by financial year"
+            value={fyInterest ? formatInrCompact(fyInterest.total) : '–'}
             sub={
-              o.next
-                ? `${niceDate(o.next.date)} · ${o.next.days === 0 ? 'today' : `in ${plural(o.next.days, 'day')}`} · ${o.next.bank}${o.next.count > 1 ? ` and ${o.next.count - 1} more` : ''}`
-                : 'no deposit is running'
+              fyInterest
+                ? `FY ${fyInterest.fy}, earned and to come · every year on Reports, for your tax return`
+                : 'for your tax return'
             }
-            href={to('/deposits?tab=maturities')}
-            why={ex['deposits.next']}
-            testId="dv-x-next"
+            href={to('/reports')}
+            testId="dv-x-fy"
           />
           <Extra
-            label="To confirm"
-            value={toConfirm === 0 ? 'None' : String(toConfirm)}
-            sub={toConfirm === 0 ? 'nothing waiting' : 'matured: say where the money went'}
-            warn={toConfirm > 0}
-            href={to('/deposits?tab=maturities')}
-            why={ex['deposits.toConfirm']}
-            testId="dv-x-confirm"
-          />
-          <Extra
-            label="Largest bank"
-            value={banks[0] ? formatPct(banks[0].share, 0) : '–'}
+            label="Your rate vs today's best"
+            value={
+              !vsBest || vsBest.compared === 0
+                ? 'No offers'
+                : vsBest.below === 0
+                  ? 'At the best'
+                  : `+${formatInrCompact(vsBest.moreAYear)} a year`
+            }
             sub={
-              banks[0]
-                ? `${banks[0].bank} holds ${formatInrCompact(banks[0].current)}`
-                : 'no bank yet'
+              !vsBest || vsBest.compared === 0
+                ? 'same term, from the Rates page: no offer on file for these terms'
+                : vsBest.below === 0
+                  ? `all ${plural(vsBest.compared, 'deposit')} at or above today's best for their term`
+                  : `${vsBest.below} of ${vsBest.compared} below today's best for the same term, after tax · from the Rates page`
             }
-            why={ex['deposits.largest']}
-            testId="dv-x-largest"
+            warn={!!vsBest && vsBest.below > 0}
+            href={to('/rates')}
+            testId="dv-x-best"
           />
         </Extras>
       </HeadlinePanel>
@@ -246,6 +258,48 @@ export function DepositOverviewPanel({
             </>
           )}
         </div>
+
+        <dl className="bv-grid" aria-label="More figures">
+          <Stat
+            label={TERMS.todayChange.label}
+            value={`${o.today.change < 0 ? '−' : '+'}${formatInr(Math.abs(Math.round(o.today.change)))}`}
+            sub={
+              o.today.changePct !== null
+                ? `${formatPct(o.today.changePct, 2)} today · est.`
+                : 'est.'
+            }
+            why={ex['deposits.today']}
+          />
+          <Stat
+            label="Next maturity"
+            value={o.next ? formatInrCompact(o.next.amount) : '–'}
+            sub={
+              o.next
+                ? `${niceDate(o.next.date)} · ${o.next.days === 0 ? 'today' : `in ${plural(o.next.days, 'day')}`} · ${o.next.bank}${o.next.count > 1 ? ` and ${o.next.count - 1} more` : ''}`
+                : 'no deposit is running'
+            }
+            href={to('/deposits?tab=maturities')}
+            why={ex['deposits.next']}
+          />
+          <Stat
+            label="To confirm"
+            value={toConfirm === 0 ? 'None' : String(toConfirm)}
+            sub={toConfirm === 0 ? 'nothing waiting' : 'matured: say where the money went'}
+            tone={toConfirm > 0 ? 'warn' : undefined}
+            href={to('/deposits?tab=maturities')}
+            why={ex['deposits.toConfirm']}
+          />
+          <Stat
+            label="Largest bank"
+            value={banks[0] ? formatPct(banks[0].share, 0) : '–'}
+            sub={
+              banks[0]
+                ? `${banks[0].bank} holds ${formatInrCompact(banks[0].current)}`
+                : 'no bank yet'
+            }
+            why={ex['deposits.largest']}
+          />
+        </dl>
 
         {!empty && (
           <div className="dv-pair">

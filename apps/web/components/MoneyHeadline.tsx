@@ -57,6 +57,8 @@ export function Pill({
   why,
   testId,
   extra,
+  extraWhy,
+  pctNote,
 }: {
   amount: number;
   pct: number | null;
@@ -65,6 +67,10 @@ export function Pill({
   testId: string;
   /** a few words after the label ("· XIRR 7.59% a year") */
   extra?: string | undefined;
+  /** the "?" of the extra words (the XIRR after a profit), shown after them */
+  extraWhy?: Explain | undefined;
+  /** what kind of percentage it is, written after it: "overall" gives "(+7.8% overall)" */
+  pctNote?: string | undefined;
 }) {
   const dir = Math.round(amount) > 0 ? 'up' : Math.round(amount) < 0 ? 'down' : 'flat';
   return (
@@ -75,11 +81,12 @@ export function Pill({
           {dir === 'up' ? 'Up ' : dir === 'down' ? 'Down ' : 'No change '}
         </span>{' '}
         {signed(amount)}
-        {pct !== null && ` (${signedPct(pct, 2)})`}
+        {pct !== null && ` (${signedPct(pct, pctNote ? 1 : 2)}${pctNote ? ` ${pctNote}` : ''})`}
       </span>{' '}
       <span className="hl-pl">{label}</span>
-      {extra ? <span className="hl-small">{extra}</span> : null}
       {why && <Why explain={why} tone="on-dark" />}
+      {extra ? <span className="hl-small">{extra}</span> : null}
+      {extra && extraWhy && <Why explain={extraWhy} tone="on-dark" />}
     </span>
   );
 }

@@ -2,6 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   bankOverview,
+  coverCounts,
+  depositInterestThisFy,
+  depositsVsBest,
+  runningDeposits,
   DEFAULT_CONFIG,
   depositsByBank,
   filterBlocksByOwner,
@@ -17,6 +21,7 @@ import {
   type DepositLinks,
 } from '@/app/(app)/deposits/Parts';
 import { DemoShell } from '@/components/DemoShell';
+import { DEMO_OFFERS, DEMO_RATE_PREFS } from '@/lib/demo-rates';
 import { HiddenDepositsNote } from '@/components/HiddenDepositsNote';
 import { ListingTools } from '@/components/ListingTools';
 import { PageHead } from '@/components/PageHead';
@@ -98,6 +103,9 @@ export default async function DemoDeposits({
   });
   const todayIso = DEMO_TODAY.toISOString().slice(0, 10);
   const depBanks = depositsByBank(scoped, todayIso);
+  const running = runningDeposits(scoped);
+  const fyInterest = depositInterestThisFy(running, todayIso);
+  const vsBest = depositsVsBest(running, DEMO_OFFERS, DEMO_RATE_PREFS.nroTaxRate);
   const depLadder = maturityLadder(scoped);
   const growth = demoBankGrowth({
     owner: who && tab !== 'cover' ? who : null,
@@ -116,7 +124,7 @@ export default async function DemoDeposits({
     }),
     true,
     {
-      cover: { limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks },
+      cover: { limit: v.cover.limit, uninsured: v.cover.uninsured, ...coverCounts(v.cover) },
       toConfirm: s.confirm.length,
       banks: depBanks,
       ladder: depLadder,
@@ -150,10 +158,12 @@ export default async function DemoDeposits({
       <DepositOverviewPanel
         ex={exD}
         growth={growth}
+        fyInterest={fyInterest}
+        vsBest={vsBest}
         o={overview}
         banks={depBanks}
         ladder={depLadder}
-        cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, banksOver: overBanks }}
+        cover={{ limit: v.cover.limit, uninsured: v.cover.uninsured, ...coverCounts(v.cover) }}
         toConfirm={s.confirm.length}
         styles={m.styles}
         scope={who ? (m.styles[who]?.name ?? null) : null}

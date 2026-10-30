@@ -848,7 +848,14 @@ export interface HomeExtras {
   available30: { total: number; cash: number; deposits: number };
   maturing30: { count: number; principal: number };
   maturing90: { count: number; principal: number };
-  aboveInsured: { amount: number; banks: number; limit: number };
+  aboveInsured: {
+    amount: number;
+    banks: number;
+    limit: number;
+    /** bank-and-name holdings, and how many are over the limit */
+    holdings: number;
+    holdingsOver: number;
+  };
   nre: number;
   nro: number;
   /** holdings valued but left out of net worth by Settings (property, unless counted) */

@@ -46,7 +46,19 @@ test.describe('Accounts: the money-in-banks overview (public sample)', () => {
     await expect(p.locator('.hl-asof')).toContainText('· est.');
     await expect(p.locator('.hl-pill.up .sr-only').first()).toHaveText(/Up/);
     // the window for "maturing in" comes from Settings (30 days by default), it is not written into the page
-    await expect(p.getByText(/Maturing in 30 days/)).toBeVisible();
+    await expect(p.getByTestId('bv-tile-soon')).toContainText(
+      /Maturing soon.*in 30 days · ₹[\d,]+ in 90 days \(principal\)/,
+    );
+    // insured limit counted by bank-and-name holdings, as in the approved design
+    await expect(p.getByTestId('bv-x-insured')).toContainText(
+      /\d+ of \d+ bank-and-name holdings|all within/,
+    );
+    // by bank and by person: current value, profit, average rate and the deposits' XIRR for each
+    const by = p.getByTestId('bv-by');
+    await expect(by.getByRole('table', { name: 'By bank' })).toBeVisible();
+    // on a phone the rows become cards, so each figure is checked by its label, which shows at every width
+    for (const h of ['Current value', 'Profit', 'Average interest rate', 'Deposits XIRR'])
+      expect(await by.locator(`td[data-label="${h}"]`).count()).toBeGreaterThan(0);
     // the bars have a text alternative that names every share
     await expect(
       p.getByRole('img', { name: /Where the money sits: Savings and cash \d+%/ }),

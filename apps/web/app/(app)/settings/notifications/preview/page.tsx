@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { DEFAULT_APP_URL, buildDigestEmail } from '@fwos/core';
+import { DEFAULT_APP_URL, buildDigestEmail, withHome } from '@fwos/core';
 import { buildDigestInput } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DigestFrames } from '@/components/DigestFrames';
 import { PageHead } from '@/components/PageHead';
 import { niceDate } from '@/lib/dates';
 import { loadContext } from '@/lib/data';
+import { loadHome } from '@/lib/home-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,14 +26,18 @@ export default async function DigestPreviewPage() {
     include_goals?: boolean | null;
   } | null;
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore' }).format(new Date());
-  const input = await buildDigestInput(supabase as unknown as SupabaseClient, {
-    date,
-    householdName: (h.data as { name: string } | null)?.name ?? 'Household',
-    appUrl: DEFAULT_APP_URL,
-    includeRetirement: set?.include_retirement ?? true,
-    includeGoals: set?.include_goals ?? true,
-  });
-  const email = buildDigestEmail(input);
+  // the money figures are Home's, from Home's own loader, as in the 08:30 job; without them the e-mail leaves those lines out
+  const [input, home] = await Promise.all([
+    buildDigestInput(supabase as unknown as SupabaseClient, {
+      date,
+      householdName: (h.data as { name: string } | null)?.name ?? 'Household',
+      appUrl: DEFAULT_APP_URL,
+      includeRetirement: set?.include_retirement ?? true,
+      includeGoals: set?.include_goals ?? true,
+    }),
+    loadHome(supabase, '1Y').catch(() => null),
+  ]);
+  const email = buildDigestEmail(withHome(input, home));
   return (
     <>
       <PageHead

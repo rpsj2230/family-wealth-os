@@ -10,13 +10,14 @@ import {
   depositCover,
   holdingsFromAssets,
   summariseGoals,
+  withHome,
   type DigestInput,
   type DigestSources,
   type GoalSummary,
 } from '@fwos/core';
 import { demoModel } from './demo-fixture';
 import { demoHomeInput } from './demo-home';
-import type { HomeInput } from './home';
+import { buildHome, type HomeInput } from './home';
 
 /** The funds as the digest counts them, read from the same view Home draws. */
 export function digestFunds(inv: HomeInput['inv']): DigestSources['funds'] {
@@ -113,7 +114,11 @@ export function demoDigestSources(over: Partial<DigestSources> = {}): DigestSour
   };
 }
 
-/** The invented summary the sample page and the browser test draw. */
+/**
+ * The invented summary the sample page and the browser test draw. Its money figures (net worth, today's change, the four kinds, own
+ * money, lifetime profit, the XIRRs, the earning rate now, what matures in 30 days) are read off Home's model of the same household,
+ * as the real summary's are.
+ */
 export function demoDigestInput(over: Partial<DigestSources> = {}): DigestInput {
-  return assembleDigest(demoDigestSources(over));
+  return withHome(assembleDigest(demoDigestSources(over)), buildHome(demoHomeInput('1Y')));
 }

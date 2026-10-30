@@ -194,7 +194,7 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Investments, Overview cards and Funds | `invest.dataCheck`, `invest.valueChart`, `invest.returns`, `invest.goals`, `invest.mix`, `invest.movers`, `invest.nextSips`, `invest.people`, `invest.fundsTable` |
 | Investments, Performance | `invest.pl`, `invest.monthGrid`, `invest.growth100`, `invest.drawdown`, `invest.risk`, `invest.rolling`, `invest.whatIf`, `invest.chgValue`, `invest.chgChange`, `invest.chgNewMoney`, `invest.chgMarket`, `invest.contrib`, `invest.pace` |
 | Investments, Breakdown | `invest.byKind`, `invest.byHouse`, `invest.byFund`, `invest.keyFigures`, `invest.plans`, `invest.ageing`, `invest.gainByFund`, `invest.longTermCard`, `invest.sipCard`, `invest.bookedCard` |
-| A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns` |
+| A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns`, `fund.benchXirr`, `fund.longTerm`, `fund.fundReturn` |
 | Investments, Value by period | `valuation.chart`, `valuation.table` |
 | Home, hero | `home.netWorth`, `home.today`, `home.earnedFy`, `home.ownMoney`, `home.profitSoFar`, `home.movement`, `home.verified` |
 | Home, How is my money growing? | `home.earningRate`, `home.fundsXirr`, `home.depositsXirr`, `home.savingsRate`, `home.xirr` |
@@ -208,6 +208,8 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Monthly update | `monthly.status`, `monthly.freshness` |
 | New money | `newmoney.options`, `newmoney.better`, `newmoney.room` |
 | Rates | `rates.freshness`, `rates.best` |
+| A fixed deposit's page | `fd.value`, `fd.profit`, `fd.invested`, `fd.maturity`, `fd.toCome`, `fd.interestFy`, `fd.afterTax`, `fd.insured` |
+| A savings account's page | `savings.value`, `savings.today`, `savings.balance`, `savings.rate`, `savings.interestFy`, `savings.vsDeposits` |
 
 Not yet covered (no "?" on these pages): Goals, I need money (Raise), Can I retire now, Lent, policies and property (Others), the Tax filing papers, Settings, the Import pages, the AI cost page, the monthly grid's per-row estimates and the per-bank pages. They show the same figures as the covered pages in places (net worth, deposit values) but their own derived numbers have no explainer yet.
 

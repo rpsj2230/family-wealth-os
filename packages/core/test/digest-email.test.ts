@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DigestInput } from '../src/digest';
+import { buildDigest, type DigestInput } from '../src/digest';
+import { familyFromHome, familyLines, withHome, type HomeFigures } from '../src/digest-family';
 import { DIGEST_TEXT_LIMIT, buildDigestEmail, emailProblems } from '../src/digest-email';
 import { goalCard, retirementCard, type DigestGoalCard } from '../src/digest-goals';
 import type { DigestWealth } from '../src/digest-wealth';
@@ -117,7 +118,9 @@ describe('the hero and the tiles', () => {
     expect(text).toContain('₹62,00,000');
     expect(text).toMatch(/▲ \+₹9,500 \(\+0\.2%\)/);
     expect(text).toMatch(/Profit \(overall\) ▲ \+₹[\d.]+ L \(\+\d+\.\d%\)/);
-    expect(text).toContain('invested in deposits and funds');
+    expect(text).toContain('of the deposits and funds held');
+    // without Home's family figures it names the holdings' profit, and claims nothing about Home's figures
+    expect(text).not.toMatch(/same as (on )?Home/i);
   });
 
   it('shows the header, with the date, "values as of" and the late-input chip', () => {
@@ -147,8 +150,8 @@ describe('the hero and the tiles', () => {
 
   it('shows the funds tile with today and the overall profit and per cent', () => {
     expect(text).toMatch(/In mutual funds ₹19\.00 L 31% of total/);
-    expect(text).toMatch(/Today ▲ \+₹8,000/);
-    expect(text).toMatch(/Overall \+₹4\.00 L \(\+26\.7%\)/);
+    expect(text).toMatch(/Today’s change ▲ \+₹8,000/);
+    expect(text).toMatch(/Profit \+₹4\.00 L \(\+26\.7% overall\)/);
   });
 
   it('draws a fall in red with a down arrow and a true minus sign', () => {
@@ -512,9 +515,10 @@ describe('safety of the HTML and the text', () => {
     });
     const e = buildDigestEmail(w);
     expect(e.text.split('\n')[0]).toBe('Family Wealth Summary · 27 Oct 2026');
-    expect(e.text).toMatch(/Net worth {3}₹62\.00 L {2}\(₹62,00,000\)/);
-    expect(e.text).toMatch(/Today {7}\+₹9,500 \(\+0\.2%\)/);
-    expect(e.text).toMatch(/Overall {5}\+₹[\d.]+ L \(\+[\d.]+%\) on ₹[\d.]+ L put in/);
+    expect(e.text).toMatch(/Net worth {7}₹62\.00 L {2}\(₹62,00,000\)/);
+    expect(e.text).toMatch(/Today’s change {2}\+₹9,500 \(\+0\.2%\)/);
+    expect(e.text).toMatch(/Profit {10}\+₹[\d.]+ L \(\+[\d.]+% overall\) on ₹[\d.]+ L invested/);
+    expect(e.text).not.toMatch(/put in/);
     expect(e.text).toMatch(/FDs +₹23\.00 L +37%/);
     expect(e.text).toMatch(/Savings +₹10\.00 L +16%/);
     expect(e.text).toMatch(/Mutual funds +₹19\.00 L +31%/);
@@ -524,7 +528,7 @@ describe('safety of the HTML and the text', () => {
 
   it('gives the plain-text part for every HTML part (the figures are all in it)', () => {
     const e = buildDigestEmail(full());
-    for (const needle of ['₹62.00 L', 'Today', 'Overall', 'GOALS', 'NEEDS YOU', 'Open the portal'])
+    for (const needle of ['₹62.00 L', 'Today', 'Profit', 'GOALS', 'NEEDS YOU', 'Open the portal'])
       expect(e.text).toContain(needle);
   });
 });
@@ -575,5 +579,135 @@ describe('foreign cash under the savings tile', () => {
     expect(two.text).toContain('US$ 2,000');
     expect(two.text.length).toBeLessThanOrEqual(DIGEST_TEXT_LIMIT);
     expect(two.chat.length).toBeLessThanOrEqual(DIGEST_TEXT_LIMIT);
+  });
+});
+
+describe('the family figures of money words v6 (from Home’s model)', () => {
+  // the example of the approved proposal, put into Home's shape
+  const total = 34_425_616;
+  const todayAmount = 37_397;
+  const home: HomeFigures = {
+    total,
+    change: {
+      today: {
+        amount: todayAmount,
+        pct: todayAmount / (total - todayAmount),
+        banks: 5_138,
+        funds: 32_259,
+      },
+    },
+    money: { invested: 22_083_070, profit: 2_259_258, profitPct: 0.102, estimated: true },
+    classes: wealthOf(total, {
+      fd: part(31, 18_179_862, 19_599_590),
+      cash: part(12, 9_637_907, 9_637_907),
+      funds: {
+        count: 20,
+        invested: 3_903_209,
+        value: 4_742_739,
+        today: 32_259,
+        withoutStatement: 0,
+      },
+    }).classes,
+    capital: {
+      totals: { ownMoney: 24_724_505, profit: 9_701_111, profitPct: 9_701_111 / 24_724_505 },
+      opening: { date: '2017-04-01', value: 1_000_000, coverage: { withValue: 1, of: 1 } },
+    },
+    growth: {
+      all: { rate: 0.0766, perYear: 2_636_000 },
+      fd: 0.0759,
+      funds: 0.1256,
+      savings: { rate: 0.0574, kind: 'rate', estimated: false, basis: 'earned this FY' },
+      own: { rate: 0.0665, since: '2017-04-01' },
+    },
+    extras: {
+      earnedFy: {
+        total: 1_963_340,
+        pct: 0.053,
+        deposits: 744_869,
+        funds: 452_591,
+        savings: 321_190,
+        other: 444_690,
+      },
+      maturing30: { count: 3, principal: 3_600_000 },
+    },
+  };
+  const LINES = [
+    'Net worth ₹3,44,25,616 · Today’s change +₹37,397 (+0.11%) · Earned this FY +₹19,63,340',
+    'Own money ₹2,47,24,505 · Lifetime profit +₹97,01,111 (+39.2% overall) · XIRR on own money 6.65% · Earning rate now 7.66%',
+    'Fixed deposits ₹1,95,99,590 (Profit +₹14,19,728, XIRR 7.59%) · Mutual funds ₹47,42,739 (Profit +₹8,39,530, XIRR 12.56%) · Savings ₹96,37,907 (5.74%)',
+    'Maturing in the next 30 days: ₹36,00,000',
+  ];
+  const input = withHome(base(), home);
+  const e = buildDigestEmail(input);
+
+  it('reads the figures off Home’s model, not working them out again', () => {
+    expect(input.wealth!.total).toBe(home.total);
+    expect(input.wealth!.classes).toBe(home.classes);
+    expect(input.family).toEqual(familyFromHome(home));
+    expect(input.family!.own!.lifetimeProfit).toBe(home.capital.totals.profit);
+    expect(input.family!.xirrOwn).toBe(home.growth.own.rate);
+    expect(input.family!.earningRate).toBe(home.growth.all!.rate);
+    expect(withHome(base(), null)).toEqual(base());
+  });
+
+  it('writes the four lines, word for word, in the text part, Telegram and the WhatsApp message', () => {
+    expect(familyLines(input.wealth!.total, input.wealth!.today, input.family!)).toEqual(LINES);
+    const at = e.text.split('\n').indexOf(LINES[0]!);
+    expect(at).toBeGreaterThan(0);
+    expect(e.text.split('\n').slice(at, at + 4)).toEqual(LINES);
+    const chat = buildDigest(input).whatsapp.split('\n');
+    const c = chat.indexOf(LINES[0]!);
+    expect(chat.slice(c, c + 4)).toEqual(LINES);
+    expect(e.text).not.toMatch(/put in|same as (on )?Home/i);
+  });
+
+  it('shows the same figures in the e-mail, each under its own name', () => {
+    const text = strip(e.html);
+    expect(text).toMatch(/Today’s change ▲ \+₹37,397 \(\+0\.11%\)/);
+    expect(text).toMatch(/Earned this FY ▲ \+₹19,63,340/);
+    expect(text).toMatch(/Own money ₹2,47,24,505/);
+    expect(text).toMatch(/Lifetime profit ▲ \+₹97,01,111 \(\+39\.2% overall\)/);
+    expect(text).toMatch(/XIRR on own money 6\.65%/);
+    expect(text).toMatch(/Earning rate now 7\.66%/);
+    expect(text).toMatch(
+      /In FDs ₹1\.96 Cr .*Profit \+₹14\.20 L \(\+7\.8% overall\) XIRR 7\.59% a year/,
+    );
+    expect(text).toMatch(
+      /In mutual funds ₹47\.43 L .*Profit \+₹8\.40 L \(\+21\.5% overall\) XIRR 12\.56% a year/,
+    );
+    expect(text).toMatch(/In savings ₹96\.38 L .*Rate earned 5\.74% a year/);
+    expect(text).toContain('Maturing in the next 30 days: ₹36,00,000');
+    expect(text).toContain('Lifetime profit is net worth − own money');
+    expect(text).not.toMatch(/same as (on )?Home|is on Home/i);
+    expect(emailProblems(e.html)).toEqual([]);
+  });
+
+  it('leaves out what Home cannot work out yet, and says so', () => {
+    const early = withHome(base(), {
+      ...home,
+      capital: { ...home.capital, opening: null },
+      growth: { ...home.growth, all: null, own: { rate: null, since: null } },
+      extras: { earnedFy: null, maturing30: { count: 0, principal: 0 } },
+    });
+    const lines = familyLines(early.wealth!.total, early.wealth!.today, early.family!);
+    expect(lines[0]).toBe('Net worth ₹3,44,25,616 · Today’s change +₹37,397 (+0.11%)');
+    expect(lines[1]).toMatch(/^Fixed deposits /);
+    expect(lines[2]).toBe('Maturing in the next 30 days: nothing');
+    const html = strip(buildDigestEmail(early).html);
+    expect(html).toMatch(/Own money Not worked out yet/);
+    expect(html).toMatch(/Earned this FY Not worked out yet/);
+  });
+
+  it('shows a fall with a true minus sign', () => {
+    const down = withHome(base(), {
+      ...home,
+      capital: {
+        ...home.capital,
+        totals: { ownMoney: 24_724_505, profit: -120_500, profitPct: -120_500 / 24_724_505 },
+      },
+    });
+    const l = familyLines(down.wealth!.total, down.wealth!.today, down.family!);
+    expect(l[1]).toContain('Lifetime profit −₹1,20,500 (−0.5% overall)');
+    expect(strip(buildDigestEmail(down).html)).toMatch(/Lifetime profit ▼ −₹1,20,500/);
   });
 });

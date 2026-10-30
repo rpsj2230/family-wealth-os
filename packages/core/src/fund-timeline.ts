@@ -134,6 +134,20 @@ export function periodChange(points: SeriesPoint[]): PeriodChange | null {
   };
 }
 
+/**
+ * What the funds earned from a day to the last point (this financial year: from 1 April): the change between the last point before
+ * that day (or the first point after it, when the records start later) and the last point, with money added or withdrawn left out
+ * and booked profit kept in. The same rule as every period on the Performance tab. Null when the series does not reach the day.
+ */
+export function earnedSince(points: SeriesPoint[], from: string): PeriodChange | null {
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const last = sorted[sorted.length - 1];
+  if (!last || last.date < from) return null;
+  const before = sorted.filter((p) => p.date < from);
+  const base = before[before.length - 1] ?? sorted.find((p) => p.date >= from)!;
+  return base === last ? null : periodChange([base, last]);
+}
+
 // ------------------------------------------------------------------------------------------------
 // Return over time
 // ------------------------------------------------------------------------------------------------

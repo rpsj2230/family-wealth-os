@@ -123,7 +123,7 @@ export function rankOffers(
     tenureMonths?: number;
     balance?: number;
   },
-  prefs: RatePrefs,
+  prefs: Pick<RatePrefs, 'nroTaxRate'>,
 ): (RateOffer & { net: number })[] {
   const best = new Map<string, RateOffer & { net: number }>();
   for (const o of offers) {

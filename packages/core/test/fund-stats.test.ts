@@ -112,6 +112,27 @@ describe('holdingProfile', () => {
     });
     expect(p.longValue).toBe(12_000);
     expect(p.shortValue).toBe(24_000);
+    // the last short-term lot turns long-term on this day, and then all of it is
+    expect(p.nextTurn?.on).toBe('2027-01-11');
+    expect(p.allLongOn).toBe('2028-12-11');
+  });
+  it('says when all of it is long-term only while some is not', () => {
+    const p = holdingProfile({
+      lots,
+      basis: 'statement',
+      value: 36_000,
+      today: TODAY,
+      holdingMonths: 12,
+    });
+    expect(p.allLongOn).toBe('2026-12-11');
+    const old = holdingProfile({
+      lots: lots.slice(0, 1),
+      basis: 'statement',
+      value: 12_000,
+      today: TODAY,
+      holdingMonths: 12,
+    });
+    expect(old.allLongOn).toBeNull();
   });
   it('has nothing to say without lots', () => {
     const p = holdingProfile({

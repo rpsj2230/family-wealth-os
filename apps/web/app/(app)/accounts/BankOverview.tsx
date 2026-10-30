@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { TypeLegend } from '@/app/(app)/accounts/TypeLegend';
 import type { ReactNode } from 'react';
 import {
+  LADDER_DAYS,
   TERMS,
   formatInr,
   formatInrCompact,
   formatPct,
+  type BankFiguresRow,
   type BankGrowth,
   type BankOverview as Overview,
   type Explain,
@@ -148,7 +150,12 @@ export function BankOverviewPanel({
   ex,
   growth = null,
   inflation = null,
+  byBank = [],
+  byPerson = [],
 }: {
+  /** "By bank · by person": current value, profit, average rate and deposit XIRR for each (core bankFiguresBy) */
+  byBank?: BankFiguresRow[];
+  byPerson?: BankFiguresRow[];
   /** the "?" explainers of the figures below */
   ex: ExplainSet<'accounts'>;
   /** how the money in banks is growing (core bank-growth.ts); null draws the page without the rates */
@@ -304,13 +311,9 @@ export function BankOverviewPanel({
             testId="bv-tile-maturity"
           />
           <Tile
-            label={`Maturing in ${plural(o.soon.days, 'day')}`}
-            value={o.soon.count === 0 ? 'None' : formatInr(Math.round(o.soon.amount))}
-            sub={
-              o.soon.count === 0
-                ? 'nothing falls due soon'
-                : `${plural(o.soon.count, 'deposit')}${o.next ? ` · next ${niceDate(o.next.date)}, ${o.next.bank}` : ''}`
-            }
+            label="Maturing soon"
+            value={formatInr(Math.round(o.maturingPrincipal.d30))}
+            sub={`in ${LADDER_DAYS.d30} days · ${formatInr(Math.round(o.maturingPrincipal.d90))} in ${LADDER_DAYS.d90} days (principal)${o.next ? ` · next ${niceDate(o.next.date)}, ${o.next.bank}` : ''}`}
             href={to('/deposits?tab=maturities')}
             why={ex['accounts.soon']}
             testId="bv-tile-soon"
@@ -323,7 +326,7 @@ export function BankOverviewPanel({
               value={o.cover.uninsured > 0 ? formatInrCompact(o.cover.uninsured) : 'None'}
               sub={
                 o.cover.uninsured > 0
-                  ? `in ${plural(o.cover.banksOver, 'bank')} · over ${formatInrCompact(o.cover.limit)} per bank and name`
+                  ? `${o.cover.holdingsOver} of ${o.cover.holdings} bank-and-name holdings over ${formatInrCompact(o.cover.limit)}`
                   : `all within ${formatInrCompact(o.cover.limit)} per bank and name`
               }
               warn={o.cover.uninsured > 0}
@@ -348,7 +351,7 @@ export function BankOverviewPanel({
                 .filter((t) => t.key === 'NRE' || t.key === 'NRO')
                 .map((t) => formatInrCompact(t.amount))
                 .join(' · ')}
-              sub={`all bank money${o.accountTypes.some((t) => t.key !== 'NRE' && t.key !== 'NRO') ? ` · other ${formatInrCompact(o.accountTypes.filter((t) => t.key !== 'NRE' && t.key !== 'NRO').reduce((a, t) => a + t.amount, 0))}` : ''}`}
+              sub={`all bank money${o.accountTypes.some((t) => t.key !== 'NRE' && t.key !== 'NRO') ? ` · other ${formatInrCompact(o.accountTypes.filter((t) => t.key !== 'NRE' && t.key !== 'NRO').reduce((a, t) => a + t.amount, 0))}` : ''} · NRO interest is taxed`}
               testId="bv-x-types"
             />
           )}
@@ -363,6 +366,14 @@ export function BankOverviewPanel({
       </HeadlinePanel>
 
       <div className="card bv" id="bv-detail">
+        {byBank.length > 0 && (
+          <div className="bv-by" data-testid="bv-by">
+            <FiguresTable caption="By bank" first="Bank" rows={byBank} />
+            {byPerson.length > 1 && (
+              <FiguresTable caption="By person" first="Person" rows={byPerson} />
+            )}
+          </div>
+        )}
         <div className="bv-journey">
           <WhyHead why={ex['accounts.journey']}>
             <h3 className="bv-h">
@@ -548,5 +559,60 @@ export function BankOverviewPanel({
         </details>
       </div>
     </section>
+  );
+}
+
+/** One table of "By bank · by person": what each holds, its profit, the deposits' average rate and their XIRR. */
+function FiguresTable({
+  caption,
+  first,
+  rows,
+}: {
+  caption: string;
+  first: string;
+  rows: BankFiguresRow[];
+}) {
+  return (
+    <div>
+      <table className="tbl lines responsive bv-bytable">
+        <caption className="bv-h">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{first}</th>
+            <th scope="col" className="num">
+              {TERMS.currentValue.label}
+            </th>
+            <th scope="col" className="num">
+              {TERMS.profit.label}
+            </th>
+            <th scope="col" className="num">
+              {TERMS.averageRate.label}
+            </th>
+            <th scope="col" className="num">
+              Deposits {TERMS.xirr.label}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key}>
+              <th scope="row">{r.name}</th>
+              <td className="num" data-label={TERMS.currentValue.label}>
+                {formatInr(Math.round(r.current))}
+              </td>
+              <td className={`num ${r.profit < 0 ? 'neg' : 'pos'}`} data-label={TERMS.profit.label}>
+                {signedShort(r.profit)}
+              </td>
+              <td className="num" data-label={TERMS.averageRate.label}>
+                {r.avgRate === null ? '–' : formatPct(r.avgRate, 2)}
+              </td>
+              <td className="num" data-label={`Deposits ${TERMS.xirr.label}`}>
+                {r.xirr === null ? '–' : `${formatPct(r.xirr, 2)} a year`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

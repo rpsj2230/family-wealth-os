@@ -293,3 +293,8 @@ table.dtable tr.dim td {
   display: block;
   overflow-wrap: anywhere;
 }
+
+/* the dark headline of a holding's page (money words v6) sits between the heading and the light figures */
+.detailhead + .hl {
+  margin-bottom: 16px;
+}

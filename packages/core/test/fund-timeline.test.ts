@@ -270,3 +270,19 @@ describe('periodChange counts booked profit in Earned', () => {
     expect(c.gain).toBe(1_000);
   });
 });
+
+describe('earnedSince', () => {
+  it('measures from the last point before the day, leaving money added out', async () => {
+    const { earnedSince } = await import('../src/fund-timeline');
+    const pts = [
+      { date: '2026-03-31', value: 100_000, invested: 90_000, net: 90_000 },
+      { date: '2026-06-30', value: 120_000, invested: 100_000, net: 100_000 },
+      { date: '2026-10-30', value: 130_000, invested: 105_000, net: 105_000 },
+    ];
+    const e = earnedSince(pts, '2026-04-01')!;
+    expect(e.from).toBe('2026-03-31');
+    expect(e.netIn).toBe(15_000);
+    expect(e.gain).toBe(15_000);
+    expect(earnedSince(pts, '2026-11-01')).toBeNull();
+  });
+});

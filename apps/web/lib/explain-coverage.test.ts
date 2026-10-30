@@ -44,7 +44,7 @@ describe('every registered headline figure has its "?"', () => {
     for (const { f, text } of files) {
       if (f.includes('/lib/explain-')) continue;
       for (const m of text.matchAll(
-        /\['((?:invest|fund|home|accounts|deposits|cash|reports|tax|monthly|newmoney|rates|goals|raise|retire|others)\.[A-Za-z0-9]+)'\]/g,
+        /\['((?:invest|fund|home|accounts|deposits|cash|reports|tax|monthly|newmoney|rates|goals|raise|retire|others|fd|savings)\.[A-Za-z0-9]+)'\]/g,
       ))
         if (!known.has(m[1]!)) stray.push(`${f}: ${m[1]}`);
     }

@@ -208,6 +208,12 @@ export function PortfolioHero({
   extras?: {
     platforms: { name: string; value: number }[];
     regular: { value: number; count: number };
+    /** the yearly tax-free allowance on long-term equity gains, and what is left of it for each person this financial year */
+    taxFree?: { exemption: number; people: { name: string; left: number }[] } | null;
+    /** your XIRR against the same money in the benchmark fund (Performance tab, same figures) */
+    bench?: { name: string; xirr: number | null } | null;
+    /** what the funds earned since 1 April: change in value less money added, plus profit booked on sales */
+    earnedFy?: number | null;
   };
   hero: Hero;
   asOf: string;
@@ -217,7 +223,7 @@ export function PortfolioHero({
   projectionAssumed: boolean;
   holdingMonths: number | null;
   base: string;
-  tabLinks: { performance: string; transactions: string; breakdown: string };
+  tabLinks: { performance: string; transactions: string; breakdown: string; tax: string };
 }) {
   const h = hero;
   const day = h.dayPct === null ? null : h.dayAmount;
@@ -265,8 +271,13 @@ export function PortfolioHero({
             </span>
           </div>
           <div className="hero-asof">
-            As of {niceDate(asOf)} · {h.funds} fund{h.funds === 1 ? '' : 's'}
-            {h.folios > 0 ? ` · ${h.folios} folio${h.folios === 1 ? '' : 's'}` : ''}
+            {h.funds} fund{h.funds === 1 ? '' : 's'}
+            {extras && extras.platforms.length > 0
+              ? ` · ${extras.platforms.map((p) => `${p.name} ${formatInrCompact(p.value)}`).join(' · ')}`
+              : h.folios > 0
+                ? ` · ${h.folios} folio${h.folios === 1 ? '' : 's'}`
+                : ''}{' '}
+            · as of {niceDate(asOf)} prices
           </div>
         </div>
         <div className="invhero-ring">
@@ -369,38 +380,11 @@ export function PortfolioHero({
           why={ex['invest.totalGain']}
         />
         <Cell
-          label={TERMS.sip.label}
-          value={h.sipMonthly > 0 ? formatInrCompact(h.sipMonthly) : 'None'}
-          {...(h.sipMonthly > 0 ? { exact: formatInr(Math.round(h.sipMonthly)) } : {})}
-          sub={h.sipMonthly > 0 ? 'a month, running instalments' : 'no running SIP'}
-          why={ex['invest.sip']}
-        />
-        <Cell
-          label={TERMS.longTermShare.label}
-          value={h.longShare === null ? '–' : `${Math.round(h.longShare * 100)}%`}
-          sub={
-            h.longShare === null
-              ? 'needs statement or prices'
-              : `of equity value held over ${holdingMonths} months`
-          }
-          href={tabLinks.breakdown}
-          why={ex['invest.longTerm']}
-        />
-        <Cell
-          label="Statements"
-          value={`${h.withStatement} of ${h.funds}`}
-          sub={
-            h.estimated > 0 || h.unreconciled > 0
-              ? [
-                  h.estimated > 0 ? `${h.estimated} estimated` : '',
-                  h.unreconciled > 0 ? `${h.unreconciled} not reconciled yet` : '',
-                ]
-                  .filter(Boolean)
-                  .join(', ')
-              : 'every fund is exact'
-          }
-          href={tabLinks.transactions}
-          why={ex['invest.statements']}
+          label={TERMS.earnedFy.label}
+          value={typeof extras?.earnedFy === 'number' ? rupees(extras.earnedFy) : '–'}
+          sub="since 1 April, money added left out"
+          cls={typeof extras?.earnedFy === 'number' ? tone(extras.earnedFy) : null}
+          href={tabLinks.performance}
         />
       </dl>
 
@@ -408,6 +392,20 @@ export function PortfolioHero({
         <div className="hl-extras invhero-extras">
           <h3 className="hl-xh">Also on this page</h3>
           <ul className="hl-xg">
+            <li className="hl-x" data-testid="inv-x-longterm">
+              <div className="hl-xl">
+                {TERMS.longTermShare.label}
+                <Why explain={ex['invest.longTerm']} tone="on-dark" />
+              </div>
+              <div className="hl-xv num">
+                {h.longShare === null ? '–' : `${Math.round(h.longShare * 100)}%`}
+              </div>
+              <div className="hl-xs">
+                {h.longShare === null
+                  ? 'needs a statement or prices'
+                  : `of equity value, held over ${holdingMonths} months: taxed as long-term`}
+              </div>
+            </li>
             <li
               className={`hl-x${extras.regular.count > 0 ? ' warn' : ''}`}
               data-testid="inv-x-regular"
@@ -422,29 +420,61 @@ export function PortfolioHero({
                   : 'every fund is a Direct plan'}
               </div>
             </li>
-            {extras.platforms.length > 0 && (
-              <li className="hl-x" data-testid="inv-x-platforms">
-                <div className="hl-xl">Where they are held</div>
-                <div className="hl-xv num">
-                  {extras.platforms.map((p) => formatInrCompact(p.value)).join(' · ')}
-                </div>
-                <div className="hl-xs">{extras.platforms.map((p) => p.name).join(' · ')}</div>
-              </li>
-            )}
+            <li className="hl-x" data-testid="inv-x-taxfree">
+              <div className="hl-xl">
+                <Link href={tabLinks.tax} className="hl-tlink">
+                  Tax-free gain left this FY
+                </Link>
+              </div>
+              <div className="hl-xv num">
+                {extras.taxFree
+                  ? formatInrCompact(extras.taxFree.people.reduce((a, p) => a + p.left, 0))
+                  : '–'}
+              </div>
+              <div className="hl-xs">
+                {extras.taxFree
+                  ? `${extras.taxFree.people.map((p) => `${p.name} ${formatInrCompact(p.left)}`).join(' · ')} of ${formatInrCompact(extras.taxFree.exemption)} a person, for harvesting`
+                  : 'the tax rules for this year are not set yet'}
+              </div>
+            </li>
             <li className="hl-x" data-testid="inv-x-benchmarks">
               <div className="hl-xl">
                 <Link href={tabLinks.performance} className="hl-tlink">
                   Against benchmarks
                 </Link>
               </div>
-              <div className="hl-xv">See Performance</div>
-              <div className="hl-xs">your XIRR against each fund’s own index</div>
+              <div className="hl-xv num">
+                {extras.bench && extras.bench.xirr !== null && h.xirr !== null
+                  ? `${h.xirr >= extras.bench.xirr ? 'Ahead' : 'Behind'} by ${(Math.abs(h.xirr - extras.bench.xirr) * 100).toFixed(1)} points`
+                  : '–'}
+              </div>
+              <div className="hl-xs">
+                {extras.bench && extras.bench.xirr !== null && h.xirr !== null
+                  ? `your XIRR ${pct(h.xirr, 2).replace(/^\+/, '')} vs ${pct(extras.bench.xirr, 2).replace(/^\+/, '')} for the same money in ${extras.bench.name} · each fund against its own index on its page`
+                  : 'needs the benchmark prices: each fund against its own index on its page'}
+              </div>
             </li>
           </ul>
         </div>
       )}
 
       <p className="invhero-foot">
+        <b>{TERMS.sip.label}:</b>{' '}
+        {h.sipMonthly > 0
+          ? `${formatInr(Math.round(h.sipMonthly))} a month, running instalments`
+          : 'no running SIP'}
+        <Why explain={ex['invest.sip']} tone="on-dark" /> · <b>Statements:</b> {h.withStatement} of{' '}
+        {h.funds}
+        {h.estimated > 0 || h.unreconciled > 0
+          ? ` (${[
+              h.estimated > 0 ? `${h.estimated} estimated` : '',
+              h.unreconciled > 0 ? `${h.unreconciled} not reconciled yet` : '',
+            ]
+              .filter(Boolean)
+              .join(', ')})`
+          : ', every fund is exact'}
+        <Why explain={ex['invest.statements']} tone="on-dark" />
+        <br />
         <b>{TERMS.maturityValue.label}:</b> not applicable, because mutual funds have no fixed end
         date.
         {projection.length > 0 && (

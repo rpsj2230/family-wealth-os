@@ -16,7 +16,9 @@
  *    savings interest in lumps), and money held by others earns nothing in this figure.
  * Foreign-currency lines are counted at today's rupee value with no gain or loss (the exchange rate is not interest).
  */
-import { dicgcPosition, capacityKeyFor } from './dicgc';
+import { coverCounts, dicgcPosition, capacityKeyFor } from './dicgc';
+import { LADDER_DAYS } from './dashboard';
+import { depositsXirr } from './class-yearly';
 import { daysBetween } from './fd';
 import { depositPeriod, recentWindow, savingsPeriod } from './period-gains';
 import { OTHER_HOLDINGS_KEY, type BankBlock, type BankRow } from './accounts-view';
@@ -117,6 +119,10 @@ export interface BankOverview {
   fdRate: number | null;
   next: OverviewNextMaturity | null;
   soon: { days: number; count: number; amount: number };
+  /** principal of the running deposits that mature within 30, 90 and 365 days (money words v6: "₹36 L in 30 days · ₹45.66 L in 90 days") */
+  maturingPrincipal: { d30: number; d90: number; d365: number };
+  /** running deposits whose maturity value is the bank's own figure (the rest are worked out from their terms) */
+  maturityFromBank: number;
   topBank: { name: string; amount: number; share: number } | null;
 
   accountTypes: {
@@ -130,7 +136,15 @@ export interface BankOverview {
   people: OverviewPerson[];
 
   /** deposit insurance: null when no limit was given */
-  cover: { limit: number; insured: number; uninsured: number; banksOver: number } | null;
+  cover: {
+    limit: number;
+    insured: number;
+    uninsured: number;
+    banksOver: number;
+    /** rows of the cover (one bank and one name each), and how many are over the limit */
+    holdings: number;
+    holdingsOver: number;
+  } | null;
 
   banksDone: number;
   /** stale balances plus deposits to confirm */
@@ -234,6 +248,8 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
   let todayFd = 0;
   let todaySavings = 0;
   let soonCount = 0;
+  const maturingPrincipal = { d30: 0, d90: 0, d365: 0 };
+  let maturityFromBank = 0;
   let soonAmount = 0;
   let stale = 0;
   let toConfirm = 0;
@@ -322,6 +338,13 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
               ).profit,
             );
             nextCandidates.push({ row: r, bank: b.name });
+            if (fd.maturityAmountFromBank) maturityFromBank++;
+            // the same windows and rule as Home (maturingWithin): after today, up to and including the last day
+            if (fd.daysLeft > 0) {
+              if (fd.daysLeft <= LADDER_DAYS.d30) maturingPrincipal.d30 += fd.principal;
+              if (fd.daysLeft <= LADDER_DAYS.d90) maturingPrincipal.d90 += fd.principal;
+              if (fd.daysLeft <= LADDER_DAYS.y1) maturingPrincipal.d365 += fd.principal;
+            }
             if (fd.daysLeft <= opts.soonDays) {
               soonCount++;
               soonAmount += fd.maturityAmount;
@@ -432,6 +455,8 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
     fdRate: fdRateWeight > 0 ? fdRateSum / fdRateWeight : null,
     next,
     soon: { days: opts.soonDays, count: soonCount, amount: soonAmount },
+    maturingPrincipal,
+    maturityFromBank,
     topBank: top
       ? { name: top.name, amount: top.amount, share: ratio(top.amount, bankTotal) }
       : null,
@@ -459,7 +484,7 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
           limit: pos.limit,
           insured: pos.insured,
           uninsured: pos.uninsured,
-          banksOver: Object.values(pos.byBank).filter((x) => x.uninsured > 0).length,
+          ...coverCounts(pos),
         }
       : null,
     banksDone,
@@ -468,4 +493,76 @@ export function bankOverview(blocks: BankBlock[], opts: OverviewOptions): BankOv
     toConfirm,
     oldestUpdate: dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : null,
   };
+}
+
+export interface BankFiguresRow {
+  key: string;
+  name: string;
+  current: number;
+  invested: number;
+  profit: number;
+  /** the deposits' average rate, weighted by principal (decimal); null without a deposit */
+  avgRate: number | null;
+  /** XIRR of the running deposits, each from its booking date to today's value; null without one */
+  xirr: number | null;
+}
+
+/**
+ * "By bank · by person" (money words v6): Current value, Profit, Average interest rate and XIRR for each bank and for each person, so
+ * it is easy to see which pays best. The same line figures as the totals (bankRowFigures); savings bring their balance, deposits their
+ * terms. Banks outside India (other holdings) are left out.
+ */
+export function bankFiguresBy(
+  blocks: BankBlock[],
+  by: 'bank' | 'owner',
+  today: string,
+  names: Record<string, string> = {},
+): BankFiguresRow[] {
+  const acc = new Map<
+    string,
+    {
+      name: string;
+      current: number;
+      invested: number;
+      rateSum: number;
+      rateWeight: number;
+      fds: { principal: number; bookedOn: string; value: number }[];
+    }
+  >();
+  for (const b of blocks) {
+    if (b.key === OTHER_HOLDINGS_KEY) continue;
+    for (const r of b.sections.flatMap((s) => s.rows)) {
+      const f = bankRowFigures(r);
+      if (!f.counted) continue;
+      const key = by === 'bank' ? b.key : r.ownerId;
+      const a = acc.get(key) ?? {
+        name: by === 'bank' ? b.name : (names[r.ownerId] ?? 'Unknown'),
+        current: 0,
+        invested: 0,
+        rateSum: 0,
+        rateWeight: 0,
+        fds: [],
+      };
+      a.current += f.current;
+      a.invested += f.invested;
+      if (r.kind === 'fd' && r.fd && !r.fd.needsConfirmation && r.status === 'active') {
+        a.rateSum += r.fd.principal * r.fd.rate;
+        a.rateWeight += r.fd.principal;
+        a.fds.push({ principal: r.fd.principal, bookedOn: r.fd.bookedOn, value: f.current });
+      }
+      acc.set(key, a);
+    }
+  }
+  return [...acc.entries()]
+    .map(([key, a]) => ({
+      key,
+      name: a.name,
+      current: a.current,
+      invested: a.invested,
+      profit: a.current - a.invested,
+      avgRate: a.rateWeight > 0 ? a.rateSum / a.rateWeight : null,
+      xirr: depositsXirr(a.fds, today)?.rate ?? null,
+    }))
+    .filter((r) => r.current !== 0)
+    .sort((x, y) => y.current - x.current);
 }

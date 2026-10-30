@@ -1,13 +1,20 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { DEFAULT_CONFIG, parseRange, personStyles, type NavPoint } from '@fwos/core';
+import {
+  DEFAULT_CONFIG,
+  depositRates,
+  heldValueOf,
+  parseRange,
+  personStyles,
+  type NavPoint,
+} from '@fwos/core';
 import { ActivityLog } from '@/components/ActivityLog';
 import { AssetFacts, DetailHeader } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
-import { niceDate } from '@/lib/dates';
-import { formatInr } from '@fwos/core';
+import { daysBetweenIso } from '@/lib/dates';
 import { FundDetailPanel } from '@/components/FundDetailPanel';
 import { HistoryLine } from '@/components/HistoryLine';
+import { DepositHeadlinePanel, SavingsHeadlinePanel } from '@/components/HoldingHeadline';
 import {
   DEMO_FUND_IDS,
   DEMO_HOLDING_MONTHS,
@@ -59,9 +66,49 @@ const common = {
   code: null,
 };
 
+/** Invented: one NRE deposit and the NRE savings account it is linked to, both Anil's at the same bank. */
+const SAMPLE_FD = {
+  principal: 500_000,
+  rate: 0.0725,
+  booked_on: '2025-03-12',
+  maturity_on: '2028-03-12',
+  compounding: 'quarterly' as const,
+  bank_maturity_amount: null,
+  fd_ref_last4: '5076',
+};
+const SAMPLE_SAVINGS = {
+  rate: 0.07,
+  balance: { date: '2026-10-15', amount: 410_000 },
+};
+/** The deposit's current value by the valuation engine's rule (its terms, at the rate gap in Settings): one value everywhere. */
+const fdNow = () => heldValueOf(SAMPLE_FD, TODAY, DEFAULT_CONFIG.estimates.observedRateGap);
+/** The savings account's current value: the bank's last balance and the interest since, not yet credited (quarterly credit). */
+const savingsAccrued = () =>
+  Math.round(
+    (SAMPLE_SAVINGS.balance.amount *
+      SAMPLE_SAVINGS.rate *
+      daysBetweenIso(SAMPLE_SAVINGS.balance.date, TODAY)) /
+      365,
+  );
+const savingsNow = () => SAMPLE_SAVINGS.balance.amount + savingsAccrued();
+
+/** The headline inputs of the samples: Settings at their defaults, the cover of Anil's name at the bank (the deposit and the savings). */
+const sampleHeadline = (): NonNullable<AssetViewInput['headline']> => ({
+  nroTaxRate: DEFAULT_CONFIG.rates.nroTaxRate,
+  rateGap: DEFAULT_CONFIG.estimates.observedRateGap,
+  tdsRate: DEFAULT_CONFIG.estimates.interestTdsRate,
+  savingsRate: DEFAULT_CONFIG.estimates.savingsRate,
+  cover: { limit: DEFAULT_CONFIG.deposits.insuranceLimit, total: fdNow() + savingsNow() },
+  depositRate: depositRates(
+    [{ principal: SAMPLE_FD.principal, rate: SAMPLE_FD.rate, kind: 'NRE' }],
+    DEFAULT_CONFIG.rates.nroTaxRate,
+  ).all,
+});
+
 function fdInput(): AssetViewInput {
   return {
     ...common,
+    headline: sampleHeadline(),
     asset: {
       id: 'fd1',
       type: 'fixed_deposit',
@@ -77,18 +124,70 @@ function fdInput(): AssetViewInput {
       holder_name: null,
     },
     code: 'FD-NRE-5076',
-    current: { amount: 1_043_800, basis: 'calculated', ageDays: 0, asOf: TODAY },
+    current: { amount: fdNow(), basis: 'calculated', ageDays: 0, asOf: TODAY },
     observations: [],
-    fd: {
-      principal: 1_000_000,
-      rate: 0.0725,
-      booked_on: '2025-10-26',
-      maturity_on: '2027-10-26',
-      compounding: 'quarterly',
-      bank_maturity_amount: null,
-      fd_ref_last4: '5076',
-    },
+    fd: SAMPLE_FD,
     linked: { id: 's1', label: 'Sample Equity Bank Cash-NRE-1100' },
+  };
+}
+
+/** Invented balances of the sample savings account, oldest first. */
+const SAVINGS_BALANCES: [string, number][] = [
+  ['2026-03-31', 386_500],
+  ['2026-06-30', 396_200],
+  ['2026-09-30', 404_800],
+  [SAMPLE_SAVINGS.balance.date, SAMPLE_SAVINGS.balance.amount],
+];
+
+function savingsInput(): AssetViewInput {
+  return {
+    ...common,
+    headline: sampleHeadline(),
+    asset: {
+      id: 's1',
+      type: 'bank_account',
+      nickname: 'Cash-NRE-1100',
+      label: null,
+      status: 'active',
+      currency: 'INR',
+      account_kind: 'NRE',
+      is_joint: false,
+      identifier_last4: '1100',
+      linked_last4: null,
+      notes: null,
+      holder_name: null,
+    },
+    code: 'Cash-NRE-1100',
+    current: {
+      amount: savingsNow(),
+      basis: 'estimated',
+      ageDays: daysBetweenIso(SAMPLE_SAVINGS.balance.date, TODAY),
+      asOf: SAMPLE_SAVINGS.balance.date,
+    },
+    observations: SAVINGS_BALANCES.map(([as_of, amount], k) => ({
+      id: `b${k}`,
+      amount,
+      currency: 'INR',
+      fx_rate: null,
+      as_of,
+      confidence: 'verified',
+      source: 'email',
+      note: null,
+      created_at: `${as_of}T09:00:00Z`,
+      superseded_by: null,
+    })),
+    rateInfo: { rate: SAMPLE_SAVINGS.rate, tag: 'own', note: 'the rate set for this account' },
+    breakdown: {
+      savings: {
+        baseline: SAMPLE_SAVINGS.balance,
+        interest: savingsAccrued(),
+        credited: 0,
+        accrued: savingsAccrued(),
+        moved: 0,
+      },
+      fund: null,
+      navStaleDays: null,
+    },
   };
 }
 
@@ -271,6 +370,7 @@ export default async function DemoAsset({
 }) {
   const sp = await searchParams;
   const fund = sp.kind === 'fund';
+  const savings = sp.kind === 'savings';
   const range = parseRange(sp.range);
   const fundId = sp.id && DEMO_FUND_IDS.includes(sp.id) ? sp.id : 'f1';
   const sample = demoFund(fundId, range);
@@ -285,11 +385,15 @@ export default async function DemoAsset({
     maxPoints: NAV_POINTS,
     benchmark: bench,
   });
-  const view = buildAssetView(fund ? fundInput(sample.row, sample.navs) : fdInput());
+  const view = buildAssetView(
+    fund ? fundInput(sample.row, sample.navs) : savings ? savingsInput() : fdInput(),
+  );
   const activity = buildActivity({
     viewerId: 'me',
     audit: audit.filter((a) =>
-      fund ? a.table_name !== 'fixed_deposits' : a.table_name !== 'mf_positions',
+      fund
+        ? a.table_name !== 'fixed_deposits'
+        : a.table_name !== 'mf_positions' && !(savings && a.table_name === 'fixed_deposits'),
     ),
     inbox: fund
       ? []
@@ -311,6 +415,7 @@ export default async function DemoAsset({
       </p>
       <p className="notice warn" role="note">
         Invented data. See another sample: <Link href="/demo/asset">Fixed deposit</Link> ·{' '}
+        <Link href="/demo/asset?kind=savings">Savings account</Link> ·{' '}
         <Link href="/demo/asset?kind=fund">Mutual fund</Link>
       </p>
     </>
@@ -320,6 +425,22 @@ export default async function DemoAsset({
     const owner = PEOPLE[sample.row.ownerId]!;
     const base = '/demo/asset';
     const keep = { kind: 'fund', id: fundId };
+    const sipView = sipPlanView({
+      assetId: fundId,
+      startedOn: sample.row.startedOn ?? '2024-07-05',
+      sipMonthly: sample.row.sipMonthly || 5000,
+      sipStopped: false,
+      changes: [
+        { on: sample.row.startedOn ?? '2024-07-05', monthly: 5000 },
+        { on: '2026-04-05', monthly: sample.row.sipMonthly || 8000 },
+      ],
+      payFrom: 'demo-acc-1',
+      accounts: [
+        { id: 'demo-acc-1', label: 'Sample Equity Bank · Cash-NRO-1111' },
+        { id: 'demo-acc-2', label: 'Sample Bank · Cash-NRE-2222' },
+      ],
+      today: DEMO_TODAY,
+    });
     return (
       <main className="content">
         {notice}
@@ -337,8 +458,6 @@ export default async function DemoAsset({
             title={sample.row.name}
             subtitle={`Mutual fund · held by ${owner.name}`}
             person={owner}
-            headline={formatInr(sample.row.value)}
-            headlineNote={`as of ${niceDate(DEMO_TODAY)}`}
           />
           <FundPage
             fund={sample.row}
@@ -370,28 +489,8 @@ export default async function DemoAsset({
                 colour={owner.colour}
               />
             )}
-            sipPlan={
-              <SipPlan
-                demo
-                today={DEMO_TODAY}
-                view={sipPlanView({
-                  assetId: fundId,
-                  startedOn: sample.row.startedOn ?? '2024-07-05',
-                  sipMonthly: sample.row.sipMonthly || 5000,
-                  sipStopped: false,
-                  changes: [
-                    { on: sample.row.startedOn ?? '2024-07-05', monthly: 5000 },
-                    { on: '2026-04-05', monthly: sample.row.sipMonthly || 8000 },
-                  ],
-                  payFrom: 'demo-acc-1',
-                  accounts: [
-                    { id: 'demo-acc-1', label: 'Sample Equity Bank · Cash-NRO-1111' },
-                    { id: 'demo-acc-2', label: 'Sample Bank · Cash-NRE-2222' },
-                  ],
-                  today: DEMO_TODAY,
-                })}
-              />
-            }
+            sipNow={{ now: sipView.now, next: sipView.next }}
+            sipPlan={<SipPlan demo today={DEMO_TODAY} view={sipView} />}
             records={
               <>
                 <AssetFacts facts={view.facts} />
@@ -417,9 +516,36 @@ export default async function DemoAsset({
         title={view.title}
         subtitle={view.subtitle}
         person={PEOPLE.p1!}
-        {...(view.headline ? { headline: view.headline } : {})}
-        {...(view.headlineNote ? { headlineNote: view.headlineNote } : {})}
       />
+      {view.deposit && (
+        <DepositHeadlinePanel
+          h={view.deposit}
+          bank={common.bankName}
+          bankMaturityAmount={view.context.bankMaturityAmount}
+          sample
+        />
+      )}
+      {view.savings && (
+        <SavingsHeadlinePanel
+          h={view.savings}
+          rateNote={view.context.rateNote}
+          rateAssumed={view.context.rateAssumed}
+          tdsRate={view.context.tdsRate}
+          balances={view.context.balances}
+          sample
+        />
+      )}
+      {view.kpis.length > 0 && (
+        <section className="kpis assetkpis" aria-label="Key figures">
+          {view.kpis.map((k) => (
+            <article key={k.label} className="kpi">
+              <div className="kpi-label">{k.label}</div>
+              <div className={`kpi-value ${k.tone ?? ''}`}>{k.value}</div>
+              {k.note && <div className="kpi-sub muted">{k.note}</div>}
+            </article>
+          ))}
+        </section>
+      )}
       <AssetFacts facts={view.facts} />
       {view.charts.map((c) => (
         <section className="detailsection" key={c.title} aria-label={c.title}>

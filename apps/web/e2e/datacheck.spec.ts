@@ -105,7 +105,7 @@ test.describe('The fund page (public sample)', () => {
     await expect(mid).toContainText('Starts midway: 300 units before first line');
     await expect(mid).toContainText('Held before the first line');
     await expect(mid).toContainText('DETAILED');
-    await expect(page.locator('.fundhero abbr.bv-est').first()).toBeVisible();
+    await expect(page.getByTestId('fund-asof').locator('abbr.bv-est')).toBeVisible();
 
     await page.goto('/demo/asset?kind=fund&id=f3');
     const gap = page.getByTestId('adds-up');

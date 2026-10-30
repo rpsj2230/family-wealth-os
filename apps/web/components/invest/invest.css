@@ -1375,29 +1375,6 @@ td.lg-amt.out {
 }
 
 /* ------------------------------------------------------------------ the fund page */
-.fundhero {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  margin: 12px 0 16px;
-}
-.fundhero .kpi {
-  padding: 10px 14px;
-}
-.fundhero .kpi-value {
-  font-size: 1.3rem;
-}
-.fundhero .kpi.main {
-  grid-column: span 2;
-}
-@media (max-width: 560px) {
-  .fundhero {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .fundhero .kpi.main {
-    grid-column: 1 / -1;
-  }
-}
 .fundnote {
   margin: 0 0 14px;
   font-size: 0.84rem;
@@ -1446,7 +1423,7 @@ table.pltbl td {
 /* the "est." mark on a figure whose fund history does not reconcile (the same mark as on Accounts and Home) */
 .invhero .bv-est,
 .fundslist .bv-est,
-.fundhero .bv-est,
+.hl .bv-est,
 .datacheck .bv-est {
   display: inline-block;
   padding: 0 6px;
@@ -1463,7 +1440,7 @@ table.pltbl td {
 }
 .invhero abbr.bv-est,
 .fundslist abbr.bv-est,
-.fundhero abbr.bv-est,
+.hl abbr.bv-est,
 .datacheck abbr.bv-est {
   text-decoration: none;
   cursor: help;
@@ -1901,4 +1878,9 @@ tr.fl-datacheck td .datacheck {
 }
 .txnactions .btn.danger {
   color: var(--fail-fg, #b42318);
+}
+
+/* the dark headline at the top of a fund's page, then its buttons */
+.hl + .fundactions {
+  margin-top: 12px;
 }

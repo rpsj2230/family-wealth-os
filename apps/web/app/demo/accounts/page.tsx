@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
+  bankFiguresBy,
   bankOverview,
   DEFAULT_CONFIG,
   filterBlocksByOwner,
@@ -120,6 +121,13 @@ export default async function DemoAccounts({
           }
         />
         <BankOverviewPanel
+          byBank={bankFiguresBy(shown, 'bank', DEMO_TODAY.toISOString().slice(0, 10))}
+          byPerson={bankFiguresBy(
+            shown,
+            'owner',
+            DEMO_TODAY.toISOString().slice(0, 10),
+            Object.fromEntries(people.map((x) => [x.id, x.name])),
+          )}
           ex={exA}
           growth={growth}
           inflation={DEMO_INFLATION}

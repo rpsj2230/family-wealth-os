@@ -213,6 +213,8 @@ export interface HoldingProfile {
   unknownCostValue: number;
   /** the first day any short-term lot becomes long-term, and what turns that day */
   nextTurn: { on: string; value: number } | null;
+  /** the day the last short-term lot becomes long-term, so all of the value is; null when it already is (or nothing is held) */
+  allLongOn: string | null;
   firstBought: string | null;
   /** average price paid per unit across the lots with a known cost */
   avgCost: number | null;
@@ -241,6 +243,7 @@ export function holdingProfile(args: {
     shortGain: 0,
     unknownCostValue: 0,
     nextTurn: null,
+    allLongOn: null,
     firstBought: null,
     avgCost: null,
   };
@@ -271,6 +274,7 @@ export function holdingProfile(args: {
     out.longValue + out.shortValue > 0 ? out.longValue / (out.longValue + out.shortValue) : null;
   const next = [...turns.entries()].sort(([a], [b]) => a.localeCompare(b))[0];
   out.nextTurn = next ? { on: next[0], value: next[1] } : null;
+  out.allLongOn = [...turns.keys()].sort().pop() ?? null;
   out.avgCost = costUnits > 0 ? cost / costUnits : null;
   return out;
 }

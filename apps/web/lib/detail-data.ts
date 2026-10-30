@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import {
   buildBankBlocks,
   capacityLabel,
+  depositRates,
   filterBlocksByOwner,
   tenureText,
   formatInr,
@@ -33,6 +34,7 @@ import { quickModel } from './quick-edit';
 import { loadFxHint, loadJointHolders } from './quick-edit-data';
 import { cashRatesFor, loadOffers } from './rates-view';
 import { buildDeposits } from './deposits';
+import { runningOf } from './bank-growth-data';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Supabase = Ctx['supabase'];
@@ -128,7 +130,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
         .eq('asset_id', id)
         .order('paid_on'),
       supabase.from('owners').select('id, display_name').order('created_at'),
-      supabase.from('institutions').select('id, name, notes'),
+      supabase.from('institutions').select('id, name, notes, deposit_insured'),
       supabase.from('goal_allocations').select('goal_id').eq('asset_id', id),
       supabase.from('goals').select('id, name'),
       auditRows(supabase),
@@ -148,6 +150,8 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
     id: string;
     name: string;
     notes: string | null;
+    /** false for a bank outside the Indian deposit insurance scheme */
+    deposit_insured?: boolean | null;
   }[];
   const instNames = Object.fromEntries(instRows.map((i) => [i.id, i.name]));
   const bank =
@@ -273,7 +277,54 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
       ? (await loadSettings(supabase as unknown as SupabaseClient)).config.funds
       : undefined;
   const unitTolerance = fundCfg?.unitTolerance;
+  const headline =
+    (asset.type === 'fixed_deposit' && fd) || asset.type === 'bank_account'
+      ? await (async (): Promise<NonNullable<AssetViewInput['headline']>> => {
+          const cfg = (await loadSettings(supabase as unknown as SupabaseClient)).config;
+          const jointHolders = await loadJointHolders(supabase as unknown as SupabaseClient);
+          // the deposit-insurance position exactly as the Deposits page counts it (lib/deposits.ts), for this bank and name
+          const cover = buildDeposits(
+            l.assetRows.map((a) => ({
+              id: a.id,
+              ownerId: a.owner_id,
+              institutionId: a.institution_id ?? null,
+              type: a.type,
+              status: a.status,
+              nickname: a.nickname,
+              accountKind: a.account_kind,
+              isJoint: !!a.is_joint,
+              jointHolderId: jointHolders[a.id] ?? null,
+            })),
+            l.portfolio.valued,
+            l.fdRows,
+            new Map(Object.entries(instNames)),
+            new Map(ownerList.map((o) => [o.id, o.name])),
+            l.today,
+            cfg.deposits.insuranceLimit,
+            new Set(instRows.filter((b) => b.deposit_insured === false).map((b) => b.id)),
+            l.hideMaturedAfterDays,
+          ).cover;
+          const coverRow = cover.rows.find((r) => r.depositIds.includes(id));
+          const running = runningOf(blocks.flatMap((b) => b.sections.flatMap((sct) => sct.rows)));
+          return {
+            nroTaxRate: cfg.rates.nroTaxRate,
+            rateGap: cfg.estimates.observedRateGap,
+            tdsRate: asset.tds_rate ?? cfg.estimates.interestTdsRate,
+            savingsRate: cfg.estimates.savingsRate,
+            cover: coverRow ? { limit: cover.limit, total: coverRow.total } : null,
+            depositRate: depositRates(
+              running.map((r) => ({
+                principal: r.fd!.principal,
+                rate: r.fd!.rate,
+                kind: r.accountKind ?? null,
+              })),
+              cfg.rates.nroTaxRate,
+            ).all,
+          };
+        })()
+      : null;
   const input: AssetViewInput = {
+    headline,
     ...(unitTolerance !== undefined ? { unitTolerance } : {}),
     // how the central engine reached today's value: savings from the last confirmed balance, a fund from statement units and SIPs
     breakdown: valued?.detail
@@ -329,6 +380,7 @@ export async function loadAssetDetail(id: string): Promise<DetailBase> {
             fd.bank_maturity_amount === null ? null : Number(fd.bank_maturity_amount),
           fd_ref_last4: fd.fd_ref_last4 ?? null,
           fd_ref: fd.fd_ref ?? null,
+          payout: fd.payout ?? null,
           ended_on: fd.ended_on ?? null,
           ended_estimated: !!fd.ended_estimated,
           start_estimated: !!fd.start_estimated,

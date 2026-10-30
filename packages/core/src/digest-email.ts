@@ -8,7 +8,7 @@
  * figure has an arrow and a sign, every state a word. Nothing is pure white or pure black, so a client that darkens the page by
  * itself keeps the text readable.
  */
-import { TERMS } from './terms';
+import { PERCENT_KIND, TERMS } from './terms';
 import { DEFAULT_CONFIG } from './config';
 import type { DigestInput } from './digest';
 import {
@@ -33,6 +33,7 @@ import {
   shortDay,
 } from './foreign-cash';
 import { digestSubject, needsYouMarker, DIGEST_SUBJECT_NAME } from './digest-subject';
+import { FAMILY_KIND_LABEL, familyLines, signedExact, type DigestFamily } from './digest-family';
 import type { Change, ClassCard } from './home';
 
 export interface DigestEmail {
@@ -223,6 +224,8 @@ interface Model {
   } | null;
   month: Change | null;
   classes: ClassCard[];
+  /** the family figures (money words v6), from Home's model; null leaves them out */
+  family: DigestFamily | null;
   goals: DigestGoalCard[] | null;
   retire: DigestGoalCard | null;
   retireLine: string | null;
@@ -257,10 +260,11 @@ function model(i: DigestInput): Model {
     preheader: '',
     total: w ? w.total : nw.total,
     today,
-    todayLabel: w || !i.previous ? 'Today' : `Since ${dayMonth(i.previous.date)}`,
+    todayLabel: w || !i.previous ? TERMS.todayChange.label : `Since ${dayMonth(i.previous.date)}`,
     overall: w ? w.overall : null,
     month: showMonth,
     classes: w ? w.classes : [],
+    family: i.family ?? null,
     goals,
     retire,
     retireLine: i.retirement
@@ -306,15 +310,24 @@ const toneClass = (t: 'up' | 'down' | 'flat') => (t === 'up' ? 'up' : t === 'dow
 const toneColor = (t: 'up' | 'down' | 'flat') =>
   t === 'up' ? L.up : t === 'down' ? L.down : L.mute;
 
-/** "▲ +₹1.2 L (+0.4%)" in green or red, with the exact amount in the title. */
-function delta(amount: number, pct: number | null, size = 14, bold = true): string {
+/**
+ * "▲ +₹1.2 L (+0.4%)" in green or red, with the exact amount in the title. `exact` writes the amount to the rupee, `decimals` the
+ * places of the percentage and `kind` the word after it ("overall").
+ */
+function delta(
+  amount: number,
+  pct: number | null,
+  size = 14,
+  bold = true,
+  o: { exact?: boolean; decimals?: number; kind?: string } = {},
+): string {
   const t = tone(amount);
   // the amount and the percentage may wrap apart on a narrow screen, but neither is cut in two
   const p =
     pct !== null && t !== 'flat'
-      ? ` <span style="white-space:nowrap">(${esc(signedPct(pct))})</span>`
+      ? ` <span style="white-space:nowrap">(${esc(signedPct(pct, o.decimals ?? 1))}${o.kind ? ` ${esc(o.kind)}` : ''})</span>`
       : '';
-  return `<span class="${toneClass(t)}" title="${esc(inrExact(amount))}" style="color:${toneColor(t)};font-size:${size}px;${bold ? 'font-weight:700;' : ''}"><span style="white-space:nowrap">${ARROW[t]} ${esc(signedInr(amount))}</span>${p}</span>`;
+  return `<span class="${toneClass(t)}" title="${esc(inrExact(amount))}" style="color:${toneColor(t)};font-size:${size}px;${bold ? 'font-weight:700;' : ''}"><span style="white-space:nowrap">${ARROW[t]} ${esc(o.exact ? signedExact(amount) : signedInr(amount))}</span>${p}</span>`;
 }
 
 function chip(label: string, key: keyof typeof CHIP): string {
@@ -340,7 +353,10 @@ function section(title: string, body: string, note = ''): string {
 const card = (inner: string, pad = '14px 16px') =>
   `<tr><td class="cd" style="background:${L.card};border:1px solid ${L.line};border-radius:12px;padding:${pad}">${inner}</td></tr><tr><td height="10" style="height:10px;line-height:10px;font-size:0">&nbsp;</td></tr>`;
 
-function tile(c: ClassCard, label: string): string {
+/** A yearly rate in a tile or the hero: 7.59%. */
+const ratePct = (r: number) => plainPct(r, 2);
+
+function tile(c: ClassCard, label: string, f: DigestFamily | null): string {
   const t = tone(c.today);
   const hasProfit = (c.key === 'fd' || c.key === 'funds') && c.invested > 0;
   const pt = tone(c.profit);
@@ -348,11 +364,24 @@ function tile(c: ClassCard, label: string): string {
   const lines: string[] = [];
   if (c.key !== 'others')
     lines.push(
-      `<div class="mu" style="color:${L.mute};font-size:12px;line-height:17px">Today <span class="${toneClass(t)}" style="color:${toneColor(t)};font-weight:700;white-space:nowrap">${ARROW[t]} ${esc(signedInr(c.today))}</span></div>`,
+      `<div class="mu" style="color:${L.mute};font-size:12px;line-height:17px">${esc(TERMS.todayChange.label)} <span class="${toneClass(t)}" style="color:${toneColor(t)};font-weight:700;white-space:nowrap">${ARROW[t]} ${esc(signedInr(c.today))}</span></div>`,
     );
   if (hasProfit)
     lines.push(
-      `<div class="mu" style="color:${L.mute};font-size:12px;line-height:17px">Overall <span class="${toneClass(pt)}" style="color:${toneColor(pt)};font-weight:700" title="${esc(inrExact(c.profit))}">${esc(signedInr(c.profit))}${c.profitPct !== null ? ` (${esc(signedPct(c.profitPct))})` : ''}${c.estimated ? ' est.' : ''}</span></div>`,
+      `<div class="mu" style="color:${L.mute};font-size:12px;line-height:17px">${esc(TERMS.profit.label)} <span class="${toneClass(pt)}" style="color:${toneColor(pt)};font-weight:700" title="${esc(inrExact(c.profit))}">${esc(signedInr(c.profit))}${c.profitPct !== null ? ` (${esc(signedPct(c.profitPct))} ${PERCENT_KIND.overall})` : ''}${c.estimated ? ' est.' : ''}</span></div>`,
+    );
+  // the yearly rate Home shows on the same card: XIRR for deposits and funds, the rate savings earned this financial year
+  const yearly =
+    c.key === 'fd'
+      ? f?.fd?.xirr
+      : c.key === 'funds'
+        ? f?.funds?.xirr
+        : c.key === 'cash'
+          ? f?.savings?.rate
+          : null;
+  if (yearly !== null && yearly !== undefined)
+    lines.push(
+      `<div class="mu" style="color:${L.mute};font-size:12px;line-height:17px">${esc(c.key === 'cash' ? TERMS.rateEarned.label : TERMS.xirr.label)} <span class="ink" style="color:${L.ink};font-weight:700;white-space:nowrap">${esc(ratePct(yearly))} ${PERCENT_KIND.yearly}</span></div>`,
     );
   // foreign cash: the savings in S$ (or another currency) on their own, with the rupee value and the rate in small type under it.
   // The tile's own figure above stays the rupee total of all cash.
@@ -360,7 +389,7 @@ function tile(c: ClassCard, label: string): string {
     lines.push(
       `<div class="mu" title="${esc(foreignRupeeLine(f))}" style="color:${L.mute};font-size:12px;line-height:17px;padding-top:3px">of it <span class="ink" style="color:${L.ink};font-weight:700;white-space:nowrap">${esc(formatForeign(f.native, f.currency))}</span></div><div class="mu" style="color:${L.mute};font-size:11px;line-height:15px">≈ ${esc(inr(f.inr))} at ₹${esc(formatRate(f.rate))}${f.rateDate ? ` (${esc(shortDay(f.rateDate))})` : ''}</div>`,
     );
-  return `<div style="display:inline-block;width:100%;max-width:142px;vertical-align:top;font-size:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="tl" style="background:${L.tile};border-radius:10px;table-layout:fixed"><tr><td height="132" valign="top" align="left" style="height:132px;text-align:left;padding:10px 10px 11px 10px;font-family:${FONT}">
+  return `<div style="display:inline-block;width:100%;max-width:142px;vertical-align:top;font-size:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding:4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="tl" style="background:${L.tile};border-radius:10px;table-layout:fixed"><tr><td height="${f ? 150 : 132}" valign="top" align="left" style="height:${f ? 150 : 132}px;text-align:left;padding:10px 10px 11px 10px;font-family:${FONT}">
 <div class="mu" style="color:${L.mute};font-size:11px;line-height:15px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">${esc(label)}</div>
 <div class="ink" title="${esc(inrExact(c.current))}" style="color:${L.ink};font-size:20px;line-height:27px;font-weight:700;white-space:nowrap">${esc(inr(c.current))}</div>
 <div class="mu" style="color:${L.mute};font-size:12px;line-height:17px;padding-bottom:5px">${esc(share.toFixed(share >= 10 || share === 0 ? 0 : 1))}% of total</div>
@@ -454,27 +483,77 @@ function buildHtml(m: Model): string {
   // b. hero
   const t = m.today;
   const o = m.overall;
+  const f = m.family;
   const heroToday = t
     ? Math.round(t.amount) === 0
       ? `<span class="mu" style="color:${L.mute};font-size:14px;font-weight:700">${ARROW.flat} No change yet today</span>`
-      : delta(t.amount, t.pct, 15)
+      : f
+        ? delta(t.amount, t.pct, 15, true, { exact: true, decimals: 2 })
+        : delta(t.amount, t.pct, 15)
     : `<span class="mu" style="color:${L.mute};font-size:14px">First report: nothing to compare with yet</span>`;
   const heroOverall = o
     ? delta(o.profit, o.profitPct, 15)
     : `<span class="mu" style="color:${L.mute};font-size:14px">Not enough data</span>`;
+  const notYet = `<span class="mu" style="color:${L.mute};font-size:14px">Not worked out yet</span>`;
+  /** one row of two labelled figures */
+  const pair = (a: [string, string], b: [string, string] | null, top = 14) =>
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:${top}px"><tr>
+<td valign="top" width="50%" style="padding-right:8px"><div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">${esc(a[0])}</div><div style="padding-top:2px">${a[1]}</div></td>
+<td valign="top" width="50%">${b ? `<div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">${esc(b[0])}</div><div style="padding-top:2px">${b[1]}</div>` : ''}</td></tr></table>`;
+  const plain = (s: string) =>
+    `<span class="ink" style="color:${L.ink};font-size:15px;font-weight:700;white-space:nowrap">${esc(s)}</span>`;
+  const monthLine = m.month
+    ? ` Earned, last 30 days: <span class="${toneClass(tone(m.month.amount))}" style="color:${toneColor(tone(m.month.amount))};font-weight:700">${esc(signedInr(m.month.amount))}${m.month.pct !== null ? ` (${esc(signedPct(m.month.pct))})` : ''}</span>.`
+    : '';
+  // with Home's family figures: Today's change and Earned this FY; Own money and Lifetime profit; XIRR on own money and the earning
+  // rate now (money words v6). Without them (an older input), the profit of the holdings, named as such.
+  const heroRows = f
+    ? [
+        pair(
+          [m.todayLabel, heroToday],
+          [
+            TERMS.earnedFy.label,
+            f.earnedFy ? delta(f.earnedFy.amount, null, 15, true, { exact: true }) : notYet,
+          ],
+        ),
+        pair(
+          [TERMS.ownMoney.label, f.own ? plain(inrExact(f.own.ownMoney)) : notYet],
+          [
+            TERMS.lifetimeProfit.label,
+            f.own
+              ? delta(f.own.lifetimeProfit, f.own.profitPct, 15, true, {
+                  exact: true,
+                  kind: PERCENT_KIND.overall,
+                })
+              : notYet,
+          ],
+          12,
+        ),
+        pair(
+          [TERMS.xirrOwn.label, f.xirrOwn !== null ? plain(ratePct(f.xirrOwn)) : notYet],
+          [
+            TERMS.earningRate.label,
+            f.earningRate !== null ? plain(ratePct(f.earningRate)) : notYet,
+          ],
+          12,
+        ),
+        `<div class="mu" style="font:12px/17px ${FONT};color:${L.mute};padding-top:8px">${esc(TERMS.lifetimeProfit.label)} is ${esc(TERMS.netWorth.label.toLowerCase())} − ${esc(TERMS.ownMoney.label.toLowerCase())}, since records began. ${esc(TERMS.profit.label)} on each kind below is its current value − invested${o?.estimated ? '; partly an estimate' : ''}.${monthLine}</div>`,
+      ].join('\n')
+    : [
+        pair(
+          [m.todayLabel, heroToday],
+          [`${TERMS.profit.label} (${PERCENT_KIND.overall})`, heroOverall],
+        ),
+        o
+          ? `<div class="mu" style="font:12px/17px ${FONT};color:${L.mute};padding-top:8px">${esc(TERMS.profit.label)} of the deposits and funds held: current value − the ${esc(inr(o.invested))} invested${o.estimated ? '; partly an estimate' : ''}. ${esc(TERMS.lifetimeProfit.label)} on your own money is on Home.${monthLine}</div>`
+          : '',
+      ].join('\n');
   rows.push(
     `<tr><td class="cd" style="background:${L.card};padding:20px 20px 18px 20px;border-left:1px solid ${L.line};border-right:1px solid ${L.line}">
-<div class="mu" style="font:700 12px/16px ${FONT};letter-spacing:.08em;text-transform:uppercase;color:${L.mute}">Net worth</div>
+<div class="mu" style="font:700 12px/16px ${FONT};letter-spacing:.08em;text-transform:uppercase;color:${L.mute}">${esc(TERMS.netWorth.label)}</div>
 <div class="ink" title="${esc(inrExact(m.total))}" style="font:700 40px/48px ${FONT};color:${L.ink};letter-spacing:-.01em">${esc(inr(m.total))}</div>
 <div class="mu" style="font:13px/18px ${FONT};color:${L.mute}">${esc(inrExact(m.total))}${i.wealth ? '' : ' · estimated'}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px"><tr>
-<td valign="top" width="50%" style="padding-right:8px"><div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">${esc(m.todayLabel)}</div><div style="padding-top:2px">${heroToday}</div></td>
-<td valign="top" width="50%"><div class="mu" style="font:12px/16px ${FONT};color:${L.mute}">${esc(TERMS.profit.label)} (overall)</div><div style="padding-top:2px">${heroOverall}</div></td></tr></table>
-${
-  o
-    ? `<div class="mu" style="font:12px/17px ${FONT};color:${L.mute};padding-top:8px">Profit on the ${esc(inr(o.invested))} invested in deposits and funds (current value − invested)${o.estimated ? '; partly an estimate' : ''}. Lifetime profit on your own money is on Home.${m.month ? ` Earned, last 30 days: <span class="${toneClass(tone(m.month.amount))}" style="color:${toneColor(tone(m.month.amount))};font-weight:700">${esc(signedInr(m.month.amount))}${m.month.pct !== null ? ` (${esc(signedPct(m.month.pct))})` : ''}</span>.` : ''}</div>`
-    : ''
-}
+${heroRows}
 </td></tr>`,
   );
 
@@ -483,9 +562,12 @@ ${
     const ordered = [...m.classes].sort(
       (a, b) => TILE_ORDER.indexOf(a.key) - TILE_ORDER.indexOf(b.key),
     );
-    const tiles = ordered.map((c) => tile(c, TILE_LABEL[c.key] ?? c.label)).join('');
+    const tiles = ordered.map((c) => tile(c, TILE_LABEL[c.key] ?? c.label, f)).join('');
+    const maturing = f
+      ? `<div class="mu" style="font:13px/19px ${FONT};color:${L.mute};text-align:left;padding:8px 4px 0 4px">Maturing in the next 30 days: <span class="ink" style="color:${L.ink};font-weight:700;white-space:nowrap">${f.maturing30.principal > 0 ? esc(inrExact(f.maturing30.principal)) : 'nothing'}</span></div>`
+      : '';
     rows.push(
-      `<tr><td class="cd" style="background:${L.card};padding:0 12px 14px 12px;border-left:1px solid ${L.line};border-right:1px solid ${L.line};border-bottom:1px solid ${L.line};border-radius:0 0 14px 14px;font-size:0;line-height:0;text-align:center">${tiles}</td></tr>`,
+      `<tr><td class="cd" style="background:${L.card};padding:0 12px 14px 12px;border-left:1px solid ${L.line};border-right:1px solid ${L.line};border-bottom:1px solid ${L.line};border-radius:0 0 14px 14px;font-size:0;line-height:0;text-align:center">${tiles}${maturing}</td></tr>`,
     );
   } else {
     rows.push(
@@ -646,35 +728,49 @@ function buildText(m: Model, wa: boolean): string {
       .join(' · ') || '',
   );
   out.push('');
-  out.push(`${pad('Net worth', 12)}${inr(m.total)}  (${inrExact(m.total)})`);
-  if (m.today)
-    out.push(
-      `${pad(m.todayLabel, 12)}${Math.round(m.today.amount) === 0 ? 'no change yet' : `${signedInr(m.today.amount)}${m.today.pct !== null ? ` (${signedPct(m.today.pct)})` : ''}`}`,
-    );
-  else out.push('First report: nothing to compare with yet.');
-  if (m.overall)
-    out.push(
-      `${pad('Overall', 12)}${signedInr(m.overall.profit)}${m.overall.profitPct !== null ? ` (${signedPct(m.overall.profitPct)})` : ''} on ${inr(m.overall.invested)} put in`,
-    );
-  if (m.classes.length) {
-    out.push('');
-    for (const c of [...m.classes].sort(
-      (a, b) => TILE_ORDER.indexOf(a.key) - TILE_ORDER.indexOf(b.key),
-    )) {
-      const bits: string[] = [];
-      if (c.key !== 'others') bits.push(`today ${signedInr(c.today)}`);
-      if ((c.key === 'fd' || c.key === 'funds') && c.invested > 0)
-        bits.push(
-          `overall ${signedInr(c.profit)}${c.profitPct !== null ? ` (${signedPct(c.profitPct)})` : ''}`,
-        );
-      out.push(
-        `${pad(TILE_SHORT[c.key]!, 14)}${padL(inr(c.current), 9)} ${padL(`${Math.round(c.share * 100)}%`, 4)}  ${bits.join(' · ')}`.trimEnd(),
-      );
-      // the foreign part of the cash, small, under the cash line; the figure above it is still all the cash in rupees
+  if (m.family) {
+    // the four lines of money words v6, the same in the e-mail's text part, Telegram and WhatsApp
+    const lines = familyLines(m.total, m.today, m.family);
+    out.push(...lines.slice(0, -1));
+    // the foreign part of the savings, small, after the kinds; the savings figure is still all the cash in rupees
+    for (const c of m.classes)
       for (const f of c.foreign ?? [])
         out.push(
-          `${' '.repeat(14)}of it ${foreignShort(f)} at ₹${formatRate(f.rate)}${f.rateDate ? ` (${shortDay(f.rateDate)})` : ''}`,
+          `  ${FAMILY_KIND_LABEL.savings}, of it ${foreignShort(f)} at ₹${formatRate(f.rate)}${f.rateDate ? ` (${shortDay(f.rateDate)})` : ''}`,
         );
+    out.push(lines[lines.length - 1]!);
+  } else {
+    const label = (s: string) => pad(s, 16);
+    out.push(`${label(TERMS.netWorth.label)}${inr(m.total)}  (${inrExact(m.total)})`);
+    if (m.today)
+      out.push(
+        `${label(m.todayLabel)}${Math.round(m.today.amount) === 0 ? 'no change yet' : `${signedInr(m.today.amount)}${m.today.pct !== null ? ` (${signedPct(m.today.pct)})` : ''}`}`,
+      );
+    else out.push('First report: nothing to compare with yet.');
+    if (m.overall)
+      out.push(
+        `${label(TERMS.profit.label)}${signedInr(m.overall.profit)}${m.overall.profitPct !== null ? ` (${signedPct(m.overall.profitPct)} ${PERCENT_KIND.overall})` : ''} on ${inr(m.overall.invested)} invested`,
+      );
+    if (m.classes.length) {
+      out.push('');
+      for (const c of [...m.classes].sort(
+        (a, b) => TILE_ORDER.indexOf(a.key) - TILE_ORDER.indexOf(b.key),
+      )) {
+        const bits: string[] = [];
+        if (c.key !== 'others') bits.push(`today ${signedInr(c.today)}`);
+        if ((c.key === 'fd' || c.key === 'funds') && c.invested > 0)
+          bits.push(
+            `${TERMS.profit.label.toLowerCase()} ${signedInr(c.profit)}${c.profitPct !== null ? ` (${signedPct(c.profitPct)})` : ''}`,
+          );
+        out.push(
+          `${pad(TILE_SHORT[c.key]!, 14)}${padL(inr(c.current), 9)} ${padL(`${Math.round(c.share * 100)}%`, 4)}  ${bits.join(' · ')}`.trimEnd(),
+        );
+        // the foreign part of the cash, small, under the cash line; the figure above it is still all the cash in rupees
+        for (const f of c.foreign ?? [])
+          out.push(
+            `${' '.repeat(14)}of it ${foreignShort(f)} at ₹${formatRate(f.rate)}${f.rateDate ? ` (${shortDay(f.rateDate)})` : ''}`,
+          );
+      }
     }
   }
   if (m.goals !== null) {
