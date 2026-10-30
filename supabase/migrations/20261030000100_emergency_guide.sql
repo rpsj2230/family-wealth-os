@@ -50,3 +50,62 @@ begin
 end $$;
 revoke all on function public.touch_member_activity(uuid) from public, anon;
 grant execute on function public.touch_member_activity(uuid) to authenticated;
+
+-- 5 ------------------------------------------------------------------------------------------------------------------------------
+-- Telling the trusted people in order. alert_contacts is in priority order. At inactive_days the first person is told, with a link
+-- "I have received this"; if they do not confirm, they are reminded `reminders` times, `remind_every_days` apart, and then the next
+-- person is told the same way. The chain stops when anyone confirms, or when a member uses the portal again (a new absence starts a
+-- new chain). The owner's warning carries a link "I'm fine" that postpones without signing in.
+alter table public.emergency_access
+  add column remind_every_days   int not null default 2 check (remind_every_days between 1 and 14),
+  add column reminders           int not null default 3 check (reminders between 0 and 10),
+  add column postpone_token_hash text;
+
+create table public.emergency_alert_log (
+  household_id    uuid not null references public.households on delete cascade,
+  -- last_member_seen when this absence's chain began: one chain per absence
+  absence_from    timestamptz not null,
+  -- position in alert_contacts (0 = first priority)
+  contact_pos     int not null check (contact_pos between 0 and 19),
+  sends           int not null default 0,
+  first_sent_at   timestamptz,
+  last_sent_at    timestamptz,
+  token_hash      text not null,
+  confirmed_at    timestamptz,
+  primary key (household_id, absence_from, contact_pos)
+);
+alter table public.emergency_alert_log enable row level security;
+-- members see who was told and who confirmed; nobody else, and only the daily job (service role) writes
+create policy ealert_members_read on public.emergency_alert_log for select using (public.is_member(household_id));
+revoke all on public.emergency_alert_log from anon, authenticated;
+grant select on public.emergency_alert_log to authenticated;
+
+-- "I have received this": the link in the message carries a random token; only its hash is stored. Works without signing in,
+-- reveals nothing, and only marks that message as received.
+create function public.confirm_emergency_alert(p_token text) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare n int;
+begin
+  if p_token is null or length(p_token) < 32 then return false; end if;
+  update public.emergency_alert_log set confirmed_at = coalesce(confirmed_at, now())
+    where token_hash = encode(digest(p_token, 'sha256'), 'hex');
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+revoke all on function public.confirm_emergency_alert(text) from public;
+grant execute on function public.confirm_emergency_alert(text) to anon, authenticated;
+
+-- "I'm fine": the link in the owner's warning postpones the alert as if a member had used the portal
+create function public.postpone_emergency_alert(p_token text) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare n int;
+begin
+  if p_token is null or length(p_token) < 32 then return false; end if;
+  update public.emergency_access
+    set last_member_seen = now(), warned_at = null, alerted_at = null, postpone_token_hash = null
+    where postpone_token_hash = encode(digest(p_token, 'sha256'), 'hex');
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+revoke all on function public.postpone_emergency_alert(text) from public;
+grant execute on function public.postpone_emergency_alert(text) to anon, authenticated;
