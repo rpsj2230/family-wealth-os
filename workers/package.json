@@ -22,7 +22,8 @@
     "fund-units": "tsx src/fund-units.ts",
     "capital-opening": "tsx src/capital-opening.ts",
     "timing": "tsx src/timing.ts",
-    "bank-statements": "tsx src/bank-statements.ts"
+    "bank-statements": "tsx src/bank-statements.ts",
+    "statement-deposits": "tsx src/statement-deposits.ts"
   },
   "dependencies": {
     "@fwos/core": "workspace:*",

@@ -1,0 +1,35 @@
+name: Deposits from statements (by hand)
+# Run by hand only. Finds deposits the bank statements show (a booking and a pay-back with the same deposit number) that the portal
+# has no record of. "plan" writes nothing; "apply" adds them as matured deposits and rebuilds the movements. The log shows dates,
+# deposit numbers' last four digits and ratios only.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: plan (write nothing) or apply
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+permissions:
+  contents: read
+concurrency:
+  group: bank-statements-import
+  cancel-in-progress: false
+jobs:
+  deposits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: https://imrrsvpqdazjojeescwl.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fwos/workers statement-deposits
