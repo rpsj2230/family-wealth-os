@@ -596,6 +596,7 @@ export * from './daily-valuation';
 export * from './statement-store';
 export * from './statement-rebuild';
 export * from './statement-save';
+export * from './bank-statement-mail';
 export * from './remittance-store';
 export * from './trail-store';
 export * from './needed-store';

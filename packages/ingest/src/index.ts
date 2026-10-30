@@ -94,3 +94,4 @@ export * from './bank-statement';
 export * from './xls-binary';
 export * from './diary-history';
 export * from './alert-line';
+export * from './bank-statement-mail';

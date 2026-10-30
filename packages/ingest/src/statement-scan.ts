@@ -57,6 +57,8 @@ export interface StatementIo {
   importPdf(m: {
     messageId: string;
     receivedOn: string;
+    /** the From line of the message (for a forward, of the original), so a bank statement is placed with the bank that sent it */
+    from?: string;
     attachments: { filename: string; content: Uint8Array }[];
   }): Promise<ImportedFromMail>;
 }
@@ -71,6 +73,8 @@ export interface ScanConfig {
   maxPerRun: number;
   /** read again the messages that could not be opened before (a person pressed Scan now, maybe after saving a password) */
   retryFailed: boolean;
+  /** what the senders send: fund statements (the default) or bank account statements */
+  kind?: 'fund' | 'bank';
 }
 
 export interface ScanItem {
@@ -103,9 +107,20 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** The sentence recorded for a statement that was read. */
-export function describeRead(registrar: string, r: ImportedFromMail): string {
+export function describeRead(
+  registrar: string,
+  r: ImportedFromMail,
+  kind: 'fund' | 'bank' = 'fund',
+): string {
   if (r.outcome === 'failed')
     return /^Could not/.test(r.reason) ? r.reason : `Could not read: ${r.reason}`;
+  if (kind === 'bank') {
+    // for a bank statement, funds counts the accounts and transactions the new lines
+    const base = `Bank statement from ${registrar}: ${plural(r.funds, 'account')}, ${
+      r.transactions === 0 ? 'no new lines' : `${plural(r.transactions, 'new line')}`
+    }`;
+    return r.reason ? `${base} (${r.reason})` : base;
+  }
   const base = `Fund statement from ${registrar}: ${plural(r.funds, 'fund')}, ${
     r.transactions === 0 ? 'no new transactions' : `${plural(r.transactions, 'transaction')} added`
   }`;
@@ -210,6 +225,7 @@ export async function runStatementScan(
         continue;
       }
       let registrar = c.registrar;
+      let from = msg.from;
       if (c.via === 'forward') {
         const fw = forwardedRegistrar(msg.subject, msg.text, cfg.senders);
         if (!fw) {
@@ -225,6 +241,7 @@ export async function runStatementScan(
           continue;
         }
         registrar = fw.registrar;
+        from = fw.address;
       }
       const pdfs = msg.attachments.filter((a) => a.content.length <= cfg.maxBytes);
       if (pdfs.length === 0) {
@@ -240,8 +257,8 @@ export async function runStatementScan(
         continue;
       }
       report.found++;
-      const res = await io.importPdf({ messageId: c.id, receivedOn, attachments: pdfs });
-      const text = describeRead(registrar, res);
+      const res = await io.importPdf({ messageId: c.id, receivedOn, from, attachments: pdfs });
+      const text = describeRead(registrar, res, cfg.kind);
       await io.record({
         ...base,
         bodyText: emailExcerpt(msg.text),

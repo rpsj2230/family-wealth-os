@@ -14,7 +14,12 @@
  */
 import { ImapFlow, type MessageStructureObject } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { importCasAttachments, loadSettings } from '@fwos/data';
+import {
+  importBankStatementMail,
+  importCasAttachments,
+  loadSettings,
+  rebuildStatementMoves,
+} from '@fwos/data';
 import {
   lookBackDays,
   maskAddress,
@@ -314,6 +319,25 @@ async function main() {
     },
   };
 
+  // the banks' statements, under their own key so a message the alert reader saw is still read here
+  let bankLines = 0;
+  const bankKey = (id: string) => `bank-statement:${id}`;
+  const bankIo: StatementIo = {
+    seen: (id) => io.seen(bankKey(id)),
+    record: (row) => io.record({ ...row, messageId: bankKey(row.messageId) }),
+    async importPdf(m) {
+      const r = await importBankStatementMail(db, hh, m);
+      bankLines += r.lines;
+      return {
+        outcome: r.outcome,
+        reason: r.reason,
+        people: r.ownerIds.map((id) => names.get(id) ?? 'someone'),
+        funds: r.accounts,
+        transactions: r.lines,
+      };
+    },
+  };
+
   const own = await ownAddresses(db, hh, cfg.inbox.trustedForwarders);
   const client = new ImapFlow({
     host: 'imap.gmail.com',
@@ -325,6 +349,7 @@ async function main() {
   try {
     await client.connect();
     let report;
+    let bankReport: Awaited<ReturnType<typeof runStatementScan>> | null = null;
     try {
       const path = await allMailPath(client);
       // EXAMINE, not SELECT: the server itself refuses any change to this mailbox for as long as it is open
@@ -338,6 +363,16 @@ async function main() {
           maxPerRun: sm.maxPerRun,
           retryFailed: trigger === 'requested' || trigger === 'manual',
         });
+        if (sm.banksEnabled && sm.bankSenders.length > 0)
+          bankReport = await runStatementScan(readerOver(client), bankIo, {
+            senders: sm.bankSenders,
+            ownAddresses: own,
+            since,
+            maxBytes: Math.round(sm.maxMb * 1_048_576),
+            maxPerRun: sm.maxPerRun,
+            retryFailed: trigger === 'requested' || trigger === 'manual',
+            kind: 'bank',
+          });
       } finally {
         lock.release();
       }
@@ -348,14 +383,30 @@ async function main() {
       `Gmail statements (${trigger}, looked back ${days} days): ${scanLine(report)}; ${report.skipped} already handled.`,
     );
     for (const l of report.lines) console.log(' -', l);
+    if (bankReport) {
+      console.log(
+        `Bank statements: ${scanLine(bankReport)}; ${bankReport.skipped} already handled; ${bankLines} new lines.`,
+      );
+      for (const l of bankReport.lines) console.log(' -', l);
+    }
+    // the new lines are sorted by the rules at once, so the trail and the figures follow them today
+    if (bankLines > 0) {
+      const rb = await rebuildStatementMoves(db, hh);
+      console.log(
+        `Movements from statements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}.`,
+      );
+    }
     await finish(scanId, {
       ok: true,
       found: report.found,
       imported: report.imported,
       skipped: report.skipped,
       problems: report.problems,
-      note: scanLine(report).slice(0, 500),
-      detail: report.items.slice(0, 60),
+      note: `${scanLine(report)}${bankReport ? `; bank statements: ${scanLine(bankReport)}` : ''}`.slice(
+        0,
+        500,
+      ),
+      detail: [...report.items, ...(bankReport?.items ?? [])].slice(0, 60),
     });
   } catch (e) {
     const msg = (e as Error).message.slice(0, 400);

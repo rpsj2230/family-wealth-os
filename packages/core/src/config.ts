@@ -356,6 +356,10 @@ export interface AppConfig {
     minGapHours: number;
     /** a requested full statement that has not arrived after this many days is flagged and leaves a task */
     requestWaitDays: number;
+    /** the same scan also reads the account statements your banks e-mail (opened with the statement passwords saved per person) */
+    banksEnabled: boolean;
+    /** who a bank statement may come from: a domain or one full address, as for the fund statements */
+    bankSenders: string[];
   };
 }
 
@@ -587,6 +591,22 @@ export const DEFAULT_CONFIG: AppConfig = {
     maxPerRun: 40,
     minGapHours: 20,
     requestWaitDays: 2,
+    banksEnabled: true,
+    // The banks the household holds, by the domains their e-statements come from; "bank.in" is the domain only banks regulated by
+    // the RBI may register (each moves its mail there), so it covers them all. Edit the list in Settings.
+    bankSenders: [
+      'bank.in',
+      'hdfcbank.net',
+      'hdfcbank.com',
+      'idfcfirstbank.com',
+      'yesbank.in',
+      'indusind.com',
+      'aubank.in',
+      'rblbank.com',
+      'esafbank.com',
+      'equitasbank.com',
+      'janabank.com',
+    ],
   },
 };
 
@@ -1063,6 +1083,14 @@ export function configFromJson(raw: unknown): AppConfig {
           : [];
         return list.length > 0 ? list.slice(0, 40) : d.statementMail.senders;
       })(),
+      banksEnabled: bool(stm.banksEnabled, d.statementMail.banksEnabled),
+      bankSenders: Array.isArray(stm.bankSenders)
+        ? [
+            ...new Set(
+              (stm.bankSenders as unknown[]).map(cleanSender).filter((x): x is string => !!x),
+            ),
+          ].slice(0, 40)
+        : d.statementMail.bankSenders,
       firstDays: Math.round(num(stm.firstDays, d.statementMail.firstDays, 1, 1500)),
       regularDays: Math.round(num(stm.regularDays, d.statementMail.regularDays, 1, 400)),
       maxMb: num(stm.maxMb, d.statementMail.maxMb, 1, 40),

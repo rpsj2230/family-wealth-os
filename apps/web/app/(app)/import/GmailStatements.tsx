@@ -289,13 +289,18 @@ export function GmailStatements({ model: m, demo = false }: { model: GmailModel;
       </fieldset>
 
       <details className="disclose gm-help" id="statement-passwords">
-        <summary>Statement passwords (if you did not use your PAN)</summary>
+        <summary>Statement passwords (your banks’, and a fund statement not on your PAN)</summary>
         <p className="small">
           Some services choose a random password and e-mail it to you separately. If a statement
           could not be opened, type the password you were given for that person’s statement. It is
           saved write-only, like the PAN: it cannot be read back or seen again, only removed, and
           the app never reads a password out of an e-mail. The easier way is to ask for the
           statement again with your PAN as the password.
+        </p>
+        <p className="small">
+          Your banks’ monthly statements are read the same way: save here the password each bank
+          gives its statement for that person (often a mix of name and date of birth, or the
+          customer ID), and every statement the bank e-mails is imported by itself.
         </p>
         <StatementPasswords people={people} disabled={demo || people.length === 0} />
       </details>
