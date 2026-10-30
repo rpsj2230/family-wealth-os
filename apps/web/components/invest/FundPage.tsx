@@ -18,7 +18,7 @@ import { Tabs } from '@/components/Tabs';
 import { Why, WhyHead } from '@/components/Why';
 import { niceDate } from '@/lib/dates';
 import { fundExplain } from '@/lib/explain-fund';
-import type { FundDetail } from '@/lib/fund-detail-model';
+import type { FundDetail, FundReturns } from '@/lib/fund-detail-model';
 import type { FundRow } from '@/lib/investments';
 import { AddsUp, LedgerChip } from './DataCheck';
 import { AddTxnButton, EditFundButton } from './FundEdit';
@@ -43,6 +43,11 @@ export const FUND_TABS = ['overview', 'returns', 'transactions', 'sip', 'lots', 
 export type FundTab = (typeof FUND_TABS)[number];
 export const parseFundTab = (v: string | undefined): FundTab =>
   (FUND_TABS as readonly string[]).includes(v ?? '') ? (v as FundTab) : 'overview';
+
+/** The Returns tab shows the time the holder's money has been in the fund, or the fund's whole price history. */
+export type ReturnScope = 'mine' | 'whole';
+export const parseReturnScope = (v: string | undefined): ReturnScope =>
+  v === 'whole' ? 'whole' : 'mine';
 
 const inr = (n: number) => formatInr(Math.round(n));
 const price = (n: number) =>
@@ -83,6 +88,71 @@ function Tile({
   );
 }
 
+/** The holder's own money over each period: the value at the start, money in and out, the value now, the profit and the return. */
+function OwnPeriods({ rows }: { rows: FundReturns['own'] }) {
+  return (
+    <div className="tablewrap">
+      <table className="data ownperiods">
+        <caption className="sr-only">Your money in this fund over each period</caption>
+        <thead>
+          <tr>
+            <th scope="col">Period</th>
+            <th scope="col" className="num">
+              Value at the start
+            </th>
+            <th scope="col" className="num">
+              Put in
+            </th>
+            <th scope="col" className="num">
+              Taken out
+            </th>
+            <th scope="col" className="num">
+              Value now
+            </th>
+            <th scope="col" className="num">
+              Profit
+            </th>
+            <th scope="col" className="num">
+              Your return
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.def.key}>
+              <th scope="row">
+                {r.sinceFirst ? 'Since you started' : r.def.label}
+                <span className="fl-s">from {niceDate(r.from)}</span>
+              </th>
+              <td className="num" data-label="Value at the start">
+                {r.sinceFirst ? '–' : inr(r.startValue)}
+              </td>
+              <td className="num" data-label="Put in">
+                {r.putIn > 0 ? inr(r.putIn) : '–'}
+              </td>
+              <td className="num" data-label="Taken out">
+                {r.takenOut > 0 ? inr(r.takenOut) : '–'}
+              </td>
+              <td className="num" data-label="Value now">
+                {inr(r.endValue)}
+              </td>
+              <td className={`num ${tone(r.gain)}`} data-label="Profit">
+                {rupees(r.gain)}
+              </td>
+              <td className={`num ${tone(r.ret)}`} data-label="Your return">
+                {r.ret === null ? '–' : pct(r.ret, 1)}
+                <span className="fl-s">
+                  {r.ret === null ? '' : r.annualised ? 'a year (XIRR)' : 'on the money at work'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /**
  * A fund's page: the headline row, then tabs. Overview (the figures and graphs), Returns (the fund's price return over each period
  * against the benchmark, calendar and financial years, month grid, fall from the high, rolling returns, risk), Transactions (every
@@ -94,6 +164,7 @@ export function FundPage({
   detail,
   tab,
   heat,
+  scope = 'mine',
   base,
   keep,
   today,
@@ -113,6 +184,8 @@ export function FundPage({
   detail: FundDetail;
   tab: FundTab;
   heat: YearKind;
+  /** the Returns tab: from the first purchase (the default) or the fund's whole price history */
+  scope?: ReturnScope;
   /** this page's address without its query, and the query values to carry along */
   base: string;
   keep: Record<string, string>;
@@ -331,15 +404,17 @@ export function FundPage({
         </p>
       );
     else {
-      const rows: PeriodRow[] = ret.versus.map((x) => ({
+      const mine = scope === 'mine' && ret.since !== null;
+      const shown = mine ? ret : ret.whole;
+      const rows: PeriodRow[] = shown.versus.map((x) => ({
         def: x.def,
         r: x.yours,
         gain: undefined,
         v: x.v,
       }));
-      const hasBench = ret.versus.some((x) => x.v.benchmark !== null);
-      const p = ret.profile;
-      const growth = ret.growth;
+      const hasBench = shown.versus.some((x) => x.v.benchmark !== null);
+      const p = shown.profile;
+      const growth = shown.growth;
       const series: PlotSeries[] = growth
         ? [
             { key: 'fund', name: f.name, colour, points: growth.fund },
@@ -352,11 +427,81 @@ export function FundPage({
             },
           ]
         : [];
+      const sh = ret.shadow;
+      const benchNow = sh && sh.bench.length > 0 ? sh.bench[sh.bench.length - 1]! : null;
+      const valueNow = sh ? sh.value[sh.value.length - 1]! : null;
       returnsBody = (
         <>
+          {ret.since !== null && (
+            <Chips<ReturnScope>
+              label="Show"
+              items={[
+                { key: 'mine', label: `Since you invested (${niceDate(ret.since)})` },
+                { key: 'whole', label: 'The fund’s whole price history' },
+              ]}
+              current={mine ? 'mine' : 'whole'}
+              href={(k) =>
+                href({
+                  tab: 'returns',
+                  scope: k === 'mine' ? undefined : k,
+                  heat: heat === 'financial' ? undefined : heat,
+                })
+              }
+            />
+          )}
+          {mine && ret.own.length > 0 && (
+            <section className="card wide" aria-labelledby="fy">
+              <div className="cardhead">
+                <h2 id="fy">Your money over each period</h2>
+                <span className="small muted">Counts only your own money, and when it went in</span>
+              </div>
+              <OwnPeriods rows={ret.own} />
+              {ret.estimated && <EstimateNote share={1} />}
+            </section>
+          )}
+          {mine && sh && (
+            <section className="card wide" aria-labelledby="fm">
+              <div className="cardhead">
+                <h2 id="fm">How your money grew</h2>
+                <span className="small muted">From {niceDate(sh.value[0]!.date)}</span>
+              </div>
+              <PlotChart
+                unit="inr"
+                caption={`${f.name}: your value against the money you put in${benchNow ? ' and the same money in the benchmark' : ''}`}
+                series={[
+                  { key: 'value', name: 'Your value', colour, area: true, points: sh.value },
+                  {
+                    key: 'in',
+                    name: 'Money you put in',
+                    colour: 'var(--viz-line)',
+                    step: true,
+                    points: sh.invested,
+                  },
+                  ...(sh.bench.length >= 2
+                    ? [
+                        {
+                          key: 'bench',
+                          name: `Same money in ${ret.benchName ?? 'the benchmark'}`,
+                          colour: 'var(--viz-3)',
+                          dashed: true,
+                          points: sh.bench,
+                        },
+                      ]
+                    : []),
+                ]}
+                note={
+                  benchNow && valueNow
+                    ? `Had every purchase and sale of yours gone into ${ret.benchName ?? 'the benchmark'} (an index fund that follows the Nifty 50) on the same day, it would be worth ${inr(benchNow.value)} on ${niceDate(benchNow.date)}, against ${inr(valueNow.value)} in this fund.`
+                    : undefined
+                }
+              />
+            </section>
+          )}
           <p className="fundnote">
             {ret.basis === 'price'
-              ? 'These are the fund’s own returns from its published prices (the price of one unit), not your return: they ignore when you put money in. Your own return is the XIRR above.'
+              ? mine
+                ? `The figures below are the fund’s price return (the price of one unit) while your money has been in it, from your first purchase on ${niceDate(ret.since!)}. They ignore how much you put in and when; your own return is in the table above.`
+                : 'These are the fund’s own returns from its published prices over its whole history, including the years before you invested. They are not your return.'
               : 'No published prices are loaded for this fund, so these returns are worked out from the values you recorded and the money put in'}
             {ret.estimated && ', with the money put in estimated from the start date and SIP'}
             {ret.basis === 'values' ? '.' : ''}
@@ -367,7 +512,11 @@ export function FundPage({
                 <h2 id="fr">Return over each period</h2>
               </WhyHead>
               <span className="small muted">
-                {ret.basis === 'price' ? 'Price return' : 'From recorded values'}
+                {ret.basis === 'price'
+                  ? mine
+                    ? 'Price return, since you invested'
+                    : 'Price return, whole history'
+                  : 'From recorded values'}
               </span>
             </div>
             <ReturnsByPeriod
@@ -388,14 +537,18 @@ export function FundPage({
                 unit="index"
                 caption={`Growth of 100: ${f.name} and the benchmark`}
                 series={series}
-                note="Both start at 100 on the same day. The benchmark is an index fund that follows the Nifty 50, a proxy for the index."
+                note={`Both start at 100 on ${niceDate(growth.from)}${mine ? ', your first purchase' : ''}. The benchmark is an index fund that follows the Nifty 50, a proxy for the index.`}
               />
             </section>
           )}
           <section className="card wide" aria-labelledby="fh">
             <div className="cardhead">
               <h2 id="fh">Month by month</h2>
-              <span className="small muted">Return in each month and each year</span>
+              <span className="small muted">
+                {mine
+                  ? 'The price return in each month since you invested'
+                  : 'Return in each month and each year'}
+              </span>
             </div>
             <Chips<YearKind>
               label="Years"
@@ -404,7 +557,13 @@ export function FundPage({
                 { key: 'calendar', label: 'Calendar' },
               ]}
               current={heat}
-              href={(k) => href({ tab: 'returns', heat: k === 'financial' ? undefined : k })}
+              href={(k) =>
+                href({
+                  tab: 'returns',
+                  heat: k === 'financial' ? undefined : k,
+                  scope: scope === 'whole' ? 'whole' : undefined,
+                })
+              }
             />
             <Extremes
               bestMonth={p.bestMonth}
@@ -424,6 +583,7 @@ export function FundPage({
             <section className="card" aria-labelledby="fd">
               <div className="cardhead">
                 <h2 id="fd">Fall from the highest price</h2>
+                {mine && <span className="small muted">Since you invested</span>}
               </div>
               <DrawdownCard d={p.drawdown} />
             </section>
@@ -437,7 +597,11 @@ export function FundPage({
           <section className="card wide" aria-labelledby="fo">
             <div className="cardhead">
               <h2 id="fo">Rolling returns</h2>
-              <span className="small muted">What any holding period would have earned</span>
+              <span className="small muted">
+                {mine
+                  ? 'What any holding period since you invested would have earned'
+                  : 'What any holding period would have earned'}
+              </span>
             </div>
             <RollingCard rolling={p.rolling} minWindows={config.rollingMinWindows} />
           </section>

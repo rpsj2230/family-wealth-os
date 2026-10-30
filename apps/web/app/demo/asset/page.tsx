@@ -18,7 +18,7 @@ import {
 } from '@/lib/demo-funds';
 import { fundEditRows } from '@/lib/invest-ledger';
 import { FundEditProvider } from '@/components/invest/FundEdit';
-import { FundPage, parseFundTab } from '@/components/invest/FundPage';
+import { FundPage, parseFundTab, parseReturnScope } from '@/components/invest/FundPage';
 import { SipPlan } from '@/components/invest/SipPlan';
 import { sipPlanView } from '@/lib/sip-plan';
 import type { ReplacedRow } from '@/components/invest/ReplacedLines';
@@ -265,6 +265,7 @@ export default async function DemoAsset({
     id?: string;
     tab?: string;
     heat?: string;
+    scope?: string;
     edit?: string;
   }>;
 }) {
@@ -344,6 +345,7 @@ export default async function DemoAsset({
             detail={detail}
             tab={parseFundTab(sp.tab)}
             heat={sp.heat === 'calendar' ? 'calendar' : 'financial'}
+            scope={parseReturnScope(sp.scope)}
             base={base}
             keep={keep}
             today={DEMO_TODAY}

@@ -93,6 +93,34 @@ test('sample fund: the returns tab shows the periods, the benchmark, years, mont
   await noSideways(page);
 });
 
+test('sample fund: returns start with your first purchase and show your own money, with the whole history one click away', async ({
+  page,
+}) => {
+  await page.goto('/demo/asset?kind=fund&tab=returns');
+  const show = page.getByRole('navigation', { name: 'Show' });
+  await expect(show.getByRole('link', { name: /^Since you invested/ })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: 'Your money over each period' })).toBeVisible();
+  const own = page.getByRole('table', { name: 'Your money in this fund over each period' });
+  await expect(own.getByRole('rowheader', { name: /Since you started/ })).toBeVisible();
+  await expect(own.getByRole('columnheader', { name: 'Your return' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How your money grew' })).toBeVisible();
+  await expect(page.getByText(/Had every purchase and sale of yours gone into/)).toBeVisible();
+  await expect(page.getByText(/while your money has been in it/)).toBeVisible();
+  // the month grid covers only the months since the first purchase; the whole history has at least as many
+  const months = page.getByRole('table', { name: /Return in each month/ }).locator('[aria-label]');
+  const mineCount = await months.count();
+  expect(mineCount).toBeGreaterThan(0);
+  await show.getByRole('link', { name: 'The fund’s whole price history' }).click();
+  await expect(page).toHaveURL(/scope=whole/);
+  await expect(page.getByText(/including the years before you invested/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your money over each period' })).toHaveCount(0);
+  expect(await months.count()).toBeGreaterThanOrEqual(mineCount);
+  await noSideways(page);
+});
+
 test('sample fund: every transaction can be filtered, searched, sorted and exported', async ({
   page,
 }) => {

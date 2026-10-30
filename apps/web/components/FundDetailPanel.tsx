@@ -294,7 +294,7 @@ export function FundDetailPanel({
           </div>
           {d.units.length >= 2 && (
             <div className="vizblock">
-              <h3 className="subhead">Units held over time</h3>
+              <h3 className="subhead">Units bought and held over time</h3>
               <PlotChart
                 unit="units"
                 caption={`${f.name}: units held after each transaction`}
@@ -307,6 +307,25 @@ export function FundDetailPanel({
                     points: d.units,
                   },
                 ]}
+                markers={d.nav.buys.flatMap((b): PlotMarker[] => {
+                  const held = [...d.units].reverse().find((u) => u.date <= b.date);
+                  return held
+                    ? [
+                        {
+                          date: b.date,
+                          value: held.value,
+                          shape: 'dot',
+                          colour: 'var(--viz-2)',
+                          label: `Bought ${b.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units for ${inr(b.amount)} at ${price(b.nav)}`,
+                        },
+                      ]
+                    : [];
+                })}
+                legendMarkers={
+                  d.nav.buys.length
+                    ? [{ label: 'Units bought', shape: 'dot', colour: 'var(--viz-2)' }]
+                    : []
+                }
               />
             </div>
           )}

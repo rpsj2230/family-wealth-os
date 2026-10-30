@@ -110,9 +110,9 @@ test.describe('Explain movements (public sample)', () => {
 
   test('Home links to it from the sample', async ({ page }) => {
     await page.goto('/demo/dashboard');
-    await expect(page.getByRole('link', { name: 'Explain movements' }).first()).toHaveAttribute(
-      'href',
-      '/demo/reconcile',
-    );
+    // the link on the page itself (the side menu on a wide screen also has one, to the signed-in page)
+    await expect(
+      page.getByRole('main').getByRole('link', { name: 'Explain movements' }).first(),
+    ).toHaveAttribute('href', '/demo/reconcile');
   });
 });

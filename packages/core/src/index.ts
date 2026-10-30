@@ -59,6 +59,7 @@ export * from './ledger-rows';
 export * from './portfolio-performance';
 export * from './invest-overview';
 export * from './fund-platform';
+export * from './own-returns';
 export * from './perf-inputs';
 export * from './period-pl';
 export * from './home';

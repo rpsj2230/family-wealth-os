@@ -19,7 +19,7 @@ import { loadFundDetail } from '@/lib/fund-detail-data';
 import { fundEditRows } from '@/lib/invest-ledger';
 import { parseRange, personStyles } from '@fwos/core';
 import { FundEditProvider } from '@/components/invest/FundEdit';
-import { FundPage, parseFundTab } from '@/components/invest/FundPage';
+import { FundPage, parseFundTab, parseReturnScope } from '@/components/invest/FundPage';
 import { SipPlan } from '@/components/invest/SipPlan';
 import { loadSipPlan } from '@/lib/sip-plan-data';
 import { addFund, addFundTxn, saveFundEdit } from '../../investments/edit-actions';
@@ -31,7 +31,13 @@ export default async function AssetPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ range?: string; tab?: string; heat?: string; edit?: string }>;
+  searchParams: Promise<{
+    range?: string;
+    tab?: string;
+    heat?: string;
+    scope?: string;
+    edit?: string;
+  }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -108,6 +114,7 @@ export default async function AssetPage({
           detail={fundView.detail}
           tab={parseFundTab(sp.tab)}
           heat={sp.heat === 'calendar' ? 'calendar' : 'financial'}
+          scope={parseReturnScope(sp.scope)}
           base={`/asset/${id}`}
           keep={{}}
           today={fundView.today}

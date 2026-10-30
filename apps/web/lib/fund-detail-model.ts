@@ -20,6 +20,11 @@ import {
   type TrailingReturn,
   type Versus,
   clipSeries,
+  heldLine,
+  ownPeriods,
+  PERF_PERIODS,
+  shadowLine,
+  type OwnPeriodRow,
   FUND_RANGE_WORDS,
   holdingProfile,
   monthlyContributions,
@@ -61,12 +66,8 @@ export type DetailFund = StatFund & {
   flowsEstimated: boolean;
 };
 
-/** The fund's returns: where they come from and every view of them. */
-export interface FundReturns {
-  /** from the fund's published prices, or (when none are loaded) from the values recorded and the money put in */
-  basis: 'price' | 'values';
-  /** the cash flows behind a value-based line are worked out from the start date and SIP, not a statement */
-  estimated: boolean;
+/** One view of the returns: the trailing table against the benchmark, the profile (months, years, falls, rolling) and growth of 100. */
+export interface ReturnView {
   profile: ReturnProfile;
   /** the benchmark's returns over the same periods, and the difference */
   versus: {
@@ -75,9 +76,28 @@ export interface FundReturns {
     bench: TrailingReturn | null;
     v: Versus;
   }[];
-  benchName: string | null;
   /** growth of 100 from one start for the fund and the benchmark, to draw */
   growth: { from: string; fund: IndexPoint[]; bench: IndexPoint[] } | null;
+}
+
+/**
+ * The fund's returns: where they come from and every view of them. The top-level view (profile, versus, growth) covers only the time
+ * the holder has had money in the fund (from the first purchase); `whole` is the fund's whole price history, for comparison.
+ */
+export interface FundReturns extends ReturnView {
+  /** from the fund's published prices, or (when none are loaded) from the values recorded and the money put in */
+  basis: 'price' | 'values';
+  /** the cash flows behind a value-based line are worked out from the start date and SIP, not a statement */
+  estimated: boolean;
+  benchName: string | null;
+  /** the first purchase (or the start date): the views of the holder's own money start here */
+  since: string | null;
+  /** the whole price history, from the fund's launch */
+  whole: ReturnView;
+  /** the holder's own money over each period: value at the start, money in and out, profit, money-weighted return */
+  own: OwnPeriodRow[];
+  /** the holder's value and money put in on each valuation day, and what the same purchases would be worth in the benchmark */
+  shadow: { value: IndexPoint[]; invested: IndexPoint[]; bench: IndexPoint[] } | null;
 }
 
 export interface FundDetail {
@@ -165,39 +185,75 @@ export function buildFundDetail(args: {
             f.flows,
           ),
         );
-    const profile = returnProfile(line, args.today, cfgP);
     const benchLine = args.benchmark?.navs ?? [];
-    const benchTable = benchLine.length >= 2 ? trailingTable(benchLine, args.today, cfgP) : [];
-    const rows = profile.trailing.map(({ def, r }) => {
-      const b = benchTable.find((x) => x.def.key === def.key)?.r ?? null;
-      const [v] = versus(
-        [{ key: def.key, ret: r ? shownReturn(r) : null }],
-        [{ key: def.key, ret: b ? shownReturn(b) : null }],
-      );
-      return { def, yours: r, bench: b, v: v! };
+    const buys = f.txns
+      .filter((t) => t.units > 0)
+      .map((t) => t.date)
+      .sort();
+    const since = buys[0] ?? f.startedOn ?? null;
+    const view = (fundLine: IndexPoint[], bench: IndexPoint[], from: string | null): ReturnView => {
+      const profile = returnProfile(fundLine, args.today, cfgP);
+      const benchTable = bench.length >= 2 ? trailingTable(bench, args.today, cfgP) : [];
+      const rows = profile.trailing.map(({ def, r }) => {
+        const b = benchTable.find((x) => x.def.key === def.key)?.r ?? null;
+        const [v] = versus(
+          [{ key: def.key, ret: r ? shownReturn(r) : null }],
+          [{ key: def.key, ret: b ? shownReturn(b) : null }],
+        );
+        return { def, yours: r, bench: b, v: v! };
+      });
+      // growth of 100 from the first day both lines exist (never before `from`)
+      let growth: ReturnView['growth'] = null;
+      if (byPrice && benchLine.length >= 2) {
+        const start = [fundLine[0]!.date, benchLine[0]!.date, from ?? '']
+          .filter(Boolean)
+          .sort()
+          .pop()!;
+        const a = rebase(navLine, start);
+        const b = rebase(benchLine, start);
+        if (a.length >= 2 && b.length >= 2) growth = { from: start, fund: a, bench: b };
+      }
+      return { profile, versus: rows, growth };
+    };
+    // the holder's view starts with their first purchase; the benchmark is cut the same way so "All" means the same stretch
+    const mine = byPrice
+      ? view(heldLine(line, since), heldLine(benchLine, since), since)
+      : view(line, benchLine, since);
+    const whole = byPrice ? view(line, benchLine, null) : mine;
+    const valuePts = f.perf.map((p) => ({ date: p.date, value: p.value }));
+    const own = ownPeriods({
+      points: valuePts,
+      flows: f.flows,
+      today: args.today,
+      defs: PERF_PERIODS.filter((d) => d.key !== '1w'),
+      annualiseAfterMonths: args.config.annualiseAfterMonths,
     });
-    // growth of 100 from the first day both lines exist (never before the first purchase)
-    let growth: FundReturns['growth'] = null;
-    if (byPrice && benchLine.length >= 2) {
-      const buys = f.txns
-        .filter((t) => t.units > 0)
-        .map((t) => t.date)
-        .sort();
-      const from = [navLine[0]!.date, benchLine[0]!.date, buys[0] ?? f.startedOn ?? '']
-        .filter(Boolean)
-        .sort()
-        .pop()!;
-      const a = rebase(navLine, from);
-      const b = rebase(benchLine, from);
-      if (a.length >= 2 && b.length >= 2) growth = { from, fund: a, bench: b };
-    }
+    const benchMine =
+      benchLine.length >= 2
+        ? shadowLine(
+            f.flows,
+            benchLine,
+            valuePts.map((p) => p.date),
+          )
+        : [];
     returns = {
+      ...mine,
       basis: byPrice ? 'price' : 'values',
       estimated: !byPrice && f.flowsEstimated,
-      profile,
-      versus: rows,
       benchName: args.benchmark?.name ?? null,
-      growth,
+      since,
+      whole,
+      own,
+      shadow:
+        valuePts.length >= 2
+          ? {
+              value: valuePts,
+              invested: f.perf
+                .filter((p) => p.invested !== null)
+                .map((p) => ({ date: p.date, value: p.invested as number })),
+              bench: benchMine,
+            }
+          : null,
     };
   }
   return {
@@ -213,7 +269,13 @@ export function buildFundDetail(args: {
       navs: args.navs,
       txns: f.txns,
       avgCost,
-      from: rangeStart(args.range, args.today),
+      // the price line starts with the first purchase (or the start of the range, when later): years before the money went in say
+      // nothing about it
+      from:
+        [rangeStart(args.range, args.today), first]
+          .filter((x): x is string => !!x)
+          .sort()
+          .pop() ?? null,
       maxPoints: args.maxPoints,
     }),
     units: unitsOverTime(
