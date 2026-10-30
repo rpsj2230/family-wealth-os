@@ -54,7 +54,17 @@ export interface DepositPairing {
 export async function pairStatementDeposits(
   db: SupabaseClient,
   hh: string,
-  opts: { write: boolean; loaded?: LoadedPortfolio; trail?: Trail; log?: Log },
+  opts: {
+    write: boolean;
+    /**
+     * only deposits whose booking and pay-back print the same deposit number (the daily job): a pair found by its dates and amounts
+     * alone waits for the hand-run job, where the plan is read first
+     */
+    numberedOnly?: boolean;
+    loaded?: LoadedPortfolio;
+    trail?: Trail;
+    log?: Log;
+  },
 ): Promise<DepositPairing> {
   const log = opts.log ?? (() => undefined);
   const loaded = opts.loaded ?? (await loadPortfolioData(db, { householdId: hh }));
@@ -92,10 +102,9 @@ export async function pairStatementDeposits(
   const interest = t.lines.filter((l) => t.classified.get(l.id)?.cls === 'fd_interest').map(asLine);
   const last4 = new Map(loaded.assetRows.map((a) => [a.id, a.identifier_last4 ?? null]));
   const keyOf = (id: string) => `${asset.get(id)?.owner_id}|${bankOf(id) ?? ''}`;
-  const found = depositsFromStatements(bookings, paybacks, last4, interest).map((d) => ({
-    ...d,
-    key: keyOf(d.accountId),
-  }));
+  const found = depositsFromStatements(bookings, paybacks, last4, interest)
+    .filter((d) => !opts.numberedOnly || d.last4 !== '')
+    .map((d) => ({ ...d, key: keyOf(d.accountId) }));
   const fdRow = new Map(loaded.fdRows.map((f) => [f.asset_id, f]));
   const records: DepositRecord[] = loaded.fdRows.map((f) => ({
     id: f.asset_id,

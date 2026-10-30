@@ -164,7 +164,10 @@ const store: DigestStore = {
     // what follows by itself from the statement lines the mail brought: the deposits a booking and its pay-back show, and every
     // loan the statements built brought up to date; then the lines are sorted again (counts only in the log)
     try {
-      const dep = await pairStatementDeposits(db, householdId, { write: true });
+      const dep = await pairStatementDeposits(db, householdId, {
+        write: true,
+        numberedOnly: true,
+      });
       const loans = await syncStatementLoans(db, householdId);
       if (dep.added + dep.numbered + dep.kept + loans.updated > 0) {
         const rb = await rebuildStatementMoves(db, householdId);
