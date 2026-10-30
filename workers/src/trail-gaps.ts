@@ -65,10 +65,10 @@ async function main() {
     .filter((p) => !REAL_STARTS.has(p.kind))
     .sort((a, b) => b.amount - a.amount);
   console.log('  largest gap starts (step, holding, share of all money held):');
-  for (const p of gaps.slice(0, 25)) {
+  for (const p of gaps.slice(0, 40)) {
     const n = c.nodes.get(p.node);
     console.log(
-      `    ${p.kind} ${n?.date ?? p.date} ${name(n?.assetId ?? p.assetId ?? null)}${
+      `    ${p.kind} [${t.classified.get(p.node)?.cls ?? n?.kind ?? '?'}${t.classified.get(p.node)?.counterpart ? ` → ${name(t.classified.get(p.node)!.counterpart)}` : ''}] ${n?.date ?? p.date} ${name(n?.assetId ?? p.assetId ?? null)}${
         n && n.kind === 'line'
           ? ` "${String((n as { narration?: string }).narration ?? '')
               .toLowerCase()
