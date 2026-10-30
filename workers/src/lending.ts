@@ -63,6 +63,24 @@ async function main() {
       `\n${p.name}: lent ${p.lent.length} times, ${lakh(lent)}${p.lent.length ? ` (${p.lent[0]!.date} to ${p.lent[p.lent.length - 1]!.date})` : ''}; paid back ${p.repaid.length} times, ${lakh(back)}${p.repaid.length ? ` (to ${p.repaid[p.repaid.length - 1]!.date})` : ''}; still owed ${lakh(Math.max(0, p.owed))}${p.owed < -1 ? ` (${lakh(-p.owed)} more came back than was lent)` : ''}`,
     );
     if (accounts.length) console.log(`  accounts: ${accounts.join('; ')}`);
+    // the other side's bank, by the IFSC codes and bank names the narrations print
+    const codes = new Map<string, number>();
+    for (const l of [...p.lent, ...p.repaid])
+      for (const m of l.narration
+        .toUpperCase()
+        .matchAll(
+          /\b([A-Z]{4})(?:0|…)|\b(IDFC|HDFC|ICICI|AXIS|KOTAK|SBI|YES|INDUSIND|EQUITAS|JANA|RBL|ESAF)\b/g,
+        )) {
+        const c = (m[1] ?? m[2])!;
+        codes.set(c, (codes.get(c) ?? 0) + 1);
+      }
+    if (codes.size)
+      console.log(
+        `  banks named in these lines: ${[...codes]
+          .sort((a, b) => b[1] - a[1])
+          .map(([c, n]) => `${c} ×${n}`)
+          .join(', ')}`,
+      );
     if (existing)
       console.log(
         `  already on file as "${existing.nickname}" (${existing.status}): left as it is`,
