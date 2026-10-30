@@ -96,7 +96,9 @@ test.describe('Import > Fund statement: read my statements from Gmail (public sa
 
   test('statement passwords are write-only: only a count is shown', async ({ page }) => {
     const card = await open(page);
-    await card.getByText('Statement passwords (if you did not use your PAN)').click();
+    await card
+      .getByText('Statement passwords (your banks’, and a fund statement not on your PAN)')
+      .click();
     await expect(card.getByText('Anil: 1 saved')).toBeVisible();
     await expect(card.getByText('Beena: none saved')).toBeVisible();
     await expect(card.locator('input[name=statementPassword]')).toHaveAttribute('type', 'password');
@@ -136,7 +138,9 @@ for (const width of [412, 810]) {
     const card = await open(page);
     await page.addStyleTag({ content: '* { font-family: "DejaVu Sans", sans-serif !important; }' });
     await card.getByText('How to get statements in your Gmail').click();
-    await card.getByText('Statement passwords (if you did not use your PAN)').click();
+    await card
+      .getByText('Statement passwords (your banks’, and a fund statement not on your PAN)')
+      .click();
     await noOverflow(page);
     await page.goto('/demo/settings?tab=connections');
     await page.addStyleTag({ content: '* { font-family: "DejaVu Sans", sans-serif !important; }' });

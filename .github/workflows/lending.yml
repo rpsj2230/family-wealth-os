@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       held:
-        description: 'optional: accounts of yours in someone else''s name, Name@Bank, comma separated (Atul@IDFC)'
+        description: "optional: accounts of yours in someone else's name, Name@Bank, comma separated (Atul@IDFC)"
         required: false
         default: ''
         type: string
