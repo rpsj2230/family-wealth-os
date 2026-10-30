@@ -298,12 +298,19 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
       credits.set(k, [...(credits.get(k) ?? []), m]);
     }
   const bankAt = new Map(ctx.accounts.map((a) => [a.assetId, bankWord(a.bank ?? '')]));
-  // the other banks a narration names by IFSC code (its own bank's code left out)
+  // the household's banks as a narration writes them in words ("…/RAGINI SINGH/INDUSIND BANK", "IDFC FIRST B"): a name of four
+  // letters or more alone, a shorter one ("yes", "au") only before "bank"
+  const wordsOfBanks = [
+    ...new Set([...bankAt.values()].map((b) => b.split(' ')[0]!).filter(Boolean)),
+  ].map((w) => ({ w, re: new RegExp(`\\b${w}\\b${w.length < 4 ? '\\s*bank' : ''}`, 'i') }));
+  // the other banks a narration names, by IFSC code or in words (its own bank left out)
   const named = (l: StmtLine) => {
     const own = bankAt.get(l.assetId) ?? '';
-    return [...l.narration.toUpperCase().matchAll(/\b([A-Z]{4})(?:0|…)/g)]
-      .map((m) => IFSC_BANK[m[1]!])
-      .filter((b): b is string => !!b && !(own && own.startsWith(b)));
+    const byCode = [...l.narration.toUpperCase().matchAll(/\b([A-Z]{4})(?:0|…)/g)].map(
+      (m) => IFSC_BANK[m[1]!],
+    );
+    const byName = wordsOfBanks.filter((b) => b.re.test(l.narration)).map((b) => b.w);
+    return [...byCode, ...byName].filter((b): b is string => !!b && !(own && own.startsWith(b)));
   };
   const names = (l: StmtLine, other: StmtLine) => {
     const bank = bankAt.get(other.assetId) ?? '';

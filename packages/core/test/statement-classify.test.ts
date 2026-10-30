@@ -292,6 +292,17 @@ describe('several transfers of one sum on one day', () => {
     expect([of(ls[0]!.id).counterpart, of(ls[3]!.id).counterpart]).toEqual(['yes', 'rbl']);
     expect([of(ls[1]!.id).counterpart, of(ls[5]!.id).counterpart]).toEqual(['rbl', 'eq']);
   });
+  it('reads a bank named in words as well as by its code', () => {
+    const named = classifyLines(
+      [
+        line('rbl', d, -60_000, 'IMPS/RIB/123/RAGINI SINGH/YES BANK'),
+        line('eq', d, 60_000, 'IMPS CR SAMPLE'),
+        line('yes', d, 60_000, 'IMPS INWARD SAMPLE'),
+      ],
+      banks,
+    );
+    expect(named.map((c) => c.counterpart)).toEqual(['yes', null, 'rbl']);
+  });
   it('never pairs lines whose codes name another bank', () => {
     const only = classifyLines(
       [
