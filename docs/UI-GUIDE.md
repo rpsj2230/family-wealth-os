@@ -196,7 +196,7 @@ Wording rule: a percentage always names what it is a share of ("+18.7% on the â‚
 | Investments, Breakdown | `invest.byKind`, `invest.byHouse`, `invest.byFund`, `invest.keyFigures`, `invest.plans`, `invest.ageing`, `invest.gainByFund`, `invest.longTermCard`, `invest.sipCard`, `invest.bookedCard` |
 | A fund's page | `fund.value`, `fund.moneyIn`, `fund.profit`, `fund.today`, `fund.xirr`, `fund.sip`, `fund.units`, `fund.tax`, `fund.booked`, `fund.returns`, `fund.benchXirr`, `fund.longTerm`, `fund.fundReturn` |
 | Investments, Value by period | `valuation.chart`, `valuation.table` |
-| Home, hero | `home.netWorth`, `home.today`, `home.earnedFy`, `home.ownMoney`, `home.profitSoFar`, `home.movement`, `home.verified` |
+| Home, hero | `home.netWorth`, `home.today`, `home.earnedFy`, `home.savedFy`, `home.ownMoney`, `home.profitSoFar`, `home.movement`, `home.verified` |
 | Home, How is my money growing? | `home.earningRate`, `home.fundsXirr`, `home.depositsXirr`, `home.savingsRate`, `home.xirr` |
 | Home, Also on this page | `home.free30`, `home.maturing90`, `home.insured`, `home.nreNro`, `home.goalsStat`, `home.needsStat` |
 | Home, cards | `home.classDeposits`, `home.classFunds`, `home.classCash`, `home.classOthers`, `home.periods`, `home.changed`, `home.trend`, `home.growth`, `home.where`, `home.liquidity`, `home.banks`, `home.deposits`, `home.funds`, `home.goals`, `home.risks` |

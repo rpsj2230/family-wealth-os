@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { attachProceeds } from '../src/position-build';
-import { reconcileQueue } from '../src/reconcile';
+import { linesExplain, reconcileQueue } from '../src/reconcile';
 import type { PositionAsset, PositionConfig } from '../src/position';
 
 const TODAY = '2026-10-28';
@@ -229,5 +229,132 @@ describe('reconcileQueue: transfers between the family’s own accounts are pair
     expect(fall.suggestions[0]).toMatchObject({ kind: 'fd_funding', assetId: 'fd-new' });
     expect(q.funding[0]!.suggestion).toMatchObject({ assetId: 'rbl' });
     expect(q.funding[0]!.suggestion!.why).toContain('the same sum left RBL savings');
+  });
+});
+
+describe('reconcileQueue: a balance change the bank’s own lines account for is not asked about', () => {
+  // Equitas NRE: ₹0 on 26 Oct, ₹10,06,687 on 28 Oct; the bank's line: a transfer in of exactly that sum
+  const acct = base({
+    assetId: 'eq',
+    type: 'bank_account',
+    records: [rec('2026-10-26', 0), rec('2026-10-28', 1_006_687)],
+  });
+  // a savings account: ₹5,00,000 on 30 Sep, ₹4,84,758 on 6 Oct; lines: interest +6,915 and TDS −2,157 on 1 Oct, two fund SIPs on 5 Oct
+  const sav = base({
+    assetId: 'sv',
+    type: 'bank_account',
+    records: [rec('2026-09-30', 500_000), rec('2026-10-06', 484_758)],
+  });
+  const position = { assets: [acct, sav], config: cfg };
+  const lines = [
+    { assetId: 'eq', date: '2026-10-28', amount: 1_006_687 },
+    { assetId: 'sv', date: '2026-10-01', amount: 6_915 },
+    { assetId: 'sv', date: '2026-10-01', amount: -2_157 },
+    { assetId: 'sv', date: '2026-10-05', amount: -10_000 },
+    { assetId: 'sv', date: '2026-10-05', amount: -10_000 },
+  ];
+
+  it('without the lines, both changes are asked about', () => {
+    const q = reconcileQueue({ position, moves: [], tolerance: 500, sinceDays: 120 });
+    expect(q.balances.map((b) => b.assetId).sort()).toEqual(['eq', 'sv']);
+  });
+
+  it('with the lines, neither is', () => {
+    const q = reconcileQueue({ position, moves: [], tolerance: 500, sinceDays: 120, lines });
+    expect(q.balances).toEqual([]);
+  });
+
+  it('lines that do not add up to the change leave it asked', () => {
+    const q = reconcileQueue({
+      position,
+      moves: [],
+      tolerance: 500,
+      sinceDays: 120,
+      lines: lines.filter((l) => l.date !== '2026-10-05' || l.amount !== -10_000).slice(0, 3),
+    });
+    expect(q.balances.map((b) => b.assetId)).toEqual(['sv']);
+  });
+});
+
+describe('linesExplain', () => {
+  it('takes a balance before or after the lines of its own day', () => {
+    const ls = [{ date: '2026-10-01', amount: 100 }];
+    // the first balance was taken before the day's line
+    expect(
+      linesExplain(
+        ls,
+        { date: '2026-10-01', amount: 1_000 },
+        { date: '2026-10-03', amount: 1_100 },
+        1,
+      ),
+    ).toBe(true);
+    // or after it: then nothing moved between them, and no line inside proves nothing
+    expect(
+      linesExplain(
+        ls,
+        { date: '2026-10-01', amount: 1_100 },
+        { date: '2026-10-03', amount: 1_100 },
+        1,
+      ),
+    ).toBe(false);
+    expect(linesExplain([], { date: 'a', amount: 0 }, { date: 'b', amount: 0 }, 1)).toBe(false);
+  });
+});
+
+describe('reconcileQueue: a new deposit the bank lines show being paid for is not asked about', () => {
+  const dep = (id: string, bank: string, owner: string) =>
+    base({
+      assetId: id,
+      type: 'fixed_deposit',
+      ownerId: owner,
+      institutionId: bank,
+      fd: {
+        principal: 500_000,
+        rate: 0.07,
+        bookedOn: '2026-09-14',
+        maturityOn: '2029-09-15',
+        compounding: 'quarterly',
+        bankMaturityAmount: null,
+        endedOn: null,
+      },
+    });
+  const acct = (id: string, bank: string, owner: string) =>
+    base({ assetId: id, type: 'bank_account', ownerId: owner, institutionId: bank });
+  const assets = [
+    dep('yes-fd', 'yes', 'g'),
+    dep('eq-fd1', 'eq', 'r'),
+    dep('eq-fd2', 'eq', 'r'),
+    dep('eq-fd3', 'eq', 'a'),
+    acct('yes-sb', 'yes', 'g'),
+    acct('eq-sb1', 'eq', 'r'),
+    acct('eq-sb2', 'eq', 'r'),
+  ];
+  const position = { assets: attachProceeds(assets, cfg), config: cfg };
+  const q = (lines: { assetId: string; date: string; amount: number }[]) =>
+    reconcileQueue({ position, moves: [], tolerance: 500, sinceDays: 120, pairDays: 5, lines })
+      .funding.map((f) => f.assetId)
+      .sort();
+
+  it('without lines, every deposit is asked about', () => {
+    expect(q([])).toEqual(['eq-fd1', 'eq-fd2', 'eq-fd3', 'yes-fd']);
+  });
+
+  it('each line pays for one deposit only, so a third deposit of the same sum is still asked about', () => {
+    expect(
+      q([
+        { assetId: 'yes-sb', date: '2026-09-14', amount: -500_000 },
+        { assetId: 'eq-sb1', date: '2026-09-13', amount: -500_000 },
+        { assetId: 'eq-sb2', date: '2026-09-14', amount: -500_000 },
+      ]),
+    ).toEqual(['eq-fd3']);
+  });
+
+  it('a line of another sum, or outside the pairing days, does not count', () => {
+    expect(
+      q([
+        { assetId: 'yes-sb', date: '2026-09-14', amount: -400_000 },
+        { assetId: 'eq-sb1', date: '2026-09-01', amount: -500_000 },
+      ]),
+    ).toEqual(['eq-fd1', 'eq-fd2', 'eq-fd3', 'yes-fd']);
   });
 });

@@ -217,7 +217,7 @@ describe('the money words v6 lines of the e-mail and the WhatsApp text are Home�
   const digest = buildDigest(input);
   // the sample household's four lines (invented figures)
   const LINES = [
-    'Net worth ₹3,73,16,279 · Today’s change +₹10,807 (+0.03%) · Earned this FY +₹18,17,755',
+    'Net worth ₹3,73,16,279 · Today’s change +₹10,807 (+0.03%) · Earned this FY +₹18,17,755 · Saved this FY +₹61,19,308',
     'Own money ₹3,53,76,928 · Lifetime profit +₹19,39,351 (+5.5% overall) · XIRR on own money 10.34% · Earning rate now 6.27%',
     'Fixed deposits ₹1,63,20,616 (Profit +₹10,46,716, XIRR 7.63%) · Mutual funds ₹63,62,456 (Profit +₹20,24,235, XIRR 13.98%) · Savings ₹1,13,13,207 (1.81%)',
     'Maturing in the next 30 days: ₹41,00,000',

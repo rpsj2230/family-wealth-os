@@ -72,6 +72,33 @@ export interface QueueMove {
   idemKey: string | null;
 }
 
+/**
+ * Do the bank's lines between two balances account for the whole change? The bank's lines and its balances are the same record, so
+ * no estimate is needed: the first balance plus the lines after it is the second balance, within the tolerance. A balance may be
+ * taken before or after the lines of its own day, so the lines of the first and the last day are tried both in and out. At least one
+ * line must fall inside the stretch (no lines prove nothing).
+ */
+export function linesExplain(
+  lines: readonly { date: string; amount: number }[] | undefined,
+  from: { date: string; amount: number },
+  to: { date: string; amount: number },
+  tolerance: number,
+): boolean {
+  if (!lines?.length) return false;
+  const sum = (f: (d: string) => boolean) => {
+    const inside = lines.filter((l) => f(l.date));
+    return { n: inside.length, total: inside.reduce((a, l) => a + l.amount, 0) };
+  };
+  const tries = [
+    sum((d) => d > from.date && d <= to.date),
+    sum((d) => d >= from.date && d <= to.date),
+    sum((d) => d > from.date && d < to.date),
+    sum((d) => d >= from.date && d < to.date),
+  ];
+  const change = to.amount - from.amount;
+  return tries.some((t) => t.n > 0 && Math.abs(t.total - change) <= Math.max(tolerance, 1));
+}
+
 export function reconcileQueue(args: {
   position: PositionInput;
   moves: QueueMove[];
@@ -81,6 +108,12 @@ export function reconcileQueue(args: {
   sinceDays: number;
   /** Settings: two changes this many days apart or less, of the same sum in opposite directions, are offered as one transfer */
   pairDays?: number;
+  /**
+   * The bank's own statement lines (from statements and alerts) of the accounts: a balance change they account for in full is
+   * explained by the bank itself (a fund bought, interest and the tax on it, a transfer) and is not asked about. What each line was
+   * is the line's own matter: a line that needs an answer is asked once, on the line (Bank statements), never again as a balance.
+   */
+  lines?: readonly { assetId: string; date: string; amount: number }[];
 }): ReconcileQueue {
   const { position, moves } = args;
   const c = position.config;
@@ -90,6 +123,14 @@ export function reconcileQueue(args: {
   const confirmed = moves.filter((m) => m.status === 'confirmed');
   const answered = new Set(moves.filter((m) => m.idemKey).map((m) => m.idemKey!));
   const pairDays = args.pairDays ?? 3;
+  // only the lines of this family's own accounts count
+  const ownLines = (args.lines ?? []).filter((l) => byId.has(l.assetId));
+  const linesOf = new Map<string, { date: string; amount: number }[]>();
+  for (const l of ownLines) {
+    const list = linesOf.get(l.assetId);
+    if (list) list.push(l);
+    else linesOf.set(l.assetId, [l]);
+  }
   const apart = (a: string, b: string) =>
     Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000;
   /** the same sum, give or take the tolerance or half a per cent (interest of a day or two) */
@@ -198,6 +239,7 @@ export function reconcileQueue(args: {
         candidates: awaitingAmounts.filter((x) => byId.get(x.assetId)?.ownerId === a.ownerId),
       });
       if (r.explained) continue;
+      if (linesExplain(linesOf.get(a.assetId), prev, cur, args.tolerance)) continue;
       // answered from the other side: a transfer or a deposit's funding you confirmed for the account it pairs with
       const settled = confirmed.some(
         (m) =>
@@ -234,6 +276,45 @@ export function reconcileQueue(args: {
       .filter((x): x is string => !!x),
   );
   const funding: FundingItem[] = [];
+  // the bank lines that paid for a deposit: money of the same sum leaving a family account within the pairing days of the booking.
+  // Each line pays for one deposit only (several deposits of the same sum are often booked on one day), the closest first: the
+  // same bank and person, then the same bank, then the same person, then the nearest day.
+  const paid = new Set<string>();
+  {
+    const pairs = position.assets
+      .filter(
+        (d) => d.fd && d.status !== 'gifted' && d.fd.bookedOn >= since && d.fd.bookedOn <= today,
+      )
+      .flatMap((d) =>
+        ownLines
+          .map((l, i) => ({ l, i }))
+          .filter(
+            ({ l }) =>
+              l.amount < 0 &&
+              l.assetId !== d.assetId &&
+              Math.abs(-l.amount - d.fd!.principal) <= Math.max(1, args.tolerance) &&
+              apart(l.date, d.fd!.bookedOn) <= pairDays,
+          )
+          .map(({ l, i }) => {
+            const acct = byId.get(l.assetId);
+            const bank = !!acct?.institutionId && acct.institutionId === d.institutionId;
+            const person = acct?.ownerId === d.ownerId;
+            return {
+              d: d.assetId,
+              i,
+              rank: (bank ? 0 : 2) + (person ? 0 : 1),
+              days: apart(l.date, d.fd!.bookedOn),
+            };
+          }),
+      )
+      .sort((x, y) => x.rank - y.rank || x.days - y.days || x.d.localeCompare(y.d) || x.i - y.i);
+    const usedLine = new Set<number>();
+    for (const p of pairs) {
+      if (paid.has(p.d) || usedLine.has(p.i)) continue;
+      paid.add(p.d);
+      usedLine.add(p.i);
+    }
+  }
   for (const a of position.assets) {
     if (!a.fd || a.status === 'gifted' || a.fd.bookedOn < since || a.fd.bookedOn > today) continue;
     if (funded.has(a.assetId) || a.fd.renewedFrom || placedInto.has(a.assetId)) continue;
@@ -247,6 +328,8 @@ export function reconcileQueue(args: {
         x.assetId !== a.assetId,
     );
     if (fromProceeds) continue;
+    // the bank's own line shows the money leaving an account for it
+    if (paid.has(a.assetId)) continue;
     const acct =
       position.assets.find(
         (x) =>

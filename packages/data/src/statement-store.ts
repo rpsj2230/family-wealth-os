@@ -449,3 +449,31 @@ export async function syncStatementMoves(
   }
   return { added: add.length, removed: drop.length };
 }
+
+/**
+ * The bank's statement lines since a day, as the balance checks need them: the account, the day and the amount only (no narration),
+ * so a check that one balance follows from the one before stays cheap enough for Home. Row Level Security limits it to the household.
+ */
+export async function loadLineAmounts(
+  supabase: SupabaseClient,
+  since: string,
+): Promise<{ assetId: string; date: string; amount: number }[]> {
+  const rows = await pageAll<{ asset_id: string; txn_on: string; amount: number | string }>(
+    (from, to) =>
+      supabase
+        .from('statement_lines')
+        .select('asset_id, txn_on, amount')
+        .gte('txn_on', since)
+        .order('txn_on')
+        .order('id')
+        .range(from, to),
+  );
+  return rows.map((r) => ({ assetId: r.asset_id, date: r.txn_on, amount: Number(r.amount) }));
+}
+
+/** The first day of bank lines a balance check needs: a year before its window, as the balance before the window may be that old. */
+export function linesSince(today: string, sinceDays: number): string {
+  return new Date(Date.parse(`${today}T00:00:00Z`) - (sinceDays + 366) * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+}

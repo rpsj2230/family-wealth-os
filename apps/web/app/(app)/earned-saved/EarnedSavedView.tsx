@@ -82,10 +82,11 @@ export function EarnedSavedView({
         <h2 id="es-years-h">Year by year</h2>
         <p className="muted small">
           <strong>{TERMS.earnedFy.label.replace(' this FY', '')}</strong>: what the holdings earned
-          (interest, fund gains, exchange-rate moves, earnings less costs). <strong>Saved</strong>:
-          money that came in less money that went out (salary, transfers from abroad, money back,
-          spending). <strong>%</strong>: earned ÷ the money at work (net worth on 1 April plus half
-          of what was saved, as savings arrive through the year). Choose a year for its months.
+          (interest, fund profit and loss, exchange-rate moves, earnings less costs).{' '}
+          <strong>Saved</strong>: money that came in less money that went out (salary, transfers
+          from abroad, money back, spending). <strong>%</strong>: earned ÷ the money at work (net
+          worth on 1 April plus half of what was saved, as savings arrive through the year). Choose
+          a year for its months.
         </p>
         <div className="tablewrap">
           <table className="tbl es-table">

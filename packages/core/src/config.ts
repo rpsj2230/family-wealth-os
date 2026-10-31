@@ -401,7 +401,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     savingsSlabIncremental: false,
     savingsCreditMonths: 3,
     unexplainedTolerance: 500,
-    transferPairDays: 3,
+    transferPairDays: 5,
   },
   capital: {
     openingDate: '',

@@ -36,6 +36,8 @@ import {
   buildDigestInput,
   loadNeeds,
   ledgerMovesOf,
+  linesSince,
+  loadLineAmounts,
   loadPortfolioData,
   loadPositionInput,
   loadMoneyTrail,
@@ -406,11 +408,14 @@ async function main() {
       console.log(
         `Maturity proceeds counted until placed: ${proceeds.length} deposits, ₹${inr(proceeds.reduce((x, v) => x + (v.estimate?.estimatedAmount ?? 0), 0))}`,
       );
+      const sinceDays = Math.max(cfg.deposits.hideMaturedAfterDays, 120);
       const q = reconcileQueue({
         position,
         moves: l.engine.moves,
         tolerance: cfg.estimates.unexplainedTolerance,
-        sinceDays: Math.max(cfg.deposits.hideMaturedAfterDays, 120),
+        sinceDays,
+        pairDays: cfg.estimates.transferPairDays,
+        lines: await loadLineAmounts(db, linesSince(position.config.today, sinceDays)),
       });
       console.log(
         `Explain movements: ${q.proceeds.length} proceeds to place, ${q.balances.length} balances that changed more than expected (net ₹${inr(q.balances.reduce((x, b) => x + b.difference, 0))}), ${q.funding.length} new deposits with no source`,

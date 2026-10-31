@@ -6,7 +6,13 @@ import {
   positionInputFrom,
   reconcileQueue,
 } from '@fwos/core';
-import { capitalStart, loadFeedStatus, loadSettings } from '@fwos/data';
+import {
+  capitalStart,
+  linesSince,
+  loadFeedStatus,
+  loadLineAmounts,
+  loadSettings,
+} from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
@@ -65,7 +71,13 @@ export async function MovementsView({
     ...(loaded.engine.extras.placements ? { placements: loaded.engine.extras.placements } : {}),
   });
   const recentDays = Math.max(config.deposits.hideMaturedAfterDays, 120);
+  // the bank's lines from a year before the window: the balance before the first one in it may be months older
+  const lineAmounts = await loadLineAmounts(
+    supabase as unknown as SupabaseClient,
+    linesSince(today, recentDays),
+  );
   const q = reconcileQueue({
+    lines: lineAmounts,
     position,
     moves: loaded.engine.moves,
     tolerance: config.estimates.unexplainedTolerance,

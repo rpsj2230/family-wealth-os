@@ -13,6 +13,8 @@ import {
   capitalDays,
   capitalStart,
   ledgerMovesOf,
+  linesSince,
+  loadLineAmounts,
   loadPositionInput,
   loadSettings,
   pageAll,
@@ -247,13 +249,18 @@ export async function loadHome(
       .map((t) => ({ id: t.id as string, title: t.title as string, dueOn: t.due_on as string })),
     openTasks: (tasks.data ?? []).length,
     inboxReview: inbox.count ?? 0,
-    toExplain: (() => {
-      // the same queue as the Explain movements page
+    toExplain: await (async () => {
+      // the same queue as the Explain movements page, with the bank's own lines
+      const sinceDays = Math.max(settings.config.deposits.hideMaturedAfterDays, 120);
       const q = reconcileQueue({
+        lines: await loadLineAmounts(
+          supabase as unknown as SupabaseClient,
+          linesSince(todayIso, sinceDays),
+        ),
         position,
         moves: loaded.engine.moves,
         tolerance: settings.config.estimates.unexplainedTolerance,
-        sinceDays: Math.max(settings.config.deposits.hideMaturedAfterDays, 120),
+        sinceDays,
         pairDays: settings.config.estimates.transferPairDays,
       });
       return {
