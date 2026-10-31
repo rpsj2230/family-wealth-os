@@ -166,19 +166,18 @@ export function positionInputFrom(args: {
     : args.assets.filter((a) => a.type !== 'property');
   const bank = args.bank;
   const built = positionAssetsFrom({ ...args, assets }).map((a) =>
-    bank && a.type === 'bank_account' && a.currency === 'INR' && bank.spans[a.assetId]
+    bank &&
+    a.type === 'bank_account' &&
+    a.currency === 'INR' &&
+    (bank.spans[a.assetId] || bank.alerts?.[a.assetId])
       ? {
           ...a,
           records: withBankBalances(
             a.records,
             bank.points[a.assetId],
             bank.spans[a.assetId],
-            (p) => ({
-              date: p.date,
-              amount: p.amount,
-              currency: 'INR',
-              fxRate: null,
-            }),
+            (p) => ({ date: p.date, amount: p.amount, currency: 'INR', fxRate: null }),
+            bank.alerts?.[a.assetId] ?? [],
           ),
         }
       : a,

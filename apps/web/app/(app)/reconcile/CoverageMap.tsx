@@ -41,7 +41,9 @@ export function CoverageMap({
         <strong>{months > 0 ? ((full / months) * 100).toFixed(1) : '0'}%</strong> of the account
         months are covered by a bank statement in full; {complete} of {rows.length} account
         {rows.length === 1 ? '' : 's'} are complete, with no break in the chain. Inside the covered
-        months the bank&rsquo;s own balances are used, not the typed ones.
+        months the bank&rsquo;s own balances are used, not the typed ones; a balance in a bank alert
+        e-mail is used on its own day too (alerts alone never count a month as covered, as a payment
+        may have had no alert).
       </p>
       {untrusted.length > 0 && (
         <p className="notice warn small" data-testid="rc-cov-untrusted">

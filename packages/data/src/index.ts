@@ -111,23 +111,36 @@ export async function loadPortfolioData(
       txn_on: string;
       amount: number | string;
       balance: number | string | null;
+      statement_id: string;
     }>((from, to) =>
-      sel('statement_lines', 'asset_id, txn_on, amount, balance')
+      sel('statement_lines', 'asset_id, txn_on, amount, balance, statement_id')
         .order('txn_on')
         .order('id')
         .range(from, to),
     ),
-    sel('bank_statements', 'asset_id, from_on, to_on, opening, closing, file_label'),
-  ]).then(([ls, st]) =>
-    bankTruth(
-      ls.map((l) => ({
-        assetId: l.asset_id,
-        date: l.txn_on,
-        amount: Number(l.amount),
-        balance: l.balance === null ? null : Number(l.balance),
-      })),
+    sel('bank_statements', 'id, asset_id, from_on, to_on, opening, closing, file_label'),
+  ]).then(([ls, st]) => {
+    const rows = (st.data ?? []) as unknown as {
+      id: string;
+      asset_id: string;
+      from_on: string;
+      to_on: string;
+      opening: number | string | null;
+      closing: number | string | null;
+      file_label: string | null;
+    }[];
+    // the lines of the bank's alert e-mails are kept apart: their balances count day by day, never as a period covered
+    const alertFiles = new Set(rows.filter((x) => x.file_label === ALERTS_FILE).map((x) => x.id));
+    const asLine = (l: (typeof ls)[number]) => ({
+      assetId: l.asset_id,
+      date: l.txn_on,
+      amount: Number(l.amount),
+      balance: l.balance === null ? null : Number(l.balance),
+    });
+    return bankTruth(
+      ls.filter((l) => !alertFiles.has(l.statement_id)).map(asLine),
       (
-        (st.data ?? []) as unknown as {
+        rows as unknown as {
           asset_id: string;
           from_on: string;
           to_on: string;
@@ -145,8 +158,9 @@ export async function loadPortfolioData(
           opening: x.opening === null ? null : Number(x.opening),
           closing: x.closing === null ? null : Number(x.closing),
         })),
-    ),
-  );
+      ls.filter((l) => alertFiles.has(l.statement_id)).map(asLine),
+    );
+  });
   const [owners, assets, obsRowsRead, fds, positions, institutions, offerRows, sipChangeRows] =
     await Promise.all([
       sel('owners', 'id, display_name'),

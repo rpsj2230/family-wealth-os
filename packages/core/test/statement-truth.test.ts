@@ -159,3 +159,46 @@ describe('trustBank: the bank’s balances count only where they agree with the 
     expect(t2.points.ok).toHaveLength(2);
   });
 });
+
+describe('the balances in the bank’s alert e-mails', () => {
+  const truth = bankTruth(
+    [],
+    [],
+    [
+      // two alerts on 10 June (the later balance is the day's), one on 20 June
+      { assetId: 'a', date: '2025-06-10', amount: -5_000, balance: 95_000 },
+      { assetId: 'a', date: '2025-06-10', amount: -2_000, balance: 93_000 },
+      { assetId: 'a', date: '2025-06-20', amount: 10_000, balance: 103_000 },
+    ],
+  );
+  it('each day’s last alert balance is the bank’s balance on that day', () => {
+    expect(truth.alerts!.a).toEqual([
+      { date: '2025-06-10', amount: 93_000 },
+      { date: '2025-06-20', amount: 103_000 },
+    ]);
+    // alerts are not a statement: they cover no period
+    expect(truth.spans.a).toBeUndefined();
+  });
+  it('they are records of their days; a typed balance of the same day gives way, the others stay', () => {
+    const typed = [
+      { date: '2025-05-31', amount: 100_000 },
+      { date: '2025-06-20', amount: 104_000 },
+      { date: '2025-06-30', amount: 103_500 },
+    ];
+    const r = withBankBalances(typed, undefined, undefined, (p) => ({ ...p }), truth.alerts!.a);
+    expect(r).toEqual([
+      { date: '2025-05-31', amount: 100_000 },
+      { date: '2025-06-10', amount: 93_000 },
+      { date: '2025-06-20', amount: 103_000 },
+      { date: '2025-06-30', amount: 103_500 },
+    ]);
+  });
+  it('an alert on a day a statement covers adds nothing (the statement already has it)', () => {
+    const t = bankTruth(
+      [{ assetId: 'a', date: '2025-06-10', amount: -2_000, balance: 93_000 }],
+      [{ assetId: 'a', from: '2025-06-01', to: '2025-06-30', opening: 95_000, closing: 93_000 }],
+      [{ assetId: 'a', date: '2025-06-10', amount: -2_000, balance: 93_000 }],
+    );
+    expect(t.alerts!.a).toBeUndefined();
+  });
+});

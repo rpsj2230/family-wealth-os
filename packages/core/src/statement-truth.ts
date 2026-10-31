@@ -88,6 +88,12 @@ export interface BankTruth {
   /** every day's end balance, to compare a typed balance with */
   dayEnds: Record<string, BankPoint[]>;
   /**
+   * the balances the bank's alert e-mails gave (the balance after the last alert of a day), outside the periods a statement covers:
+   * each is the bank's own balance on its day, and stands as the account's record for that day. Alerts never cover a month in full
+   * (a payment with no alert may be missing), so they replace only a typed balance of the same day
+   */
+  alerts?: Record<string, BankPoint[]>;
+  /**
    * accounts whose statements do not agree with the balances typed for them (trustBank): their balances are not used, and the
    * account is listed to check that its statements are its own (two accounts with the same last four digits)
    */
@@ -110,6 +116,8 @@ function merge(spans: { from: string; to: string }[]): { from: string; to: strin
 export function bankTruth(
   lines: readonly TruthLine[],
   statements: readonly TruthStatement[],
+  /** the lines of the bank's alert e-mails (kept apart from statements) */
+  alertLines: readonly TruthLine[] = [],
 ): BankTruth {
   const ends = dayEndBalances(lines);
   const spansBy = new Map<string, { from: string; to: string }[]>();
@@ -132,7 +140,14 @@ export function bankTruth(
       .map(([date, amount]) => ({ date, amount }))
       .sort((a, b) => a.date.localeCompare(b.date));
   }
-  return { points, spans, dayEnds };
+  // alert balances: a day's last balance from the alerts, where no statement covers that day
+  const alerts: Record<string, BankPoint[]> = {};
+  for (const [acct, pts] of dayEndBalances(alertLines)) {
+    const sp = spans[acct] ?? merge(spansBy.get(acct) ?? []);
+    const outside = pts.filter((p) => !inside(p.date, sp));
+    if (outside.length) alerts[acct] = outside;
+  }
+  return { points, spans, dayEnds, alerts };
 }
 
 const inside = (d: string, spans: readonly { from: string; to: string }[]) =>
@@ -149,8 +164,10 @@ export function withBankBalances<R extends { date: string; amount: number; sheet
   points: readonly BankPoint[] | undefined,
   spans: readonly { from: string; to: string }[] | undefined,
   make: (p: BankPoint) => R,
+  /** the balances the bank's alerts gave: each is the record of its day (a typed balance of the same day gives way) */
+  alerts: readonly BankPoint[] = [],
 ): R[] {
-  if (!points?.length || !spans?.length) return [...records];
+  if (!points?.length || !spans?.length) return withAlerts([...records], alerts, make);
   // a typed balance gives way only where the bank has a balance of its own in the same month: a statement whose lines carry no
   // balance replaces nothing
   const months = new Set(
@@ -159,8 +176,25 @@ export function withBankBalances<R extends { date: string; amount: number; sheet
   const kept = records.filter(
     (r) => r.sheet || !inside(r.date, spans) || !months.has(r.date.slice(0, 7)),
   );
-  return [...kept, ...points.filter((p) => inside(p.date, spans)).map(make)].sort((a, b) =>
-    a.date.localeCompare(b.date),
+  return withAlerts(
+    [...kept, ...points.filter((p) => inside(p.date, spans)).map(make)].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    ),
+    alerts,
+    make,
+  );
+}
+
+/** Adds the alerts' balances as records of their days: a typed balance of the same day gives way to the bank's. */
+function withAlerts<R extends { date: string; amount: number; sheet?: boolean }>(
+  records: R[],
+  alerts: readonly BankPoint[],
+  make: (p: BankPoint) => R,
+): R[] {
+  if (!alerts.length) return records;
+  const days = new Set(alerts.map((a) => a.date));
+  return [...records.filter((r) => r.sheet || !days.has(r.date)), ...alerts.map(make)].sort(
+    (a, b) => a.date.localeCompare(b.date),
   );
 }
 
@@ -286,9 +320,11 @@ export function trustBank(
   if (!untrusted.length) return { ...truth, untrusted };
   const points = { ...truth.points };
   const spans = { ...truth.spans };
+  const alerts = { ...(truth.alerts ?? {}) };
   for (const id of untrusted) {
     delete points[id];
     delete spans[id];
+    delete alerts[id];
   }
-  return { ...truth, points, spans, untrusted };
+  return { ...truth, points, spans, alerts, untrusted };
 }
