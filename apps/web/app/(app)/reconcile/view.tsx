@@ -9,6 +9,7 @@ import {
   statementCoverage,
 } from '@fwos/core';
 import {
+  ALERTS_FILE,
   capitalStart,
   linesSince,
   loadFeedStatus,
@@ -399,13 +400,15 @@ function coverageOf(
   return {
     rows: statementCoverage(
       accounts,
-      stmts.map((s) => ({
-        assetId: s.asset_id,
-        from: s.from_on,
-        to: s.to_on,
-        opening: s.opening === null ? null : Number(s.opening),
-        closing: s.closing === null ? null : Number(s.closing),
-      })),
+      stmts
+        .filter((s) => s.file_label !== ALERTS_FILE)
+        .map((s) => ({
+          assetId: s.asset_id,
+          from: s.from_on,
+          to: s.to_on,
+          opening: s.opening === null ? null : Number(s.opening),
+          closing: s.closing === null ? null : Number(s.closing),
+        })),
     ),
     disagreements: disagreements(
       loaded.obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),

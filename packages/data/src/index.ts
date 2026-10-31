@@ -26,6 +26,7 @@ import {
   type BankTruth,
 } from '@fwos/core';
 import { HIST_FUND_REF } from '@fwos/ingest';
+import { ALERTS_FILE } from './statement-save';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { columnExists, liveLinesFilter } from './columns';
 import {
@@ -115,7 +116,7 @@ export async function loadPortfolioData(
         .order('id')
         .range(from, to),
     ),
-    sel('bank_statements', 'asset_id, from_on, to_on, opening, closing'),
+    sel('bank_statements', 'asset_id, from_on, to_on, opening, closing, file_label'),
   ]).then(([ls, st]) =>
     bankTruth(
       ls.map((l) => ({
@@ -131,14 +132,18 @@ export async function loadPortfolioData(
           to_on: string;
           opening: number | string | null;
           closing: number | string | null;
+          file_label: string | null;
         }[]
-      ).map((x) => ({
-        assetId: x.asset_id,
-        from: x.from_on,
-        to: x.to_on,
-        opening: x.opening === null ? null : Number(x.opening),
-        closing: x.closing === null ? null : Number(x.closing),
-      })),
+      )
+        // the bank's alerts are kept as one running file from the first alert to the last: they cover no period in full
+        .filter((x) => x.file_label !== ALERTS_FILE)
+        .map((x) => ({
+          assetId: x.asset_id,
+          from: x.from_on,
+          to: x.to_on,
+          opening: x.opening === null ? null : Number(x.opening),
+          closing: x.closing === null ? null : Number(x.closing),
+        })),
     ),
   );
   const [owners, assets, obsRowsRead, fds, positions, institutions, offerRows, sipChangeRows] =

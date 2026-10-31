@@ -5,7 +5,13 @@ import {
   type AppConfig,
   type HistoryReview,
 } from '@fwos/core';
-import { capitalDays, capitalStart, ledgerMovesOf, loadPositionInput } from '@fwos/data';
+import {
+  ALERTS_FILE,
+  capitalDays,
+  capitalStart,
+  ledgerMovesOf,
+  loadPositionInput,
+} from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { loadPortfolio } from './portfolio-data';
 
@@ -40,7 +46,11 @@ export async function loadHistoryReview(
     reinvestDays: config.harvest.reinvestDays,
   });
   // the days each account's bank statements cover: a month they cover for every account that moved is decided by its lines
-  const { data: stmts } = await supabase.from('bank_statements').select('asset_id, from_on, to_on');
+  const { data: stmts } = await supabase
+    .from('bank_statements')
+    .select('asset_id, from_on, to_on')
+    // the bank's alerts are one running file from the first alert to the last: they cover no month in full
+    .neq('file_label', ALERTS_FILE);
   const review = historyReview({
     ledger,
     position,

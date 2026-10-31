@@ -106,3 +106,21 @@ describe('statementCoverage', () => {
     ]);
   });
 });
+
+describe('a typed balance is kept unless the bank gives one that month', () => {
+  it('outside any statement, or in a covered month with no bank balance, the typed balance stays', () => {
+    const typed = [
+      { date: '2025-05-31', amount: 50_000 }, // no statement for May
+      { date: '2025-06-30', amount: 61_000 }, // a statement covers June, but its lines carry no balance
+      { date: '2025-07-31', amount: 70_500 }, // July: the bank's balance is 70,000
+    ];
+    const spans = [{ from: '2025-06-01', to: '2025-07-31' }];
+    const points = [{ date: '2025-07-29', amount: 70_000 }];
+    const r = withBankBalances(typed, points, spans, (p) => ({ ...p }));
+    expect(r).toEqual([
+      { date: '2025-05-31', amount: 50_000 },
+      { date: '2025-06-30', amount: 61_000 },
+      { date: '2025-07-29', amount: 70_000 },
+    ]);
+  });
+});

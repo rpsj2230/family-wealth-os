@@ -135,7 +135,9 @@ const inside = (d: string, spans: readonly { from: string; to: string }[]) =>
 
 /**
  * An account's records with the bank's balances in the periods its statements cover: a typed or sheet balance dated inside them is
- * replaced by the bank's own balances (each month's last day with lines and each statement's close); outside them it stays.
+ * replaced by the bank's own balances (each month's last day with lines and each statement's close) when the bank gives one that
+ * month; outside them, or in a month the bank's lines give no balance, it stays. Alerts alone never replace a typed balance (they
+ * are not a statement covering a period).
  */
 export function withBankBalances<R extends { date: string; amount: number; sheet?: boolean }>(
   records: readonly R[],
@@ -144,7 +146,14 @@ export function withBankBalances<R extends { date: string; amount: number; sheet
   make: (p: BankPoint) => R,
 ): R[] {
   if (!points?.length || !spans?.length) return [...records];
-  const kept = records.filter((r) => r.sheet || !inside(r.date, spans));
+  // a typed balance gives way only where the bank has a balance of its own in the same month: a statement whose lines carry no
+  // balance replaces nothing
+  const months = new Set(
+    points.filter((p) => inside(p.date, spans)).map((p) => p.date.slice(0, 7)),
+  );
+  const kept = records.filter(
+    (r) => r.sheet || !inside(r.date, spans) || !months.has(r.date.slice(0, 7)),
+  );
   return [...kept, ...points.filter((p) => inside(p.date, spans)).map(make)].sort((a, b) =>
     a.date.localeCompare(b.date),
   );

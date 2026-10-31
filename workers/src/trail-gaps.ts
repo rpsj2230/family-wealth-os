@@ -5,8 +5,30 @@
  * nothing. Run by hand (Actions > Trail gaps).
  */
 import { createClient } from '@supabase/supabase-js';
-import { chainCoverage, REAL_STARTS, ORIGIN_LABEL } from '@fwos/core';
-import { loadMoneyTrail, loadPortfolioData } from '@fwos/data';
+import {
+  addDaysIso,
+  capitalLedger,
+  chainCoverage,
+  disagreements,
+  historyReview,
+  ORIGIN_LABEL,
+  REAL_STARTS,
+  statementCoverage,
+  twoWayPeople,
+} from '@fwos/core';
+import {
+  ALERTS_FILE,
+  capitalDays,
+  capitalStart,
+  ledgerMovesOf,
+  loadMoneyTrail,
+  loadPortfolioData,
+  loadPositionInput,
+  loadSettings,
+  loadStatements,
+  positionFor,
+  statementPicture,
+} from '@fwos/data';
 
 const need = (n: string) => {
   const v = process.env[n];
@@ -275,7 +297,212 @@ async function main() {
   console.log(`  ${missed} lines`);
 }
 
-main().catch((e) => {
-  console.error('Trail gaps failed:', (e as Error).message);
-  process.exit(1);
-});
+/**
+ * After the rules: how much of the money moved is placed and traced, what is left and its shape (the bank's own words of the
+ * narrations, never a name or an amount of a holding), whether every statement is there, and how much of own money is still worked
+ * out from balances. Shares and counts only.
+ */
+async function afterRules(household: string) {
+  const loaded = await loadPortfolioData(db, { householdId: household });
+  const { config } = await loadSettings(db, household);
+  // an account by its bank, kind, last four digits and holder (no amounts)
+  const name = (id: string) => {
+    const a = loaded.assetRows.find((x) => x.id === id);
+    if (!a) return '(not on file)';
+    return [
+      a.institution_id ? loaded.institutionName?.get(a.institution_id) : null,
+      a.account_kind ?? a.type,
+      a.identifier_last4 ? `…${a.identifier_last4}` : null,
+      loaded.ownerName.get(a.owner_id),
+    ]
+      .filter(Boolean)
+      .join(' ');
+  };
+  const stored = await loadStatements(db, household);
+  const picture = statementPicture(stored, loaded, config, positionFor(loaded, config, true));
+  const byId = new Map(picture.lines.map((l) => [l.id, l]));
+  const abs = (n: number) => Math.abs(n);
+  const total = picture.lines.reduce((a, l) => a + abs(l.amount), 0);
+  console.log(`\n== After the rules: ${picture.lines.length} statement lines`);
+  const byCls = new Map<string, { n: number; v: number }>();
+  for (const c of picture.classified) {
+    const l = byId.get(c.id);
+    if (!l) continue;
+    const g = byCls.get(c.cls) ?? { n: 0, v: 0 };
+    g.n++;
+    g.v += abs(l.amount);
+    byCls.set(c.cls, g);
+  }
+  for (const [k, g] of [...byCls].sort((a, b) => b[1].v - a[1].v))
+    console.log(
+      `  ${k.padEnd(13)} ${String(g.n).padStart(5)} lines, ${pct(g.v, total)} of the money`,
+    );
+
+  // the trail: lines between the family's own holdings that do not name the other side
+  const INTERNAL = new Set(['own_transfer', 'fd_funding', 'fd_proceeds', 'fund_buy', 'fund_sell']);
+  const internal = picture.classified.filter((c) => INTERNAL.has(c.cls));
+  const open = internal.filter((c) => !c.counterpart && !c.remittanceId);
+  const iv = internal.reduce((a, c) => a + abs(byId.get(c.id)?.amount ?? 0), 0);
+  const ov = open.reduce((a, c) => a + abs(byId.get(c.id)?.amount ?? 0), 0);
+  console.log(
+    `\n== Trail: ${pct(iv - ov, iv)} of the money moved between your own holdings names its other side; ${open.length} lines do not`,
+  );
+  // their shape: the bank's own words only (no names, no numbers), and the reason the rule gave
+  const BANKWORD =
+    /^(neft|rtgs|imps|upi|ach|nach|ecs|trf|transfer|to|from|by|cr|dr|chq|clg|atm|pos|int|tds|si|fd|td|rd|cms|mmt|inb|ib|mb|own|self|ac|acct|account|deposit|closure|proceeds|maturity|renewal|sweep|auto|iccl|bse|cams|kfin|nse|mf|sip|wise|remittance|inward|outward|ft|funds?|tpt|p2a|vpa|ref)$/i;
+  const shape = (n: string) =>
+    (n.match(/[A-Za-z]+/g) ?? [])
+      .filter((w) => BANKWORD.test(w))
+      .slice(0, 4)
+      .map((w) => w.toUpperCase())
+      .join(' ') || '(no bank words)';
+  const shapes = new Map<string, { n: number; v: number; cls: Set<string> }>();
+  for (const c of open) {
+    const l = byId.get(c.id)!;
+    const k = shape(l.narration);
+    const g = shapes.get(k) ?? { n: 0, v: 0, cls: new Set<string>() };
+    g.n++;
+    g.v += abs(l.amount);
+    g.cls.add(`${c.cls}${l.amount > 0 ? '+' : '-'}`);
+    shapes.set(k, g);
+  }
+  for (const [k, g] of [...shapes].sort((a, b) => b[1].v - a[1].v).slice(0, 20))
+    console.log(
+      `  ${pct(g.v, ov).padStart(4)}  ${String(g.n).padStart(4)} lines  [${[...g.cls].join(',')}]  ${k}`,
+    );
+  const reasons = new Map<string, number>();
+  for (const c of open) {
+    const r = c.reason
+      .replace(/\d[\d,.]*/g, '#')
+      .replace(/₹#/g, '₹#')
+      .slice(0, 70);
+    reasons.set(r, (reasons.get(r) ?? 0) + abs(byId.get(c.id)!.amount));
+  }
+  console.log('  by the reason given:');
+  for (const [r, v] of [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 12))
+    console.log(`    ${pct(v, ov).padStart(4)}  ${r}`);
+
+  // lines still to answer, and their shape
+  const ask = picture.classified.filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out');
+  const av = ask.reduce((a, c) => a + abs(byId.get(c.id)?.amount ?? 0), 0);
+  console.log(`\n== Lines still to answer: ${ask.length}, ${pct(av, total)} of the money`);
+  const askShapes = new Map<string, { n: number; v: number }>();
+  for (const c of ask) {
+    const l = byId.get(c.id)!;
+    const k = `${l.amount > 0 ? 'in ' : 'out'} ${shape(l.narration)}`;
+    const g = askShapes.get(k) ?? { n: 0, v: 0 };
+    g.n++;
+    g.v += abs(l.amount);
+    askShapes.set(k, g);
+  }
+  for (const [k, g] of [...askShapes].sort((a, b) => b[1].v - a[1].v).slice(0, 12))
+    console.log(`  ${pct(g.v, av).padStart(4)}  ${String(g.n).padStart(4)} lines  ${k}`);
+
+  // are all the statements here?
+  const real = stored.statements.filter((x) => x.file_label !== ALERTS_FILE);
+  const recs = new Map<string, string[]>();
+  for (const o of loaded.obsRows) recs.set(o.asset_id, [...(recs.get(o.asset_id) ?? []), o.as_of]);
+  const today = loaded.today.toISOString().slice(0, 10);
+  const accts = loaded.assetRows
+    .filter(
+      (a) =>
+        a.type === 'bank_account' &&
+        a.currency === 'INR' &&
+        a.status !== 'gifted' &&
+        a.status !== 'merged',
+    )
+    .flatMap((a) => {
+      const ds = [
+        ...(recs.get(a.id) ?? []),
+        ...real.filter((x) => x.asset_id === a.id).map((x) => x.from_on),
+      ].sort();
+      const held = a.status === 'active' || a.status === 'stopped';
+      return ds.length
+        ? [{ assetId: a.id, from: ds[0]!, to: held ? today : ds[ds.length - 1]! }]
+        : [];
+    });
+  const cov = statementCoverage(
+    accts,
+    real.map((x) => ({
+      assetId: x.asset_id,
+      from: x.from_on,
+      to: x.to_on,
+      opening: x.opening === null ? null : Number(x.opening),
+      closing: x.closing === null ? null : Number(x.closing),
+    })),
+  );
+  const months = cov.reduce((a, r) => a + r.months.length, 0);
+  const full = cov.reduce((a, r) => a + r.full, 0);
+  console.log(
+    `\n== Statements: ${pct(full, months)} of ${months} account-months covered in full; ${cov.filter((r) => r.full === r.months.length && !r.breaks.length).length} of ${cov.length} accounts complete`,
+  );
+  console.log(
+    `  gaps between statements: ${cov.reduce((a, r) => a + r.breaks.filter((b) => b.kind === 'gap').length, 0)}; statements opening off the last close: ${cov.reduce((a, r) => a + r.breaks.filter((b) => b.kind === 'balance').length, 0)}`,
+  );
+  for (const r of cov
+    .filter((x) => x.full < x.months.length)
+    .sort((a, b) => b.months.length - b.full - (a.months.length - a.full)))
+    console.log(
+      `  ${name(r.assetId)}: ${r.full}/${r.months.length} months; missing ${r.missing.map((m) => (m.from === m.to ? m.from : `${m.from}..${m.to}`)).join(', ')}`,
+    );
+  if (loaded.bank)
+    console.log(
+      `  typed balances that differ from the bank's: ${
+        disagreements(
+          loaded.obsRows.map((o) => ({
+            assetId: o.asset_id,
+            date: o.as_of,
+            amount: Number(o.amount),
+          })),
+          loaded.bank,
+          1,
+        ).length
+      }`,
+    );
+
+  // own money still worked out from balances, and the months the review asks about
+  const position = await loadPositionInput(db, loaded, {
+    config,
+    days: capitalDays(capitalStart(loaded, config), today, config.home.changeDays),
+  });
+  const ledger = capitalLedger({
+    position,
+    moves: ledgerMovesOf(loaded.engine.moves),
+    openingDate: config.capital.openingDate || null,
+    reinvestDays: config.harvest.reinvestDays,
+  });
+  const tt = ledger.totals;
+  console.log(
+    `\n== Money movements: own money is ${pct(abs(tt.confirmedExternal + tt.corrections), abs(tt.confirmedExternal) + abs(tt.corrections) + abs(tt.unexplained))} confirmed, the rest worked out from balances`,
+  );
+  const r = historyReview({
+    ledger,
+    position,
+    minimum: config.capital.reviewMinimum,
+    minimumPct: config.capital.reviewMinimumPct,
+    pairMonths: config.capital.reviewPairMonths,
+    before: addDaysIso(today, -Math.max(config.deposits.hideMaturedAfterDays, 120)),
+    coverage: real.map((x) => ({ assetId: x.asset_id, from: x.from_on, to: x.to_on })),
+  });
+  console.log(
+    `  earlier months: ${r.open.length} to answer, ${r.byStatements.length} decided by statements, ${r.settled.length} settled by the records, ${r.cancelling.length} pairs cancelling, ${r.small.count} below the limits`,
+  );
+  const people = twoWayPeople(picture.lines, picture.classified, {
+    ownNames: [...loaded.ownerName.values()],
+    borrowers: loaded.assetRows
+      .filter((a) => a.type === 'receivable')
+      .map((a) => a.nickname.replace(/^(loan|money lent|gift)\s+to\s+/i, '')),
+    minimum: config.statements.reviewAbove,
+  });
+  console.log(`  people paid and paying back, not yet recorded as loans: ${people.length}`);
+}
+
+main()
+  .then(async () => {
+    const hh = await db.from('households').select('id').limit(1);
+    await afterRules(String(hh.data?.[0]?.id ?? ''));
+  })
+  .catch((e) => {
+    console.error('Trail gaps failed:', (e as Error).message);
+    process.exit(1);
+  });
