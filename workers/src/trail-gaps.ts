@@ -9,6 +9,7 @@ import {
   addDaysIso,
   capitalLedger,
   chainCoverage,
+  dayEndBalances,
   disagreements,
   historyReview,
   ORIGIN_LABEL,
@@ -452,6 +453,49 @@ async function afterRules(household: string) {
     console.log(
       `  ${name(r.assetId)}: ${r.full}/${r.months.length} months; missing ${r.missing.map((m) => (m.from === m.to ? m.from : `${m.from}..${m.to}`)).join(', ')}`,
     );
+  // each statement of a flagged account, against every account at the same bank: whose typed balances do its balances match?
+  for (const bad of loaded.bank?.untrusted ?? []) {
+    const acct = loaded.assetRows.find((a) => a.id === bad);
+    const peers = loaded.assetRows.filter(
+      (a) =>
+        a.type === 'bank_account' &&
+        a.currency === 'INR' &&
+        a.institution_id === acct?.institution_id,
+    );
+    const linesOf = await db
+      .from('statement_lines')
+      .select('statement_id, txn_on, amount, balance')
+      .eq('asset_id', bad);
+    for (const st of real.filter((x) => x.asset_id === bad)) {
+      const ls = (linesOf.data ?? []).filter((l) => l.statement_id === st.id);
+      const ends =
+        dayEndBalances(
+          ls.map((l) => ({
+            assetId: 'x',
+            date: l.txn_on as string,
+            amount: Number(l.amount),
+            balance: l.balance === null ? null : Number(l.balance),
+          })),
+        ).get('x') ?? [];
+      const score = peers.map((p) => {
+        const typed = loaded.obsRows.filter(
+          (o) => o.asset_id === p.id && o.as_of >= st.from_on && o.as_of <= st.to_on,
+        );
+        const judged = typed
+          .map((o) => {
+            const b = ends.filter((e) => e.date <= o.as_of).pop();
+            return b
+              ? Math.abs(b.amount - Number(o.amount)) <= Math.max(1, 0.01 * Math.abs(b.amount))
+              : null;
+          })
+          .filter((x): x is boolean => x !== null);
+        return { p: name(p.id), n: judged.length, ok: judged.filter(Boolean).length };
+      });
+      console.log(
+        `  statement ${st.from_on}..${st.to_on} filed to ${name(bad)}: ${score.map((x) => `${x.p} ${x.ok}/${x.n}`).join('; ')}`,
+      );
+    }
+  }
   if (loaded.bank?.untrusted?.length)
     console.log(
       `  statements that do not agree with the typed balances (typed kept): ${loaded.bank.untrusted.map(name).join('; ')}`,
