@@ -17,6 +17,7 @@ import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
+import { loadAccountChecks } from '@/lib/account-checks';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
 import { loadJointHolders } from '@/lib/quick-edit-data';
@@ -130,7 +131,10 @@ export default async function MonthlyPage({
       .freshnessDays,
     links: { inbox: '/inbox', accounts: '/accounts' },
   });
-  const { cards, inboxWaiting } = await loadAutomation(supabase, iso);
+  const [{ cards, inboxWaiting }, checks] = await Promise.all([
+    loadAutomation(supabase, iso),
+    loadAccountChecks(),
+  ]);
   const quick = quickModel({
     blocks,
     assets: assetRows,
@@ -184,7 +188,16 @@ export default async function MonthlyPage({
           value.
         </p>
       )}
-      <UpdateGrid blocks={visible} styles={styles} today={iso} fxHint={fxHint} institutions />
+      <UpdateGrid
+        blocks={visible}
+        styles={styles}
+        today={iso}
+        fxHint={fxHint}
+        institutions
+        checks={checks.checks}
+        ownNames={checks.ownNames}
+        returnTo="/monthly"
+      />
       <HiddenDepositsNote
         counts={hiddenCounts}
         showAll={showAll}

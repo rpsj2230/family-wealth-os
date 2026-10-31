@@ -28,12 +28,17 @@ export function guessAccount(
 export function BankStatementForm({
   accounts,
   file,
+  defaultAsset,
 }: {
   accounts: { id: string; label: string; last4: string | null }[];
   /** the statement file; null to paste rows copied from net banking instead */
   file: File | null;
+  /** the account, when the form is opened from it (Monthly update, its own page) */
+  defaultAsset?: string;
 }) {
-  const [asset, setAsset] = useState(() => (file ? guessAccount(file.name, accounts) : ''));
+  const [asset, setAsset] = useState(
+    () => defaultAsset ?? (file ? guessAccount(file.name, accounts) : ''),
+  );
   const [password, setPassword] = useState('');
   const [pasted, setPasted] = useState('');
   const [confirm, setConfirm] = useState(false);

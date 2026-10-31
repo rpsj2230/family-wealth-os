@@ -1,7 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, useTransition, type ClipboardEvent, type KeyboardEvent } from 'react';
+import {
+  Fragment,
+  useMemo,
+  useState,
+  useTransition,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from 'react';
 import {
   bankStyle,
   formatInr,
@@ -23,12 +30,15 @@ import {
   buildGridChanges,
   carryForward,
   changeHint,
+  feedHint,
   spreadPaste,
   type CarryRow,
   type GridEdit,
   type GridRowInfo,
 } from '@/lib/update-grid';
 import { slugify } from '@/lib/slug';
+import type { AccountCheck } from '@fwos/data';
+import { AccountCheckPanel } from './AccountCheckPanel';
 import './datain.css';
 
 const FD_STATUS = [
@@ -71,6 +81,9 @@ export function UpdateGrid({
   fxHint,
   institutions,
   summary = true,
+  checks,
+  ownNames = [],
+  returnTo = '/monthly',
 }: {
   blocks: BankBlock[];
   styles: Record<string, PersonStyle>;
@@ -79,7 +92,14 @@ export function UpdateGrid({
   institutions: boolean;
   /** show the "where each bank stands" board (off on the single-bank page) */
   summary?: boolean;
+  /** each account's bank lines: a typed balance is checked against them as it is typed, and its lines are answered in place */
+  checks?: Record<string, AccountCheck>;
+  /** the household's names, so a person on a line is told from them */
+  ownNames?: string[];
+  /** this page, to come back to after answering a line */
+  returnTo?: string;
 }) {
+  const [checkOpen, setCheckOpen] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Record<string, GridEdit>>({});
   const [asOf, setAsOf] = useState(today);
   const [onlyWaiting, setOnlyWaiting] = useState(false);
@@ -186,78 +206,109 @@ export function UpdateGrid({
     const e = edits[r.assetId] ?? {};
     const st = rowState(r, today);
     const hint = changeHint(r.recorded, e.amount, r.currency);
+    const check = r.currency === 'INR' ? checks?.[r.assetId] : undefined;
+    const feed = feedHint(check, e.amount);
     const edited = e.amount !== undefined && e.amount.trim() !== '';
+    const opened = !!checkOpen[r.assetId] || (!!feed?.warn && !!check?.ask.length);
     return (
-      <tr
-        key={r.assetId}
-        className={`urow ${st === 'waiting' || st === 'missing' ? 'wait' : ''} ${edited ? 'edited' : ''} ${st === 'closed' ? 'dim' : ''}`}
-      >
-        <td className="acct">
-          <div className="code">
-            <span className={`kind ${r.kind}`}>{r.code}</span>
-            <EditButton id={r.assetId} name={r.code} />
-          </div>
-          {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
-          {r.notes && <div className="sub">{r.notes}</div>}
-          {errors[r.assetId] && (
-            <div className="small fail" role="alert">
-              {errors[r.assetId]}
+      <Fragment key={r.assetId}>
+        <tr
+          className={`urow ${st === 'waiting' || st === 'missing' ? 'wait' : ''} ${edited ? 'edited' : ''} ${st === 'closed' ? 'dim' : ''}`}
+        >
+          <td className="acct">
+            <div className="code">
+              <span className={`kind ${r.kind}`}>{r.code}</span>
+              <EditButton id={r.assetId} name={r.code} />
             </div>
-          )}
-        </td>
-        <td className="lastcell" data-label="Last value">
-          <div className="amt">{own(r, r.recorded)}</div>
-          <UpdatedCell asOf={r.asOf} source={r.source} olderEmail={r.olderEmail ?? null} />
-          {(st === 'waiting' || st === 'missing') && (
-            <span className="statuspill warn">
-              {st === 'missing' ? 'No value yet' : 'Needs this month’s value'}
-            </span>
-          )}
-        </td>
-        <td className="newcell" data-label="New balance">
-          <div className="newbal">
-            <input
-              className="bal"
-              data-bal
-              data-id={r.assetId}
-              inputMode="decimal"
-              autoComplete="off"
-              aria-label={`New balance for ${bank} ${ownerName} ${r.code}`}
-              placeholder={r.recorded === null ? 'New balance' : String(Math.round(r.recorded))}
-              value={e.amount ?? ''}
-              onChange={(ev) => set(r.assetId, { amount: ev.target.value })}
-              onKeyDown={onKey}
-              onPaste={(ev) => onPaste(ev, r.assetId)}
-            />
-            {r.currency !== 'INR' && (
+            {r.kind === 'held' && r.holderName && <div className="sub">held by {r.holderName}</div>}
+            {r.notes && <div className="sub">{r.notes}</div>}
+            {errors[r.assetId] && (
+              <div className="small fail" role="alert">
+                {errors[r.assetId]}
+              </div>
+            )}
+          </td>
+          <td className="lastcell" data-label="Last value">
+            <div className="amt">{own(r, r.recorded)}</div>
+            <UpdatedCell asOf={r.asOf} source={r.source} olderEmail={r.olderEmail ?? null} />
+            {(st === 'waiting' || st === 'missing') && (
+              <span className="statuspill warn">
+                {st === 'missing' ? 'No value yet' : 'Needs this month’s value'}
+              </span>
+            )}
+          </td>
+          <td className="newcell" data-label="New balance">
+            <div className="newbal">
               <input
-                className="bal fx"
+                className="bal"
+                data-bal
+                data-id={r.assetId}
                 inputMode="decimal"
-                aria-label={`${r.currency} to INR rate for ${r.code}`}
-                placeholder={
-                  fxHint[r.currency]
-                    ? `₹ per ${r.currency} ${fxHint[r.currency]}`
-                    : `${r.currency}→INR`
-                }
-                value={e.fx ?? ''}
-                onChange={(ev) => set(r.assetId, { fx: ev.target.value })}
+                autoComplete="off"
+                aria-label={`New balance for ${bank} ${ownerName} ${r.code}`}
+                placeholder={r.recorded === null ? 'New balance' : String(Math.round(r.recorded))}
+                value={e.amount ?? ''}
+                onChange={(ev) => set(r.assetId, { amount: ev.target.value })}
+                onKeyDown={onKey}
+                onPaste={(ev) => onPaste(ev, r.assetId)}
               />
-            )}
-            {r.recorded !== null && st !== 'closed' && (
-              <button
-                type="button"
-                className="btn compact"
-                onClick={() => set(r.assetId, { amount: String(r.recorded) })}
-                title={`Same as last: ${own(r, r.recorded)}`}
-                aria-label={`Same as last for ${r.code}: ${own(r, r.recorded)}`}
-              >
-                Same
-              </button>
-            )}
-            {hint && <span className={`delta ${hint.warn ? 'warn' : ''}`}>{hint.text}</span>}
-          </div>
-        </td>
-      </tr>
+              {r.currency !== 'INR' && (
+                <input
+                  className="bal fx"
+                  inputMode="decimal"
+                  aria-label={`${r.currency} to INR rate for ${r.code}`}
+                  placeholder={
+                    fxHint[r.currency]
+                      ? `₹ per ${r.currency} ${fxHint[r.currency]}`
+                      : `${r.currency}→INR`
+                  }
+                  value={e.fx ?? ''}
+                  onChange={(ev) => set(r.assetId, { fx: ev.target.value })}
+                />
+              )}
+              {r.recorded !== null && st !== 'closed' && (
+                <button
+                  type="button"
+                  className="btn compact"
+                  onClick={() => set(r.assetId, { amount: String(r.recorded) })}
+                  title={`Same as last: ${own(r, r.recorded)}`}
+                  aria-label={`Same as last for ${r.code}: ${own(r, r.recorded)}`}
+                >
+                  Same
+                </button>
+              )}
+              {hint && <span className={`delta ${hint.warn ? 'warn' : ''}`}>{hint.text}</span>}
+              {feed && (
+                <span className={`delta ${feed.warn ? 'warn' : 'ok'}`} data-testid="feed-hint">
+                  {feed.text}
+                </span>
+              )}
+              {check && (
+                <button
+                  type="button"
+                  className="btn compact"
+                  aria-expanded={opened}
+                  onClick={() => setCheckOpen((o) => ({ ...o, [r.assetId]: !opened }))}
+                >
+                  {check.ask.length ? `Check (${check.ask.length} to answer)` : 'Check'}
+                </button>
+              )}
+            </div>
+          </td>
+        </tr>
+        {check && opened && (
+          <tr className="urow checkrow">
+            <td colSpan={3}>
+              <AccountCheckPanel
+                account={{ id: r.assetId, label: `${bank} ${r.code}`, last4: null }}
+                check={check}
+                returnTo={returnTo}
+                ownNames={ownNames}
+              />
+            </td>
+          </tr>
+        )}
+      </Fragment>
     );
   }
 

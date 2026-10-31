@@ -185,3 +185,28 @@ export function changeHint(
     warn: false,
   };
 }
+
+/**
+ * A typed balance against what the account's bank lines reach, while it is typed: the same (it follows from the lines), or how much
+ * more or less, which is money that moved after the last line or a movement not on file. Null when there is nothing to compare.
+ */
+export function feedHint(
+  check: { reach: number | null; on: string | null; ask: unknown[] } | undefined,
+  typed: string | undefined,
+): { text: string; warn: boolean } | null {
+  if (!check || check.reach === null || !check.on || typed === undefined || typed.trim() === '')
+    return null;
+  const v = parseAmount(typed);
+  if (v === null || v < 0) return null;
+  const diff = Math.round((v - check.reach) * 100) / 100;
+  const when = new Date(`${check.on}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+  if (Math.abs(diff) < 1) return { text: `Matches the bank lines (to ${when})`, warn: false };
+  return {
+    text: `${plain(Math.abs(diff), 'INR')} ${diff > 0 ? 'more' : 'less'} than the bank lines reach (${when}): money ${diff > 0 ? 'in' : 'out'} not on file yet. Check it below.`,
+    warn: true,
+  };
+}

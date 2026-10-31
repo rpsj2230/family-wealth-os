@@ -220,6 +220,71 @@ export function accountLines(t: MoneyTrailData, assetId: string): AccountLine[] 
   return chainOrder(rows).reverse();
 }
 
+/** A bank account's lines as Monthly update and the account page check a typed balance against. */
+export interface AccountCheck {
+  /** the balance the lines on file reach: the last balance the bank gave, moved on by any line after it that gave none */
+  reach: number | null;
+  /** the day of the last line */
+  on: string | null;
+  /** the lines that need an answer, newest first */
+  ask: {
+    id: string;
+    date: string;
+    amount: number;
+    narration: string;
+    reason: string;
+    /** the tag the narration suggests, if any */
+    category: string | null;
+  }[];
+}
+
+/** Each bank account's check: what its lines reach, and which of them need an answer. */
+export function accountChecks(
+  t: Pick<MoneyTrailData, 'lines' | 'classified'>,
+): Record<string, AccountCheck> {
+  const byAsset = new Map<string, StoredLine[]>();
+  for (const l of t.lines) byAsset.set(l.asset_id, [...(byAsset.get(l.asset_id) ?? []), l]);
+  const out: Record<string, AccountCheck> = {};
+  for (const [id, ls] of byAsset) {
+    const rows = chainOrder(
+      ls.map((l) => ({
+        id: l.id,
+        date: l.txn_on,
+        amount: Number(l.amount),
+        balance: l.balance === null ? null : Number(l.balance),
+        narration: l.narration,
+      })),
+    );
+    let reach: number | null = null;
+    for (const r of rows)
+      reach =
+        r.balance !== null
+          ? r.balance
+          : reach === null
+            ? null
+            : Math.round((reach + r.amount) * 100) / 100;
+    out[id] = {
+      reach,
+      on: rows.length ? rows[rows.length - 1]!.date : null,
+      ask: rows
+        .filter((r) => {
+          const c = t.classified.get(r.id);
+          return !c || c.cls === 'ask_in' || c.cls === 'ask_out';
+        })
+        .reverse()
+        .map((r) => ({
+          id: r.id,
+          date: r.date,
+          amount: r.amount,
+          narration: r.narration,
+          reason: t.classified.get(r.id)?.reason ?? 'Not sorted yet',
+          category: t.classified.get(r.id)?.category ?? null,
+        })),
+    };
+  }
+  return out;
+}
+
 /** Oldest first; within a day, each next line is the one whose balance follows from the balance so far. */
 export function chainOrder<
   T extends { id: string; date: string; amount: number; balance: number | null },

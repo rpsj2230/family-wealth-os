@@ -1,6 +1,6 @@
 import Link from 'next/link';
+import { CategoryOptions } from '@/components/CategoryOptions';
 import {
-  CATEGORIES,
   categoryLabel,
   formatInr,
   formatInrCompact,
@@ -84,23 +84,6 @@ const DIRECTION: Record<StatementRule['direction'], string> = {
 };
 
 /** The holdings, grouped for a select: loans first (money lent), then property, accounts, deposits and funds. */
-/** The tags a line can carry (core statement-categories.ts), money out or money in, with "work it out" first. */
-function CategoryOptions({ side }: { side: 'in' | 'out' | 'any' }) {
-  const list = (
-    Object.entries(CATEGORIES) as [string, { label: string; side: 'in' | 'out' }][]
-  ).filter(([, c]) => side === 'any' || c.side === side);
-  return (
-    <>
-      <option value="">Work it out from the narration</option>
-      {list.map(([id, c]) => (
-        <option key={id} value={id}>
-          {c.label}
-        </option>
-      ))}
-    </>
-  );
-}
-
 function HoldingOptions({ holdings }: { holdings: RuleHolding[] }) {
   const groups: [string, string[]][] = [
     ['Money lent (a “Loan to …”)', ['receivable']],

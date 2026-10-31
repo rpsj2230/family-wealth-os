@@ -253,20 +253,31 @@ export async function saveStatement(_prev: StatementState, f: FormData): Promise
   };
 }
 
-function back(message: string): never {
+const STATEMENTS_PAGE = '/reconcile?tab=statements';
+
+function back(message: string, to = STATEMENTS_PAGE): never {
   revalidatePath('/', 'layout');
-  redirect(`/reconcile?tab=statements&msg=${encodeURIComponent(message)}`);
+  redirect(`${to}${to.includes('?') ? '&' : '?'}msg=${encodeURIComponent(message)}`);
 }
 
-async function rebuildOrSay(done: string): Promise<never> {
+/** The page a form was sent from (Monthly update, an account page), so the answer comes back there; only a path in this app. */
+function returnTo(f: FormData): string {
+  const r = String(f.get('return') ?? '');
+  return /^\/[a-z0-9/_\-?=&%.]*$/i.test(r) && !r.startsWith('//') ? r : STATEMENTS_PAGE;
+}
+
+async function rebuildOrSay(done: string, to = STATEMENTS_PAGE): Promise<never> {
   const { supabase, householdId } = await loadContext();
-  if (!householdId) back('Create your household first.');
+  if (!householdId) back('Create your household first.', to);
   try {
     await rebuildStatementMoves(supabase as unknown as SupabaseClient, householdId!);
   } catch (e) {
-    back(`Saved, but the movements could not be rebuilt: ${e instanceof Error ? e.message : ''}`);
+    back(
+      `Saved, but the movements could not be rebuilt: ${e instanceof Error ? e.message : ''}`,
+      to,
+    );
   }
-  back(done);
+  back(done, to);
 }
 
 /** What a line was, when no rule could say: saved on the line, then every line is sorted again. Empty takes the answer back. */
@@ -274,10 +285,11 @@ export async function answerLine(f: FormData): Promise<void> {
   const id = String(f.get('line') ?? '');
   const answer = String(f.get('answer') ?? '');
   const category = tagOf(f);
+  const to = returnTo(f);
   if (!UUID.test(id) || !['outside', 'own', 'income', 'rent', 'out', ''].includes(answer))
-    back('Choose what the line was.');
+    back('Choose what the line was.', to);
   const { supabase, householdId } = await loadContext();
-  if (!householdId) back('Create your household first.');
+  if (!householdId) back('Create your household first.', to);
   // "remember": the answer becomes a rule for every line naming the same person or words, past and future
   const remember = f.get('remember') === 'on';
   const name = String(f.get('name') ?? '')
@@ -285,7 +297,8 @@ export async function answerLine(f: FormData): Promise<void> {
     .slice(0, 160);
   const holding = String(f.get('holding') ?? '');
   if (remember && answer) {
-    if (name.length < 2) back('Write the name or words to remember, as they appear on the line.');
+    if (name.length < 2)
+      back('Write the name or words to remember, as they appear on the line.', to);
     const { data: line } = await supabase
       .from('statement_lines')
       .select('amount')
@@ -302,18 +315,18 @@ export async function answerLine(f: FormData): Promise<void> {
       interest: false,
       category,
     });
-    if ('error' in rule) back(rule.error);
+    if ('error' in rule) back(rule.error, to);
     const { error } = await supabase.from('statement_rules').insert(rule.row);
-    if (error) back(`The rule could not be saved: ${error.message}`);
-    await rebuildOrSay(`Saved as a rule: every line naming “${name}” is placed the same way.`);
+    if (error) back(`The rule could not be saved: ${error.message}`, to);
+    await rebuildOrSay(`Saved as a rule: every line naming “${name}” is placed the same way.`, to);
   }
   const { error } = await supabase
     .from('statement_lines')
     .update({ answer: answer || null, category })
     .eq('id', id)
     .eq('household_id', householdId!);
-  if (error) back(`That could not be saved: ${error.message}`);
-  await rebuildOrSay(answer ? 'Saved.' : 'Answer taken back.');
+  if (error) back(`That could not be saved: ${error.message}`, to);
+  await rebuildOrSay(answer ? 'Saved.' : 'Answer taken back.', to);
 }
 
 /**

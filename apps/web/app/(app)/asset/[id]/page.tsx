@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { AccountCheckPanel } from '@/components/AccountCheckPanel';
 import { ActivityLog } from '@/components/ActivityLog';
+import { loadAccountChecks } from '@/lib/account-checks';
 import { AssetFacts, DetailHeader, type Crumb } from '@/components/AssetFacts';
 import { DetailTables } from '@/components/DetailTable';
 import { DepositHeadlinePanel, SavingsHeadlinePanel } from '@/components/HoldingHeadline';
@@ -300,6 +302,11 @@ export default async function AssetPage({
         </section>
       )}
       {d.type === 'bank_account' && (
+        <Suspense fallback={null}>
+          <AccountCheckSection id={id} label={d.view.title} />
+        </Suspense>
+      )}
+      {d.type === 'bank_account' && (
         // the transactions need every statement line sorted by the rules: they arrive after the rest of the page
         <Suspense
           fallback={
@@ -341,6 +348,22 @@ export default async function AssetPage({
 }
 
 /** The account's bank statement lines, each opening its own page with its trail; nothing when it has no statement on file. */
+/** Check this account: what its bank lines reach, the lines to answer (answered here), and rows pasted from net banking. */
+async function AccountCheckSection({ id, label }: { id: string; label: string }) {
+  const { checks, ownNames } = await loadAccountChecks();
+  return (
+    <section className="detailsection" aria-labelledby="ac-h" id="check">
+      <h2 id="ac-h">Check the balance</h2>
+      <AccountCheckPanel
+        account={{ id, label, last4: null }}
+        check={checks[id]}
+        returnTo={`/asset/${id}`}
+        ownNames={ownNames}
+      />
+    </section>
+  );
+}
+
 async function AccountTransactions({ id, fileName }: { id: string; fileName: string }) {
   const { count } = await (
     await loadContext()

@@ -3,6 +3,7 @@ import {
   buildGridChanges,
   carryForward,
   changeHint,
+  feedHint,
   spreadPaste,
   type GridRowInfo,
 } from './update-grid';
@@ -178,5 +179,26 @@ describe('changeHint', () => {
   });
   it('names a foreign currency', () => {
     expect(changeHint(1000, '1100', 'SGD')?.text).toBe('+SGD 100 (10%) since last');
+  });
+});
+
+describe('a typed balance against the bank lines', () => {
+  const check = { reach: 1_37_912, on: '2026-09-30', ask: [] };
+  it('says when it follows from the lines', () => {
+    expect(feedHint(check, '1,37,912')).toEqual({
+      text: 'Matches the bank lines (to 30 Sept)',
+      warn: false,
+    });
+  });
+  it('flags the difference at once, and which way the money went', () => {
+    const h = feedHint(check, '1,32,912');
+    expect(h?.warn).toBe(true);
+    expect(h?.text).toMatch(/less than the bank lines reach/);
+    expect(h?.text).toMatch(/money out not on file/);
+  });
+  it('says nothing without lines or without a number', () => {
+    expect(feedHint(undefined, '100')).toBeNull();
+    expect(feedHint({ reach: null, on: null, ask: [] }, '100')).toBeNull();
+    expect(feedHint(check, '')).toBeNull();
   });
 });
