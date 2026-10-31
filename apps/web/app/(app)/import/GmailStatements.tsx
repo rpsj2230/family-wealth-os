@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { longDate } from '@fwos/core';
-import { REQUEST_PAGES } from '@fwos/ingest';
+import { REQUEST_PAGES, bankSenderDomains } from '@fwos/ingest';
 import { lastScanText, runTimesText, type GmailModel } from '@/lib/gmail-statements';
 import {
   CancelRequest,
@@ -287,6 +287,42 @@ export function GmailStatements({ model: m, demo = false }: { model: GmailModel;
       <fieldset disabled={demo} className="plain">
         <ScanNow disabled={!m.enabled || !!m.waiting} />
       </fieldset>
+
+      <details className="disclose gm-help" id="forward-bank-mail">
+        <summary>Your banks’ alerts and statements: make sure they reach this Gmail</summary>
+        <p className="small">
+          The app reads your banks’ alerts and monthly statements only in the Gmail it uses
+          {m.mailbox ? (
+            <>
+              {' '}
+              (<span className="mono">{m.mailbox}</span>)
+            </>
+          ) : null}
+          . If your banks write to another address, forward their mail here once; one filter covers
+          every bank:
+        </p>
+        <ol className="small">
+          <li>
+            In the mailbox your banks write to, open Settings → Forwarding, add this Gmail as a
+            forwarding address and confirm it.
+          </li>
+          <li>
+            Create a filter with this in <em>From</em>, choose <em>Forward it to</em> this Gmail,
+            and tick <em>Also apply to matching conversations</em>:
+            <pre className="mono gm-query" data-testid="bank-filter">
+              {bankSenderDomains().join(' OR ')}
+            </pre>
+          </li>
+          <li>
+            In each bank’s net banking, switch on an e-mail alert for every transaction and the
+            monthly e-statement.
+          </li>
+        </ol>
+        <p className="small muted">
+          Explain movements → Bank feed then shows, for every account, the last alert and
+          e-statement that came in and up to which day its lines are complete.
+        </p>
+      </details>
 
       <details className="disclose gm-help" id="statement-passwords">
         <summary>Statement passwords (your banks’, and a fund statement not on your PAN)</summary>

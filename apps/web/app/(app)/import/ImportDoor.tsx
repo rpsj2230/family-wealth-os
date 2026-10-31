@@ -261,6 +261,25 @@ export function ImportDoor({
           )}
         </section>
       )}
+
+      {accounts.length > 0 && (
+        <details className="card doorcard" data-testid="paste-rows">
+          <summary>
+            <strong>Paste rows from net banking</strong>{' '}
+            <span className="muted small">
+              (for the odd month the bank’s e-mails missed: no file needed)
+            </span>
+          </summary>
+          <p className="muted small">
+            On the bank’s page, select the rows of the transactions table, copy and paste them here.
+            Rows already on file are not added again, and the preview says whether the rows join up
+            with the account’s balance on file or what is still missing in between.
+          </p>
+          <fieldset disabled={demo} className="plain">
+            <BankStatementForm accounts={accounts} file={null} />
+          </fieldset>
+        </details>
+      )}
     </div>
   );
 }

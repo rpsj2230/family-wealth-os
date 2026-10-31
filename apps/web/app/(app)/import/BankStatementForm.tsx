@@ -30,30 +30,47 @@ export function BankStatementForm({
   file,
 }: {
   accounts: { id: string; label: string; last4: string | null }[];
-  file: File;
+  /** the statement file; null to paste rows copied from net banking instead */
+  file: File | null;
 }) {
-  const [asset, setAsset] = useState(() => guessAccount(file.name, accounts));
+  const [asset, setAsset] = useState(() => (file ? guessAccount(file.name, accounts) : ''));
   const [password, setPassword] = useState('');
+  const [pasted, setPasted] = useState('');
   const [confirm, setConfirm] = useState(false);
   const [preview, previewAct, previewing] = useActionState(previewStatement, idle);
   const [saved, saveAct, saving] = useActionState(saveStatement, idle);
   const busy = previewing || saving;
   const send = (act: (f: FormData) => void) => {
     const fd = new FormData();
-    fd.set('file', file);
+    if (file) fd.set('file', file);
+    else fd.set('pasted', pasted);
     fd.set('asset', asset);
     fd.set('password', password);
     if (confirm) fd.set('confirmMismatch', 'on');
     startTransition(() => act(fd));
   };
-  const isPdf = /\.pdf$/i.test(file.name);
+  const isPdf = !!file && /\.pdf$/i.test(file.name);
+  const ready = !!asset && (!!file || pasted.trim().length > 0);
   const p = preview.stage === 'previewed' ? preview : null;
 
   return (
     <div className="form" aria-busy={busy}>
-      <div className="filechip">
-        <span className="filechip-name">{file.name}</span>
-      </div>
+      {file ? (
+        <div className="filechip">
+          <span className="filechip-name">{file.name}</span>
+        </div>
+      ) : (
+        <label>
+          Rows copied from net banking
+          <textarea
+            rows={6}
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder="Select the rows of the transactions table on the bank’s page (with or without its heading row), copy, and paste here."
+            data-testid="bs-paste"
+          />
+        </label>
+      )}
       <div className="formgrid g3">
         <label>
           Which account
@@ -84,7 +101,7 @@ export function BankStatementForm({
         <button
           type="button"
           className="btn"
-          disabled={!asset || busy}
+          disabled={!ready || busy}
           onClick={() => send(previewAct)}
         >
           {previewing ? 'Reading…' : 'Preview'}
@@ -92,10 +109,10 @@ export function BankStatementForm({
         <button
           type="button"
           className="btn primary"
-          disabled={!asset || busy || !p}
+          disabled={!ready || busy || !p}
           onClick={() => send(saveAct)}
         >
-          {saving ? 'Saving…' : 'Save the statement'}
+          {saving ? 'Saving…' : file ? 'Save the statement' : 'Save the new rows'}
         </button>
       </div>
 
@@ -121,6 +138,21 @@ export function BankStatementForm({
               ? 'All are new.'
               : `${p.fresh} are new; the rest are already saved from another statement.`}
           </p>
+          {p.join &&
+            (Math.abs(p.join.differs) < 1 ? (
+              <p className="notice ok">
+                It starts where the account’s lines on file leave off ({formatInr(p.join.onFile)} on{' '}
+                {p.join.on}): nothing is missing in between.
+              </p>
+            ) : (
+              <p className="notice warn" data-testid="bs-join">
+                The balance before the first row is {signed(p.join.differs)} away from the account’s
+                balance on file on {p.join.on} ({formatInr(p.join.onFile)}): about{' '}
+                {formatInr(Math.abs(p.join.differs))} went {p.join.differs < 0 ? 'out' : 'in'}{' '}
+                between {p.join.on} and {p.from} that is not on file. Paste those rows too, or save
+                these and the month’s e-statement fills it in.
+              </p>
+            ))}
           {p.mismatch && (
             <p className="notice warn">
               The statement is for an account ending {p.mismatch}, which is not the account chosen.

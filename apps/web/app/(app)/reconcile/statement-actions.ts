@@ -15,7 +15,12 @@ import {
   stmtLinesOf,
   type LoadedPortfolio,
 } from '@fwos/data';
-import { isPasswordError, readBankStatement, type BankStatement } from '@fwos/ingest';
+import {
+  isPasswordError,
+  readBankStatement,
+  readPastedRows,
+  type BankStatement,
+} from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
@@ -41,6 +46,11 @@ export interface StatementState {
   classes?: { label: string; count: number; total: number }[];
   /** recorded balances that the statement corrects */
   corrected?: number;
+  /**
+   * the balance before the first line against the account's own balance on file just before it: when they differ, lines between
+   * them are missing (the difference and the days it can be in)
+   */
+  join?: { onFile: number; on: string; differs: number } | null;
   saved?: { lines: number; balances: number; moves: number; toAnswer: number };
 }
 
@@ -51,10 +61,13 @@ async function read(
   | { s: BankStatement; assetId: string; name: string; db: SupabaseClient; householdId: string }
 > {
   const file = f.get('file');
+  const pasted = String(f.get('pasted') ?? '').trim();
   const assetId = String(f.get('asset') ?? '');
-  if (!(file instanceof File) || file.size === 0)
-    return { error: 'Choose the statement file first.' };
-  if (file.size > MAX_BYTES)
+  if (!pasted && (!(file instanceof File) || file.size === 0))
+    return { error: 'Choose the statement file first, or paste the rows.' };
+  if (pasted.length > 500_000)
+    return { error: 'That is too much to paste at once: paste one month or one page at a time.' };
+  if (file instanceof File && file.size > MAX_BYTES)
     return {
       error: 'That file is larger than 5.5 MB: download a shorter period (one year at a time).',
     };
@@ -69,6 +82,22 @@ async function read(
     .eq('household_id', householdId)
     .maybeSingle();
   if (!acct || acct.type !== 'bank_account') return { error: 'Choose one of your bank accounts.' };
+  if (pasted) {
+    const s = readPastedRows(pasted);
+    if (s.lines.length === 0)
+      return {
+        error:
+          'No transaction rows were found in what was pasted. Copy the rows of the table (date, narration, amounts and balance) from the bank’s page and paste them again.',
+      };
+    return {
+      s,
+      assetId,
+      name: `Pasted ${new Date().toISOString().slice(0, 10)}`,
+      db,
+      householdId,
+    };
+  }
+  if (!(file instanceof File)) return { error: 'Choose the statement file first.' };
   const password = String(f.get('password') ?? '') || undefined;
   try {
     const s = await readBankStatement(new Uint8Array(await file.arrayBuffer()), password);
@@ -155,7 +184,24 @@ export async function previewStatement(
       .map(([cls, g]) => ({ label: LINE_CLASS_LABEL[cls], count: g.count, total: g.total }))
       .sort((a, b) => Math.abs(b.total) - Math.abs(a.total)),
     corrected: (await conflictingBalances(db, assetId, s)).length,
+    join: joinCheck(stored.lines, assetId, s),
   };
+}
+
+/** Does the statement start where the account's lines on file left off? Only judged when both give a balance. */
+function joinCheck(
+  lines: { asset_id: string; txn_on: string; balance: number | null }[],
+  assetId: string,
+  s: BankStatement,
+): { onFile: number; on: string; differs: number } | null {
+  if (s.opening === null || !s.from) return null;
+  const before = lines
+    .filter((l) => l.asset_id === assetId && l.balance !== null && l.txn_on < s.from!)
+    .sort((a, b) => a.txn_on.localeCompare(b.txn_on));
+  const last = before[before.length - 1];
+  if (!last) return null;
+  const differs = Math.round((s.opening - Number(last.balance)) * 100) / 100;
+  return { onFile: Number(last.balance), on: last.txn_on, differs };
 }
 
 /**

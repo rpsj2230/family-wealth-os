@@ -150,3 +150,61 @@ export function feedNeeds(input: FeedInput): Need[] {
   }
   return out;
 }
+
+/** One account's feed, as Explain movements > Bank feed shows it. */
+export interface FeedStatusRow {
+  accountId: string;
+  /** the last alert line, e-mailed statement and balance from the bank's e-mail (null: none yet) */
+  lastAlert: string | null;
+  lastEStatement: string | null;
+  lastEmailBalance: string | null;
+  /** the last day heard of from any source, uploads included */
+  lastHeard: string | null;
+  /** the lines are complete up to this day: every balance the bank gave up to it follows from the lines */
+  provenThrough: string | null;
+  /** money that moved with no alert, in the last Settings days */
+  gaps: { from: string; to: string; amount: number }[];
+  state: 'ok' | 'gap' | 'silent' | 'none';
+}
+
+export function feedStatus(
+  input: FeedInput & {
+    lastAlert: Map<string, string>;
+    lastEStatement: Map<string, string>;
+    lastEmailBalance: Map<string, string>;
+  },
+): FeedStatusRow[] {
+  const from = new Date(Date.parse(`${input.today}T00:00:00Z`) - input.gapDays * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return input.accounts.map((a) => {
+    const points = (input.points.get(a.id) ?? []).filter((p) => p.date >= from);
+    const gaps = missedMovements(points);
+    const told = points.filter((p) => p.balance !== null).map((p) => p.date);
+    const lastTold = told.length ? told[told.length - 1]! : null;
+    const heard = input.lastHeard.get(a.id) ?? null;
+    const provenThrough = gaps.length ? gaps[0]!.from : (lastTold ?? heard);
+    const feed =
+      input.lastAlert.get(a.id) ??
+      input.lastEStatement.get(a.id) ??
+      input.lastEmailBalance.get(a.id);
+    const state: FeedStatusRow['state'] =
+      heard && daysBetween(heard, input.today) >= input.silentDays
+        ? 'silent'
+        : gaps.length
+          ? 'gap'
+          : feed
+            ? 'ok'
+            : 'none';
+    return {
+      accountId: a.id,
+      lastAlert: input.lastAlert.get(a.id) ?? null,
+      lastEStatement: input.lastEStatement.get(a.id) ?? null,
+      lastEmailBalance: input.lastEmailBalance.get(a.id) ?? null,
+      lastHeard: heard,
+      provenThrough,
+      gaps,
+      state,
+    };
+  });
+}

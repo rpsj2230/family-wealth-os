@@ -1,11 +1,14 @@
 import {
   classifyLines,
   feedNeeds,
+  feedStatus,
   neededFromYou,
+  type FeedStatusRow,
   type AppConfig,
   type FeedPoint,
   type Need,
 } from '@fwos/core';
+import { bankForDomain } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadPortfolioData, type LoadedPortfolio } from './index';
 import { pageAll } from './paging';
@@ -16,6 +19,56 @@ import { classifyContext, loadStatements, stmtLinesOf } from './statement-store'
 const PREFIX = 'needed:';
 const PROVEN = new Set(['statement', 'person']);
 
+/**
+ * Explain movements > Bank feed: each account's last alert, e-mailed statement and e-mailed balance, the day its lines are proven
+ * complete through, and the money that moved with no alert; with what became of the banks' e-mails of the last Settings days.
+ */
+export async function loadFeedStatus(
+  db: SupabaseClient,
+  householdId: string,
+): Promise<{
+  rows: (FeedStatusRow & { label: string })[];
+  mail: { since: string; applied: number; waiting: number; passed: number; errors: number };
+}> {
+  let rows: (FeedStatusRow & { label: string })[] = [];
+  await loadNeeds(db, householdId, {
+    // the lines to answer are not needed here, so they are not counted
+    toAnswer: 0,
+    onFeed: (input) => {
+      const name = new Map(
+        input.accounts.map((a) => [
+          a.id,
+          `${a.owner} · ${a.bank}${a.kind ? ` ${a.kind}` : ''}${a.last4 ? ` …${a.last4}` : ''}`,
+        ]),
+      );
+      rows = feedStatus(input).map((r) => ({ ...r, label: name.get(r.accountId) ?? '' }));
+    },
+  });
+  const days = (await loadSettings(db, householdId)).config.statementMail.regularDays;
+  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const { data } = await db
+    .from('inbox_messages')
+    .select('outcome, from_domain, message_id')
+    .eq('household_id', householdId)
+    .gte('received_on', since);
+  const bank = (
+    (data ?? []) as { outcome: string; from_domain: string; message_id: string }[]
+  ).filter(
+    (m) => m.message_id.startsWith('bank-statement:') || bankForDomain(m.from_domain) !== null,
+  );
+  const n = (o: string) => bank.filter((m) => m.outcome === o).length;
+  return {
+    rows: rows.sort((a, b) => a.label.localeCompare(b.label)),
+    mail: {
+      since,
+      applied: n('applied'),
+      waiting: n('needs_review'),
+      passed: n('ignored'),
+      errors: n('error'),
+    },
+  };
+}
+
 /** What is still needed from the household, worked out from what is on file (core needed-from-you.ts). */
 export async function loadNeeds(
   db: SupabaseClient,
@@ -25,6 +78,8 @@ export async function loadNeeds(
     config?: AppConfig;
     stored?: Awaited<ReturnType<typeof loadStatements>>;
     toAnswer?: number;
+    /** handed the feed's figures as they are worked out (Explain movements > Bank feed) */
+    onFeed?: (input: Parameters<typeof feedStatus>[0]) => void;
   },
 ): Promise<Need[]> {
   const loaded = pre?.loaded ?? (await loadPortfolioData(db, { householdId }));
@@ -84,7 +139,9 @@ export async function loadNeeds(
         ...(unbalanced.get(l.asset_id) ?? []),
         { date: l.txn_on, amount: Number(l.amount) },
       ]);
-  const feed = await feedHealth(db, householdId, accounts, stored, recorded, config);
+  const fi = await feedInputs(db, householdId, accounts, stored, recorded, config);
+  pre?.onFeed?.(fi);
+  const feed = feedNeeds(fi);
   const needs = neededFromYou({
     accounts,
     statements: stored.statements.map((s) => ({
@@ -120,14 +177,14 @@ export async function loadNeeds(
 }
 
 /** The gaps in what the banks tell us by e-mail, now that statements are not uploaded (core feed-health.ts). */
-async function feedHealth(
+async function feedInputs(
   db: SupabaseClient,
   householdId: string,
   accounts: Parameters<typeof feedNeeds>[0]['accounts'],
   stored: Awaited<ReturnType<typeof loadStatements>>,
   recorded: { asset_id: string; as_of: string; amount: number; source: string }[],
   config: AppConfig,
-): Promise<Need[]> {
+): Promise<Parameters<typeof feedStatus>[0]> {
   const today = new Date().toISOString().slice(0, 10);
   const alertFiles = new Set(
     stored.statements.filter((s) => s.file_label === ALERTS_FILE).map((s) => s.id),
@@ -136,8 +193,22 @@ async function feedHealth(
   const heard = (id: string, d: string) => {
     if (d > (lastHeard.get(id) ?? '')) lastHeard.set(id, d);
   };
-  for (const s of stored.statements) heard(s.asset_id, s.to_on);
-  for (const r of recorded) if (r.source === 'email') heard(r.asset_id, r.as_of);
+  const latest = (m: Map<string, string>, id: string, d: string) => {
+    if (d > (m.get(id) ?? '')) m.set(id, d);
+  };
+  const lastAlert = new Map<string, string>();
+  const lastEStatement = new Map<string, string>();
+  const lastEmailBalance = new Map<string, string>();
+  for (const s of stored.statements) {
+    heard(s.asset_id, s.to_on);
+    if (s.file_label === ALERTS_FILE) latest(lastAlert, s.asset_id, s.to_on);
+    else if (/^E-mailed /.test(s.file_label ?? '')) latest(lastEStatement, s.asset_id, s.to_on);
+  }
+  for (const r of recorded)
+    if (r.source === 'email') {
+      heard(r.asset_id, r.as_of);
+      latest(lastEmailBalance, r.asset_id, r.as_of);
+    }
   const from = new Date(Date.now() - config.statementMail.gapDays * 86_400_000)
     .toISOString()
     .slice(0, 10);
@@ -152,8 +223,9 @@ async function feedHealth(
         balance: l.balance === null ? null : Number(l.balance),
         fromAlert: alertFiles.has(l.statement_id),
       });
+  // a balance from the bank's e-mail, or one you typed (Monthly update): each is a checkpoint the lines must reach
   for (const r of recorded)
-    if (r.source === 'email' && r.as_of >= from)
+    if ((r.source === 'email' || r.source === 'manual') && r.as_of >= from)
       add(r.asset_id, {
         date: r.as_of,
         amount: 0,
@@ -186,7 +258,7 @@ async function feedHealth(
         : null;
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
-  return feedNeeds({
+  return {
     today,
     silentDays: config.statementMail.silentDays,
     gapDays: config.statementMail.gapDays,
@@ -194,7 +266,10 @@ async function feedHealth(
     lastHeard,
     points,
     locked,
-  });
+    lastAlert,
+    lastEStatement,
+    lastEmailBalance,
+  };
 }
 
 /**

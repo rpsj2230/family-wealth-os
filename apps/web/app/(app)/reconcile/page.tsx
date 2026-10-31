@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { interestCheck, LINE_CLASS_LABEL, positionInputFrom, reconcileQueue } from '@fwos/core';
-import { capitalStart, loadSettings } from '@fwos/data';
+import { capitalStart, loadFeedStatus, loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
 import { Tabs } from '@/components/Tabs';
@@ -12,6 +12,7 @@ import { positionFor } from '@fwos/data';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { confirmProceeds, explainBalance, recordFunding } from './actions';
+import { Feed } from './Feed';
 import { History } from './History';
 import { Interest, type InterestAnswer } from './Interest';
 import { Statements, type CoveredMove } from './Statements';
@@ -31,7 +32,10 @@ export default async function Reconcile({
 }) {
   const { msg, tab: tabParam } = await searchParams;
   const tab =
-    tabParam === 'history' || tabParam === 'interest' || tabParam === 'statements'
+    tabParam === 'history' ||
+    tabParam === 'interest' ||
+    tabParam === 'statements' ||
+    tabParam === 'feed'
       ? tabParam
       : 'recent';
   if ((await loadAccess()).role === 'emergency_viewer') redirect('/emergency');
@@ -93,6 +97,11 @@ export default async function Reconcile({
     .sort((x, y) => x.label.localeCompare(y.label));
   const interest = tab === 'interest' ? await interestTab() : null;
   const statements = tab === 'statements' ? await statementsTab() : null;
+  const { householdId } = await loadContext();
+  const feed =
+    tab === 'feed' && householdId
+      ? await loadFeedStatus(supabase as unknown as SupabaseClient, householdId)
+      : null;
   const recentLines = tab === 'recent' && q.balances.length ? await linesForBalances() : {};
 
   /**
@@ -217,9 +226,12 @@ export default async function Reconcile({
           { key: 'history', label: 'Earlier months' },
           { key: 'interest', label: 'Interest (AIS)' },
           { key: 'statements', label: 'Bank statements' },
+          { key: 'feed', label: 'Bank feed' },
         ]}
       />
-      {statements ? (
+      {feed ? (
+        <Feed rows={feed.rows} mail={feed.mail} />
+      ) : statements ? (
         <Statements
           statements={statements.stored.statements}
           lines={statements.picture.lines}

@@ -181,3 +181,13 @@
   align-items: center;
   flex-wrap: wrap;
 }
+.gm-query {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  user-select: all;
+}
