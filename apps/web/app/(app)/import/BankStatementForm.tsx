@@ -223,12 +223,12 @@ export function BankStatementForm({
             <>
               {saved.saved.toAnswer} line{saved.saved.toAnswer === 1 ? '' : 's'} across your
               statements need{saved.saved.toAnswer === 1 ? 's' : ''} an answer on{' '}
-              <Link href="/reconcile?tab=statements">Explain movements &gt; Bank statements</Link>.
+              <Link href="/transactions?tab=statements">Transactions &gt; Bank statements</Link>.
             </>
           ) : (
             <>
               Every line is sorted: see{' '}
-              <Link href="/reconcile?tab=statements">Explain movements &gt; Bank statements</Link>.
+              <Link href="/transactions?tab=statements">Transactions &gt; Bank statements</Link>.
             </>
           )}
         </p>

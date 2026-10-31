@@ -66,7 +66,7 @@ export interface DigestInput {
   appUrl: string;
   /** how far ahead policy dates and tasks appear; from Settings (reminders) */
   reminders?: { policyDays: number; taskDays: number };
-  /** recent bank statement lines no rule explains, newest first: each is answered on Explain movements > Bank statements */
+  /** recent bank statement lines no rule explains, newest first: each is answered on Transactions > Bank statements */
   newLines?: { date: string; account: string; amount: number; words: string }[];
   /** better interest rates found elsewhere, already worded; from the rate comparison */
   rateIdeas?: string[];

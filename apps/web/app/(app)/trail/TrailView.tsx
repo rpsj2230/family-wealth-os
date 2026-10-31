@@ -159,7 +159,7 @@ export function TrailView({
           (id) => holdings.find((h) => h.id === id)?.kind ?? null,
         )}
         {...(sample ? {} : { exportHref: '/trail/export' })}
-        answerHref={sample ? '/demo/reconcile' : '/reconcile?tab=statements'}
+        answerHref={sample ? '/demo/reconcile' : '/transactions?tab=statements'}
         importHref={sample ? '/demo/import' : '/import'}
       />
 

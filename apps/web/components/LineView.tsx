@@ -27,7 +27,7 @@ export function LineView({
   assetHref = (a) => `/asset/${a}`,
   trailHref = (a) => `/trail?h=${a}`,
   diagramHref,
-  answerHref = '/reconcile?tab=statements',
+  answerHref = '/transactions?tab=statements',
 }: {
   d: LineDetail;
   data: Pick<MoneyTrailData, 'holdings'>;
@@ -143,8 +143,8 @@ export function LineView({
         <section className="detailsection" aria-label="To answer">
           <p className="small">
             The rules could not tell what this was. Say what it was in{' '}
-            <Link href={answerHref}>Explain movements → Bank statements</Link>; the trail follows
-            your answer.
+            <Link href={answerHref}>Transactions → Bank statements</Link>; the trail follows your
+            answer.
           </p>
         </section>
       )}

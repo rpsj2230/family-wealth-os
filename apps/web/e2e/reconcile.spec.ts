@@ -60,7 +60,7 @@ test.describe('Explain movements (public sample)', () => {
   test('interest: what the banks reported against the estimate, with a year to settle', async ({
     page,
   }) => {
-    await page.goto('/demo/reconcile?tab=interest');
+    await page.goto('/demo/transactions?tab=interest');
     await expect(
       page.getByRole('heading', { name: /Interest: what the banks reported/ }),
     ).toBeVisible();
@@ -75,7 +75,7 @@ test.describe('Explain movements (public sample)', () => {
   test('bank statements: what every line was, the years, and the lines to answer', async ({
     page,
   }) => {
-    await page.goto('/demo/reconcile?tab=statements');
+    await page.goto('/demo/transactions?tab=statements');
     await expect(
       page.getByRole('heading', { name: /Bank statements: what every line was/ }),
     ).toBeVisible();

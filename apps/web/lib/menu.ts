@@ -3,6 +3,7 @@
  * the person is doing. Kept as data so a new page is one line, and so a test can check that no entry points at a missing page.
  */
 import {
+  ArrowLeftRight,
   BellRing,
   Cable,
   Coins,
@@ -97,8 +98,14 @@ export const MENU: MenuGroup[] = [
       {
         href: '/reconcile',
         label: 'Explain movements',
-        hint: 'Where matured money went, what a balance change was, where a new deposit came from.',
+        hint: 'Only what needs you: where matured money went, what a balance change was, where a new deposit came from.',
         icon: Scale,
+      },
+      {
+        href: '/transactions',
+        label: 'Transactions',
+        hint: 'Every bank line with its tag, the statements, the interest the banks reported, and the bank feed.',
+        icon: ArrowLeftRight,
       },
       {
         href: '/trail',

@@ -321,8 +321,8 @@ export function GmailStatements({ model: m, demo = false }: { model: GmailModel;
           </li>
         </ol>
         <p className="small muted">
-          Explain movements → Bank feed then shows, for every account, the last alert and
-          e-statement that came in and up to which day its lines are complete.
+          Transactions → Bank feed then shows, for every account, the last alert and e-statement
+          that came in and up to which day its lines are complete.
         </p>
       </details>
 

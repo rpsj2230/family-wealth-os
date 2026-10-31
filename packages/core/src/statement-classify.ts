@@ -1,5 +1,5 @@
 /**
- * What each line of a bank statement was (Explain movements > Bank statements), so own money and lifetime profit can be worked out
+ * What each line of a bank statement was (Transactions > Bank statements), so own money and lifetime profit can be worked out
  * from what really happened rather than from the change in balances.
  *
  * The rules run in this order, and the first that fits decides:
@@ -101,7 +101,7 @@ export interface ClassifyContext {
     side: 'buy' | 'sell';
   }[];
   /**
-   * What you have said about a person or words (Explain movements > Bank statements > Rules), for every line that names them, past
+   * What you have said about a person or words (Transactions > Bank statements > Rules), for every line that names them, past
    * and future. Applied straight after the answers you gave for single lines.
    */
   rules?: StatementRule[];

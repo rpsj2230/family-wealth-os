@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  ArrowLeftRight,
   CalendarCheck,
   Coins,
   Ellipsis,
@@ -65,6 +66,7 @@ export const GROUPS: { title: string; items: Item[] }[] = [
       { href: '/trail', label: 'Money trail', icon: Route },
       { href: '/growth', label: 'Money at work', icon: Sprout },
       { href: '/reconcile', label: 'Explain movements', icon: Scale },
+      { href: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
       { href: '/raise', label: 'I need money', icon: Banknote },
       { href: '/new-money', label: 'New money', icon: PiggyBank },
       { href: '/rates', label: 'Rates', icon: Percent },

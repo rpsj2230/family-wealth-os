@@ -1,6 +1,6 @@
 /**
  * The interest a bank statement shows, against the interest the app estimated for the same account and the same financial year
- * (Explain movements > Bank statements). The balances already hold what the bank really paid, so the estimate is the only thing that
+ * (Transactions > Bank statements). The balances already hold what the bank really paid, so the estimate is the only thing that
  * can be off: the difference is earnings the app did not estimate (or estimated too much). It is recorded as one confirmed movement of
  * kind income per account and year, dated the year's last day the statements cover, which moves it from "not yet explained" into
  * lifetime profit and changes no balance.

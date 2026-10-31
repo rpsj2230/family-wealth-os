@@ -13,7 +13,7 @@ const STATE: Record<FeedStatusRow['state'], { label: string; tone: string }> = {
 };
 
 /**
- * Explain movements > Bank feed: for each account, what the bank's e-mails have told us and until when its lines are complete, so it
+ * Transactions > Bank feed: for each account, what the bank's e-mails have told us and until when its lines are complete, so it
  * can be seen that nothing was dropped. Money that moved with no alert is listed with the days it can be in; the month's e-statement
  * fills it in by itself, or the rows can be pasted on Import.
  */

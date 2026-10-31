@@ -1,5 +1,5 @@
 /**
- * Rows copied from a bank's net banking page and pasted in (Explain movements > Bank statements > Paste rows): read with the same
+ * Rows copied from a bank's net banking page and pasted in (Transactions > Bank statements > Paste rows): read with the same
  * reader as a downloaded statement. A copy of the table with its heading row reads as it is. A copy of the rows alone (the usual
  * case) has its columns worked out: the date is the column that holds dates, the narration the one with the longest words, the
  * balance the right-most amount column filled on every row, and the amount column(s) the rest. Which of two amount columns is the

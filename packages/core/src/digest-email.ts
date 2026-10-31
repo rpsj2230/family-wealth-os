@@ -157,7 +157,7 @@ function legacyNeeds(i: DigestInput): NeedsItem[] {
   for (const l of i.newLines ?? [])
     out.push({
       text: `What was this? ${niceDate(l.date)}, ${l.account}: ${l.amount < 0 ? 'out' : 'in'} ${inrExact(Math.abs(l.amount))}${l.words ? ` (“${l.words}”)` : ''}.`,
-      href: '/reconcile?tab=statements',
+      href: '/transactions?tab=statements',
       tone: 'warn',
     });
   for (const idea of (i.rateIdeas ?? []).slice(0, 2))

@@ -17,7 +17,7 @@ const statement = (k: 'ais' | '26as') => (k === 'ais' ? 'AIS' : 'Form 26AS');
 const yearEnd = (fy: string) => `31 March ${Number(fy.slice(0, 4)) + 1}`;
 
 /**
- * Explain movements > Interest: for each person and finished year, the interest the banks reported to the tax department (AIS, or
+ * Transactions > Interest: for each person and finished year, the interest the banks reported to the tax department (AIS, or
  * Form 26AS) against what the app estimated for the same taxable accounts, before tax at source. A difference beyond the tolerance can
  * be recorded as that year's earnings in one step, and taken back.
  */

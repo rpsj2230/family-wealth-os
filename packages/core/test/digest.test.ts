@@ -67,7 +67,7 @@ describe('new bank lines to explain', () => {
     expect(g.text).toContain('What was this?');
     expect(g.text).toContain('Sample Bank …1234: out ₹25,000');
     expect(g.text).toContain('UPI SAMPLE FRIEND');
-    expect(g.html).toContain('/reconcile?tab=statements');
+    expect(g.html).toContain('/transactions?tab=statements');
   });
 });
 

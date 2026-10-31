@@ -115,7 +115,7 @@ function HoldingOptions({ holdings }: { holdings: RuleHolding[] }) {
 }
 
 /**
- * Explain movements > Bank statements: which days each account's statements cover, what the lines add up to each year, the lines no
+ * Transactions > Bank statements: which days each account's statements cover, what the lines add up to each year, the lines no
  * rule could place (largest first) with a short form for each, the interest compared with the estimate, and any answer given earlier
  * that the statements now cover.
  */
@@ -359,7 +359,7 @@ export function Statements({
                 {tagRows.map(([tag, row]) => (
                   <tr key={tag}>
                     <th scope="row">
-                      <Link href={`/reconcile?tab=lines&tag=${tag}`}>{categoryLabel(tag)}</Link>
+                      <Link href={`/transactions?tab=lines&tag=${tag}`}>{categoryLabel(tag)}</Link>
                     </th>
                     {tagFys.map((fy) => (
                       <td key={fy} className="num">

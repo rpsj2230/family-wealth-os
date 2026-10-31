@@ -284,7 +284,7 @@ const FY = /^\d{4}-\d{2}$/;
 
 /**
  * Records the difference between the interest the tax department was told about (AIS or Form 26AS) and the interest the app estimated
- * for one person's taxable accounts in one finished year (Explain movements > Interest). It is earnings, not money moved: one confirmed
+ * for one person's taxable accounts in one finished year (Transactions > Interest). It is earnings, not money moved: one confirmed
  * movement of kind income on the account you chose, dated the year's last day, into the account when the banks paid more than the
  * estimate and out of it when they paid less. One answer per person and year; saving it again changes nothing.
  */
@@ -351,5 +351,5 @@ export async function undoInterestDifference(f: FormData): Promise<void> {
 function interestDone(message: string): never {
   revalidatePath('/reconcile');
   revalidatePath('/');
-  redirect(`/reconcile?tab=interest&msg=${encodeURIComponent(message)}`);
+  redirect(`/transactions?tab=interest&msg=${encodeURIComponent(message)}`);
 }

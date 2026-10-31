@@ -12,7 +12,7 @@ export function StatementLines({
   assetId,
   lines,
   hrefTemplate = `/asset/${assetId}/line/{id}`,
-  answerHref = '/reconcile?tab=statements',
+  answerHref = '/transactions?tab=statements',
   fileName = 'transactions',
 }: {
   assetId: string;

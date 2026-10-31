@@ -98,7 +98,7 @@ export function AccountCheckPanel({
       {ask.length > shown && (
         <p className="muted small">
           {ask.length - shown} more on{' '}
-          <Link href="/reconcile?tab=statements">Explain movements → Bank statements</Link>.
+          <Link href="/transactions?tab=statements">Transactions → Bank statements</Link>.
         </p>
       )}
       <details className="acheck-paste">

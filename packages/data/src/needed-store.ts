@@ -20,7 +20,7 @@ const PREFIX = 'needed:';
 const PROVEN = new Set(['statement', 'person']);
 
 /**
- * Explain movements > Bank feed: each account's last alert, e-mailed statement and e-mailed balance, the day its lines are proven
+ * Transactions > Bank feed: each account's last alert, e-mailed statement and e-mailed balance, the day its lines are proven
  * complete through, and the money that moved with no alert; with what became of the banks' e-mails of the last Settings days.
  */
 export async function loadFeedStatus(
@@ -78,7 +78,7 @@ export async function loadNeeds(
     config?: AppConfig;
     stored?: Awaited<ReturnType<typeof loadStatements>>;
     toAnswer?: number;
-    /** handed the feed's figures as they are worked out (Explain movements > Bank feed) */
+    /** handed the feed's figures as they are worked out (Transactions > Bank feed) */
     onFeed?: (input: Parameters<typeof feedStatus>[0]) => void;
   },
 ): Promise<Need[]> {

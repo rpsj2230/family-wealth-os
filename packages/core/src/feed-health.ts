@@ -151,7 +151,7 @@ export function feedNeeds(input: FeedInput): Need[] {
   return out;
 }
 
-/** One account's feed, as Explain movements > Bank feed shows it. */
+/** One account's feed, as Transactions > Bank feed shows it. */
 export interface FeedStatusRow {
   accountId: string;
   /** the last alert line, e-mailed statement and balance from the bank's e-mail (null: none yet) */

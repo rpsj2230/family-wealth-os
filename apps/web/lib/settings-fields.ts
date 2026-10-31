@@ -503,7 +503,7 @@ export const CONFIG_GROUPS: GroupSpec[] = [
       {
         name: 'stmtReviewAbove',
         label: 'Bank statements: ask about a line no rule places when it is at least',
-        hint: 'Smaller lines are counted without asking: a debit as spending, a credit as a small amount coming in (a refund, cashback). Larger ones wait on Explain movements > Bank statements.',
+        hint: 'Smaller lines are counted without asking: a debit as spending, a credit as a small amount coming in (a refund, cashback). Larger ones wait on Transactions > Bank statements.',
         kind: 'money',
         path: ['statements', 'reviewAbove'],
         unit: '₹',

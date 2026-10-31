@@ -134,7 +134,7 @@ export function neededFromYou(input: {
     out.push({
       key: 'answer-lines',
       assetId: null,
-      title: `Answer ${input.toAnswer} bank statement line${input.toAnswer === 1 ? '' : 's'} in Explain movements → Bank statements (what each one was)`,
+      title: `Answer ${input.toAnswer} bank statement line${input.toAnswer === 1 ? '' : 's'} in Transactions → Bank statements (what each one was)`,
       rank: 2,
     });
   if (!input.ownershipFrom)

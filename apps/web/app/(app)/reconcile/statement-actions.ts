@@ -241,7 +241,7 @@ export async function saveStatement(_prev: StatementState, f: FormData): Promise
   } catch (e) {
     return {
       stage: 'error',
-      message: `The lines were saved, but the movements could not be rebuilt: ${e instanceof Error ? e.message : ''}. Open Explain movements > Bank statements and press Rebuild.`,
+      message: `The lines were saved, but the movements could not be rebuilt: ${e instanceof Error ? e.message : ''}. Open Transactions > Bank statements and press Rebuild.`,
     };
   }
   revalidatePath('/', 'layout');
@@ -253,7 +253,7 @@ export async function saveStatement(_prev: StatementState, f: FormData): Promise
   };
 }
 
-const STATEMENTS_PAGE = '/reconcile?tab=statements';
+const STATEMENTS_PAGE = '/transactions?tab=statements';
 
 function back(message: string, to = STATEMENTS_PAGE): never {
   revalidatePath('/', 'layout');

@@ -1,7 +1,7 @@
 import { TransactionsTable, type TxnRow } from '@/components/TransactionsTable';
 
 /**
- * Explain movements > All transactions: every bank statement line of every account, with what it counts as and its tag, to search,
+ * Transactions > All transactions: every bank statement line of every account, with what it counts as and its tag, to search,
  * filter by tag, account or period, and export. Opened from "Where the money went, by tag" with that tag chosen. A line opens its
  * own page, where its tag can be changed if it is wrong.
  */
