@@ -357,6 +357,14 @@ async function main() {
     },
   };
 
+  // the first scan for the banks' statements looks as far back as a first scan does, so those already in the mailbox come in
+  const { count: bankSeen } = await db
+    .from('inbox_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('household_id', hh)
+    .like('message_id', 'bank-statement:%');
+  const bankSince = bankSeen ? since : sinceDate(new Date(), lookBackDays(true, sm));
+
   const own = await ownAddresses(db, hh, cfg.inbox.trustedForwarders);
   const client = new ImapFlow({
     host: 'imap.gmail.com',
@@ -386,7 +394,7 @@ async function main() {
           bankReport = await runStatementScan(readerOver(client), bankIo, {
             senders: sm.bankSenders,
             ownAddresses: own,
-            since,
+            since: bankSince,
             maxBytes: Math.round(sm.maxMb * 1_048_576),
             maxPerRun: sm.maxPerRun,
             retryFailed: trigger === 'requested' || trigger === 'manual',

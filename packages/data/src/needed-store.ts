@@ -171,8 +171,8 @@ async function feedHealth(
     .from('inbox_messages')
     .select('received_on, from_domain, reason')
     .eq('household_id', householdId)
-    .like('message_id', 'bank-statement:%')
-    .eq('outcome', 'needs_review');
+    .eq('outcome', 'needs_review')
+    .or('reason.ilike.%saved passwords%,reason.ilike.%No account ending%');
   const locked = (
     (failed ?? []) as { received_on: string; from_domain: string; reason: string | null }[]
   )

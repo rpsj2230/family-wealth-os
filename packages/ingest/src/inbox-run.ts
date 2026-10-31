@@ -21,6 +21,7 @@ import {
   parseAiResponse,
   mentionsBalance,
   movementAlertAccount,
+  bankForDomain,
   parseBankEmail,
   senderDomain,
   senderMatchesBank,
@@ -91,6 +92,13 @@ export interface InboxIo {
   ): Promise<{ outcome: 'imported' | 'partial' | 'failed'; reason: string }>;
   /** Imports a Form 26AS or AIS attached to the message; absent when this run cannot do it. */
   taxImport?(m: InboxMessage): Promise<{ outcome: 'imported' | 'failed'; reason: string }>;
+  /**
+   * Imports a bank's account statement attached to the message, opened with the statement passwords saved per person, as lines of
+   * the account it names; absent when this run cannot do it.
+   */
+  bankStatementImport?(
+    m: InboxMessage,
+  ): Promise<{ outcome: 'imported' | 'partial' | 'failed'; reason: string }>;
   /** Text of a PDF; throws if it is encrypted or unreadable. */
   pdfText(content: Uint8Array): Promise<string>;
   /** Saves the movement a bank alert reports as a statement line of the account; absent when this run does not keep lines. */
@@ -280,6 +288,41 @@ export async function runInbox(
 
       if (parsed.kind === 'balance') {
         readings = [parsed.reading];
+      } else if (parsed.kind === 'statement' && io.bankStatementImport && bankForDomain(domain)) {
+        // the bank's own statement: every line goes in (not only the balance), opened with the saved passwords, by rule
+        const res = await io.bankStatementImport(m);
+        if (res.outcome !== 'failed' || /password|No account ending/i.test(res.reason)) {
+          await log({
+            outcome: res.outcome === 'imported' ? 'applied' : 'needs_review',
+            reason: res.reason.slice(0, 300) || 'bank statement imported',
+            reading: null,
+            assetId: null,
+          });
+          continue;
+        }
+        // not a statement of transactions the reader knows: read for its balance below, as before
+        source = 'statement';
+        const pdf = m.attachments.find((a) => a.filename === parsed.hint);
+        if (!pdf || !chain) {
+          await log({
+            outcome: 'needs_review',
+            reason: res.reason.slice(0, 300),
+            reading: null,
+            assetId: null,
+          });
+          continue;
+        }
+        try {
+          readings = await readWithAi(
+            chain,
+            `${m.subject}\n${await io.pdfText(pdf.content)}`,
+            domain,
+            'inbox_statement',
+          );
+        } catch {
+          readings = [];
+        }
+        if (readings.length === 0) note = res.reason || 'the AI found no balance in the statement';
       } else if (parsed.kind === 'statement') {
         source = 'statement';
         const pdf = m.attachments.find((a) => a.filename === parsed.hint);

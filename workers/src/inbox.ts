@@ -20,6 +20,7 @@ import {
   aiChainFor,
   importCasAttachments,
   importTaxFile,
+  importBankStatementMail,
   loadSettings,
   rebuildStatementMoves,
   saveAlertLine,
@@ -109,11 +110,37 @@ async function main() {
     async alreadySeen(messageId) {
       const r = await db
         .from('inbox_messages')
-        .select('id', { count: 'exact', head: true })
+        .select('outcome, reason')
         .eq('household_id', hh)
-        .eq('message_id', messageId);
+        .eq('message_id', messageId)
+        .limit(1);
       if (r.error) throw new Error(`seen check: ${r.error.message}`);
-      return (r.count ?? 0) > 0;
+      const row = (r.data ?? [])[0] as { outcome: string; reason: string | null } | undefined;
+      if (!row) return false;
+      // a bank statement that waits for a password or an account's last four digits is read again on every run, so it goes in by
+      // itself once they are saved
+      return !(
+        row.outcome === 'needs_review' &&
+        /saved passwords|No account ending/i.test(row.reason ?? '')
+      );
+    },
+    async bankStatementImport(m) {
+      const r = await importBankStatementMail(db, hh, {
+        messageId: m.messageId,
+        receivedOn: m.receivedOn,
+        from: m.from,
+        attachments: m.attachments.filter(
+          (a) => /\.pdf$/i.test(a.filename) || /\.(csv|xlsx?)$/i.test(a.filename),
+        ),
+      });
+      alertLines += r.lines;
+      return {
+        outcome: r.outcome,
+        reason:
+          r.outcome === 'failed'
+            ? r.reason
+            : `Bank statement: ${r.accounts} account${r.accounts === 1 ? '' : 's'}, ${r.lines} new line${r.lines === 1 ? '' : 's'}${r.reason ? ` (${r.reason})` : ''}`,
+      };
     },
     async record(row) {
       must(
@@ -322,7 +349,7 @@ async function main() {
   if (alertLines > 0) {
     const rb = await rebuildStatementMoves(db, hh);
     console.log(
-      `Statement lines from bank alerts: ${alertLines}. Movements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}.`,
+      `New statement lines from bank e-mails: ${alertLines}. Movements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}.`,
     );
   }
   if (report.errors > 0) process.exitCode = 1;

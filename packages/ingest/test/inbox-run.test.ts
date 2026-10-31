@@ -134,6 +134,42 @@ describe('runInbox: a movement alert that gives no balance', () => {
   });
 });
 
+describe('runInbox: a bank statement attached to the bank’s e-mail', () => {
+  const stmtMsg = msg({
+    subject: 'Your e-statement for September',
+    text: 'Please find attached your account statement.',
+    attachments: [{ filename: 'statement.pdf', content: new Uint8Array([1]) }],
+  });
+  it('goes to the bank importer (saved passwords, every line), not read for a balance only', async () => {
+    const seen: string[] = [];
+    const { io, rows, applied } = fakeIo({
+      bankStatementImport: async (m) => {
+        seen.push(m.messageId);
+        return { outcome: 'imported', reason: 'Bank statement: 1 account, 4 new lines' };
+      },
+    });
+    const r = await runInbox([stmtMsg], io, cfgNoAi);
+    expect(seen).toEqual(['m1']);
+    expect(applied).toHaveLength(0);
+    expect(r.applied).toBe(1);
+    expect(rows[0]).toMatchObject({
+      outcome: 'applied',
+      reason: 'Bank statement: 1 account, 4 new lines',
+    });
+  });
+  it('waits for review, saying which password is missing, when none opens it', async () => {
+    const { io, rows } = fakeIo({
+      bankStatementImport: async () => ({
+        outcome: 'failed',
+        reason: 'statement.pdf: None of the saved passwords opens it.',
+      }),
+    });
+    await runInbox([stmtMsg], io, cfgNoAi);
+    expect(rows[0]).toMatchObject({ outcome: 'needs_review' });
+    expect(rows[0]!.reason).toMatch(/saved passwords/);
+  });
+});
+
 describe('runInbox: rule-based alerts', () => {
   it('records the HDFC balance when the sender and one account match, and logs it as applied', async () => {
     const { io, rows, applied } = fakeIo();

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   bankFitsSender,
@@ -93,5 +94,46 @@ describe('the account an e-mailed statement belongs to', () => {
     expect(pickStatementAccount(stmt(null), 'r', 'a@hdfcbank.net', accounts).ok).toBe(false);
     expect(pickStatementAccount(stmt('0000'), 'r', 'a@hdfcbank.net', accounts).ok).toBe(false);
     expect(pickStatementAccount(stmt('9999'), 'r', 'a@rblbank.com', accounts).ok).toBe(false);
+  });
+});
+
+// Invented statements (test/fixtures): the same one plain and locked with the two encryptions banks use, password "SAMP1234".
+const fixture = (name: string) =>
+  new Uint8Array(readFileSync(new URL(`./fixtures/${name}.pdf`, import.meta.url)));
+
+describe('a locked statement PDF, end to end', () => {
+  const saved = [
+    { ownerId: 'other', passwords: ['NOT-IT'], panLast4: null },
+    { ownerId: 'r', passwords: ['ABCDE1234F', 'SAMP1234'], panLast4: null },
+  ];
+  for (const name of ['sample-bank-statement-aes', 'sample-bank-statement-rc4'])
+    it(`${name}: opened with the saved password, every line read, and placed on its account`, async () => {
+      expect((await openBankStatement(fixture(name), [])).ok).toBe(false);
+      const r = await openBankStatement(fixture(name), saved);
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.ownerId).toBe('r');
+      expect(r.stmt).toMatchObject({
+        last4: '5678',
+        from: '2026-09-03',
+        to: '2026-09-30',
+        opening: 100_000,
+        closing: 137_912,
+        breaks: 0,
+      });
+      expect(r.stmt.lines.map((l) => [l.date, l.credit - l.debit, l.balance])).toEqual([
+        ['2026-09-03', -2_500, 97_500],
+        ['2026-09-10', 50_000, 147_500],
+        ['2026-09-15', -10_000, 137_500],
+        ['2026-09-30', 412, 137_912],
+      ]);
+      const placed = pickStatementAccount(r.stmt, r.ownerId, 'estatement@samplebank.bank.in', [
+        { id: 'mine', ownerId: 'r', last4: '5678', bank: 'Sample Bank', currency: 'INR' },
+        { id: 'theirs', ownerId: 'other', last4: '5678', bank: 'Other Bank', currency: 'INR' },
+      ]);
+      expect(placed).toMatchObject({ ok: true, account: { id: 'mine' } });
+    });
+  it('the plain copy needs no password', async () => {
+    const r = await openBankStatement(fixture('sample-bank-statement'), []);
+    expect(r).toMatchObject({ ok: true, ownerId: null });
   });
 });

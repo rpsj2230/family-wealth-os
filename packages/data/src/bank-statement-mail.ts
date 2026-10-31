@@ -57,22 +57,24 @@ export async function importBankStatementMail(
     statementAccounts(db, hh),
   ]);
   const problems: string[] = [];
+  // a file's name may carry the whole account number: only its last four digits go into a reason
+  const label = (f: string) => f.replace(/\d{5,}/g, (d) => `…${d.slice(-4)}`);
   const owners = new Set<string>();
   const saved = new Set<string>();
   let lines = 0;
   for (const a of m.attachments) {
     const opened = await openBankStatement(a.content, candidates);
     if (!opened.ok) {
-      problems.push(`${a.filename}: ${opened.reason}`);
+      problems.push(`${label(a.filename)}: ${opened.reason}`);
       continue;
     }
     if (opened.stmt.lines.length === 0) {
-      problems.push(`${a.filename}: no transaction lines were found in it.`);
+      problems.push(`${label(a.filename)}: no transaction lines were found in it.`);
       continue;
     }
     const pick = pickStatementAccount(opened.stmt, opened.ownerId, m.from ?? '', accounts);
     if (!pick.ok) {
-      problems.push(`${a.filename}: ${pick.reason}`);
+      problems.push(`${label(a.filename)}: ${pick.reason}`);
       continue;
     }
     const r = await saveBankStatement(
