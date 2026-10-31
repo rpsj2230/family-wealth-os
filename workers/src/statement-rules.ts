@@ -146,7 +146,24 @@ async function main() {
         `  found ${l.txn_on} in ${lakh(l.amount)} ${label(l.asset_id)} [${t.classified.get(l.id)?.cls}] "${l.narration.toLowerCase().replace(/\d/g, '#').slice(0, 60)}"`,
       );
   }
-  const [findAmount, findAfter] = (findText.startsWith('words:') ? '' : findText).split('@');
+  // money in of at least an amount that is not between your own accounts or a deposit (FIND "in:50000@2024-01-01")
+  if (findText.startsWith('in:')) {
+    const [min, after] = findText.slice(3).split('@');
+    const own = new Set(['own_transfer', 'fd_proceeds', 'fd_interest', 'fund_sell', 'interest']);
+    for (const l of t.lines.filter(
+      (x) =>
+        x.amount >= Number(min) &&
+        x.txn_on >= (after ?? '') &&
+        !own.has(t.classified.get(x.id)?.cls ?? '') &&
+        /hdfc|nro/i.test(label(x.asset_id)),
+    ))
+      console.log(
+        `  found ${l.txn_on} in ${lakh(l.amount)} ${label(l.asset_id)} [${t.classified.get(l.id)?.cls}] "${l.narration.toLowerCase().replace(/\d/g, '#').slice(0, 70)}"`,
+      );
+  }
+  const [findAmount, findAfter] = (
+    findText.startsWith('words:') || findText.startsWith('in:') ? '' : findText
+  ).split('@');
   if (Number(findAmount) > 0)
     for (const l of t.lines.filter(
       (x) => Math.abs(Math.abs(x.amount) - Number(findAmount)) < 1 && x.txn_on >= (findAfter ?? ''),
