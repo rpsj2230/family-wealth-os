@@ -166,7 +166,7 @@ export function InboxBoard({
                 that applies the label <strong>{label}</strong>.
               </li>
               <li>
-                The reader opens that label every 3 hours. A balance from the bank’s own address
+                The reader opens that label every hour. A balance from the bank’s own address
                 that matches exactly one account is recorded at once.
               </li>
               <li>

@@ -1,9 +1,9 @@
 name: Read bank emails
-# Every 3 hours: reads the Gmail label with your forwarded bank emails, records balances it can verify and queues the
+# Every hour: reads the Gmail label with your forwarded bank emails, records balances it can verify and queues the
 # rest for your review in the app (Inbox). Needs IMAP switched on in Gmail and the same app password as the daily summary.
 on:
   schedule:
-    - cron: '20 */3 * * *'
+    - cron: '20 * * * *'
   workflow_dispatch:
 permissions:
   contents: read

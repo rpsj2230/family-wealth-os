@@ -227,7 +227,7 @@ export async function readAgain(_p: InboxResult | null, formData: FormData): Pro
     return {
       ok: true,
       message:
-        'This email was logged before the app kept a copy, so it will be fetched from Gmail again and read by the AI at the next mailbox run (every 3 hours, or press Run workflow on “Read bank emails” in GitHub Actions). Its result will appear here.',
+        'This email was logged before the app kept a copy, so it will be fetched from Gmail again and read by the AI at the next mailbox run (every hour, or press Run workflow on “Read bank emails” in GitHub Actions). Its result will appear here.',
     };
   }
 
