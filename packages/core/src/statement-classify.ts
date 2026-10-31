@@ -279,6 +279,35 @@ const FEES =
 const TRANSFER_WORDS = /\b(trf|transfer|self|own|imps|neft|rtgs|ft|fund\s*trf|ib\s*funds?)\b/i;
 
 /**
+ * Two to `maxK` of the items whose values add up to the target (as `fits` judges), the largest first, or null. The candidates are
+ * capped (the largest sixteen), which keeps the search small; a split payment is made of a few sizeable parts.
+ */
+export function combo<T>(
+  items: readonly T[],
+  value: (t: T) => number,
+  target: number,
+  maxK: number,
+  fits: (target: number, sum: number) => boolean,
+): T[] | null {
+  const xs = [...items].sort((a, b) => value(b) - value(a)).slice(0, 16);
+  const pick: T[] = [];
+  const go = (start: number, sum: number): T[] | null => {
+    if (pick.length >= 2 && fits(target, sum)) return [...pick];
+    if (pick.length === maxK) return null;
+    for (let i = start; i < xs.length; i++) {
+      const v = value(xs[i]!);
+      if (sum + v > target + 1) continue;
+      pick.push(xs[i]!);
+      const r = go(i + 1, sum + v);
+      pick.pop();
+      if (r) return r;
+    }
+    return null;
+  };
+  return go(0, 0);
+}
+
+/**
  * A narration as a pattern: the words left once numbers, references and punctuation are taken out, so the same payment on
  * different days reads the same ("ACH DR:P...0457X...8037,ESFB...0212,INDIAN CLEARING CORP~CLG" → "ACH DR P X ESFB INDIAN CLEARING
  * CORP CLG"). Null when too little is left to recognise a payment by (fewer than two words of three letters or more).
@@ -426,22 +455,32 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   }
 
   // 3. a transfer from Singapore on file (Wise): the same sum arriving within a few days, in the account it went to when that is known
+  // First the same sum; then, for what is left, the sum give or take 1.5% (the rate on the day the money landed, and the fees),
+  // within the pairing days: the transfer's own record may hold the amount at the quoted rate rather than the one credited.
   const usedRemit = new Set<string>();
-  for (const l of sorted) {
-    if (!open(l) || l.amount <= 0) continue;
-    const r = (ctx.remittances ?? []).find(
-      (x) =>
-        !usedRemit.has(x.id) &&
-        near(x.amount, l.amount) &&
-        (!x.toAssetId || x.toAssetId === l.assetId) &&
-        l.date >= addDaysIso(x.date, -2) &&
-        l.date <= addDaysIso(x.date, 4),
-    );
-    if (!r) continue;
-    usedRemit.add(r.id);
-    set(l, 'own_transfer', `The transfer from Singapore (Wise) of ${r.date}`, r.fromAssetId);
-    out.get(l.id)!.remittanceId = r.id;
-  }
+  for (const loose of [false, true])
+    for (const l of sorted) {
+      if (!open(l) || l.amount <= 0) continue;
+      const r = (ctx.remittances ?? []).find(
+        (x) =>
+          !usedRemit.has(x.id) &&
+          near(x.amount, l.amount, loose ? Math.max(1, 0.015 * x.amount) : 1) &&
+          (!x.toAssetId || x.toAssetId === l.assetId) &&
+          l.date >= addDaysIso(x.date, -2) &&
+          l.date <= addDaysIso(x.date, loose ? Math.max(4, ctx.pairDays) : 4),
+      );
+      if (!r) continue;
+      usedRemit.add(r.id);
+      set(
+        l,
+        'own_transfer',
+        loose
+          ? `The transfer from Singapore (Wise) of ${r.date}, at the rate and fees of the day`
+          : `The transfer from Singapore (Wise) of ${r.date}`,
+        r.fromAssetId,
+      );
+      out.get(l.id)!.remittanceId = r.id;
+    }
 
   // 3–4. rent and money from abroad, by their wording
   for (const l of sorted) {
@@ -707,6 +746,178 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     const whose = ctx.fundTxns[i]!.ownerId === l.ownerId ? 'your' : 'another person’s';
     if (l.amount < 0) set(l, 'fund_buy', `A fund purchase of this amount is in ${whose} CAS`, fund);
     else set(l, 'fund_sell', `A fund sale of this amount is in ${whose} CAS`, fund);
+  }
+
+  // 7b. what the exact matches above leave, matched more loosely. Every line used must still be open, and each is used once.
+  //  (a) a transfer that arrives a bank charge short (IMPS, NEFT or RTGS charges, up to ₹25 or 0.1%);
+  //  (b) one payment split across several lines: one debit that arrives in two or three of your accounts, or two or three debits
+  //      that arrive as one credit; one debit that books two or three deposits; two or three debits that book one deposit;
+  //  (c) one debit for several fund purchases (one mandate for many schemes), or one credit for several sales.
+  // Only for sums the size of a transfer (at least the asking limit), so a small payment is never taken for one.
+  {
+    const charge = (amt: number) => Math.max(25, 0.001 * amt);
+    const fits = (target: number, sum: number) =>
+      sum <= target + 1 && target - sum <= charge(target);
+    const byDay = new Map<string, StmtLine[]>();
+    for (const l of sorted) byDay.set(l.date, [...(byDay.get(l.date) ?? []), l]);
+    const around = (date: string, days: number) => {
+      const out2: StmtLine[] = [];
+      for (let k = -days; k <= days; k++) out2.push(...(byDay.get(addDaysIso(date, k)) ?? []));
+      return out2;
+    };
+    const ownerOf = new Map(ctx.accounts.map((a) => [a.assetId, a.ownerId]));
+
+    // (a)
+    for (const l of sorted) {
+      if (!open(l) || l.amount >= 0 || -l.amount < ctx.reviewAbove) continue;
+      const amt = -l.amount;
+      let best: StmtLine | null = null;
+      for (const m of around(l.date, ctx.pairDays)) {
+        if (!open(m) || m.amount <= 0 || m.assetId === l.assetId) continue;
+        const short = amt - m.amount;
+        if (short <= 0.5 || short > charge(amt)) continue;
+        if (clashes(l, m) || clashes(m, l)) continue;
+        if (!best || daysApart(m.date, l.date) < daysApart(best.date, l.date)) best = m;
+      }
+      if (!best) continue;
+      const fee = Math.round((amt - best.amount) * 100) / 100;
+      set(
+        l,
+        'own_transfer',
+        `Arrived in another of your accounts ₹${fee} short (bank charges)`,
+        best.assetId,
+      );
+      set(
+        best,
+        'own_transfer',
+        `Left another of your accounts, less ₹${fee} bank charges`,
+        l.assetId,
+      );
+    }
+
+    // (b) transfers: one to many, and many to one
+    for (const side of [-1, 1] as const)
+      for (const l of sorted) {
+        if (!open(l) || Math.sign(l.amount) !== side || Math.abs(l.amount) < ctx.reviewAbove)
+          continue;
+        const target = Math.abs(l.amount);
+        const parts = around(l.date, ctx.pairDays).filter(
+          (m) =>
+            open(m) &&
+            m.id !== l.id &&
+            m.assetId !== l.assetId &&
+            Math.sign(m.amount) === -side &&
+            Math.abs(m.amount) < target &&
+            Math.abs(m.amount) >= 0.1 * target &&
+            !clashes(l, m) &&
+            !clashes(m, l),
+        );
+        const got = combo(parts, (m) => Math.abs(m.amount), target, 3, fits);
+        if (!got) continue;
+        const where = [...new Set(got.map((m) => m.assetId))];
+        set(
+          l,
+          'own_transfer',
+          side < 0
+            ? `Split across ${got.length} lines arriving in your other accounts`
+            : `Made up of ${got.length} lines leaving your other accounts`,
+          where.length === 1 ? where[0]! : null,
+        );
+        for (const m of got)
+          set(
+            m,
+            'own_transfer',
+            side < 0
+              ? `Part of one payment of ₹${Math.round(target).toLocaleString('en-IN')} from another of your accounts`
+              : `Part of one credit of ₹${Math.round(target).toLocaleString('en-IN')} into another of your accounts`,
+            l.assetId,
+          );
+      }
+
+    // (b) deposits: one debit for several bookings, several debits for one booking (the same person)
+    const fundedFd = new Set(
+      [...out.values()]
+        .filter((c) => c.cls === 'fd_funding' && c.counterpart)
+        .map((c) => c.counterpart!),
+    );
+    for (const l of sorted) {
+      if (!open(l) || l.amount >= 0 || -l.amount < ctx.reviewAbove) continue;
+      const owner = ownerOf.get(l.assetId) ?? l.ownerId;
+      const ds = ctx.deposits.filter(
+        (d) =>
+          !fundedFd.has(d.assetId) &&
+          d.ownerId === owner &&
+          d.principal < -l.amount &&
+          daysApart(d.bookedOn, l.date) <= ctx.pairDays,
+      );
+      const got = combo(
+        ds,
+        (d) => d.principal,
+        -l.amount,
+        3,
+        (t, x) => near(t, x, 1),
+      );
+      if (!got) continue;
+      for (const d of got) fundedFd.add(d.assetId);
+      set(l, 'fd_funding', `Booked ${got.length} deposits of yours together`, got[0]!.assetId);
+    }
+    for (const d of ctx.deposits) {
+      if (fundedFd.has(d.assetId) || d.principal < ctx.reviewAbove) continue;
+      const parts = around(d.bookedOn, ctx.pairDays).filter(
+        (l) =>
+          open(l) &&
+          l.amount < 0 &&
+          -l.amount < d.principal &&
+          (ownerOf.get(l.assetId) ?? l.ownerId) === d.ownerId,
+      );
+      const got = combo(
+        parts,
+        (l) => -l.amount,
+        d.principal,
+        3,
+        (t, x) => near(t, x, 1),
+      );
+      if (!got) continue;
+      fundedFd.add(d.assetId);
+      for (const l of got)
+        set(l, 'fd_funding', `One of ${got.length} payments that booked one deposit`, d.assetId);
+    }
+
+    // (c) funds: one debit for several purchases in the CAS, one credit for several sales
+    for (const l of sorted) {
+      if (!open(l) || Math.abs(l.amount) < 1) continue;
+      const buy = l.amount < 0;
+      const owner = ownerOf.get(l.assetId) ?? l.ownerId;
+      const ts = ctx.fundTxns
+        .map((t, k) => ({ t, k }))
+        .filter(
+          ({ t, k }) =>
+            !usedFund.has(k) &&
+            t.side === (buy ? 'buy' : 'sell') &&
+            t.amount < Math.abs(l.amount) &&
+            t.ownerId === owner &&
+            (buy
+              ? l.date <= addDaysIso(t.date, 1) && l.date >= addDaysIso(t.date, -ctx.fundDays)
+              : l.date >= addDaysIso(t.date, -1) && l.date <= addDaysIso(t.date, ctx.fundDays)),
+        );
+      const got = combo(
+        ts,
+        (x) => x.t.amount,
+        Math.abs(l.amount),
+        4,
+        (t, x) => near(t, x, 1),
+      );
+      if (!got) continue;
+      for (const g of got) usedFund.add(g.k);
+      set(
+        l,
+        buy ? 'fund_buy' : 'fund_sell',
+        buy
+          ? `${got.length} fund purchases in your CAS, paid in one debit`
+          : `${got.length} fund sales in your CAS, paid in one credit`,
+        got[0]!.t.assetId ?? null,
+      );
+    }
   }
 
   // 8. deposits and funds from the wording alone

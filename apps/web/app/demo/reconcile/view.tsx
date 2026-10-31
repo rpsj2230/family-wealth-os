@@ -21,6 +21,7 @@ import { holdingLabels } from '@/lib/holding-label';
 import { History } from '@/app/(app)/reconcile/History';
 import { Interest } from '@/app/(app)/reconcile/Interest';
 import { Statements } from '@/app/(app)/reconcile/Statements';
+import { TrailCheck } from '@/app/(app)/reconcile/TrailCheck';
 import { Recent } from '@/app/(app)/reconcile/Recent';
 import { sampleFinish } from '../sample-actions';
 import '@/app/(app)/reconcile/reconcile.css';
@@ -228,21 +229,34 @@ export async function DemoMovementsView({
             }
           />
           {stmt ? (
-            <Statements
-              statements={stmt.statements}
-              lines={stmt.lines}
-              classified={stmt.classified}
-              interest={[]}
-              labels={labels}
-              covered={[]}
-              act={{
-                answer: sampleFinish,
-                remove: sampleFinish,
-                rebuild: sampleFinish,
-                covered: sampleFinish,
-              }}
-              sample
-            />
+            <>
+              <Statements
+                statements={stmt.statements}
+                lines={stmt.lines}
+                classified={stmt.classified}
+                interest={[]}
+                labels={labels}
+                covered={[]}
+                act={{
+                  answer: sampleFinish,
+                  remove: sampleFinish,
+                  rebuild: sampleFinish,
+                  covered: sampleFinish,
+                }}
+                sample
+              />
+              <TrailCheck
+                lines={stmt.lines}
+                classified={stmt.classified}
+                labels={labels}
+                ownNames={Object.values(ownerName)}
+                ownerNames={ownerName}
+                borrowers={[]}
+                minimum={cfg.statements.reviewAbove}
+                sample
+                act={sampleFinish}
+              />
+            </>
           ) : interest ? (
             <Interest
               rows={interest}

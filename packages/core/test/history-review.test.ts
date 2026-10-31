@@ -186,38 +186,6 @@ describe('historyReview: the bank statements decide a month', () => {
   });
 });
 
-describe('historyReview: an account that stopped being recorded, its money in another account', () => {
-  // c held ₹8 lakh and was last recorded in February 2025; in March the same sum arrived in b; the family kept recording until July
-  const c = savings('c', [rec('2025-01-31', 800_000), rec('2025-02-28', 800_000)]);
-  const b2 = savings('b', [
-    rec('2025-01-31', 100_000),
-    rec('2025-02-28', 100_200),
-    rec('2025-03-31', 900_500),
-    rec('2025-07-31', 902_000),
-  ]);
-  const p = input([a, b2, c]);
-  const r = historyReview({
-    ledger: capitalLedger({ position: p, moves: [], openingDate: '2025-01-31' }),
-    position: p,
-    minimum: 25_000,
-    pairMonths: 2,
-    before: '2026-07-01',
-  });
-  it('is found, with the account its money went to', () => {
-    expect(r.closures).toHaveLength(1);
-    expect(r.closures[0]).toMatchObject({
-      assetId: 'c',
-      into: 'b',
-      lastOn: '2025-02-28',
-      on: '2025-03-31',
-    });
-  });
-  it('the rise it explains is not asked about', () => {
-    const march = [...r.settled, ...r.open].find((m) => m.key === '2025-03')!;
-    expect(march.closedInto?.[0]?.assetId).toBe('c');
-  });
-});
-
 describe('historyReview: asks only above a share of net worth', () => {
   it('a month below the larger of the two limits is counted, not asked', () => {
     const at = (pct: number) =>

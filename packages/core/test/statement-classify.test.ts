@@ -564,3 +564,115 @@ describe('classifyLines: a deposit named by its number', () => {
     expect(by.get('n4')!.counterpart ?? null).not.toBe('fdY');
   });
 });
+
+describe('classifyLines: looser matches for what the exact ones leave', () => {
+  const lctx: ClassifyContext = {
+    accounts: [
+      { assetId: 'a', ownerId: 'r', last4: '1111' },
+      { assetId: 'b', ownerId: 'r', last4: '2222' },
+      { assetId: 'c', ownerId: 'r', last4: '3333' },
+    ],
+    deposits: [
+      {
+        assetId: 'd1',
+        ownerId: 'r',
+        principal: 500_000,
+        bookedOn: '2025-09-14',
+        maturityOn: '2028-09-14',
+        endedOn: null,
+        maturityAmount: null,
+      },
+      {
+        assetId: 'd2',
+        ownerId: 'r',
+        principal: 300_000,
+        bookedOn: '2025-09-14',
+        maturityOn: '2028-09-14',
+        endedOn: null,
+        maturityAmount: null,
+      },
+      {
+        assetId: 'd3',
+        ownerId: 'r',
+        principal: 700_000,
+        bookedOn: '2025-10-20',
+        maturityOn: '2028-10-20',
+        endedOn: null,
+        maturityAmount: null,
+      },
+    ],
+    fundTxns: [
+      { ownerId: 'r', assetId: 'f1', date: '2025-11-05', amount: 10_000, side: 'buy' },
+      { ownerId: 'r', assetId: 'f2', date: '2025-11-05', amount: 5_000, side: 'buy' },
+      { ownerId: 'r', assetId: 'f3', date: '2025-11-05', amount: 2_500, side: 'buy' },
+    ],
+    remittances: [
+      { id: 'w1', date: '2025-12-01', amount: 400_000, toAssetId: 'a', fromAssetId: 'sg' },
+    ],
+    rentWords: [],
+    remittanceWords: [],
+    reviewAbove: 10_000,
+    pairDays: 5,
+    fundDays: 5,
+    askLarge: true,
+  };
+  const L = (
+    id: string,
+    assetId: string,
+    date: string,
+    amount: number,
+    narration = 'TRANSFER',
+  ) => ({
+    id,
+    assetId,
+    ownerId: 'r',
+    date,
+    amount,
+    narration,
+  });
+  const cs = classifyLines(
+    [
+      // a transfer that arrives ₹15 short
+      L('t1', 'a', '2025-08-01', -200_000, 'IMPS OUT'),
+      L('t2', 'b', '2025-08-02', 199_985, 'IMPS IN'),
+      // one payment of ₹6 L that arrives in two accounts
+      L('s1', 'a', '2025-08-20', -600_000, 'RTGS OUT'),
+      L('s2', 'b', '2025-08-21', 400_000, 'RTGS IN'),
+      L('s3', 'c', '2025-08-21', 200_000, 'RTGS IN'),
+      // one debit that booked two deposits
+      L('f1', 'a', '2025-09-14', -800_000, 'TRF'),
+      // two debits that booked one deposit
+      L('g1', 'b', '2025-10-20', -400_000, 'TRF'),
+      L('g2', 'c', '2025-10-20', -300_000, 'TRF'),
+      // one mandate debit for three fund purchases
+      L('m1', 'a', '2025-11-04', -17_500, 'ACH DR ICCL'),
+      // a Wise transfer landing at a slightly different rate
+      L('w1', 'a', '2025-12-03', 403_900, 'INWARD REMITTANCE'),
+    ],
+    lctx,
+  );
+  const by = new Map(cs.map((c) => [c.id, c]));
+  it('a transfer a bank charge short is still a transfer', () => {
+    expect(by.get('t1')).toMatchObject({ cls: 'own_transfer', counterpart: 'b' });
+    expect(by.get('t1')!.reason).toMatch(/₹15 short/);
+    expect(by.get('t2')).toMatchObject({ cls: 'own_transfer', counterpart: 'a' });
+  });
+  it('one payment split across two accounts', () => {
+    expect(by.get('s1')!.cls).toBe('own_transfer');
+    expect(by.get('s2')).toMatchObject({ cls: 'own_transfer', counterpart: 'a' });
+    expect(by.get('s3')).toMatchObject({ cls: 'own_transfer', counterpart: 'a' });
+  });
+  it('one debit booking two deposits, and two debits booking one', () => {
+    expect(by.get('f1')!.cls).toBe('fd_funding');
+    expect(by.get('g1')).toMatchObject({ cls: 'fd_funding', counterpart: 'd3' });
+    expect(by.get('g2')).toMatchObject({ cls: 'fd_funding', counterpart: 'd3' });
+  });
+  it('one mandate debit for several fund purchases', () => {
+    expect(by.get('m1')!.cls).toBe('fund_buy');
+    expect(by.get('m1')!.reason).toMatch(/3 fund purchases/);
+  });
+  it('money from Singapore at the rate of the day', () => {
+    expect(by.get('w1')!.cls).toBe('own_transfer');
+    expect(by.get('w1')!.remittanceId).toBe('w1');
+  });
+});

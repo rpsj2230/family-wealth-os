@@ -29,6 +29,7 @@ import { Feed } from './Feed';
 import { History } from './History';
 import { Interest, type InterestAnswer } from './Interest';
 import { Statements, type CoveredMove } from './Statements';
+import { TrailCheck } from './TrailCheck';
 import { Recent, type StatementLineView } from './Recent';
 import './reconcile.css';
 
@@ -297,20 +298,33 @@ export async function MovementsView({
       ) : feed ? (
         <Feed rows={feed.rows} mail={feed.mail} />
       ) : statements ? (
-        <Statements
-          statements={statements.stored.statements}
-          lines={statements.picture.lines}
-          classified={statements.picture.classified}
-          interest={statements.picture.interest}
-          labels={labels}
-          covered={statements.covered}
-          rules={statements.stored.rules}
-          holdings={loaded.assetRows
-            .filter((a) => a.status !== 'gifted' && a.status !== 'merged')
-            .map((a) => ({ id: a.id, label: labels[a.id]!, type: a.type }))
-            .sort((x, y) => x.label.localeCompare(y.label))}
-          ownNames={[...loaded.ownerName.values()]}
-        />
+        <>
+          <Statements
+            statements={statements.stored.statements}
+            lines={statements.picture.lines}
+            classified={statements.picture.classified}
+            interest={statements.picture.interest}
+            labels={labels}
+            covered={statements.covered}
+            rules={statements.stored.rules}
+            holdings={loaded.assetRows
+              .filter((a) => a.status !== 'gifted' && a.status !== 'merged')
+              .map((a) => ({ id: a.id, label: labels[a.id]!, type: a.type }))
+              .sort((x, y) => x.label.localeCompare(y.label))}
+            ownNames={[...loaded.ownerName.values()]}
+          />
+          <TrailCheck
+            lines={statements.picture.lines}
+            classified={statements.picture.classified}
+            labels={labels}
+            ownNames={[...loaded.ownerName.values()]}
+            ownerNames={Object.fromEntries(loaded.ownerName)}
+            borrowers={loaded.assetRows
+              .filter((a) => a.type === 'receivable')
+              .map((a) => a.nickname.replace(/^(loan|money lent|gift)\s+to\s+/i, ''))}
+            minimum={config.statements.reviewAbove}
+          />
+        </>
       ) : interest ? (
         <Interest
           rows={interest.rows}

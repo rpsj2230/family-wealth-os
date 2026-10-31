@@ -353,32 +353,3 @@ function interestDone(message: string): never {
   revalidatePath('/');
   redirect(`/transactions?tab=interest&msg=${encodeURIComponent(message)}`);
 }
-
-/**
- * Marks an account closed that looks closed into another one (Earlier months > Accounts that look closed): it stops counting after its
- * last record, so the money that moved to the other account is counted once. Only an active account of this household is changed.
- */
-export async function markClosed(f: FormData): Promise<void> {
-  const asset = String(f.get('asset') ?? '');
-  if (!UUID.test(asset)) historyDone('That account was not found.');
-  const { supabase, householdId } = await loadContext();
-  if (!householdId) historyDone('Create your household first.');
-  const { data } = await supabase
-    .from('assets')
-    .select('status, type')
-    .eq('id', asset)
-    .eq('household_id', householdId!)
-    .maybeSingle();
-  if (
-    !data ||
-    data.type !== 'bank_account' ||
-    (data.status !== 'active' && data.status !== 'stopped')
-  )
-    historyDone('Only an active bank account can be marked closed here.');
-  const r = await saveAccountDetails([{ id: asset, status: 'closed' }]);
-  historyDone(
-    r.ok
-      ? 'Marked closed: it no longer counts after its last record, so its money is counted once.'
-      : r.message,
-  );
-}

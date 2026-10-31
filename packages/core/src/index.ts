@@ -133,4 +133,5 @@ export * from './statement-deposits';
 export * from './statement-lending';
 export * from './statement-categories';
 export * from './saved-by-tag';
+export * from './two-way-people';
 export * from './line-name';

@@ -49,7 +49,6 @@ export async function loadHistoryReview(
       from: x.from_on as string,
       to: x.to_on as string,
     })),
-    tolerance: config.estimates.unexplainedTolerance,
     minimumPct: config.capital.reviewMinimumPct,
     minimum: config.capital.reviewMinimum,
     pairMonths: config.capital.reviewPairMonths,

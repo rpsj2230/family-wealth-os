@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { formatInr, formatInrCompact, type HistoryReview } from '@fwos/core';
 import { niceDate } from '@/lib/dates';
 import type { HistoryAnswer } from '@/lib/history-data';
-import { markClosed, recordHistory, undoHistory } from './actions';
+import { recordHistory, undoHistory } from './actions';
 
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
 const monthName = (key: string) =>
@@ -16,15 +16,11 @@ const midMonth = (from: string, through: string) => {
   const mid = `${from.slice(0, 7)}-15`;
   return mid > through ? through : mid < from ? from : mid;
 };
-/** What the records say about a month by themselves, in words: accounts first recorded, accounts closed into another. */
+/** What the records say about a month by themselves, in words: accounts and deposits first recorded. */
 function explainedBy(m: HistoryReview['open'][number], label: Map<string, string>): string {
   return [
     ...(m.firstRecorded ?? []).map(
       (f) => `${label.get(f.assetId) ?? f.name} first recorded at ${formatInrCompact(f.value)}`,
-    ),
-    ...(m.closedInto ?? []).map(
-      (c) =>
-        `${label.get(c.assetId) ?? c.name} (${formatInrCompact(c.value)}) closed into ${label.get(c.into) ?? c.intoName}`,
     ),
   ].join(', ');
 }
@@ -47,7 +43,7 @@ export function History({
   opening,
   minimum,
   minimumPct = 0,
-  act = { record: recordHistory, undo: undoHistory, close: markClosed },
+  act = { record: recordHistory, undo: undoHistory },
   sample = false,
 }: {
   review: HistoryReview;
@@ -61,7 +57,6 @@ export function History({
   act?: {
     record: (f: FormData) => Promise<void>;
     undo: (f: FormData) => Promise<void>;
-    close?: (f: FormData) => Promise<void>;
   };
   /** the public sample: holdings have no pages of their own */
   sample?: boolean;
@@ -198,46 +193,14 @@ export function History({
           <h2 id="rc-fr">Months explained by the records themselves</h2>
           <p className="muted small">
             The money of these months is an account or deposit first entered in the records that
-            month, or an account&rsquo;s money arriving in another when it was closed: money that
-            was already yours, not new money. It counts as own money, never as profit, and needs no
-            answer.
+            month: money that was already yours, not new money. It counts as own money, never as
+            profit, and needs no answer.
           </p>
           <ul className="list small">
             {review.settled.map((m) => (
               <li key={m.key}>
                 <strong>{monthName(m.key)}</strong> {signed(m.gross ?? m.amount)}:{' '}
                 {explainedBy(m, label)}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {review.closures.length > 0 && (
-        <section className="card rc" aria-labelledby="rc-cl" data-testid="rc-h-closures">
-          <h2 id="rc-cl">Accounts that look closed</h2>
-          <p className="muted small">
-            Nothing has been recorded for these accounts for months while the others were, and soon
-            after their last record the same sum arrived in another of your accounts. While they are
-            still counted, that money counts twice. Marking one closed stops it counting after its
-            last record.
-          </p>
-          <ul className="rc-list">
-            {review.closures.map((c) => (
-              <li key={c.assetId} className="rc-item">
-                <div className="rc-what">
-                  <strong>{label.get(c.assetId) ?? c.name}</strong>
-                  <div className="small">
-                    {formatInrCompact(c.value)} last recorded {niceDate(c.lastOn)}; the same sum
-                    arrived in {label.get(c.into) ?? c.intoName} by {niceDate(c.on)}.
-                  </div>
-                </div>
-                {act.close && !sample && (
-                  <form action={act.close}>
-                    <input type="hidden" name="asset" value={c.assetId} />
-                    <button className="btn primary">Mark closed</button>
-                  </form>
-                )}
               </li>
             ))}
           </ul>

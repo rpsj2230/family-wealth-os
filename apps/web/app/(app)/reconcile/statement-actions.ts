@@ -531,3 +531,58 @@ export async function removeCovered(f: FormData): Promise<void> {
     `${ok.length} earlier answer${ok.length === 1 ? '' : 's'} removed: the statements now count that money.`,
   );
 }
+
+/**
+ * Records someone the bank lines show both paid and paying back as money lent (Bank statements > People who paid you back): a
+ * "Loan to …" record of the person whose account paid them most, and a rule placing every line naming them, past and future, as
+ * money lent and paid back. Nothing is assumed: this is your answer.
+ */
+export async function recordTwoWayLoan(f: FormData): Promise<void> {
+  const name = String(f.get('name') ?? '')
+    .trim()
+    .slice(0, 120);
+  const owner = String(f.get('owner') ?? '');
+  const lent = Number(f.get('lent') ?? 0);
+  const lentOn = String(f.get('lent_on') ?? '');
+  if (name.length < 3 || !UUID.test(owner) || !(lent > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(lentOn))
+    back('That person could not be recorded: the details are missing.');
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) back('Create your household first.');
+  const { data: asset, error } = await supabase
+    .from('assets')
+    .insert({
+      household_id: householdId,
+      type: 'receivable',
+      owner_id: owner,
+      nickname: `Loan to ${name}`,
+      status: 'active',
+    })
+    .select('id')
+    .single();
+  if (error || !asset) back(`That could not be saved: ${error?.message ?? 'no record made'}.`);
+  const { error: e2 } = await supabase.from('receivables').insert({
+    asset_id: asset!.id,
+    household_id: householdId,
+    counterparty: name,
+    lent: Math.round(lent),
+    lent_on: lentOn,
+    expected_on: null,
+  });
+  if (e2) {
+    await supabase.from('assets').delete().eq('id', asset!.id);
+    back(`That could not be saved; nothing was kept: ${e2.message}`);
+  }
+  const { error: e3 } = await supabase.from('statement_rules').insert({
+    household_id: householdId,
+    name,
+    match: 'name',
+    action: 'loan',
+    asset_id: asset!.id,
+    direction: 'any',
+    interest: false,
+  });
+  if (e3) back(`The loan was recorded, but not the rule: ${e3.message}`);
+  await rebuildOrSay(
+    `Recorded as money lent to ${name}: every line naming them is now money lent or paid back.`,
+  );
+}
