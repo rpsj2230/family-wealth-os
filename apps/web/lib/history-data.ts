@@ -45,7 +45,6 @@ export async function loadHistoryReview(
     minimum: config.capital.reviewMinimum,
     pairMonths: config.capital.reviewPairMonths,
     before: addDaysIso(today, -recentDays),
-    limit: 20,
   });
   const answers = loaded.engine.moves
     .filter((m) => m.status === 'confirmed' && m.idemKey?.startsWith('hist:'))

@@ -120,3 +120,39 @@ describe('historyReview: the earlier months to explain, largest first', () => {
     expect(r.open).toHaveLength(0);
   });
 });
+
+describe('historyReview: what the records explain by themselves', () => {
+  // an account abroad first entered in the records in April 2025 at ₹37 lakh: money already the family's, not money to explain
+  const uob = savings('uob', [rec('2025-04-20', 3_700_000), rec('2025-05-31', 3_700_000)]);
+  const p = input([a, b, uob]);
+  const r = historyReview({
+    ledger: capitalLedger({ position: p, moves: [], openingDate: '2025-01-31' }),
+    position: p,
+    minimum: 25_000,
+    pairMonths: 2,
+    before: '2026-07-01',
+  });
+
+  it('a month whose money is an account first recorded is settled by itself, with the account named', () => {
+    expect(r.open.map((m) => m.key)).toEqual(['2025-03']);
+    expect(r.settled).toHaveLength(1);
+    expect(r.settled[0]!.key).toBe('2025-04');
+    const f = r.settled[0]!.firstRecorded!;
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ assetId: 'uob', name: 'uob savings' });
+    // its value at the month's end: the first balance and a few days' interest
+    expect(f[0]!.value).toBeGreaterThanOrEqual(3_700_000);
+    expect(f[0]!.value).toBeLessThan(3_710_000);
+  });
+
+  it('lists every month when no limit is given', () => {
+    const many = historyReview({
+      ledger: capitalLedger({ position, moves: [], openingDate: '2025-01-31' }),
+      position,
+      minimum: 1,
+      pairMonths: 0,
+      before: '2026-07-01',
+    });
+    expect(many.listedTotal).toBeCloseTo(many.openTotal, 6);
+  });
+});

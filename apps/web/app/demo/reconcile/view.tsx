@@ -90,7 +90,6 @@ export async function DemoMovementsView({
           minimum: cfg.capital.reviewMinimum,
           pairMonths: cfg.capital.reviewPairMonths,
           before: addDaysIso(today, -recentDays),
-          limit: 20,
         })
       : null;
   // invented statements for the last finished year: one person's banks paid noticeably more than estimated, the other's matched

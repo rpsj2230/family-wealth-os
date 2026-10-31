@@ -35,6 +35,14 @@ export interface HistoryMonth {
   amount: number;
   /** the holdings that changed most in the month, largest first */
   changes: HistoryChange[];
+  /**
+   * what the records already say about the month's money, worked out by themselves: holdings first entered in the records that month
+   * (an account that already held money, a deposit booked earlier), each with its value. They are money already yours, not new money
+   * to explain, so they are taken off the amount (`amount` is what is left)
+   */
+  firstRecorded?: { assetId: string; name: string; value: number }[];
+  /** the month's whole unexplained amount, before what the records explain by themselves */
+  gross?: number;
 }
 
 export interface HistoryReview {
@@ -48,6 +56,45 @@ export interface HistoryReview {
   listedTotal: number;
   /** months below the minimum, left out of the list, and their money without its sign */
   small: { count: number; total: number };
+  /** months the records explain by themselves (holdings first recorded), with nothing left to answer */
+  settled: HistoryMonth[];
+}
+
+/**
+ * The holdings first entered in the records during a month: there before the month with no value, held with a value at its end, and not
+ * new money by their nature: a bank account, a policy or any other holding first recorded, or a deposit booked before the month began.
+ * A deposit booked in the month (paid for from an account) and a fund (bought) are left out: their money came from the family's own
+ * accounts and nets out already.
+ */
+export function firstRecordedIn(
+  position: PositionInput,
+  month: SpanFigures,
+): { assetId: string; name: string; value: number }[] {
+  const days = valueDays(month);
+  const held = (d: string) =>
+    new Map(
+      positionAsOf(position, d)
+        .holdings.filter((h) => h.value !== null && h.state === 'held')
+        .map((h) => [h.assetId, h] as const),
+    );
+  const before = held(days.open);
+  const after = held(days.close);
+  const byId = new Map(position.assets.map((a) => [a.assetId, a]));
+  const out: { assetId: string; name: string; value: number }[] = [];
+  for (const [id, h] of after) {
+    if (before.has(id)) continue;
+    const a = byId.get(id);
+    if (!a || a.type === 'mutual_fund') continue;
+    if (a.fd && a.fd.bookedOn >= month.from) continue;
+    // the first record is inside the month (not a holding that was merely valueless at its start)
+    const first = a.records.map((r) => r.date).sort()[0] ?? a.fd?.bookedOn ?? null;
+    if (!first || first < month.from || first > days.close) {
+      if (!a.fd) continue;
+    }
+    if (Math.abs(h.value!) < 1) continue;
+    out.push({ assetId: id, name: h.name, value: h.value! });
+  }
+  return out.sort((x, y) => Math.abs(y.value) - Math.abs(x.value));
 }
 
 const monthKey = (m: SpanFigures) => m.from.slice(0, 7);
@@ -107,17 +154,47 @@ export function historyReview(args: {
   pairMonths: number;
   /** months ending on or after this day are left to the recent list of Explain movements */
   before: string;
-  /** the most months to list */
-  limit: number;
+  /** the most months to list (all of them when left out) */
+  limit?: number;
   /** how many holdings to name for each month */
   topChanges?: number;
 }): HistoryReview {
   const { ledger, position, minimum } = args;
-  const months = ledger.months.filter((m) => m.through < args.before);
+  const all = ledger.months.filter((m) => m.through < args.before);
+  // what the records explain by themselves: holdings first recorded in the month (only for months with something to explain)
+  const first = new Map(
+    all
+      .filter((m) => Math.abs(m.unexplained) >= minimum)
+      .map((m) => [monthKey(m), firstRecordedIn(position, m)] as const),
+  );
+  const firstTotal = (m: SpanFigures) =>
+    (first.get(monthKey(m)) ?? []).reduce((a, x) => a + x.value, 0);
+  // a month keeps its own figures; only its amount to explain is what is left after the first records, when they point the same way
+  const left = new Map(
+    all.map((m) => {
+      const f = firstTotal(m);
+      const rest = Math.sign(f) === Math.sign(m.unexplained) ? m.unexplained - f : m.unexplained;
+      // never more than the month's own amount, never past zero
+      const clipped = Math.sign(rest) !== Math.sign(m.unexplained) ? 0 : rest;
+      return [monthKey(m), f !== 0 ? clipped : m.unexplained] as const;
+    }),
+  );
+  const months = all.map((m) => ({ ...m, unexplained: left.get(monthKey(m))! }));
+  const settled = all.filter(
+    (m) =>
+      Math.abs(m.unexplained) >= minimum &&
+      Math.abs(left.get(monthKey(m))!) < minimum &&
+      firstTotal(m) !== 0,
+  );
   const big = months.filter((m) => Math.abs(m.unexplained) >= minimum);
   const small = months.filter(
     (m) => Math.abs(m.unexplained) >= 1 && Math.abs(m.unexplained) < minimum,
   );
+  const decorate = (m: SpanFigures, h: HistoryMonth): HistoryMonth => {
+    const f = first.get(monthKey(m)) ?? [];
+    const orig = all.find((x) => monthKey(x) === monthKey(m))!;
+    return f.length ? { ...h, firstRecorded: f, gross: orig.unexplained } : h;
+  };
 
   // pairs that cancel: the closest later month of the opposite sign within the window, the same sum give or take the minimum or 2%
   const paired = new Set<string>();
@@ -143,11 +220,16 @@ export function historyReview(args: {
   const openMonths = big
     .filter((m) => !paired.has(monthKey(m)))
     .sort((a, b) => Math.abs(b.unexplained) - Math.abs(a.unexplained));
-  const listed = openMonths.slice(0, args.limit);
+  const listed = args.limit === undefined ? openMonths : openMonths.slice(0, args.limit);
   const total = (ms: SpanFigures[]) => ms.reduce((a, m) => a + Math.abs(m.unexplained), 0);
   return {
-    open: listed.map((m) => toMonth(m, monthChanges(position, m, args.topChanges ?? 3))),
+    open: listed.map((m) =>
+      decorate(m, toMonth(m, monthChanges(position, m, args.topChanges ?? 3))),
+    ),
     cancelling,
+    settled: settled
+      .sort((a, b) => Math.abs(b.unexplained) - Math.abs(a.unexplained))
+      .map((m) => decorate(m, toMonth(m))),
     openTotal: total(openMonths),
     listedTotal: total(listed),
     small: { count: small.length, total: total(small) },

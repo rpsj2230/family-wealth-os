@@ -86,6 +86,9 @@ export function History({
                     <div className="rc-amount">{signed(m.amount)}</div>
                     <div className="muted small">
                       {into ? 'came in' : 'went out'} with nothing to say what it was
+                      {m.firstRecorded?.length && m.gross !== undefined
+                        ? ` (of ${signed(m.gross)}; ${m.firstRecorded.map((f) => `${label.get(f.assetId) ?? f.name} first recorded at ${formatInrCompact(f.value)}`).join(', ')} is already explained)`
+                        : ''}
                     </div>
                     {m.changes.length > 0 && (
                       <ul className="small rc-changes">
@@ -169,6 +172,30 @@ export function History({
           </ul>
         )}
       </section>
+
+      {review.settled.length > 0 && (
+        <section className="card rc" aria-labelledby="rc-fr" data-testid="rc-h-settled">
+          <h2 id="rc-fr">Months explained by the records themselves</h2>
+          <p className="muted small">
+            The money of these months is an account or deposit first entered in the records that
+            month: money that was already yours, not new money. It counts as own money, never as
+            profit, and needs no answer.
+          </p>
+          <ul className="list small">
+            {review.settled.map((m) => (
+              <li key={m.key}>
+                <strong>{monthName(m.key)}</strong> {signed(m.gross ?? m.amount)}:{' '}
+                {(m.firstRecorded ?? [])
+                  .map(
+                    (f) =>
+                      `${label.get(f.assetId) ?? f.name} first recorded at ${formatInrCompact(f.value)}`,
+                  )
+                  .join(', ')}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {answers.length > 0 && (
         <section className="card rc" aria-labelledby="rc-a">
