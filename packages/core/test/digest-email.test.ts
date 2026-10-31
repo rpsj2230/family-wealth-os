@@ -173,6 +173,14 @@ describe('the hero and the tiles', () => {
     expect(t).toContain('partly an estimate');
     expect(m.html).toMatch(/class="dn"[^>]*>▼/);
     expect(m.html).not.toContain('-₹');
+    // what the day's change is made of, and which fund prices it compares
+    const withDates = buildDigestEmail(
+      base({ wealth: down, fundPrices: { from: '2026-10-29', to: '2026-10-30' } }),
+    );
+    const td = strip(withDates.html);
+    expect(td).toContain('funds −₹45,000');
+    expect(td).toMatch(/fund prices of 29 Oct → 30 Oct/);
+    expect(withDates.text).toMatch(/fund prices of 29 Oct → 30 Oct/);
     expect(m.text).toContain('−₹45,000');
   });
 

@@ -223,6 +223,8 @@ interface Model {
   total: number;
   today: { amount: number; pct: number | null } | null;
   todayLabel: string;
+  /** what today's change is made of: a day's interest on banks and deposits, and the funds' move between two published prices */
+  todayParts: string | null;
   overall: {
     profit: number;
     profitPct: number | null;
@@ -268,6 +270,10 @@ function model(i: DigestInput): Model {
     total: w ? w.total : nw.total,
     today,
     todayLabel: w || !i.previous ? TERMS.todayChange.label : `Since ${dayMonth(i.previous.date)}`,
+    todayParts:
+      w && Math.round(w.today.amount) !== 0
+        ? `Banks and deposits ${signedInr(w.today.banks)} · funds ${signedInr(w.today.funds)}${i.fundPrices ? ` (fund prices of ${dayMonth(i.fundPrices.from)} → ${dayMonth(i.fundPrices.to)}; a day's prices come out that evening)` : ''}`
+        : null,
     overall: w ? w.overall : null,
     month: showMonth,
     classes: w ? w.classes : [],
@@ -494,9 +500,12 @@ function buildHtml(m: Model): string {
   const heroToday = t
     ? Math.round(t.amount) === 0
       ? `<span class="mu" style="color:${L.mute};font-size:14px;font-weight:700">${ARROW.flat} No change yet today</span>`
-      : f
-        ? delta(t.amount, t.pct, 15, true, { exact: true, decimals: 2 })
-        : delta(t.amount, t.pct, 15)
+      : (f
+          ? delta(t.amount, t.pct, 15, true, { exact: true, decimals: 2 })
+          : delta(t.amount, t.pct, 15)) +
+        (m.todayParts
+          ? `<div class="mu" style="color:${L.mute};font-size:11px;line-height:15px;padding-top:2px">${esc(m.todayParts)}</div>`
+          : '')
     : `<span class="mu" style="color:${L.mute};font-size:14px">First report: nothing to compare with yet</span>`;
   const heroOverall = o
     ? delta(o.profit, o.profitPct, 15)
@@ -746,6 +755,7 @@ function buildText(m: Model, wa: boolean): string {
           `  ${FAMILY_KIND_LABEL.savings}, of it ${foreignShort(f)} at ₹${formatRate(f.rate)}${f.rateDate ? ` (${shortDay(f.rateDate)})` : ''}`,
         );
     out.push(lines[lines.length - 1]!);
+    if (m.todayParts) out.push(`${TERMS.todayChange.label}: ${m.todayParts}`);
   } else {
     const label = (s: string) => pad(s, 16);
     out.push(`${label(TERMS.netWorth.label)}${inr(m.total)}  (${inrExact(m.total)})`);
@@ -753,6 +763,7 @@ function buildText(m: Model, wa: boolean): string {
       out.push(
         `${label(m.todayLabel)}${Math.round(m.today.amount) === 0 ? 'no change yet' : `${signedInr(m.today.amount)}${m.today.pct !== null ? ` (${signedPct(m.today.pct)})` : ''}`}`,
       );
+    if (m.today && m.todayParts) out.push(`${label('')}${m.todayParts}`);
     else out.push('First report: nothing to compare with yet.');
     if (m.overall)
       out.push(

@@ -66,6 +66,8 @@ export interface DigestInput {
   appUrl: string;
   /** how far ahead policy dates and tasks appear; from Settings (reminders) */
   reminders?: { policyDays: number; taskDays: number };
+  /** the fund prices today's change compares: the last two each fund house published (most funds share them) */
+  fundPrices?: { from: string; to: string } | null;
   /** recent bank statement lines no rule explains, newest first: each is answered on Transactions > Bank statements */
   newLines?: { date: string; account: string; amount: number; words: string }[];
   /** better interest rates found elsewhere, already worded; from the rate comparison */

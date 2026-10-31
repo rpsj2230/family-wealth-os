@@ -431,7 +431,15 @@ export async function buildDigestInput(
     monthly,
     ...(position ? { position } : {}),
   });
-  return newLines.length ? { ...input, newLines } : input;
+  // the price dates most funds' "today" compares (each fund's last two published prices)
+  const spans = new Map<string, number>();
+  for (const m of Object.values(fundDay)) {
+    const k = `${m.from}|${m.to}`;
+    spans.set(k, (spans.get(k) ?? 0) + 1);
+  }
+  const top = [...spans].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const fundPrices = top ? { from: top.split('|')[0]!, to: top.split('|')[1]! } : null;
+  return { ...input, ...(newLines.length ? { newLines } : {}), fundPrices };
 }
 
 /**

@@ -45,4 +45,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the newest fund prices first, so "Today's change" uses the latest the fund houses have published, however late the run starts
+      - name: Refresh fund prices
+        run: pnpm --filter @fwos/workers market-data
+        continue-on-error: true
       - run: pnpm --filter @fwos/workers digest
