@@ -440,8 +440,8 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     merchants: ['give india', 'giveindia', 'ketto', 'milaap', 'cry', 'akshaya patra'],
     words: ['donation', 'charity', 'temple', 'trust', 'mandir', 'gurudwara'],
   },
-  other_spend: { label: 'Other spending', side: 'out', merchants: [], words: [] },
-  given: { label: 'Money to a person', side: 'out', merchants: [], words: [] },
+  other_spend: { label: 'Everyday spending', side: 'out', merchants: [], words: [] },
+  given: { label: 'Payment to a person', side: 'out', merchants: [], words: [] },
   transfer: { label: 'Between your own accounts', side: 'both', merchants: [], words: [] },
   deposit: { label: 'Deposit booked or paid back', side: 'both', merchants: [], words: [] },
   loan: { label: 'Money lent or paid back', side: 'both', merchants: [], words: [] },
@@ -502,9 +502,9 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     sure: true,
   },
   rent: { label: 'Rent received', side: 'in', merchants: [], words: [] },
-  money_back: { label: 'Money back from a person', side: 'in', merchants: [], words: [] },
+  money_back: { label: 'From someone you paid before', side: 'in', merchants: [], words: [] },
   from_person: { label: 'Money from a person', side: 'in', merchants: [], words: [] },
-  other_in: { label: 'Other money in', side: 'in', merchants: [], words: [] },
+  other_in: { label: 'Small or other money in', side: 'in', merchants: [], words: [] },
 };
 
 export interface CategoryGuess {

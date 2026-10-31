@@ -683,8 +683,8 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   // 10. a known merchant or kind of payment: a flight is travel, a card bill is spending, TDS is tax, a refund is money back; a
   // person's own tag says it outright
   const OUT_CLASS: Partial<Record<CategoryId, LineClass>> = { fees: 'fee', taxes: 'tax' };
+  // only what your money earned is earnings (profit); salary, refunds and money from others are your own money coming in
   const IN_CLASS: Partial<Record<CategoryId, LineClass>> = {
-    salary: 'income',
     dividend: 'income',
     interest: 'interest',
   };
@@ -782,7 +782,9 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     if (c.category) continue;
     const rule = tagRules.length ? tagRules.find((x) => ruleMatches(x, l)) : undefined;
     const guess = () => categorize(l.narration, l.amount)?.id;
-    const person = () => (lineNameGuess(l.narration) ? true : false);
+    // a name is read only on a large line: a shop paid by UPI often shows its owner's name, so a small one is everyday spending
+    const person = () =>
+      Math.abs(l.amount) >= ctx.reviewAbove && lineNameGuess(l.narration) ? true : false;
     c.category =
       l.category ??
       rule?.category ??

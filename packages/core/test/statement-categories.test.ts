@@ -61,7 +61,7 @@ describe('the classifier places known merchants without asking', () => {
   });
   const run = (lines: StmtLine[], c = ctx) =>
     Object.fromEntries(classifyLines(lines, c).map((x) => [x.id, x]));
-  it('a large flight is travel spending, a large refund money back, salary earnings, TDS tax', () => {
+  it('a large flight is travel spending, a large refund money back, salary your own money, TDS tax', () => {
     const r = run([
       l('f', -95_000, 'POS INDIGO AIRLINES'),
       l('r', 40_000, 'REFUND MAKEMYTRIP BOOKING'),
@@ -70,7 +70,8 @@ describe('the classifier places known merchants without asking', () => {
     ]);
     expect(r.f).toMatchObject({ cls: 'spent', category: 'flights' });
     expect(r.r).toMatchObject({ cls: 'outside_in', category: 'refund' });
-    expect(r.s).toMatchObject({ cls: 'income', category: 'salary' });
+    // salary is new money of your own, not what your money earned: it never counts as profit
+    expect(r.s).toMatchObject({ cls: 'outside_in', category: 'salary' });
     expect(r.t).toMatchObject({ cls: 'tax', category: 'taxes' });
   });
   it('above the limits it is still asked; a general word is trusted to a lower amount', () => {
@@ -86,13 +87,14 @@ describe('the classifier places known merchants without asking', () => {
   it('a transfer to someone the lists do not know is still asked when it is large', () => {
     expect(run([l('p', -150_000, 'IMPS-SAMPLE PERSON-SBIN000001')]).p!.cls).toBe('ask_out');
   });
-  it('a small payment to a person is money to a person, and a person’s tag wins over the guess', () => {
+  it('a small UPI payment showing a name is everyday spending, and a person’s tag wins over the guess', () => {
     const r = run([
       l('small', -900, 'UPI-SAMPLE PERSON-9876'),
       l('mine', -250_000, 'IMPS-SAMPLE PERSON-SBIN000001', { category: 'medical' }),
       l('over', -2_000, 'UPI-SWIGGY', { category: 'groceries' }),
     ]);
-    expect(r.small).toMatchObject({ cls: 'spent', category: 'given' });
+    // a shop paid by UPI often shows a person's name: a small one is everyday spending, never "a payment to a person"
+    expect(r.small).toMatchObject({ cls: 'spent', category: 'other_spend' });
     expect(r.mine).toMatchObject({ cls: 'spent', category: 'medical' });
     expect(r.over).toMatchObject({ category: 'groceries' });
   });
