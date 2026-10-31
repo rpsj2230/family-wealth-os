@@ -162,6 +162,18 @@ describe('nothing is asked: every line is placed and tagged', () => {
     expect(by('NEFT CR-SAMPLE TENANT-JUL RENT')).toMatchObject({ cls: 'rent', category: 'rent' });
     expect(by('INWARD REMITTANCE SGD')).toMatchObject({ category: 'remittance' });
   });
+  it('a transfer from Singapore on file is money from abroad, even when it lands as one of your own transfers', () => {
+    const withRemit = classifyLines(
+      [l('a', '2025-08-01', 500_000, 'NEFT CR-SAMPLE PERSON-DBS SINGAPORE')],
+      {
+        ...base,
+        remittances: [
+          { id: 'w1', date: '2025-07-30', amount: 500_000, toAssetId: 'a', fromAssetId: 'sg' },
+        ],
+      },
+    );
+    expect(withRemit[0]).toMatchObject({ remittanceId: 'w1', category: 'remittance' });
+  });
   it('every line has a tag', () => {
     expect(r.filter((c) => !c.category)).toEqual([]);
   });

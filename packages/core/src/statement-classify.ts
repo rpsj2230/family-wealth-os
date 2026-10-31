@@ -787,6 +787,8 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
       l.category ??
       rule?.category ??
       BY_CLASS[c.cls] ??
+      // money from your accounts abroad (a transfer from Singapore on file, or one the words show) is money from abroad
+      (c.remittanceId || c.fromSingapore ? 'remittance' : undefined) ??
       (c.cls === 'own_transfer'
         ? (c.counterpart && lent.has(c.counterpart)) || /\b(lent|paid back)\b/.test(c.reason)
           ? 'loan'
