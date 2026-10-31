@@ -845,6 +845,12 @@ export interface HomeExtras {
     savings: number;
     other: number;
   } | null;
+  /**
+   * money that came in from outside less money spent or taken out since 1 April: net worth's change that is not earnings, so it
+   * needs no tag. `unexplained` is the part of it no answer or rule has placed yet (best guesses included); null before the ledger
+   * reaches this year
+   */
+  savedFy: { total: number; confirmed: number; unexplained: number; estimated: boolean } | null;
   available30: { total: number; cash: number; deposits: number };
   maturing30: { count: number; principal: number };
   maturing90: { count: number; principal: number };

@@ -244,3 +244,13 @@
 .invhero-extras a {
   color: inherit;
 }
+/* a pill's label that opens the figure's details (Earned this FY, Saved this FY) */
+.hl-plink {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.hl-plink:hover,
+.hl-plink:focus-visible {
+  text-decoration-style: solid;
+}

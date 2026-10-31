@@ -132,6 +132,12 @@ export const MENU: MenuGroup[] = [
         icon: Percent,
       },
       {
+        href: '/earned-saved',
+        label: 'Earned and saved',
+        hint: 'Every financial year on one table: what the holdings earned, what was saved, and the return.',
+        icon: TrendingUp,
+      },
+      {
         href: '/growth',
         label: 'Money at work',
         hint: 'Which money is not growing, what would make it grow, and the corpus in 20 years.',

@@ -636,11 +636,12 @@ describe('the family figures of money words v6 (from Home’s model)', () => {
         savings: 321_190,
         other: 444_690,
       },
+      savedFy: { total: 1_250_000, confirmed: 900_000, unexplained: 350_000, estimated: true },
       maturing30: { count: 3, principal: 3_600_000 },
     },
   };
   const LINES = [
-    'Net worth ₹3,44,25,616 · Today’s change +₹37,397 (+0.11%) · Earned this FY +₹19,63,340',
+    'Net worth ₹3,44,25,616 · Today’s change +₹37,397 (+0.11%) · Earned this FY +₹19,63,340 · Saved this FY +₹12,50,000',
     'Own money ₹2,47,24,505 · Lifetime profit +₹97,01,111 (+39.2% overall) · XIRR on own money 6.65% · Earning rate now 7.66%',
     'Fixed deposits ₹1,95,99,590 (Profit +₹14,19,728, XIRR 7.59%) · Mutual funds ₹47,42,739 (Profit +₹8,39,530, XIRR 12.56%) · Savings ₹96,37,907 (5.74%)',
     'Maturing in the next 30 days: ₹36,00,000',
@@ -673,6 +674,8 @@ describe('the family figures of money words v6 (from Home’s model)', () => {
     const text = strip(e.html);
     expect(text).toMatch(/Today’s change ▲ \+₹37,397 \(\+0\.11%\)/);
     expect(text).toMatch(/Earned this FY ▲ \+₹19,63,340/);
+    expect(text).toMatch(/Saved this FY ▲ \+₹12,50,000/);
+    expect(text).toMatch(/Change since 1 April \(earned \+ saved\) ▲ \+₹32,13,340/);
     expect(text).toMatch(/Own money ₹2,47,24,505/);
     expect(text).toMatch(/Lifetime profit ▲ \+₹97,01,111 \(\+39\.2% overall\)/);
     expect(text).toMatch(/XIRR on own money 6\.65%/);

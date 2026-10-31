@@ -532,6 +532,22 @@ function buildHtml(m: Model): string {
             f.earnedFy ? delta(f.earnedFy.amount, null, 15, true, { exact: true }) : notYet,
           ],
         ),
+        ...(f.savedFy
+          ? [
+              pair(
+                [TERMS.savedFy.label, delta(f.savedFy.amount, null, 15, true, { exact: true })],
+                f.earnedFy
+                  ? [
+                      'Change since 1 April (earned + saved)',
+                      delta(f.earnedFy.amount + f.savedFy.amount, null, 15, true, {
+                        exact: true,
+                      }),
+                    ]
+                  : null,
+                12,
+              ),
+            ]
+          : []),
         pair(
           [TERMS.ownMoney.label, f.own ? plain(inrExact(f.own.ownMoney)) : notYet],
           [

@@ -59,6 +59,7 @@ export function Pill({
   extra,
   extraWhy,
   pctNote,
+  href,
 }: {
   amount: number;
   pct: number | null;
@@ -71,6 +72,8 @@ export function Pill({
   extraWhy?: Explain | undefined;
   /** what kind of percentage it is, written after it: "overall" gives "(+7.8% overall)" */
   pctNote?: string | undefined;
+  /** where the figure's details are: the label becomes a link (none in the sample when it has no such page) */
+  href?: string | null | undefined;
 }) {
   const dir = Math.round(amount) > 0 ? 'up' : Math.round(amount) < 0 ? 'down' : 'flat';
   return (
@@ -83,7 +86,13 @@ export function Pill({
         {signed(amount)}
         {pct !== null && ` (${signedPct(pct, pctNote ? 1 : 2)}${pctNote ? ` ${pctNote}` : ''})`}
       </span>{' '}
-      <span className="hl-pl">{label}</span>
+      {href ? (
+        <Link href={href} className="hl-pl hl-plink">
+          {label}
+        </Link>
+      ) : (
+        <span className="hl-pl">{label}</span>
+      )}
       {why && <Why explain={why} tone="on-dark" />}
       {extra ? <span className="hl-small">{extra}</span> : null}
       {extra && extraWhy && <Why explain={extraWhy} tone="on-dark" />}

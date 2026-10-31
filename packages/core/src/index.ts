@@ -132,4 +132,5 @@ export * from './inactivity-alert';
 export * from './statement-deposits';
 export * from './statement-lending';
 export * from './statement-categories';
+export * from './saved-by-tag';
 export * from './line-name';

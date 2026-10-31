@@ -9,6 +9,7 @@ const SAMPLE_PAGES = [
   'accounts',
   'cash',
   'deposits',
+  'earned-saved',
   'goals',
   'inbox',
   'investments',

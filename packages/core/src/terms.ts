@@ -88,6 +88,10 @@ export const TERMS = {
     'Earned this FY',
     'Profit made since 1 April, with money added or withdrawn left out: interest, fund gains, exchange-rate moves and other income.',
   ),
+  savedFy: t(
+    'Saved this FY',
+    'Money that came in from outside (salary, transfers from abroad, money back) less money spent or taken out, since 1 April. It is the change in net worth that the holdings did not earn.',
+  ),
   added: t('Added', 'Money that went in during the period.'),
   withdrawn: t('Withdrawn', 'Money that came out during the period.'),
   // deposits and savings

@@ -496,6 +496,7 @@ function growthExplains(i: HomeExplainInput) {
           `The mark on each bar is inflation, ${exPct(g.inflation, 1)} a year, from the retirement plan.`,
         ];
   const ef = x.earnedFy;
+  const sf = x.savedFy;
   return {
     'home.earningRate': explain({
       id: 'home.earningRate',
@@ -607,6 +608,37 @@ function growthExplains(i: HomeExplainInput) {
         : [],
       level: ef ? 'partly_estimated' : 'missing',
       completeness: 'The same figures as Wealth movement for this financial year.',
+      notes: [],
+    }),
+    'home.savedFy': explain({
+      id: 'home.savedFy',
+      title: TERMS.savedFy.label,
+      exact: sf ? exSigned(sf.total) : '–',
+      what: TERMS.savedFy.hint,
+      how: sf
+        ? `Net worth now − net worth on 1 April − ${TERMS.earnedFy.label.toLowerCase()} = ${exSigned(sf.total)}. It needs no tag: every rupee that changed net worth was either earned by the holdings or came in or went out.${sf.unexplained !== 0 ? ` ${exSigned(sf.unexplained)} of it rests on lines placed by best guess or balance changes not yet explained; were one of them really earnings, it would move from here to ${TERMS.earnedFy.label}, and the two together would not change.` : ''}`
+        : 'Shows once the records reach this financial year.',
+      inputs: sf
+        ? [
+            {
+              label: 'Money in and out you confirmed, or matched by a rule',
+              value: exSigned(sf.confirmed),
+              basis: 'calculated',
+            },
+            {
+              label: 'Placed by best guess or not yet explained',
+              value: exSigned(sf.unexplained),
+              basis: 'estimated',
+            },
+          ]
+        : [],
+      level: sf
+        ? sf.estimated || sf.unexplained !== 0
+          ? 'partly_estimated'
+          : 'complete'
+        : 'missing',
+      completeness:
+        'As complete as the balances: an account whose balance is out of date shows its money in or out late. The same figures as Wealth movement for this financial year.',
       notes: [],
     }),
     'home.maturing90': explain({

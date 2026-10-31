@@ -60,6 +60,17 @@ export function HomeHeadline({
             label={TERMS.earnedFy.label}
             why={ex['home.earnedFy']}
             testId="hl-earned-fy"
+            href={homeLink('/earned-saved', sample)}
+          />
+        )}
+        {x.savedFy && (
+          <Pill
+            amount={x.savedFy.total}
+            pct={null}
+            label={TERMS.savedFy.label}
+            why={ex['home.savedFy']}
+            testId="hl-saved-fy"
+            href={homeLink('/earned-saved', sample)}
           />
         )}
       </div>

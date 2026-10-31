@@ -291,6 +291,7 @@ export const FIGURES = {
     'home.netWorth',
     'home.today',
     'home.earnedFy',
+    'home.savedFy',
     'home.earningRate',
     'home.fundsXirr',
     'home.depositsXirr',

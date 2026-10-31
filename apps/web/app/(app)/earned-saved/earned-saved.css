@@ -1,0 +1,23 @@
+/* Earned and saved: the year-by-year table and the chosen year's tables */
+.es .es-table {
+  width: 100%;
+}
+.es .es-table th[scope='row'] {
+  white-space: nowrap;
+}
+.es .es-table tfoot th,
+.es .es-table tfoot td {
+  border-top: 2px solid var(--border);
+  font-weight: 650;
+}
+.es .es-table tr.es-on th,
+.es .es-table tr.es-on td {
+  background: var(--soft);
+}
+.es .es-table tr.es-rest th {
+  font-style: italic;
+  font-weight: 500;
+}
+.es .es-check {
+  margin-top: 8px;
+}

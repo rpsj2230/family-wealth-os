@@ -22,7 +22,7 @@ export interface HomeFigures {
     opening: CapitalLedger['opening'];
   };
   growth: Pick<HomeGrowth, 'all' | 'fd' | 'funds' | 'savings' | 'own'>;
-  extras: Pick<HomeExtras, 'earnedFy' | 'maturing30'>;
+  extras: Pick<HomeExtras, 'earnedFy' | 'maturing30'> & Partial<Pick<HomeExtras, 'savedFy'>>;
 }
 
 /** A kind of holding as the summary's third line shows it. */
@@ -36,6 +36,8 @@ export interface DigestHolding {
 export interface DigestFamily {
   /** Earned this FY; null before the ledger reaches this financial year */
   earnedFy: { amount: number; pct: number | null } | null;
+  /** Saved this FY (money in less money out since 1 April); null before the ledger reaches this financial year */
+  savedFy?: { amount: number } | null;
   /** Own money and Lifetime profit; null until the ledger has an opening day (Home shows dashes then) */
   own: { ownMoney: number; lifetimeProfit: number; profitPct: number | null } | null;
   xirrOwn: number | null;
@@ -60,6 +62,7 @@ export function familyFromHome(h: HomeFigures): DigestFamily {
   const t = h.capital.totals;
   return {
     earnedFy: ef ? { amount: ef.total, pct: ef.pct } : null,
+    savedFy: h.extras.savedFy ? { amount: h.extras.savedFy.total } : null,
     own: h.capital.opening
       ? { ownMoney: t.ownMoney, lifetimeProfit: t.profit, profitPct: t.profitPct }
       : null,
@@ -127,6 +130,7 @@ export function familyParts(
       `${TERMS.todayChange.label} ${signedExact(today.amount)}${today.pct !== null ? ` (${signedPct(today.pct, 2)})` : ''}`,
     );
   if (f.earnedFy) worth.push(`${TERMS.earnedFy.label} ${signedExact(f.earnedFy.amount)}`);
+  if (f.savedFy) worth.push(`${TERMS.savedFy.label} ${signedExact(f.savedFy.amount)}`);
   const own: string[] = [];
   if (f.own) {
     own.push(`${TERMS.ownMoney.label} ${inrExact(f.own.ownMoney)}`);

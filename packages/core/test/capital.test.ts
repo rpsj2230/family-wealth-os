@@ -4,6 +4,10 @@ import {
   ledgerBetween,
   ledgerMoveOf,
   wealthMovement,
+  yearByYear,
+  fyStartYear,
+  fyLabel,
+  earnedPct,
   type LedgerMove,
 } from '../src/capital';
 import { attachProceeds } from '../src/position-build';
@@ -240,6 +244,49 @@ describe('wealthMovement (acceptance test 11)', () => {
     expect(wealthMovement(l, 'custom', TODAY, { from: '2020-01', to: '2025-06' }).clamped).toBe(
       true,
     );
+  });
+});
+
+describe('yearByYear: earned and saved for every financial year', () => {
+  const old = fd('old', 1_000_000, '2025-04-01', '2026-04-01');
+  const renewed = fd('new', 1_070_000, '2026-04-02', '2027-04-02');
+  const l = capitalLedger({
+    position: input([old, renewed]),
+    moves: [],
+    openingDate: '2025-04-01',
+  });
+  const years = yearByYear(l, TODAY);
+  it('names the years, newest first, and marks the running one as partial', () => {
+    expect(years.map((y) => y.label)).toEqual(['FY 2026–27', 'FY 2025–26']);
+    expect(years[0]!.partial).toBe(true);
+    // the records begin on 2 April, the day after the first deposit was booked: that year is not quite whole
+    expect(years[1]!.from).toBe('2025-04-02');
+    expect(years[1]!.partial).toBe(true);
+    const later = yearByYear(l, '2027-06-01').find((y) => y.fy === 2026)!;
+    expect(later.partial).toBe(false);
+    expect(years[1]!.months).toHaveLength(12);
+  });
+  it('the running year matches Home (Earned this FY, Saved this FY) to the rupee', () => {
+    const fy = wealthMovement(l, 'fy', TODAY).figures!;
+    expect(years[0]!.earned).toBeCloseTo(fy.earnings.total, 6);
+    expect(years[0]!.saved).toBeCloseTo(fy.moved, 6);
+  });
+  it('each year: end − start = earned + saved, and the years add up to the whole ledger', () => {
+    for (const y of years) expect(y.end - y.start).toBeCloseTo(y.earned + y.saved, 6);
+    const all = wealthMovement(l, 'all', TODAY).figures!;
+    expect(years.reduce((a, y) => a + y.earned, 0)).toBeCloseTo(all.earnings.total, 6);
+    expect(years.reduce((a, y) => a + y.saved, 0)).toBeCloseTo(all.moved, 6);
+    expect(years[1]!.pct!).toBeGreaterThan(0.06);
+  });
+  it('financial-year helpers', () => {
+    expect(fyStartYear('2026-10-31')).toBe(2026);
+    expect(fyStartYear('2027-03-31')).toBe(2026);
+    expect(fyStartYear('2027-04-01')).toBe(2027);
+    expect(fyLabel(2029)).toBe('FY 2029–30');
+    expect(fyLabel(2099)).toBe('FY 2099–00');
+    // ₹1,00,000 at work all year plus ₹20,000 saved (half counted): ₹11,000 earned is 10%
+    expect(earnedPct(100_000, 11_000, 20_000)).toBeCloseTo(0.1, 9);
+    expect(earnedPct(0, 100, 0)).toBeNull();
   });
 });
 

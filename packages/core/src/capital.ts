@@ -633,3 +633,84 @@ export function fundsEarnedThisFy(
   });
   return wealthMovement(ledger, 'fy', position.config.today).figures?.earnings.funds ?? null;
 }
+
+// ------------------------------------------------------------------------------------------------
+// Earned and saved, year by year (Indian financial years, 1 April to 31 March)
+// ------------------------------------------------------------------------------------------------
+
+/** The financial year a day falls in, by its starting calendar year: 2026-10-31 → 2026 (FY 2026–27), 2027-02-01 → 2026. */
+export const fyStartYear = (iso: string): number =>
+  Number(iso.slice(5, 7)) >= 4 ? Number(iso.slice(0, 4)) : Number(iso.slice(0, 4)) - 1;
+
+/** "FY 2026–27". */
+export const fyLabel = (startYear: number): string =>
+  `FY ${startYear}–${String((startYear + 1) % 100).padStart(2, '0')}`;
+
+/**
+ * The return on a stretch as one figure: what was earned ÷ the money at work, where money saved during the stretch counts for half
+ * of it (it arrived, on average, half-way through). Null when nothing was at work.
+ */
+export function earnedPct(start: number, earned: number, saved: number): number | null {
+  const base = start + 0.5 * saved;
+  return base > 0 ? earned / base : null;
+}
+
+export interface YearFigures {
+  /** the financial year's starting calendar year, and its name ("FY 2026–27") */
+  fy: number;
+  label: string;
+  /** the ledger's months inside it: the first may start after 1 April (records begin), the last may end today */
+  from: string;
+  to: string;
+  /** not a whole year: records begin inside it, or it is the year still running */
+  partial: boolean;
+  /** net worth at the start and the end of the stretch */
+  start: number;
+  end: number;
+  /** what the holdings earned (interest, fund gains, exchange-rate moves, earnings less costs) */
+  earned: number;
+  /** all money that came in less all that went out: end − start − earned */
+  saved: number;
+  /** of the money saved, what was confirmed (outside money and corrections) and what balances alone show */
+  confirmed: number;
+  unexplained: number;
+  /** earned ÷ money at work (earnedPct); null when nothing was at work */
+  pct: number | null;
+  estimated: boolean;
+  /** the months themselves, for the year's own tables */
+  months: SpanFigures[];
+}
+
+/**
+ * Earned and saved for every financial year the ledger covers, newest first. Each year is the sum of its months, so the years add up
+ * to the ledger's totals and the year still running matches Home's "Earned this FY" and "Saved this FY" to the rupee.
+ */
+export function yearByYear(l: CapitalLedger, today: string): YearFigures[] {
+  const by = new Map<number, SpanFigures[]>();
+  for (const m of l.months) {
+    const fy = fyStartYear(m.from);
+    by.set(fy, [...(by.get(fy) ?? []), m]);
+  }
+  const current = fyStartYear(today);
+  return [...by.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([fy, months]) => {
+      const f = ledgerBetween(l, months[0]!.from, months[months.length - 1]!.to)!;
+      return {
+        fy,
+        label: fyLabel(fy),
+        from: f.from,
+        to: f.to,
+        partial: fy === current || f.from > `${fy}-04-01`,
+        start: f.start,
+        end: f.end,
+        earned: f.earnings.total,
+        saved: f.moved,
+        confirmed: f.confirmedExternal + f.corrections,
+        unexplained: f.unexplained,
+        pct: earnedPct(f.start, f.earnings.total, f.moved),
+        estimated: f.estimated,
+        months,
+      };
+    });
+}

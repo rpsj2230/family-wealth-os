@@ -18,6 +18,8 @@ import {
   isHeld,
   wealthMovement,
   type CapitalLedger,
+  type YearFigures,
+  yearByYear,
   type FigureKind,
   type FundViews,
   type LedgerMove,
@@ -160,6 +162,8 @@ export interface HomeInput {
 /** The family's own money and its profit (capital.ts), the movement over the chosen period, and the fund views. */
 export interface HomeCapital {
   totals: CapitalLedger['totals'];
+  /** earned and saved for every financial year on record, newest first, each with its months (the Earned and saved page) */
+  years: YearFigures[];
   opening: CapitalLedger['opening'];
   limitations: string[];
   movement: WealthMovement;
@@ -782,6 +786,7 @@ export function buildHome(i: HomeInput): HomeModel {
     }));
   const capital: HomeCapital = {
     totals: ledger.totals,
+    years: yearByYear(ledger, today),
     opening: ledger.opening,
     limitations: ledger.limitations,
     movement: wealthMovement(ledger, i.movement?.key ?? 'fy', today, i.movement?.custom),
@@ -870,6 +875,14 @@ export function buildHome(i: HomeInput): HomeModel {
             fyMove.figures.earnings.deposits -
             fyMove.figures.earnings.funds -
             fyMove.figures.earnings.savings,
+        }
+      : null,
+    savedFy: fyMove.figures
+      ? {
+          total: fyMove.figures.moved,
+          confirmed: fyMove.figures.confirmedExternal + fyMove.figures.corrections,
+          unexplained: fyMove.figures.unexplained,
+          estimated: fyMove.figures.estimated,
         }
       : null,
     available30: { total: cashNow + due30.principal, cash: cashNow, deposits: due30.principal },
