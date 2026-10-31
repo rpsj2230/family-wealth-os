@@ -23,6 +23,7 @@ import {
   type PortfolioDefaults,
   type ValuationExtras,
   bankTruth,
+  trustBank,
   type BankTruth,
 } from '@fwos/core';
 import { HIST_FUND_REF } from '@fwos/ingest';
@@ -587,7 +588,11 @@ export async function loadPortfolioData(
       slabMethod: config.estimates.savingsSlabIncremental ? 'incremental' : 'whole',
     },
   };
-  const bank = await bankP;
+  // the bank's balances count only for accounts whose statements agree with what was typed for them (statement-truth.ts)
+  const bank = trustBank(
+    await bankP,
+    obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),
+  );
   return {
     today,
     bank,

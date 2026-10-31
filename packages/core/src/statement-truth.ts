@@ -87,6 +87,11 @@ export interface BankTruth {
   spans: Record<string, { from: string; to: string }[]>;
   /** every day's end balance, to compare a typed balance with */
   dayEnds: Record<string, BankPoint[]>;
+  /**
+   * accounts whose statements do not agree with the balances typed for them (trustBank): their balances are not used, and the
+   * account is listed to check that its statements are its own (two accounts with the same last four digits)
+   */
+  untrusted?: string[];
 }
 
 /** Merges periods that touch or overlap. */
@@ -254,4 +259,36 @@ export function statementCoverage(
 /** The last day of the month before today's: a statement for the month still running is not out yet, so it is never missing. */
 export function lastFinishedMonthEnd(today: string): string {
   return addDay(`${today.slice(0, 7)}-01`, -1);
+}
+
+/**
+ * The bank's balances replace typed ones only for an account whose statements agree with the balances typed for it in most months
+ * both exist (at least `share` of them within 1%): then a difference is a slip in the typing, and the bank is right. Where they
+ * disagree in most months, the statements may be another account's (two accounts with the same last four digits), so the typed
+ * balances stay and the account is listed. An account with no typed balance inside its statements is trusted.
+ */
+export function trustBank(
+  truth: BankTruth,
+  records: readonly { assetId: string; date: string; amount: number }[],
+  share = 0.6,
+): BankTruth {
+  const untrusted: string[] = [];
+  for (const id of Object.keys(truth.spans)) {
+    const inSpan = records.filter((r) => r.assetId === id && inside(r.date, truth.spans[id]!));
+    const judged = inSpan
+      .map((r) => {
+        const b = (truth.dayEnds[id] ?? []).filter((p) => p.date <= r.date).pop();
+        return b ? Math.abs(b.amount - r.amount) <= Math.max(1, 0.01 * Math.abs(b.amount)) : null;
+      })
+      .filter((x): x is boolean => x !== null);
+    if (judged.length && judged.filter(Boolean).length / judged.length < share) untrusted.push(id);
+  }
+  if (!untrusted.length) return { ...truth, untrusted };
+  const points = { ...truth.points };
+  const spans = { ...truth.spans };
+  for (const id of untrusted) {
+    delete points[id];
+    delete spans[id];
+  }
+  return { ...truth, points, spans, untrusted };
 }

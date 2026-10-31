@@ -17,11 +17,14 @@ export function CoverageMap({
   rows,
   labels,
   disagreements,
+  untrusted = [],
   sample = false,
 }: {
   rows: StatementCoverageRow[];
   labels: Record<string, string>;
   disagreements: Disagreement[];
+  /** accounts whose statements do not agree with the balances typed for them: the typed balances are used */
+  untrusted?: string[];
   sample?: boolean;
 }) {
   const months = rows.reduce((a, r) => a + r.months.length, 0);
@@ -40,6 +43,14 @@ export function CoverageMap({
         {rows.length === 1 ? '' : 's'} are complete, with no break in the chain. Inside the covered
         months the bank&rsquo;s own balances are used, not the typed ones.
       </p>
+      {untrusted.length > 0 && (
+        <p className="notice warn small" data-testid="rc-cov-untrusted">
+          The statements of {untrusted.map(name).join(', ')} do not agree with the balances typed
+          for {untrusted.length === 1 ? 'it' : 'them'} in most months, so the typed balances are
+          used there. Check each statement is that account&rsquo;s own: two accounts can share the
+          same last four digits.
+        </p>
+      )}
       <div className="rc-scroll">
         <table className="table small">
           <thead>

@@ -417,6 +417,7 @@ function coverageOf(
           closing: s.closing === null ? null : Number(s.closing),
         })),
     ),
+    untrusted: bank.untrusted ?? [],
     disagreements: disagreements(
       loaded.obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),
       bank,

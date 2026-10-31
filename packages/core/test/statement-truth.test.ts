@@ -4,6 +4,7 @@ import {
   dayEndBalances,
   disagreements,
   statementCoverage,
+  trustBank,
   withBankBalances,
 } from '../src/statement-truth';
 
@@ -122,5 +123,39 @@ describe('a typed balance is kept unless the bank gives one that month', () => {
       { date: '2025-06-30', amount: 61_000 },
       { date: '2025-07-29', amount: 70_000 },
     ]);
+  });
+});
+
+describe('trustBank: the bank’s balances count only where they agree with the typed ones', () => {
+  const truth = bankTruth(
+    [
+      { assetId: 'ok', date: '2025-01-31', amount: 0, balance: 100_000 },
+      { assetId: 'ok', date: '2025-02-28', amount: 0, balance: 101_000 },
+      { assetId: 'odd', date: '2025-01-31', amount: 0, balance: 900_000 },
+      { assetId: 'odd', date: '2025-02-28', amount: 0, balance: 905_000 },
+    ],
+    [
+      { assetId: 'ok', from: '2025-01-01', to: '2025-02-28', opening: null, closing: null },
+      { assetId: 'odd', from: '2025-01-01', to: '2025-02-28', opening: null, closing: null },
+    ],
+  );
+  const t = trustBank(truth, [
+    { assetId: 'ok', date: '2025-01-31', amount: 100_000 },
+    { assetId: 'ok', date: '2025-02-28', amount: 101_500 }, // one slip in two: still half agree… below 60%
+    { assetId: 'odd', date: '2025-01-31', amount: 50_000 },
+    { assetId: 'odd', date: '2025-02-28', amount: 52_000 },
+  ]);
+  it('an account whose statements disagree in most months keeps its typed balances and is listed', () => {
+    expect(t.untrusted).toContain('odd');
+    expect(t.spans.odd).toBeUndefined();
+    expect(t.points.odd).toBeUndefined();
+  });
+  it('an account that agrees in most months uses the bank’s balances', () => {
+    const t2 = trustBank(truth, [
+      { assetId: 'ok', date: '2025-01-31', amount: 100_000 },
+      { assetId: 'ok', date: '2025-02-28', amount: 101_000 },
+    ]);
+    expect(t2.untrusted).toEqual([]);
+    expect(t2.points.ok).toHaveLength(2);
   });
 });

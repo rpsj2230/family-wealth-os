@@ -54,11 +54,14 @@ export async function loadHistoryReview(
   const review = historyReview({
     ledger,
     position,
-    coverage: (stmts ?? []).map((x) => ({
-      assetId: x.asset_id as string,
-      from: x.from_on as string,
-      to: x.to_on as string,
-    })),
+    coverage: (stmts ?? [])
+      // an account whose statements do not agree with its typed balances is not decided by them
+      .filter((x) => !(loaded.bank?.untrusted ?? []).includes(x.asset_id as string))
+      .map((x) => ({
+        assetId: x.asset_id as string,
+        from: x.from_on as string,
+        to: x.to_on as string,
+      })),
     minimumPct: config.capital.reviewMinimumPct,
     minimum: config.capital.reviewMinimum,
     pairMonths: config.capital.reviewPairMonths,

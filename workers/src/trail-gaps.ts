@@ -452,6 +452,10 @@ async function afterRules(household: string) {
     console.log(
       `  ${name(r.assetId)}: ${r.full}/${r.months.length} months; missing ${r.missing.map((m) => (m.from === m.to ? m.from : `${m.from}..${m.to}`)).join(', ')}`,
     );
+  if (loaded.bank?.untrusted?.length)
+    console.log(
+      `  statements that do not agree with the typed balances (typed kept): ${loaded.bank.untrusted.map(name).join('; ')}`,
+    );
   if (loaded.bank) {
     const ds = disagreements(
       loaded.obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),
