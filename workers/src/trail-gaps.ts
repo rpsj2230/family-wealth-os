@@ -12,6 +12,7 @@ import {
   dayEndBalances,
   disagreements,
   historyReview,
+  abroadIncomeMoves,
   monthChanges,
   ORIGIN_LABEL,
   REAL_STARTS,
@@ -642,6 +643,23 @@ async function afterRules(household: string) {
           : name(c.assetId);
       byAcct.set(k, (byAcct.get(k) ?? 0) + (u * Math.abs(c.change)) / w);
     }
+  }
+  // the accounts abroad: their records, currency and rate, and what the abroad rule makes of them (counts and shares only)
+  {
+    const abroad = position.assets.filter((a) => a.type === 'bank_account' && a.currency !== 'INR');
+    const am = abroadIncomeMoves(position, loaded.engine.moves);
+    for (const a of abroad) {
+      const recs = a.records.filter((r) => !r.sheet);
+      console.log(
+        `  abroad ${name(a.assetId)}: currency ${a.currency}, status ${a.status}, ${recs.length} records (${a.records.length - recs.length} from the sheet), with a rate ${recs.filter((r) => r.fxRate).length}; rate series ${(position.config.fx?.[a.currency] ?? []).length} days`,
+      );
+    }
+    console.log(
+      `  the abroad rule made ${am.length} movements, ${pct(
+        am.reduce((x, m) => x + Math.abs(m.amount), 0),
+        allUnx,
+      )} of the money from balances`,
+    );
   }
   console.log('\n== Where the money worked out from balances sits (share of all of it)');
   for (const [k, v] of [...byAcct].sort((a, b) => b[1] - a[1]).slice(0, 25))
