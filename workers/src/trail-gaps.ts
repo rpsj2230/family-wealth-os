@@ -12,6 +12,7 @@ import {
   dayEndBalances,
   disagreements,
   historyReview,
+  monthChanges,
   ORIGIN_LABEL,
   REAL_STARTS,
   statementCoverage,
@@ -600,6 +601,67 @@ async function afterRules(household: string) {
     minimum: config.statements.reviewAbove,
   });
   console.log(`  people paid and paying back, not yet recorded as loans: ${people.length}`);
+
+  // where the money still worked out from balances sits: each month's unexplained amount, put on the accounts that moved that month
+  // with no statement covering them (shares of the whole, by account; and by year)
+  const spans = loaded.bank?.spans ?? {};
+  const covers = (id: string, from: string, to: string) =>
+    (spans[id] ?? []).some((x) => x.from <= from && x.to >= to);
+  const byAcct = new Map<string, number>();
+  const byYear = new Map<string, number>();
+  let allUnx = 0;
+  for (const m of ledger.months) {
+    const u = Math.abs(m.unexplained);
+    if (u < 1) continue;
+    allUnx += u;
+    byYear.set(m.from.slice(0, 4), (byYear.get(m.from.slice(0, 4)) ?? 0) + u);
+    const ch = monthChanges(position, m, Number.POSITIVE_INFINITY).filter(
+      (c) => Math.abs(c.change) >= config.capital.reviewMinimum,
+    );
+    const open = ch.filter((c) => {
+      const a = loaded.assetRows.find((x) => x.id === c.assetId);
+      if (!a) return false;
+      if (a.type === 'bank_account' && a.currency === 'INR')
+        return !covers(c.assetId, m.from, m.through);
+      return a.type !== 'fixed_deposit' && a.type !== 'mutual_fund';
+    });
+    const w = open.reduce((x, c) => x + Math.abs(c.change), 0);
+    if (!w) {
+      byAcct.set(
+        '(no account without a statement moved: residual of estimates and lines)',
+        (byAcct.get('(no account without a statement moved: residual of estimates and lines)') ??
+          0) + u,
+      );
+      continue;
+    }
+    for (const c of open) {
+      const a = loaded.assetRows.find((x) => x.id === c.assetId)!;
+      const k =
+        a.type === 'bank_account' && a.currency !== 'INR'
+          ? `${name(c.assetId)} (abroad)`
+          : name(c.assetId);
+      byAcct.set(k, (byAcct.get(k) ?? 0) + (u * Math.abs(c.change)) / w);
+    }
+  }
+  console.log('\n== Where the money worked out from balances sits (share of all of it)');
+  for (const [k, v] of [...byAcct].sort((a, b) => b[1] - a[1]).slice(0, 25))
+    console.log(`  ${pct(v, allUnx).padStart(4)}  ${k}`);
+  console.log(
+    '  by year: ' +
+      [...byYear]
+        .sort()
+        .map(([y, v]) => `${y} ${pct(v, allUnx)}`)
+        .join(', '),
+  );
+  console.log(
+    `  own money: opening ${pct(Math.abs(tt.opening), Math.abs(tt.opening) + Math.abs(tt.confirmedExternal) + Math.abs(tt.corrections) + Math.abs(tt.unexplained))}, confirmed ${pct(Math.abs(tt.confirmedExternal + tt.corrections), Math.abs(tt.opening) + Math.abs(tt.confirmedExternal) + Math.abs(tt.corrections) + Math.abs(tt.unexplained))}, from balances ${pct(Math.abs(tt.unexplained), Math.abs(tt.opening) + Math.abs(tt.confirmedExternal) + Math.abs(tt.corrections) + Math.abs(tt.unexplained))}`,
+  );
+  console.log(
+    '  earlier months to answer: ' +
+      r.open
+        .map((m) => `${m.key} (${m.changes.map((c) => name(c.assetId)).join(' / ')})`)
+        .join('; '),
+  );
 }
 
 main()
