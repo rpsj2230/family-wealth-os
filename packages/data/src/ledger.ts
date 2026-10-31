@@ -12,6 +12,8 @@ import {
   ledgerMoveOf,
   savingsSchedule,
   type LedgerMove,
+  abroadIncomeMoves,
+  type PositionInput,
   rateOfferFromRow,
   type AssetRow,
   type AppConfig,
@@ -244,3 +246,16 @@ export function capitalDays(start: string | null, today: string, recentDays: num
 /** The family ledger's reading of the stored movements (transfers between own holdings drop out). */
 export const ledgerMovesOf = (moves: MoneyMove[]): LedgerMove[] =>
   moves.map((m) => ledgerMoveOf(m)).filter((m): m is LedgerMove => m !== null);
+
+/**
+ * The family ledger's movements with what the rules add: money in or out of the accounts abroad that no transfer explains, as money
+ * from outside (Settings: capital.abroadIsIncome). The one place every ledger takes its movements from.
+ */
+export const ledgerMovesFor = (
+  moves: MoneyMove[],
+  position: PositionInput,
+  config: Pick<AppConfig, 'capital'>,
+): LedgerMove[] => [
+  ...ledgerMovesOf(moves),
+  ...(config.capital.abroadIsIncome ? abroadIncomeMoves(position, moves) : []),
+];

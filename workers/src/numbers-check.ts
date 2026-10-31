@@ -35,7 +35,7 @@ import {
 import {
   buildDigestInput,
   loadNeeds,
-  ledgerMovesOf,
+  ledgerMovesFor,
   linesSince,
   loadLineAmounts,
   loadPortfolioData,
@@ -253,7 +253,7 @@ async function main() {
       // the capital and earnings ledger (Home's own money, profit, return), the fund views and what is waiting to be explained
       const ledger = capitalLedger({
         position,
-        moves: ledgerMovesOf(l.engine.moves),
+        moves: ledgerMovesFor(l.engine.moves, position, cfg),
         openingDate: cfg.capital.openingDate || null,
         reinvestDays: cfg.harvest.reinvestDays,
       });
@@ -366,7 +366,7 @@ async function main() {
         );
         const noProp = capitalLedger({
           position: { ...position, assets: position.assets.filter((a) => a.type !== 'property') },
-          moves: ledgerMovesOf(l.engine.moves),
+          moves: ledgerMovesFor(l.engine.moves, position, cfg),
           openingDate: cfg.capital.openingDate || null,
           reinvestDays: cfg.harvest.reinvestDays,
         }).totals;

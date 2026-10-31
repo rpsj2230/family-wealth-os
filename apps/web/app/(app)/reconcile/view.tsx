@@ -7,6 +7,7 @@ import {
   positionInputFrom,
   reconcileQueue,
   statementCoverage,
+  lastFinishedMonthEnd,
 } from '@fwos/core';
 import {
   ALERTS_FILE,
@@ -394,7 +395,13 @@ function coverageOf(
       const ds = [...(recs.get(a.id) ?? []), ...(bank.spans[a.id] ?? []).map((s) => s.from)].sort();
       const held = a.status === 'active' || a.status === 'stopped';
       return ds.length
-        ? [{ assetId: a.id, from: ds[0]!, to: held ? today : ds[ds.length - 1]! }]
+        ? [
+            {
+              assetId: a.id,
+              from: ds[0]!,
+              to: held ? lastFinishedMonthEnd(today) : ds[ds.length - 1]!,
+            },
+          ]
         : [];
     });
   return {

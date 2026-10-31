@@ -9,7 +9,7 @@ import {
   ALERTS_FILE,
   capitalDays,
   capitalStart,
-  ledgerMovesOf,
+  ledgerMovesFor,
   loadPositionInput,
 } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -41,7 +41,7 @@ export async function loadHistoryReview(
   });
   const ledger = capitalLedger({
     position,
-    moves: ledgerMovesOf(loaded.engine.moves),
+    moves: ledgerMovesFor(loaded.engine.moves, position, config),
     openingDate: config.capital.openingDate || null,
     reinvestDays: config.harvest.reinvestDays,
   });

@@ -12,7 +12,7 @@ import {
 import {
   capitalDays,
   capitalStart,
-  ledgerMovesOf,
+  ledgerMovesFor,
   linesSince,
   loadLineAmounts,
   loadPositionInput,
@@ -201,7 +201,7 @@ export async function loadHome(
   });
 
   const input: HomeInput = {
-    moves: ledgerMovesOf(loaded.engine.moves),
+    moves: ledgerMovesFor(loaded.engine.moves, position, settings.config),
     abroad: loaded.engine.moves
       .filter((m) => {
         const from = m.fromAssetId ? assetRows.find((a) => a.id === m.fromAssetId) : undefined;

@@ -14,13 +14,14 @@ import {
   ORIGIN_LABEL,
   REAL_STARTS,
   statementCoverage,
+  lastFinishedMonthEnd,
   twoWayPeople,
 } from '@fwos/core';
 import {
   ALERTS_FILE,
   capitalDays,
   capitalStart,
-  ledgerMovesOf,
+  ledgerMovesFor,
   loadMoneyTrail,
   loadPortfolioData,
   loadPositionInput,
@@ -418,7 +419,13 @@ async function afterRules(household: string) {
       ].sort();
       const held = a.status === 'active' || a.status === 'stopped';
       return ds.length
-        ? [{ assetId: a.id, from: ds[0]!, to: held ? today : ds[ds.length - 1]! }]
+        ? [
+            {
+              assetId: a.id,
+              from: ds[0]!,
+              to: held ? lastFinishedMonthEnd(today) : ds[ds.length - 1]!,
+            },
+          ]
         : [];
     });
   const cov = statementCoverage(
@@ -445,20 +452,56 @@ async function afterRules(household: string) {
     console.log(
       `  ${name(r.assetId)}: ${r.full}/${r.months.length} months; missing ${r.missing.map((m) => (m.from === m.to ? m.from : `${m.from}..${m.to}`)).join(', ')}`,
     );
-  if (loaded.bank)
-    console.log(
-      `  typed balances that differ from the bank's: ${
-        disagreements(
-          loaded.obsRows.map((o) => ({
-            assetId: o.asset_id,
-            date: o.as_of,
-            amount: Number(o.amount),
-          })),
-          loaded.bank,
-          1,
-        ).length
-      }`,
+  if (loaded.bank) {
+    const ds = disagreements(
+      loaded.obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),
+      loaded.bank,
+      1,
     );
+    const size = new Map<string, number>();
+    const day = new Map<string, number>();
+    for (const d of ds) {
+      const r = Math.abs(d.typed - d.bank) / Math.max(1, Math.abs(d.bank));
+      const k1 =
+        r < 0.001
+          ? 'under 0.1%'
+          : r < 0.01
+            ? '0.1–1%'
+            : r < 0.05
+              ? '1–5%'
+              : r < 0.5
+                ? '5–50%'
+                : 'over 50%';
+      size.set(k1, (size.get(k1) ?? 0) + 1);
+      const dd = Number(d.date.slice(8, 10));
+      const k2 = dd <= 3 ? 'day 1–3' : dd >= 28 ? 'day 28–31' : 'mid-month';
+      day.set(k2, (day.get(k2) ?? 0) + 1);
+    }
+    console.log(`  typed balances that differ from the bank's: ${ds.length}`);
+    console.log(`    by size: ${[...size].map(([k, v]) => `${k} ${v}`).join(', ')}`);
+    console.log(
+      `    by day of the month typed: ${[...day].map(([k, v]) => `${k} ${v}`).join(', ')}`,
+    );
+    // would the bank's balance a day or a month earlier match? (a tab dated the 1st for the month before)
+    const ends = loaded.bank.dayEnds;
+    const prevMonth = ds.filter((d) => {
+      const before = (ends[d.assetId] ?? [])
+        .filter((p) => p.date < `${d.date.slice(0, 7)}-01`)
+        .pop();
+      return before && Math.abs(before.amount - d.typed) <= 1;
+    }).length;
+    const later = ds.filter((d) =>
+      (ends[d.assetId] ?? []).some(
+        (p) =>
+          p.date > d.date &&
+          p.date <= `${d.date.slice(0, 8)}31` &&
+          Math.abs(p.amount - d.typed) <= 1,
+      ),
+    ).length;
+    console.log(
+      `    equal to the bank's balance at the end of the month before: ${prevMonth}; later in the same month: ${later}`,
+    );
+  }
 
   // own money still worked out from balances, and the months the review asks about
   const position = await loadPositionInput(db, loaded, {
@@ -467,7 +510,7 @@ async function afterRules(household: string) {
   });
   const ledger = capitalLedger({
     position,
-    moves: ledgerMovesOf(loaded.engine.moves),
+    moves: ledgerMovesFor(loaded.engine.moves, position, config),
     openingDate: config.capital.openingDate || null,
     reinvestDays: config.harvest.reinvestDays,
   });

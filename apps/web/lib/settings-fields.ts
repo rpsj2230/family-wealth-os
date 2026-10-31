@@ -424,6 +424,13 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         max: 20,
       },
       {
+        name: 'abroadIsIncome',
+        label: 'Money arriving in the Singapore accounts is income from outside',
+        hint: 'Those accounts have balances but no statements. A rise no transfer on file explains (salary) counts as money from outside, and a fall as money spent abroad, instead of “not yet explained”. Exchange-rate moves stay in earnings.',
+        kind: 'check',
+        path: ['capital', 'abroadIsIncome'],
+      },
+      {
         name: 'reviewPairMonths',
         label: 'Two months that cancel out are one transfer when within',
         hint: 'Money the monthly tabs show leaving in one month and arriving in the next (or within this many months) is a transfer between your own accounts recorded in two months: such a pair is shown apart, with nothing to answer.',

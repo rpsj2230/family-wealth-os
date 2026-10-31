@@ -250,3 +250,8 @@ export function statementCoverage(
     };
   });
 }
+
+/** The last day of the month before today's: a statement for the month still running is not out yet, so it is never missing. */
+export function lastFinishedMonthEnd(today: string): string {
+  return addDay(`${today.slice(0, 7)}-01`, -1);
+}

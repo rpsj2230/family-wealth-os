@@ -149,6 +149,7 @@ export async function loadMoneyTrail(
       ...ctx.accounts.map((a) => [a.assetId, a.bank ?? null] as const),
       ...ctx.deposits.map((d) => [d.assetId, d.bank ?? null] as const),
     ]),
+    ...(loaded.bank ? { spans: loaded.bank.spans } : {}),
     remittanceOf: new Map([
       ...classified.filter((c) => c.remittanceId).map((c) => [c.id, c.remittanceId!] as const),
       ...tl.filter((l) => l.id.startsWith('remit:')).map((l) => [l.id, l.id.slice(6)] as const),

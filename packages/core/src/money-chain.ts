@@ -223,6 +223,12 @@ export function moneyChain(args: {
   bankOf?: Map<string, string | null>;
   /** remittances: the transfer from Singapore each credit is, by line id */
   remittanceOf?: Map<string, string>;
+  /**
+   * the periods each account's bank statements cover (merged; the bank's alerts left out). With them, money whose source lies
+   * before the statements begin is told apart from money that went through months with no statement: the first is the family's
+   * own money from before the records (like an account's opening balance), the second a gap
+   */
+  spans?: Record<string, { from: string; to: string }[]>;
 }): MoneyChain {
   const { method, pairDays } = args;
   const abroad = new Set(args.assets.filter((a) => a.abroad).map((a) => a.id));
@@ -234,6 +240,26 @@ export function moneyChain(args: {
   const bankOf = (id: string) => {
     const b = args.bankOf?.get(id);
     return b ? bankWord(b) : '';
+  };
+  /** the first day any statement of an account covers, and whether its statements run without a break from then to a day */
+  const firstCovered = (id: string) => args.spans?.[id]?.[0]?.from ?? null;
+  const unbrokenTo = (id: string, day: string) => {
+    const sp = args.spans?.[id];
+    return (
+      !!sp?.length && sp[0]!.from <= day && sp.some((x) => x.from === sp[0]!.from && x.to >= day)
+    );
+  };
+  /**
+   * A deposit booked before any statement of its holder's accounts at its bank begins: its money is the family's own from before
+   * the records (it could not show on a statement), not a gap.
+   */
+  const beforeStatements = (d: { assetId: string; ownerId: string; bookedOn: string }) => {
+    if (!args.spans) return false;
+    const bank = bankOf(d.assetId);
+    const accts = [...owner.keys()].filter(
+      (x) => owner.get(x) === d.ownerId && (!bank || bankOf(x) === bank) && firstCovered(x),
+    );
+    return accts.length > 0 && accts.every((x) => firstCovered(x)! > d.bookedOn);
   };
 
   const nodes = new Map<string, ChainNode>();
@@ -506,12 +532,11 @@ export function moneyChain(args: {
         cls: null,
         narration: 'Deposit booked with money the statements on file do not show',
       });
-      n.starts.push({
-        kind: 'untraced_deposit',
-        amount: d.principal,
-        assetId: depId,
-        person: d.ownerId,
-      });
+      n.starts.push(
+        beforeStatements(d)
+          ? { kind: 'before_records', amount: d.principal, person: d.ownerId }
+          : { kind: 'untraced_deposit', amount: d.principal, assetId: depId, person: d.ownerId },
+      );
       p.unshift({ node: n.id, amount: d.principal, via: depId, basis: 'rules' });
       push(into, depId, { node: n.id, amount: d.principal, via: depId, basis: 'rules' });
     }
@@ -721,15 +746,21 @@ export function moneyChain(args: {
           cls: null,
           narration: 'Deposit booked with money the statements on file do not show',
         });
-        const got = fromAway(d.ownerId, d.principal, n.id);
+        // booked before any statement of its bank's accounts: the family's money from before the records
+        const early = beforeStatements(d);
+        const got = early ? 0 : fromAway(d.ownerId, d.principal, n.id);
         if (got > TINY) guessed.fromOutside++;
         if (d.principal - got > TINY)
-          n.starts.push({
-            kind: 'untraced_deposit',
-            amount: d.principal - got,
-            assetId: d.assetId,
-            person: d.ownerId,
-          });
+          n.starts.push(
+            early
+              ? { kind: 'before_records', amount: d.principal - got, person: d.ownerId }
+              : {
+                  kind: 'untraced_deposit',
+                  amount: d.principal - got,
+                  assetId: d.assetId,
+                  person: d.ownerId,
+                },
+          );
         pool(d.assetId).unshift({
           node: n.id,
           amount: d.principal,
@@ -877,7 +908,11 @@ export function moneyChain(args: {
       let got = from ? payOut(`held:${from}`, pool(`held:${from}`), l.amount, n.id) : 0;
       // else deposits on file that end around then
       if (got <= TINY) got = fromDeposits(l, holder, n.id);
-      if (got <= TINY)
+      // nothing booked it on statements that run without a break from their first day to this payback: it was booked before them,
+      // with the family's money from before the records
+      if (got <= TINY && unbrokenTo(l.assetId, l.date))
+        n.starts.push({ kind: 'before_records', amount: l.amount, person: holder });
+      else if (got <= TINY)
         n.starts.push({
           kind: 'untraced_deposit',
           amount: l.amount,

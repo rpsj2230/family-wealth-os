@@ -9,7 +9,7 @@ import {
   type AppConfig,
   type BankGrowth,
 } from '@fwos/core';
-import { capitalDays, capitalStart, ledgerMovesOf, loadPositionInput } from '@fwos/data';
+import { capitalDays, capitalStart, ledgerMovesFor, loadPositionInput } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { demoHomeInput } from './demo-home';
 import type { loadPortfolio } from './portfolio-data';
@@ -54,7 +54,7 @@ export async function loadBankGrowth(
     });
     return bankGrowth({
       position: bankPosition(position, opts.owner),
-      moves: ledgerMovesOf(loaded.engine.moves),
+      moves: ledgerMovesFor(loaded.engine.moves, position, config),
       openingDate: start,
       reinvestDays: config.harvest.reinvestDays,
       deposits: runningOf(opts.rows).map((r) => ({

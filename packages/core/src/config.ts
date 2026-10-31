@@ -78,6 +78,11 @@ export interface AppConfig {
      * The months below are still counted (as own money), only not asked about
      */
     reviewMinimumPct: number;
+    /**
+     * money that arrives in an account abroad (Singapore) with no transfer on file to explain it is the family's income from outside
+     * (a fall is money spent abroad), instead of "not yet explained"; those accounts have balances but no statements
+     */
+    abroadIsIncome: boolean;
     /** two months this many months apart or less whose unexplained amounts cancel out are one transfer recorded in two months */
     reviewPairMonths: number;
     /**
@@ -412,6 +417,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     openingDate: '',
     reviewMinimum: 25_000,
     reviewMinimumPct: 0.0025,
+    abroadIsIncome: true,
     reviewPairMonths: 2,
     ownershipFrom: '',
     countProperty: false,
@@ -827,6 +833,10 @@ export function configFromJson(raw: unknown): AppConfig {
       })(),
       reviewMinimum: num(obj(r.capital).reviewMinimum, d.capital.reviewMinimum, 0, 1e9),
       reviewMinimumPct: num(obj(r.capital).reviewMinimumPct, d.capital.reviewMinimumPct, 0, 0.2),
+      abroadIsIncome:
+        typeof obj(r.capital).abroadIsIncome === 'boolean'
+          ? (obj(r.capital).abroadIsIncome as boolean)
+          : d.capital.abroadIsIncome,
       reviewPairMonths: Math.round(
         num(obj(r.capital).reviewPairMonths, d.capital.reviewPairMonths, 0, 12),
       ),
