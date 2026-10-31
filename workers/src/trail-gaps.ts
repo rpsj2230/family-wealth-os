@@ -624,15 +624,30 @@ async function afterRules(household: string) {
       if (!a) return false;
       if (a.type === 'bank_account' && a.currency === 'INR')
         return !covers(c.assetId, m.from, m.through);
+      // accounts abroad are placed by the abroad rule (their rupee value moves with the rate every month)
+      if (a.type === 'bank_account') return false;
       return a.type !== 'fixed_deposit' && a.type !== 'mutual_fund';
     });
     const w = open.reduce((x, c) => x + Math.abs(c.change), 0);
     if (!w) {
-      byAcct.set(
-        '(no account without a statement moved: residual of estimates and lines)',
-        (byAcct.get('(no account without a statement moved: residual of estimates and lines)') ??
-          0) + u,
-      );
+      // what else moved that month: deposits, funds, accounts abroad, statement accounts (the largest kind names the residual)
+      const kinds = new Map<string, number>();
+      for (const c of ch) {
+        const a = loaded.assetRows.find((x) => x.id === c.assetId);
+        const k = !a
+          ? 'other'
+          : a.type === 'fixed_deposit'
+            ? 'deposits (booked, matured or valued by estimate)'
+            : a.type === 'mutual_fund'
+              ? 'funds'
+              : a.type === 'bank_account' && a.currency !== 'INR'
+                ? 'accounts abroad (exchange rate)'
+                : 'accounts with statements (interest estimate vs lines)';
+        kinds.set(k, (kinds.get(k) ?? 0) + Math.abs(c.change));
+      }
+      const top = [...kinds].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'nothing moved over the limit';
+      const k = `(residual) ${top}`;
+      byAcct.set(k, (byAcct.get(k) ?? 0) + u);
       continue;
     }
     for (const c of open) {
