@@ -501,6 +501,20 @@ async function afterRules(household: string) {
     console.log(
       `    equal to the bank's balance at the end of the month before: ${prevMonth}; later in the same month: ${later}`,
     );
+    // by account: how many differ, by how much (the typed one as a share of the bank's), and whether the account's statements
+    // chain without a break (each line's balance follows from the one before)
+    const per = new Map<string, number[]>();
+    for (const d of ds)
+      per.set(d.assetId, [...(per.get(d.assetId) ?? []), d.typed / Math.max(1, d.bank)]);
+    const breaks = new Map<string, number>();
+    for (const st of real) breaks.set(st.asset_id, (breaks.get(st.asset_id) ?? 0) + st.breaks);
+    for (const [id, rs] of [...per].sort((a, b) => b[1].length - a[1].length)) {
+      const sorted = [...rs].sort((a, b) => a - b);
+      const mid = sorted[Math.floor(sorted.length / 2)]!;
+      console.log(
+        `    ${name(id)}: ${rs.length} differ; typed ÷ bank median ${mid.toFixed(2)} (from ${sorted[0]!.toFixed(2)} to ${sorted[sorted.length - 1]!.toFixed(2)}); line breaks in its statements ${breaks.get(id) ?? 0}`,
+      );
+    }
   }
 
   // own money still worked out from balances, and the months the review asks about
