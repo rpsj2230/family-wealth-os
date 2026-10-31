@@ -83,7 +83,7 @@ export function History({
             ? 'Nothing above the limit is waiting.'
             : `${review.open.length} month${review.open.length === 1 ? '' : 's'} listed: ${formatInrCompact(review.listedTotal)} of ${formatInrCompact(review.openTotal)} not yet explained (${Math.round(share * 100)}%).`}{' '}
           {review.small.count > 0 &&
-            `${review.small.count} smaller month${review.small.count === 1 ? '' : 's'} (each under ${minimumPct > 0 ? `the larger of ${formatInr(minimum)} and ${(minimumPct * 100).toFixed(2)}% of net worth` : formatInr(minimum)}, ${formatInrCompact(review.small.total)} in all) are counted as your own money but not asked about; the limits are in `}
+            `${review.small.count} smaller month${review.small.count === 1 ? '' : 's'} (each under ${minimumPct > 0 ? `the larger of ${formatInr(minimum)} and ${(minimumPct * 100).toFixed(2)}% of net worth` : formatInr(minimum)}, ${formatInrCompact(review.small.total)} in all) ${review.small.count === 1 ? 'is' : 'are'} counted as your own money but not asked about; the limits are in `}
           {review.small.count > 0 && (
             <Link
               href={sample ? '/demo/settings?tab=rules#estimates' : '/settings?tab=rules#estimates'}

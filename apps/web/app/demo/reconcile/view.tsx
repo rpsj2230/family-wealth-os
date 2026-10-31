@@ -88,7 +88,8 @@ export async function DemoMovementsView({
           ledger,
           position,
           minimum: cfg.capital.reviewMinimum,
-          minimumPct: cfg.capital.reviewMinimumPct,
+          // the sample's invented months are small beside its net worth: the rupee limit alone, so the form can be seen
+          minimumPct: 0,
           pairMonths: cfg.capital.reviewPairMonths,
           before: addDaysIso(today, -recentDays),
         })
@@ -260,7 +261,7 @@ export async function DemoMovementsView({
                 .sort((x, y) => x.label.localeCompare(y.label))}
               opening={ledger.opening?.date ?? null}
               minimum={cfg.capital.reviewMinimum}
-              minimumPct={cfg.capital.reviewMinimumPct}
+              minimumPct={0}
               act={{ record: sampleFinish, undo: sampleFinish }}
               sample
             />
