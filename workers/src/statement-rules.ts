@@ -130,12 +130,17 @@ async function main() {
   const findText = process.env.FIND ?? '';
   if (findText.startsWith('words:')) {
     const [w, after] = findText.slice(6).split('@');
-    const want = (w ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    // "a b|c": lines holding both a and b, or c
+    const alts = (w ?? '')
+      .toLowerCase()
+      .split('|')
+      .map((x) => x.split(/\s+/).filter(Boolean))
+      .filter((x) => x.length);
     for (const l of t.lines.filter(
       (x) =>
         x.amount > 0 &&
         x.txn_on >= (after ?? '') &&
-        want.every((k) => x.narration.toLowerCase().includes(k)),
+        alts.some((want) => want.every((k) => x.narration.toLowerCase().includes(k))),
     ))
       console.log(
         `  found ${l.txn_on} in ${lakh(l.amount)} ${label(l.asset_id)} [${t.classified.get(l.id)?.cls}] "${l.narration.toLowerCase().replace(/\d/g, '#').slice(0, 60)}"`,
