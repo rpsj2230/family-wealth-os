@@ -498,7 +498,25 @@ const plain = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim()} `;
 
-const has = (text: string, phrase: string) => text.includes(` ${plain(phrase).trim()} `);
+/** Every merchant and word once, made plain, by side: built once, so ten years of lines are read quickly. */
+const PHRASES: Record<
+  'in' | 'out',
+  { id: CategoryId; phrase: string; raw: string; confidence: 'high' | 'medium' }[]
+> = {
+  in: [],
+  out: [],
+};
+for (const [id, c] of Object.entries(CATEGORIES) as [CategoryId, Category][]) {
+  for (const m of c.merchants)
+    PHRASES[c.side].push({ id, phrase: ` ${plain(m).trim()} `, raw: m, confidence: 'high' });
+  for (const w of c.words)
+    PHRASES[c.side].push({
+      id,
+      phrase: ` ${plain(w).trim()} `,
+      raw: w,
+      confidence: c.sure ? 'high' : 'medium',
+    });
+}
 
 /**
  * What a line was, from its narration: the side of the money decides which categories can apply. A merchant's own name wins over a
@@ -506,26 +524,24 @@ const has = (text: string, phrase: string) => text.includes(` ${plain(phrase).tr
  */
 export function categorize(narration: string, amount: number): CategoryGuess | null {
   const text = plain(narration);
-  const side = amount < 0 ? 'out' : 'in';
-  let best: (CategoryGuess & { len: number }) | null = null;
-  for (const [id, c] of Object.entries(CATEGORIES) as [CategoryId, Category][]) {
-    if (c.side !== side) continue;
-    for (const [list, confidence] of [
-      [c.merchants, 'high'],
-      [c.words, c.sure ? 'high' : 'medium'],
-    ] as const)
-      for (const m of list) {
-        if (!has(text, m)) continue;
-        const better =
-          !best ||
-          (confidence === 'high' && best.confidence === 'medium') ||
-          (confidence === best.confidence && m.length > best.len);
-        if (better) best = { id, label: c.label, confidence, matched: m, len: m.length };
-      }
+  let best: (typeof PHRASES)['in'][number] | null = null;
+  for (const p of PHRASES[amount < 0 ? 'out' : 'in']) {
+    if (!text.includes(p.phrase)) continue;
+    if (
+      !best ||
+      (p.confidence === 'high' && best.confidence === 'medium') ||
+      (p.confidence === best.confidence && p.raw.length > best.raw.length)
+    )
+      best = p;
   }
-  if (!best) return null;
-  const { len: _len, ...guess } = best;
-  return guess;
+  return best
+    ? {
+        id: best.id,
+        label: CATEGORIES[best.id].label,
+        confidence: best.confidence,
+        matched: best.raw,
+      }
+    : null;
 }
 
 /** The label of a category id, or of a tag a person typed that is not one of them. */

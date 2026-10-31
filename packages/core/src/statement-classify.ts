@@ -729,6 +729,7 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
       );
   }
   // what each line that leaves or enters the family was: a person's tag, the rule's, or the guess from its words
+  const tagRules = (ctx.rules ?? []).filter((r) => r.category);
   const TAGGED = new Set<LineClass>([
     'spent',
     'fee',
@@ -742,7 +743,7 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   for (const l of lines) {
     const c = out.get(l.id)!;
     if (c.category || !TAGGED.has(c.cls)) continue;
-    const rule = ctx.rules?.find((x) => x.category && ruleMatches(x, l));
+    const rule = tagRules.length ? tagRules.find((x) => ruleMatches(x, l)) : undefined;
     const tag =
       l.category ??
       rule?.category ??
