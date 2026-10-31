@@ -319,6 +319,8 @@ export function classifyContext(
       maturityOn: f.maturity_on,
       endedOn: f.ended_on ?? null,
       maturityAmount: f.bank_maturity_amount === null ? null : Number(f.bank_maturity_amount),
+      number: f.fd_ref ?? null,
+      last4: f.fd_ref_last4 ?? null,
     })),
     fundTxns,
     // the people money was lent to, by their "Loan to …" records (a gift is spending, not a loan)

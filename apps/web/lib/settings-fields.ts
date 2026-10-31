@@ -414,6 +414,16 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
       },
       {
+        name: 'reviewMinimumPct',
+        label: '…and over this share of net worth at the month’s start',
+        hint: 'The larger of the two limits applies. A month below it is still counted as your own money (never as profit); it is only not asked about. 0 asks about every month over the rupee limit.',
+        kind: 'pct',
+        path: ['capital', 'reviewMinimumPct'],
+        unit: '% of net worth',
+        min: 0,
+        max: 20,
+      },
+      {
         name: 'reviewPairMonths',
         label: 'Two months that cancel out are one transfer when within',
         hint: 'Money the monthly tabs show leaving in one month and arriving in the next (or within this many months) is a transfer between your own accounts recorded in two months: such a pair is shown apart, with nothing to answer.',

@@ -156,3 +156,82 @@ describe('historyReview: what the records explain by themselves', () => {
     expect(many.listedTotal).toBeCloseTo(many.openTotal, 6);
   });
 });
+
+describe('historyReview: the bank statements decide a month', () => {
+  const base = (coverage?: { assetId: string; from: string; to: string }[]) =>
+    historyReview({
+      ledger: capitalLedger({ position, moves: [], openingDate: '2025-01-31' }),
+      position,
+      minimum: 25_000,
+      pairMonths: 2,
+      before: '2026-07-01',
+      ...(coverage ? { coverage } : {}),
+    });
+  it('a month whose changed accounts are covered by statements for the whole month is not asked about', () => {
+    expect(base().open.map((m) => m.key)).toEqual(['2025-03']);
+    // two statements that together cover March for account a
+    const r = base([
+      { assetId: 'a', from: '2025-02-01', to: '2025-03-15' },
+      { assetId: 'a', from: '2025-03-16', to: '2025-04-30' },
+    ]);
+    expect(r.open).toHaveLength(0);
+    expect(r.byStatements.map((m) => m.key)).toEqual(['2025-03']);
+  });
+  it('a statement with a gap in the month leaves it asked', () => {
+    const r = base([
+      { assetId: 'a', from: '2025-02-01', to: '2025-03-10' },
+      { assetId: 'a', from: '2025-03-20', to: '2025-04-30' },
+    ]);
+    expect(r.open.map((m) => m.key)).toEqual(['2025-03']);
+  });
+});
+
+describe('historyReview: an account that stopped being recorded, its money in another account', () => {
+  // c held ₹8 lakh and was last recorded in February 2025; in March the same sum arrived in b; the family kept recording until July
+  const c = savings('c', [rec('2025-01-31', 800_000), rec('2025-02-28', 800_000)]);
+  const b2 = savings('b', [
+    rec('2025-01-31', 100_000),
+    rec('2025-02-28', 100_200),
+    rec('2025-03-31', 900_500),
+    rec('2025-07-31', 902_000),
+  ]);
+  const p = input([a, b2, c]);
+  const r = historyReview({
+    ledger: capitalLedger({ position: p, moves: [], openingDate: '2025-01-31' }),
+    position: p,
+    minimum: 25_000,
+    pairMonths: 2,
+    before: '2026-07-01',
+  });
+  it('is found, with the account its money went to', () => {
+    expect(r.closures).toHaveLength(1);
+    expect(r.closures[0]).toMatchObject({
+      assetId: 'c',
+      into: 'b',
+      lastOn: '2025-02-28',
+      on: '2025-03-31',
+    });
+  });
+  it('the rise it explains is not asked about', () => {
+    const march = [...r.settled, ...r.open].find((m) => m.key === '2025-03')!;
+    expect(march.closedInto?.[0]?.assetId).toBe('c');
+  });
+});
+
+describe('historyReview: asks only above a share of net worth', () => {
+  it('a month below the larger of the two limits is counted, not asked', () => {
+    const at = (pct: number) =>
+      historyReview({
+        ledger: capitalLedger({ position, moves: [], openingDate: '2025-01-31' }),
+        position,
+        minimum: 25_000,
+        minimumPct: pct,
+        pairMonths: 0,
+        before: '2026-07-01',
+      });
+    // March's ₹15 lakh is about 14% of ₹11 lakh at its start: asked at 10%, counted at 200%
+    expect(at(0.1).open.map((m) => m.key)).toContain('2025-03');
+    expect(at(2).open.map((m) => m.key)).not.toContain('2025-03');
+    expect(at(2).small.count).toBeGreaterThan(at(0.1).small.count);
+  });
+});

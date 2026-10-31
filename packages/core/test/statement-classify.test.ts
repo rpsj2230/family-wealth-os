@@ -470,3 +470,97 @@ describe('a cheque paid in and returned unpaid', () => {
     expect(cs.map((c) => c.cls)).toEqual(['outside_in', 'spent']);
   });
 });
+
+describe('classifyLines: an answer is remembered for the same pattern', () => {
+  const base: ClassifyContext = { ...ctx, deposits: [], fundTxns: [] };
+  const l = (
+    id: string,
+    date: string,
+    amount: number,
+    narration: string,
+    answer?: 'out' | 'outside',
+  ) => ({
+    id,
+    assetId: 'a',
+    ownerId: 'r',
+    date,
+    amount,
+    narration,
+    ...(answer ? { answer } : {}),
+  });
+  it('the same narration once its numbers are out, the same direction and a similar size takes the answer', () => {
+    const cs = classifyLines(
+      [
+        l('m1', '2025-01-05', -50_000, 'SI 88812 MONTHLY TO SAMPLE CLUB DUES', 'out'),
+        l('m2', '2025-02-05', -52_000, 'SI 88931 MONTHLY TO SAMPLE CLUB DUES'),
+        l('m3', '2025-03-05', -500_000, 'SI 89011 MONTHLY TO SAMPLE CLUB DUES'),
+        l('m4', '2025-03-06', 50_000, 'SI 89011 MONTHLY TO SAMPLE CLUB DUES'),
+      ],
+      { ...base, askLarge: true },
+    );
+    const by = new Map(cs.map((c) => [c.id, c]));
+    expect(by.get('m1')!.reason).toBe('Your answer');
+    expect(by.get('m2')!.cls).toBe('spent');
+    expect(by.get('m2')!.reason).toMatch(/The same as your answer for 2025-01-05/);
+    // ten times the size, or the other direction: not the same payment
+    expect(by.get('m3')!.reason).not.toMatch(/The same as your answer/);
+    expect(by.get('m4')!.reason).not.toMatch(/The same as your answer/);
+  });
+});
+
+describe('classifyLines: a deposit named by its number', () => {
+  const dctx: ClassifyContext = {
+    ...ctx,
+    fundTxns: [],
+    deposits: [
+      {
+        assetId: 'fdX',
+        ownerId: 'r',
+        principal: 500_000,
+        bookedOn: '2023-01-10',
+        maturityOn: '2026-01-10',
+        endedOn: null,
+        maturityAmount: null,
+        number: '501234567890',
+      },
+      {
+        assetId: 'fdY',
+        ownerId: 'r',
+        principal: 200_000,
+        bookedOn: '2022-05-01',
+        maturityOn: '2027-05-01',
+        endedOn: null,
+        maturityAmount: null,
+        last4: '0278',
+      },
+    ],
+  };
+  const l = (id: string, date: string, amount: number, narration: string) => ({
+    id,
+    assetId: 'a',
+    ownerId: 'r',
+    date,
+    amount,
+    narration,
+  });
+  const cs = classifyLines(
+    [
+      // two years after the booking: no date window would find it
+      l('n1', '2025-03-01', 600_000, 'CLOSURE PROCEEDS 501234567890'),
+      l('n2', '2024-03-31', 9_500, 'TRF FROM 501234567890 QTR'),
+      l('n3', '2024-07-01', 4_000, 'INT PD ON TD 99880278'),
+      // four digits without a deposit word are not enough
+      l('n4', '2024-07-02', -4_000, 'UPI 77770278 SHOP'),
+    ],
+    dctx,
+  );
+  const by = new Map(cs.map((c) => [c.id, c]));
+  it('the full number links a payback and an interest payout at any date', () => {
+    expect(by.get('n1')).toMatchObject({ cls: 'fd_proceeds', counterpart: 'fdX' });
+    expect(by.get('n2')).toMatchObject({ cls: 'fd_interest', counterpart: 'fdX' });
+  });
+  it('the last four digits count only with a deposit word', () => {
+    expect(by.get('n3')!.cls).toBe('fd_interest');
+    expect(by.get('n4')!.counterpart ?? null).not.toBe('fdY');
+  });
+});

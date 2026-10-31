@@ -39,9 +39,18 @@ export async function loadHistoryReview(
     openingDate: config.capital.openingDate || null,
     reinvestDays: config.harvest.reinvestDays,
   });
+  // the days each account's bank statements cover: a month they cover for every account that moved is decided by its lines
+  const { data: stmts } = await supabase.from('bank_statements').select('asset_id, from_on, to_on');
   const review = historyReview({
     ledger,
     position,
+    coverage: (stmts ?? []).map((x) => ({
+      assetId: x.asset_id as string,
+      from: x.from_on as string,
+      to: x.to_on as string,
+    })),
+    tolerance: config.estimates.unexplainedTolerance,
+    minimumPct: config.capital.reviewMinimumPct,
     minimum: config.capital.reviewMinimum,
     pairMonths: config.capital.reviewPairMonths,
     before: addDaysIso(today, -recentDays),

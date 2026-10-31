@@ -325,6 +325,7 @@ export async function MovementsView({
           holdings={holdings}
           opening={history.opening}
           minimum={config.capital.reviewMinimum}
+          minimumPct={config.capital.reviewMinimumPct}
         />
       ) : (
         <Recent

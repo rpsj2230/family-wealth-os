@@ -73,6 +73,11 @@ export interface AppConfig {
     openingDate: string;
     /** Explain movements > Earlier months: a month whose unexplained money is below this many rupees is not listed */
     reviewMinimum: number;
+    /**
+     * nor when it is below this share of net worth at the month's start (0.0025 = 0.25%); the larger of the two limits applies.
+     * The months below are still counted (as own money), only not asked about
+     */
+    reviewMinimumPct: number;
     /** two months this many months apart or less whose unexplained amounts cancel out are one transfer recorded in two months */
     reviewPairMonths: number;
     /**
@@ -406,6 +411,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   capital: {
     openingDate: '',
     reviewMinimum: 25_000,
+    reviewMinimumPct: 0.0025,
     reviewPairMonths: 2,
     ownershipFrom: '',
     countProperty: false,
@@ -820,6 +826,7 @@ export function configFromJson(raw: unknown): AppConfig {
         return v === '' || v === null || v === undefined ? '' : isoDate(v, d.capital.openingDate);
       })(),
       reviewMinimum: num(obj(r.capital).reviewMinimum, d.capital.reviewMinimum, 0, 1e9),
+      reviewMinimumPct: num(obj(r.capital).reviewMinimumPct, d.capital.reviewMinimumPct, 0, 0.2),
       reviewPairMonths: Math.round(
         num(obj(r.capital).reviewPairMonths, d.capital.reviewPairMonths, 0, 12),
       ),

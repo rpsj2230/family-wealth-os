@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { formatInr, formatInrCompact, type HistoryReview } from '@fwos/core';
 import { niceDate } from '@/lib/dates';
 import type { HistoryAnswer } from '@/lib/history-data';
-import { recordHistory, undoHistory } from './actions';
+import { markClosed, recordHistory, undoHistory } from './actions';
 
 const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatInr(Math.abs(Math.round(n)))}`;
 const monthName = (key: string) =>
@@ -16,6 +16,19 @@ const midMonth = (from: string, through: string) => {
   const mid = `${from.slice(0, 7)}-15`;
   return mid > through ? through : mid < from ? from : mid;
 };
+/** What the records say about a month by themselves, in words: accounts first recorded, accounts closed into another. */
+function explainedBy(m: HistoryReview['open'][number], label: Map<string, string>): string {
+  return [
+    ...(m.firstRecorded ?? []).map(
+      (f) => `${label.get(f.assetId) ?? f.name} first recorded at ${formatInrCompact(f.value)}`,
+    ),
+    ...(m.closedInto ?? []).map(
+      (c) =>
+        `${label.get(c.assetId) ?? c.name} (${formatInrCompact(c.value)}) closed into ${label.get(c.into) ?? c.intoName}`,
+    ),
+  ].join(', ');
+}
+
 const KIND: Record<string, string> = {
   contribution: 'Money from outside',
   withdrawal: 'Money withdrawn',
@@ -33,7 +46,8 @@ export function History({
   holdings,
   opening,
   minimum,
-  act = { record: recordHistory, undo: undoHistory },
+  minimumPct = 0,
+  act = { record: recordHistory, undo: undoHistory, close: markClosed },
   sample = false,
 }: {
   review: HistoryReview;
@@ -41,8 +55,14 @@ export function History({
   holdings: { id: string; label: string }[];
   opening: string | null;
   minimum: number;
+  /** Settings: the share of net worth below which a month is not asked about either */
+  minimumPct?: number;
   /** the actions the forms run (on the public sample, ones that save nothing) */
-  act?: { record: (f: FormData) => Promise<void>; undo: (f: FormData) => Promise<void> };
+  act?: {
+    record: (f: FormData) => Promise<void>;
+    undo: (f: FormData) => Promise<void>;
+    close?: (f: FormData) => Promise<void>;
+  };
   /** the public sample: holdings have no pages of their own */
   sample?: boolean;
 }) {
@@ -63,7 +83,7 @@ export function History({
             ? 'Nothing above the limit is waiting.'
             : `${review.open.length} month${review.open.length === 1 ? '' : 's'} listed: ${formatInrCompact(review.listedTotal)} of ${formatInrCompact(review.openTotal)} not yet explained (${Math.round(share * 100)}%).`}{' '}
           {review.small.count > 0 &&
-            `${review.small.count} smaller month${review.small.count === 1 ? '' : 's'} (under ${formatInr(minimum)} each, ${formatInrCompact(review.small.total)} in all) are left out; the limit is in `}
+            `${review.small.count} smaller month${review.small.count === 1 ? '' : 's'} (each under ${minimumPct > 0 ? `the larger of ${formatInr(minimum)} and ${(minimumPct * 100).toFixed(2)}% of net worth` : formatInr(minimum)}, ${formatInrCompact(review.small.total)} in all) are counted as your own money but not asked about; the limits are in `}
           {review.small.count > 0 && (
             <Link
               href={sample ? '/demo/settings?tab=rules#estimates' : '/settings?tab=rules#estimates'}
@@ -86,8 +106,8 @@ export function History({
                     <div className="rc-amount">{signed(m.amount)}</div>
                     <div className="muted small">
                       {into ? 'came in' : 'went out'} with nothing to say what it was
-                      {m.firstRecorded?.length && m.gross !== undefined
-                        ? ` (of ${signed(m.gross)}; ${m.firstRecorded.map((f) => `${label.get(f.assetId) ?? f.name} first recorded at ${formatInrCompact(f.value)}`).join(', ')} is already explained)`
+                      {m.gross !== undefined && explainedBy(m, label)
+                        ? ` (of ${signed(m.gross)}; ${explainedBy(m, label)} is already explained)`
                         : ''}
                     </div>
                     {m.changes.length > 0 && (
@@ -178,19 +198,65 @@ export function History({
           <h2 id="rc-fr">Months explained by the records themselves</h2>
           <p className="muted small">
             The money of these months is an account or deposit first entered in the records that
-            month: money that was already yours, not new money. It counts as own money, never as
-            profit, and needs no answer.
+            month, or an account&rsquo;s money arriving in another when it was closed: money that
+            was already yours, not new money. It counts as own money, never as profit, and needs no
+            answer.
           </p>
           <ul className="list small">
             {review.settled.map((m) => (
               <li key={m.key}>
                 <strong>{monthName(m.key)}</strong> {signed(m.gross ?? m.amount)}:{' '}
-                {(m.firstRecorded ?? [])
-                  .map(
-                    (f) =>
-                      `${label.get(f.assetId) ?? f.name} first recorded at ${formatInrCompact(f.value)}`,
-                  )
-                  .join(', ')}
+                {explainedBy(m, label)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {review.closures.length > 0 && (
+        <section className="card rc" aria-labelledby="rc-cl" data-testid="rc-h-closures">
+          <h2 id="rc-cl">Accounts that look closed</h2>
+          <p className="muted small">
+            Nothing has been recorded for these accounts for months while the others were, and soon
+            after their last record the same sum arrived in another of your accounts. While they are
+            still counted, that money counts twice. Marking one closed stops it counting after its
+            last record.
+          </p>
+          <ul className="rc-list">
+            {review.closures.map((c) => (
+              <li key={c.assetId} className="rc-item">
+                <div className="rc-what">
+                  <strong>{label.get(c.assetId) ?? c.name}</strong>
+                  <div className="small">
+                    {formatInrCompact(c.value)} last recorded {niceDate(c.lastOn)}; the same sum
+                    arrived in {label.get(c.into) ?? c.intoName} by {niceDate(c.on)}.
+                  </div>
+                </div>
+                {act.close && !sample && (
+                  <form action={act.close}>
+                    <input type="hidden" name="asset" value={c.assetId} />
+                    <button className="btn primary">Mark closed</button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {review.byStatements.length > 0 && (
+        <section className="card rc" aria-labelledby="rc-bs" data-testid="rc-h-statements">
+          <h2 id="rc-bs">Months the bank statements decide</h2>
+          <p className="muted small">
+            Every account that moved in these months is covered by its bank statements for the whole
+            month, so each line is sorted on its own (between your accounts, deposits, funds, money
+            in or out). A line that still needs you is asked once, on Transactions → Bank
+            statements, never here.
+          </p>
+          <ul className="list small">
+            {review.byStatements.map((m) => (
+              <li key={m.key}>
+                <strong>{monthName(m.key)}</strong> {signed(m.amount)}
               </li>
             ))}
           </ul>

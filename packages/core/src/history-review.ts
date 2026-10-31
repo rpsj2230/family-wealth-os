@@ -14,7 +14,10 @@
  */
 import type { CapitalLedger, SpanFigures } from './capital';
 import { valueDays } from './period-gains';
-import { positionAsOf, type PositionInput } from './position';
+import { positionAsOf, type PositionAsset, type PositionInput } from './position';
+
+const addDay = (iso: string) =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
 export interface HistoryChange {
   assetId: string;
@@ -41,6 +44,8 @@ export interface HistoryMonth {
    * to explain, so they are taken off the amount (`amount` is what is left)
    */
   firstRecorded?: { assetId: string; name: string; value: number }[];
+  /** accounts that look closed into another, whose money is this month's rise (closedInto) */
+  closedInto?: ClosedInto[];
   /** the month's whole unexplained amount, before what the records explain by themselves */
   gross?: number;
 }
@@ -56,8 +61,12 @@ export interface HistoryReview {
   listedTotal: number;
   /** months below the minimum, left out of the list, and their money without its sign */
   small: { count: number; total: number };
-  /** months the records explain by themselves (holdings first recorded), with nothing left to answer */
+  /** months the records explain by themselves (holdings first recorded, accounts closed into another), with nothing left to answer */
   settled: HistoryMonth[];
+  /** months the bank statements decide: every account that changed is covered for the whole month, and its lines are sorted one by one */
+  byStatements: HistoryMonth[];
+  /** accounts that look closed into another while still counted: to be marked closed */
+  closures: ClosedInto[];
 }
 
 /**
@@ -145,11 +154,94 @@ export function monthChanges(
   return out.sort((x, y) => Math.abs(y.change) - Math.abs(x.change)).slice(0, top);
 }
 
+/**
+ * An account that looks closed into another one: it is still counted (active), but nothing has been recorded for it for months while
+ * the other accounts were, and soon after its last record another family account rose by the same sum (its last balance, give or
+ * take the tolerance or 2%). Its money most likely moved there when it was closed; while it is still counted, that money counts twice.
+ * The rise is explained (it is not new money), and the account is listed to be marked closed.
+ */
+export interface ClosedInto {
+  assetId: string;
+  name: string;
+  /** its last record */
+  lastOn: string;
+  value: number;
+  into: string;
+  intoName: string;
+  /** the day the other account's rise was recorded */
+  on: string;
+}
+
+export function closedInto(
+  position: PositionInput,
+  opts: { pairMonths: number; tolerance: number; staleMonths?: number },
+): ClosedInto[] {
+  const banks = position.assets.filter(
+    (a) => a.type === 'bank_account' && a.status !== 'gifted' && a.status !== 'merged',
+  );
+  const recs = (a: PositionAsset) =>
+    [...new Map(a.records.filter((r) => !r.sheet).map((r) => [r.date, r])).values()].sort((x, y) =>
+      x.date.localeCompare(y.date),
+    );
+  const latest = banks
+    .flatMap((a) => recs(a).map((r) => r.date))
+    .sort()
+    .pop();
+  if (!latest) return [];
+  const out: ClosedInto[] = [];
+  const used = new Set<string>();
+  for (const a of banks) {
+    if (a.status !== 'active' && a.status !== 'stopped') continue;
+    const rs = recs(a);
+    const last = rs[rs.length - 1];
+    if (!last || !(last.amount > opts.tolerance)) continue;
+    if (monthsApart(last.date.slice(0, 7), latest.slice(0, 7)) < (opts.staleMonths ?? 3)) continue;
+    const near = (x: number) =>
+      Math.abs(x - last.amount) <= Math.max(opts.tolerance, 0.02 * last.amount);
+    const hit = banks
+      .filter((b) => b.assetId !== a.assetId && b.currency === a.currency)
+      .flatMap((b) => {
+        const br = recs(b);
+        return br.slice(1).map((r2, i) => ({ b, r1: br[i]!, r2 }));
+      })
+      .filter(
+        ({ b, r1, r2 }) =>
+          !used.has(`${b.assetId}|${r2.date}`) &&
+          r2.date > last.date &&
+          r1.date <= last.date.slice(0, 7) + '-31' &&
+          monthsApart(last.date.slice(0, 7), r2.date.slice(0, 7)) <= opts.pairMonths &&
+          near(r2.amount - r1.amount),
+      )
+      .sort(
+        (x, y) =>
+          Number(x.b.ownerId !== a.ownerId) - Number(y.b.ownerId !== a.ownerId) ||
+          x.r2.date.localeCompare(y.r2.date),
+      )[0];
+    if (!hit) continue;
+    used.add(`${hit.b.assetId}|${hit.r2.date}`);
+    out.push({
+      assetId: a.assetId,
+      name: a.name,
+      lastOn: last.date,
+      value: last.amount,
+      into: hit.b.assetId,
+      intoName: hit.b.name,
+      on: hit.r2.date,
+    });
+  }
+  return out;
+}
+
 export function historyReview(args: {
   ledger: CapitalLedger;
   position: PositionInput;
   /** Settings: a month whose unexplained money is below this many rupees is not listed */
   minimum: number;
+  /**
+   * Settings: nor is one whose money is below this share of net worth at the month's start (0.0025 = 0.25%); the larger of the two
+   * limits applies. Absent: the rupee limit alone
+   */
+  minimumPct?: number;
   /** Settings: two months this many months apart or less whose amounts cancel out are a transfer recorded in two months */
   pairMonths: number;
   /** months ending on or after this day are left to the recent list of Explain movements */
@@ -158,43 +250,108 @@ export function historyReview(args: {
   limit?: number;
   /** how many holdings to name for each month */
   topChanges?: number;
+  /**
+   * the bank statements on file (account and days covered): a month in which every bank account that changed is covered by its
+   * statements for the whole month is decided by the lines (each line is sorted, or asked about, on its own) and is not asked again
+   */
+  coverage?: { assetId: string; from: string; to: string }[];
+  /** Settings: the rupee tolerance for matching sums (closed accounts) */
+  tolerance?: number;
 }): HistoryReview {
   const { ledger, position, minimum } = args;
   const all = ledger.months.filter((m) => m.through < args.before);
-  // what the records explain by themselves: holdings first recorded in the month (only for months with something to explain)
-  const first = new Map(
-    all
-      .filter((m) => Math.abs(m.unexplained) >= minimum)
-      .map((m) => [monthKey(m), firstRecordedIn(position, m)] as const),
-  );
-  const firstTotal = (m: SpanFigures) =>
-    (first.get(monthKey(m)) ?? []).reduce((a, x) => a + x.value, 0);
-  // a month keeps its own figures; only its amount to explain is what is left after the first records, when they point the same way
-  const left = new Map(
-    all.map((m) => {
-      const f = firstTotal(m);
-      const rest = Math.sign(f) === Math.sign(m.unexplained) ? m.unexplained - f : m.unexplained;
-      // never more than the month's own amount, never past zero
-      const clipped = Math.sign(rest) !== Math.sign(m.unexplained) ? 0 : rest;
-      return [monthKey(m), f !== 0 ? clipped : m.unexplained] as const;
-    }),
-  );
-  const months = all.map((m) => ({ ...m, unexplained: left.get(monthKey(m))! }));
-  const settled = all.filter(
-    (m) =>
-      Math.abs(m.unexplained) >= minimum &&
-      Math.abs(left.get(monthKey(m))!) < minimum &&
-      firstTotal(m) !== 0,
-  );
-  const big = months.filter((m) => Math.abs(m.unexplained) >= minimum);
-  const small = months.filter(
-    (m) => Math.abs(m.unexplained) >= 1 && Math.abs(m.unexplained) < minimum,
-  );
-  const decorate = (m: SpanFigures, h: HistoryMonth): HistoryMonth => {
-    const f = first.get(monthKey(m)) ?? [];
-    const orig = all.find((x) => monthKey(x) === monthKey(m))!;
-    return f.length ? { ...h, firstRecorded: f, gross: orig.unexplained } : h;
+  const limitOf = (m: SpanFigures) => Math.max(minimum, (args.minimumPct ?? 0) * Math.abs(m.start));
+  const asks = (m: SpanFigures) => Math.abs(m.unexplained) >= limitOf(m);
+  const type = new Map(position.assets.map((a) => [a.assetId, a.type]));
+  const closures = closedInto(position, {
+    pairMonths: Math.max(args.pairMonths, 1),
+    tolerance: args.tolerance ?? minimum,
+  });
+  // the days each account's statements cover, merged
+  const covered = new Map<string, { from: string; to: string }[]>();
+  for (const c of args.coverage ?? [])
+    covered.set(c.assetId, [...(covered.get(c.assetId) ?? []), { from: c.from, to: c.to }]);
+  const coversMonth = (assetId: string, m: SpanFigures) => {
+    const spans = (covered.get(assetId) ?? []).sort((x, y) => x.from.localeCompare(y.from));
+    let reach = m.from;
+    for (const sp of spans) {
+      if (sp.from > reach) break;
+      if (sp.to >= reach) reach = addDay(sp.to);
+      if (reach > m.through) return true;
+    }
+    return reach > m.through;
   };
+
+  interface Look {
+    m: SpanFigures;
+    first: { assetId: string; name: string; value: number }[];
+    closed: ClosedInto[];
+    rest: number;
+  }
+  const looks = new Map<string, Look>();
+  for (const m of all) {
+    if (!asks(m)) {
+      looks.set(monthKey(m), { m, first: [], closed: [], rest: m.unexplained });
+      continue;
+    }
+    const first = firstRecordedIn(position, m);
+    const closed = closures.filter((c) => c.on >= m.from && c.on <= m.through);
+    const explained =
+      first.reduce((a, x) => a + x.value, 0) + closed.reduce((a, x) => a + x.value, 0);
+    let rest = m.unexplained;
+    if (explained !== 0 && Math.sign(explained) === Math.sign(m.unexplained)) {
+      rest = m.unexplained - explained;
+      // never past zero: what the records explain is at most the month's own amount
+      if (Math.sign(rest) !== Math.sign(m.unexplained)) rest = 0;
+    }
+    looks.set(monthKey(m), { m, first, closed, rest });
+  }
+  const decorate = (l: Look, h: HistoryMonth): HistoryMonth => ({
+    ...h,
+    ...(l.first.length ? { firstRecorded: l.first } : {}),
+    ...(l.closed.length ? { closedInto: l.closed } : {}),
+    ...(l.first.length || l.closed.length ? { gross: l.m.unexplained } : {}),
+  });
+  const withRest = (l: Look): SpanFigures => ({ ...l.m, unexplained: l.rest });
+
+  const settled: HistoryMonth[] = [];
+  const byStatements: HistoryMonth[] = [];
+  const candidates: Look[] = [];
+  const smallMonths: SpanFigures[] = [];
+  for (const l of looks.values()) {
+    const m = withRest(l);
+    if (Math.abs(l.rest) < 1) {
+      if (l.first.length || l.closed.length) settled.push(decorate(l, toMonth(l.m)));
+      continue;
+    }
+    if (!asks(m)) {
+      if (l.first.length || l.closed.length) settled.push(decorate(l, toMonth(l.m)));
+      else smallMonths.push(m);
+      continue;
+    }
+    // decided by the bank statements: every bank account that changed this month is covered for the whole month
+    if (covered.size) {
+      // a change below the asking limit (a month's interest) is not money that moved
+      const changed = monthChanges(position, m, Number.POSITIVE_INFINITY).filter(
+        (c) => Math.abs(c.change) >= minimum,
+      );
+      const banks = changed.filter((c) => type.get(c.assetId) === 'bank_account');
+      const others = changed.filter(
+        (c) =>
+          type.get(c.assetId) !== 'bank_account' &&
+          type.get(c.assetId) !== 'fixed_deposit' &&
+          type.get(c.assetId) !== 'mutual_fund',
+      );
+      if (banks.length && !others.length && banks.every((c) => coversMonth(c.assetId, m))) {
+        byStatements.push(decorate(l, toMonth(m, changed.slice(0, args.topChanges ?? 3))));
+        continue;
+      }
+    }
+    candidates.push(l);
+  }
+  const big = candidates.map(withRest);
+  const small = smallMonths;
+  const lookOf = (m: SpanFigures) => looks.get(monthKey(m))!;
 
   // pairs that cancel: the closest later month of the opposite sign within the window, the same sum give or take the minimum or 2%
   const paired = new Set<string>();
@@ -222,16 +379,18 @@ export function historyReview(args: {
     .sort((a, b) => Math.abs(b.unexplained) - Math.abs(a.unexplained));
   const listed = args.limit === undefined ? openMonths : openMonths.slice(0, args.limit);
   const total = (ms: SpanFigures[]) => ms.reduce((a, m) => a + Math.abs(m.unexplained), 0);
+  const bySize = (a: HistoryMonth, b: HistoryMonth) =>
+    Math.abs(b.gross ?? b.amount) - Math.abs(a.gross ?? a.amount);
   return {
     open: listed.map((m) =>
-      decorate(m, toMonth(m, monthChanges(position, m, args.topChanges ?? 3))),
+      decorate(lookOf(m), toMonth(m, monthChanges(position, m, args.topChanges ?? 3))),
     ),
     cancelling,
-    settled: settled
-      .sort((a, b) => Math.abs(b.unexplained) - Math.abs(a.unexplained))
-      .map((m) => decorate(m, toMonth(m))),
     openTotal: total(openMonths),
     listedTotal: total(listed),
     small: { count: small.length, total: total(small) },
+    settled: settled.sort(bySize),
+    byStatements: byStatements.sort(bySize),
+    closures,
   };
 }

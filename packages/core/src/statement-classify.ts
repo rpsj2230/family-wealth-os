@@ -90,6 +90,10 @@ export interface ClassifyContext {
     maturityOn: string;
     endedOn: string | null;
     maturityAmount: number | null;
+    /** the deposit's number in full, when entered (a narration that prints it is this deposit's, whatever the date) */
+    number?: string | null;
+    /** its last four digits, when only those are known */
+    last4?: string | null;
   }[];
   /** the purchases and sales in your fund statements (CAS), in rupees */
   fundTxns: {
@@ -274,6 +278,23 @@ const FEES =
   /\b(charges?|chrgs?|chg|fee|fees|gst|cgst|sgst|igst|sms\s*alert|amc|annual\s*(fee|charges?)|min(imum)?\s*bal(ance)?|non[-\s]?maint|debit\s*card|dc\s*ann|consolidated\s*chgs?)\b/i;
 const TRANSFER_WORDS = /\b(trf|transfer|self|own|imps|neft|rtgs|ft|fund\s*trf|ib\s*funds?)\b/i;
 
+/**
+ * A narration as a pattern: the words left once numbers, references and punctuation are taken out, so the same payment on
+ * different days reads the same ("ACH DR:P...0457X...8037,ESFB...0212,INDIAN CLEARING CORP~CLG" → "ACH DR P X ESFB INDIAN CLEARING
+ * CORP CLG"). Null when too little is left to recognise a payment by (fewer than two words of three letters or more).
+ */
+export function linePattern(narration: string): string | null {
+  const words = narration
+    .toUpperCase()
+    .replace(/[0-9]+/g, ' ')
+    .replace(/[^A-Z]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.filter((w) => w.length >= 3).length < 2) return null;
+  return words.join(' ');
+}
+
 export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classified[] {
   const out = new Map<string, Classified>();
   const set = (l: StmtLine, cls: LineClass, reason: string, counterpart: string | null = null) =>
@@ -324,6 +345,41 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
           r.assetId,
         );
       } else set(l, RULE[r.action], why);
+    }
+  }
+
+  // 1d. your answers, remembered for the same pattern: a line with no answer whose narration reads the same once its numbers are taken
+  // out (references, dates, amounts), in the same direction, in an account of the same person, and of a similar size (half to twice)
+  // counts as the answer given for the nearest such line. A monthly SIP debit, a standing instruction or the rent answered once is
+  // answered for every month. Your answer for a single line, and your rules, come first.
+  {
+    const answered = sorted.filter((l) => l.answer);
+    if (answered.length) {
+      const owner = new Map(ctx.accounts.map((a) => [a.assetId, a.ownerId]));
+      const byKey = new Map<string, StmtLine[]>();
+      for (const l of answered) {
+        const k = linePattern(l.narration);
+        if (!k) continue;
+        const key = `${k}|${l.amount < 0 ? 'out' : 'in'}|${owner.get(l.assetId) ?? l.ownerId}`;
+        byKey.set(key, [...(byKey.get(key) ?? []), l]);
+      }
+      for (const l of sorted) {
+        if (!open(l)) continue;
+        const k = linePattern(l.narration);
+        if (!k) continue;
+        const same = byKey.get(
+          `${k}|${l.amount < 0 ? 'out' : 'in'}|${owner.get(l.assetId) ?? l.ownerId}`,
+        );
+        if (!same) continue;
+        const fit = same
+          .filter((x) => {
+            const r = Math.abs(l.amount) / Math.abs(x.amount);
+            return r >= 0.5 && r <= 2;
+          })
+          .sort((x, y) => daysApart(x.date, l.date) - daysApart(y.date, l.date))[0];
+        if (!fit) continue;
+        set(l, ANSWER[fit.answer!], `The same as your answer for ${fit.date} (the same narration)`);
+      }
     }
   }
 
@@ -451,6 +507,60 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
         b.assetId,
       );
     }
+
+  // 4c. a deposit's own number in the narration ("TD NO 0278…", "FD 501234567 CLOSURE"): the line is that deposit's, on any date. Money
+  // out books it, a credit of most of its principal or more pays it back, a smaller credit is its interest paid out. The full number
+  // decides on its own; the last four digits only with a deposit word, and only for a deposit of the same person or bank.
+  const numbered = ctx.deposits.filter(
+    (d) => (d.number && d.number.replace(/\D/g, '').length >= 6) || d.last4,
+  );
+  if (numbered.length) {
+    const usedNo = new Set<string>();
+    for (const l of sorted) {
+      if (!open(l)) continue;
+      const runs = (l.narration.match(/\d[\d\s-]{3,}\d/g) ?? [])
+        .map((r) => r.replace(/\D/g, ''))
+        .filter((r) => r.length >= 4);
+      if (!runs.length) continue;
+      const a = ctx.accounts.find((x) => x.assetId === l.assetId);
+      const byFull = numbered.find((d) => {
+        const n = (d.number ?? '').replace(/\D/g, '');
+        return (
+          n.length >= 6 &&
+          runs.some((r) => r.length >= 6 && (r === n || n.endsWith(r) || r.endsWith(n)))
+        );
+      });
+      const byLast4 =
+        byFull ??
+        (DEPOSIT_WORDS.test(l.narration) || FD_OPEN.test(l.narration)
+          ? numbered.find(
+              (d) =>
+                !!d.last4 &&
+                runs.some((r) => r.endsWith(d.last4!)) &&
+                (d.ownerId === a?.ownerId ||
+                  (!!d.bank && !!a?.bank && bankWord(d.bank) === bankWord(a.bank))),
+            )
+          : undefined);
+      const d = byLast4;
+      if (!d) continue;
+      const amt = Math.abs(l.amount);
+      const how = byFull ? 'its number' : 'the last four digits of its number';
+      if (l.amount < 0) {
+        if (usedNo.has(`${d.assetId}|out`) && !near(d.principal, amt)) continue;
+        usedNo.add(`${d.assetId}|out`);
+        set(l, 'fd_funding', `The narration names the deposit by ${how}: money into it`, d.assetId);
+      } else if (amt >= d.principal * 0.9) {
+        set(l, 'fd_proceeds', `The narration names the deposit by ${how}: it paid back`, d.assetId);
+      } else {
+        set(
+          l,
+          'fd_interest',
+          `The narration names the deposit by ${how}: its interest paid out`,
+          d.assetId,
+        );
+      }
+    }
+  }
 
   // 5. transfers between your own accounts: the closest line of the opposite sign and the same sum in another account. On a day
   // with several transfers of one sum (five of ₹5 L between six banks), the bank codes the narrations print decide: "RTGS Cr-ESMF…"
