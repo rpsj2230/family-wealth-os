@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bankFitsSender,
   openBankStatement,
+  namesPerson,
   pickStatementAccount,
   senderBankWord,
   type StatementAccount,
@@ -90,8 +91,15 @@ describe('the account an e-mailed statement belongs to', () => {
       account: { id: 'a1' },
     });
   });
+  it('a statement with no account number is placed when the bank and the holder leave one account', () => {
+    expect(pickStatementAccount(stmt(null), 'r', 'a@hdfcbank.net', accounts)).toMatchObject({
+      ok: true,
+      account: { id: 'h1' },
+    });
+  });
   it('saves nothing when the account is not certain', () => {
-    expect(pickStatementAccount(stmt(null), 'r', 'a@hdfcbank.net', accounts).ok).toBe(false);
+    // two people's accounts at the sender's bank, and nothing to say whose
+    expect(pickStatementAccount(stmt(null), null, 'a@yesbank.in', accounts).ok).toBe(false);
     expect(pickStatementAccount(stmt('0000'), 'r', 'a@hdfcbank.net', accounts).ok).toBe(false);
     expect(pickStatementAccount(stmt('9999'), 'r', 'a@rblbank.com', accounts).ok).toBe(false);
   });
@@ -135,5 +143,74 @@ describe('a locked statement PDF, end to end', () => {
   it('the plain copy needs no password', async () => {
     const r = await openBankStatement(fixture('sample-bank-statement'), []);
     expect(r).toMatchObject({ ok: true, ownerId: null });
+  });
+});
+
+describe('pickStatementAccount: the holder’s name, the mailbox and the bank tell accounts apart', () => {
+  const accts = [
+    {
+      id: 'r1',
+      ownerId: 'r',
+      last4: '1454',
+      bank: 'Jana Small Finance Bank',
+      currency: 'INR',
+      owner: 'Rupash',
+    },
+    {
+      id: 'g1',
+      ownerId: 'g',
+      last4: '1454',
+      bank: 'Equitas Small Finance Bank',
+      currency: 'INR',
+      owner: 'Ragini',
+    },
+    {
+      id: 'g2',
+      ownerId: 'g',
+      last4: '1454',
+      bank: 'Jana Small Finance Bank',
+      currency: 'INR',
+      owner: 'Ragini',
+    },
+    {
+      id: 'g3',
+      ownerId: 'g',
+      last4: '1113',
+      bank: 'ESAF Small Finance Bank',
+      currency: 'INR',
+      owner: 'Ragini',
+    },
+  ];
+  it('the name printed in the heading picks the holder', () => {
+    const r = pickStatementAccount(
+      { last4: '1454', header: 'Statement of account\nMRS RAGINI SINGH\nNRO savings' },
+      null,
+      'estatement@janabank.com',
+      accts,
+    );
+    expect(r).toMatchObject({ ok: true, account: { id: 'g2' } });
+  });
+  it('else the mailbox it was sent to', () => {
+    const r = pickStatementAccount(
+      { last4: '1454' },
+      null,
+      'statements@janabank.com',
+      accts,
+      'Rupash Singh <x@y.z>',
+    );
+    expect(r).toMatchObject({ ok: true, account: { id: 'r1' } });
+  });
+  it('a statement with no account number: the one account of that person at the sender’s bank', () => {
+    const r = pickStatementAccount(
+      { last4: null, header: 'RAGINI SINGH' },
+      null,
+      'estatement@esafbank.com',
+      accts,
+    );
+    expect(r).toMatchObject({ ok: true, account: { id: 'g3' } });
+  });
+  it('names a person only by a whole word', () => {
+    expect(namesPerson('MRS RAGINI SINGH', 'Ragini')).toBe(true);
+    expect(namesPerson('RAGINIX', 'Ragini')).toBe(false);
   });
 });

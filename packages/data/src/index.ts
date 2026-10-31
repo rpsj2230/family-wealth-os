@@ -603,9 +603,22 @@ export async function loadPortfolioData(
     },
   };
   // the bank's balances count only for accounts whose statements agree with what was typed for them (statement-truth.ts)
+  const bankOfAsset = new Map(assetRows.map((a) => [a.id, a.institution_id ?? null]));
   const bank = trustBank(
     await bankP,
     obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),
+    // the other rupee accounts at the same bank: the only ones a statement could have been filed for instead
+    (id) =>
+      assetRows
+        .filter(
+          (a) =>
+            a.id !== id &&
+            a.type === 'bank_account' &&
+            a.currency === 'INR' &&
+            !!bankOfAsset.get(id) &&
+            a.institution_id === bankOfAsset.get(id),
+        )
+        .map((a) => a.id),
   );
   return {
     today,

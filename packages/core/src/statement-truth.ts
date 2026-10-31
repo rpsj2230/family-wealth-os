@@ -296,26 +296,43 @@ export function lastFinishedMonthEnd(today: string): string {
 }
 
 /**
- * The bank's balances replace typed ones only for an account whose statements agree with the balances typed for it in most months
- * both exist (at least `share` of them within 1%): then a difference is a slip in the typing, and the bank is right. Where they
- * disagree in most months, the statements may be another account's (two accounts with the same last four digits), so the typed
- * balances stay and the account is listed. An account with no typed balance inside its statements is trusted.
+ * Whether an account's statements are its own. They were filed to it by the bank, its last four digits and whose they are, so they
+ * are trusted, and where a typed balance differs the bank's is right (a typed one may be stale). Only when the bank's balances
+ * clearly belong to another account at the same bank are they set aside: they agree with fewer than half of this account's typed
+ * balances, and with at least `share` of another's (three or more to judge by). Balances of nil are left out of the judging, as
+ * they agree with any empty account.
  */
 export function trustBank(
   truth: BankTruth,
   records: readonly { assetId: string; date: string; amount: number }[],
-  share = 0.6,
+  /** the other accounts at the same bank, by account */
+  peersOf: (assetId: string) => string[] = () => [],
+  share = 0.8,
 ): BankTruth {
   const untrusted: string[] = [];
-  for (const id of Object.keys(truth.spans)) {
-    const inSpan = records.filter((r) => r.assetId === id && inside(r.date, truth.spans[id]!));
-    const judged = inSpan
+  const agree = (id: string, owner: string) => {
+    const spans = truth.spans[owner]!;
+    const judged = records
+      .filter((r) => r.assetId === id && inside(r.date, spans) && Math.abs(r.amount) >= 1)
       .map((r) => {
-        const b = (truth.dayEnds[id] ?? []).filter((p) => p.date <= r.date).pop();
-        return b ? Math.abs(b.amount - r.amount) <= Math.max(1, 0.01 * Math.abs(b.amount)) : null;
+        const b = (truth.dayEnds[owner] ?? []).filter((p) => p.date <= r.date).pop();
+        if (!b || Math.abs(b.amount) < 1) return null;
+        return Math.abs(b.amount - r.amount) <= Math.max(1, 0.01 * Math.abs(b.amount));
       })
       .filter((x): x is boolean => x !== null);
-    if (judged.length && judged.filter(Boolean).length / judged.length < share) untrusted.push(id);
+    return {
+      n: judged.length,
+      share: judged.length ? judged.filter(Boolean).length / judged.length : 0,
+    };
+  };
+  for (const id of Object.keys(truth.spans)) {
+    const own = agree(id, id);
+    if (own.n === 0 || own.share >= 0.5) continue;
+    const better = peersOf(id).some((p) => {
+      const o = agree(p, id);
+      return o.n >= 3 && o.share >= share;
+    });
+    if (better) untrusted.push(id);
   }
   if (!untrusted.length) return { ...truth, untrusted };
   const points = { ...truth.points };

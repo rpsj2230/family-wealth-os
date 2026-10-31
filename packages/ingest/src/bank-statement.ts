@@ -51,6 +51,11 @@ export interface BankStatement {
   warnings: string[];
   /** the day the account was opened, when the statement prints it ("A/C Opening Date") */
   openedOn?: string | null;
+  /**
+   * the statement's heading block as text (the holder's name and address, the account's details): used only to tell which account
+   * it is, never saved
+   */
+  header?: string;
 }
 
 const MONTHS: Record<string, number> = {
@@ -396,6 +401,11 @@ export function readStatementGrid(grid: Cell[][]): BankStatement {
   return {
     ...finish(lines, c.amount !== null ? 'amount-drcr' : 'debit-credit', last4, warnings),
     openedOn,
+    header: grid
+      .slice(0, at)
+      .map((r) => r.map(text).join(' '))
+      .join('\n')
+      .slice(0, 4000),
   };
 }
 
@@ -503,7 +513,10 @@ export function readStatementText(textLines: string[]): BankStatement {
     warnings.push(
       `${unsure} line${unsure === 1 ? '' : 's'} where the amount printed does not match how far the balance moved: a line may be missing.`,
     );
-  return finish(lines, 'balance-moves', last4, warnings);
+  return {
+    ...finish(lines, 'balance-moves', last4, warnings),
+    header: textLines.slice(0, 40).join('\n').slice(0, 4000),
+  };
 }
 
 /** One line of CSV into cells, honouring "quoted, cells" and doubled quotes. */

@@ -36,6 +36,8 @@ import { looksLikeTaxFile } from './taxfiles';
 export interface InboxMessage {
   messageId: string;
   from: string;
+  /** the recipients (To, Delivered-To, and the To line of a forwarded mail): whose mailbox it came to */
+  to?: string;
   subject: string;
   text: string;
   receivedOn: string; // YYYY-MM-DD

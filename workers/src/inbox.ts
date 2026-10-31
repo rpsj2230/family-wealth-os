@@ -129,6 +129,7 @@ async function main() {
         messageId: m.messageId,
         receivedOn: m.receivedOn,
         from: m.from,
+        ...(m.to ? { to: m.to } : {}),
         attachments: m.attachments.filter(
           (a) => /\.pdf$/i.test(a.filename) || /\.(csv|xlsx?)$/i.test(a.filename),
         ),
@@ -305,6 +306,14 @@ async function main() {
         messages.push({
           messageId: p.messageId ?? `uid-${m.uid}@${label}`,
           from: p.from?.text ?? '',
+          // whose mailbox it came to: the To and Delivered-To headers, and a forward's own "To:" line
+          to: [
+            ...(Array.isArray(p.to) ? p.to.map((x) => x.text) : p.to ? [p.to.text] : []),
+            String(p.headers.get('delivered-to') ?? ''),
+            ...((p.text ?? '').match(/^\s*To:\s*.+$/gim) ?? []).slice(0, 3),
+          ]
+            .filter(Boolean)
+            .join(' ; '),
           subject: p.subject ?? '',
           text: p.text ?? (typeof p.html === 'string' ? stripHtml(p.html) : ''),
           receivedOn: (p.date ?? new Date()).toISOString().slice(0, 10),

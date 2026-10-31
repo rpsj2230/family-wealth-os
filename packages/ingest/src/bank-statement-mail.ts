@@ -61,6 +61,8 @@ export interface StatementAccount {
   /** the bank's name as on file ("HDFC Bank", "IDFC First Bank") */
   bank: string;
   currency: string;
+  /** the holder's name as on file ("Ragini"), to find on the statement or the mail it came to */
+  owner?: string;
 }
 
 /** The part of a sender's domain that names the bank: "alerts@hdfcbank.net" → "hdfcbank", "x@estatement.yesbank.in" → "yesbank". */
@@ -82,42 +84,65 @@ export function bankFitsSender(bank: string, word: string): boolean {
   return first.length >= 2 && word.startsWith(first);
 }
 
+/** Does a text name this person (the first name, or any word of four letters or more of the name, as a whole word)? */
+export function namesPerson(text: string, person: string | undefined): boolean {
+  if (!person || !text) return false;
+  const words = person
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w, i) => w.length >= 4 || (i === 0 && w.length >= 3));
+  const t = ` ${text.toLowerCase().replace(/[^a-z]+/g, ' ')} `;
+  return words.some((w) => t.includes(` ${w} `));
+}
+
 /**
- * The one account a statement belongs to: the last four digits it prints, narrowed by whose password opened it and by the bank the
- * sender is, in that order. Rupee accounts only (a bank in India sends these). Null with the reason when no single account fits;
- * nothing is then saved.
+ * The one account a statement belongs to, by what it shows and how it came: the last four digits it prints; then whose password
+ * opened it; the holder's name in its heading; whose mailbox it was sent to; and the bank the sender is. Each narrows the accounts
+ * only when it leaves one or more. A statement that prints no account number is placed when the rest leaves exactly one rupee
+ * account at the sender's bank. Rupee accounts only (a bank in India sends these). Null with the reason when no single account
+ * fits; nothing is then saved.
  */
 export function pickStatementAccount(
-  stmt: Pick<BankStatement, 'last4'>,
+  stmt: Pick<BankStatement, 'last4' | 'header'>,
   ownerId: string | null,
   fromAddress: string,
   accounts: readonly StatementAccount[],
+  /** the mail's recipients (To, Delivered-To, a forward's To line), to tell whose mailbox it came to */
+  to = '',
 ): { ok: true; account: StatementAccount } | { ok: false; reason: string } {
-  if (!stmt.last4)
-    return {
-      ok: false,
-      reason:
-        'The statement does not print its account number, so the account it belongs to is not known.',
-    };
-  let fit = accounts.filter((a) => a.currency === 'INR' && a.last4 === stmt.last4);
-  if (fit.length === 0)
-    return {
-      ok: false,
-      reason: `No account ending ${stmt.last4} is on record: add its last four digits to the account (Accounts), and the next scan reads it.`,
-    };
-  if (fit.length > 1 && ownerId) {
-    const mine = fit.filter((a) => a.ownerId === ownerId);
-    if (mine.length) fit = mine;
+  const word = senderBankWord(fromAddress);
+  const narrow = (xs: StatementAccount[], keep: (a: StatementAccount) => boolean) => {
+    const k = xs.filter(keep);
+    return k.length ? k : xs;
+  };
+  let fit = accounts.filter((a) => a.currency === 'INR');
+  if (stmt.last4) {
+    fit = fit.filter((a) => a.last4 === stmt.last4);
+    if (fit.length === 0)
+      return {
+        ok: false,
+        reason: `No account ending ${stmt.last4} is on record: add its last four digits to the account (Accounts), and the next scan reads it.`,
+      };
+  } else {
+    // no account number: only the accounts at the sender's bank are candidates
+    fit = word ? fit.filter((a) => bankFitsSender(a.bank, word)) : [];
+    if (fit.length === 0)
+      return {
+        ok: false,
+        reason:
+          'The statement does not print its account number, and no account at the sender’s bank is on record.',
+      };
   }
-  if (fit.length > 1) {
-    const word = senderBankWord(fromAddress);
-    const atBank = fit.filter((a) => bankFitsSender(a.bank, word));
-    if (atBank.length) fit = atBank;
-  }
+  if (fit.length > 1 && ownerId) fit = narrow(fit, (a) => a.ownerId === ownerId);
+  if (fit.length > 1 && stmt.header) fit = narrow(fit, (a) => namesPerson(stmt.header!, a.owner));
+  if (fit.length > 1 && to) fit = narrow(fit, (a) => namesPerson(to, a.owner));
+  if (fit.length > 1 && word) fit = narrow(fit, (a) => bankFitsSender(a.bank, word));
   return fit.length === 1
     ? { ok: true, account: fit[0]! }
     : {
         ok: false,
-        reason: `${fit.length} accounts end ${stmt.last4} and the statement does not say which one it is.`,
+        reason: stmt.last4
+          ? `${fit.length} accounts end ${stmt.last4} and the statement does not say which one it is.`
+          : `${fit.length} accounts at this bank could be it and the statement prints no account number.`,
       };
 }

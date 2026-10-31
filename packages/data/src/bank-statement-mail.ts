@@ -21,15 +21,18 @@ export interface BankMailResult {
 
 /** The household's rupee bank accounts, with the bank's name, for placing a statement. */
 async function statementAccounts(db: SupabaseClient, hh: string): Promise<StatementAccount[]> {
-  const [{ data: assets, error: e1 }, { data: insts, error: e2 }] = await Promise.all([
-    db
-      .from('assets')
-      .select('id, owner_id, institution_id, identifier_last4, currency, status')
-      .eq('household_id', hh)
-      .eq('type', 'bank_account'),
-    db.from('institutions').select('id, name').eq('household_id', hh),
-  ]);
+  const [{ data: assets, error: e1 }, { data: insts, error: e2 }, { data: people }] =
+    await Promise.all([
+      db
+        .from('assets')
+        .select('id, owner_id, institution_id, identifier_last4, currency, status')
+        .eq('household_id', hh)
+        .eq('type', 'bank_account'),
+      db.from('institutions').select('id, name').eq('household_id', hh),
+      db.from('owners').select('id, display_name').eq('household_id', hh),
+    ]);
   if (e1 || e2) throw new Error(`accounts: ${(e1 ?? e2)!.message}`);
+  const ownerName = new Map((people ?? []).map((o) => [o.id as string, String(o.display_name)]));
   const bank = new Map((insts ?? []).map((i) => [i.id as string, String(i.name)]));
   return (assets ?? [])
     .filter((a) => a.status !== 'merged')
@@ -39,6 +42,7 @@ async function statementAccounts(db: SupabaseClient, hh: string): Promise<Statem
       last4: (a.identifier_last4 as string | null) ?? null,
       bank: bank.get(a.institution_id as string) ?? '',
       currency: String(a.currency ?? 'INR'),
+      owner: ownerName.get(a.owner_id as string) ?? '',
     }));
 }
 
@@ -49,6 +53,8 @@ export async function importBankStatementMail(
     messageId: string;
     receivedOn: string;
     from?: string;
+    /** the mail's recipients, to tell whose mailbox it came to */
+    to?: string;
     attachments: { filename: string; content: Uint8Array }[];
   },
 ): Promise<BankMailResult> {
@@ -72,7 +78,13 @@ export async function importBankStatementMail(
       problems.push(`${label(a.filename)}: no transaction lines were found in it.`);
       continue;
     }
-    const pick = pickStatementAccount(opened.stmt, opened.ownerId, m.from ?? '', accounts);
+    const pick = pickStatementAccount(
+      opened.stmt,
+      opened.ownerId,
+      m.from ?? '',
+      accounts,
+      m.to ?? '',
+    );
     if (!pick.ok) {
       problems.push(`${label(a.filename)}: ${pick.reason}`);
       continue;

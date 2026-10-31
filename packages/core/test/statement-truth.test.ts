@@ -126,37 +126,44 @@ describe('a typed balance is kept unless the bank gives one that month', () => {
   });
 });
 
-describe('trustBank: the bank’s balances count only where they agree with the typed ones', () => {
+describe('trustBank: a statement is its account’s own unless another account clearly fits it better', () => {
   const truth = bankTruth(
     [
-      { assetId: 'ok', date: '2025-01-31', amount: 0, balance: 100_000 },
-      { assetId: 'ok', date: '2025-02-28', amount: 0, balance: 101_000 },
-      { assetId: 'odd', date: '2025-01-31', amount: 0, balance: 900_000 },
-      { assetId: 'odd', date: '2025-02-28', amount: 0, balance: 905_000 },
+      { assetId: 'a', date: '2025-01-31', amount: 0, balance: 100_000 },
+      { assetId: 'a', date: '2025-02-28', amount: 0, balance: 101_000 },
+      { assetId: 'a', date: '2025-03-31', amount: 0, balance: 102_000 },
+      { assetId: 'a', date: '2025-04-30', amount: 0, balance: 103_000 },
     ],
-    [
-      { assetId: 'ok', from: '2025-01-01', to: '2025-02-28', opening: null, closing: null },
-      { assetId: 'odd', from: '2025-01-01', to: '2025-02-28', opening: null, closing: null },
-    ],
+    [{ assetId: 'a', from: '2025-01-01', to: '2025-04-30', opening: null, closing: null }],
   );
-  const t = trustBank(truth, [
-    { assetId: 'ok', date: '2025-01-31', amount: 100_000 },
-    { assetId: 'ok', date: '2025-02-28', amount: 101_500 }, // one slip in two: still half agree… below 60%
-    { assetId: 'odd', date: '2025-01-31', amount: 50_000 },
-    { assetId: 'odd', date: '2025-02-28', amount: 52_000 },
-  ]);
-  it('an account whose statements disagree in most months keeps its typed balances and is listed', () => {
-    expect(t.untrusted).toContain('odd');
-    expect(t.spans.odd).toBeUndefined();
-    expect(t.points.odd).toBeUndefined();
+  it('typed balances that are stale do not make the bank wrong', () => {
+    const t = trustBank(
+      truth,
+      [
+        { assetId: 'a', date: '2025-01-31', amount: 100_000 },
+        { assetId: 'a', date: '2025-02-28', amount: 100_000 }, // stale
+        { assetId: 'a', date: '2025-03-31', amount: 100_000 }, // stale
+        { assetId: 'a', date: '2025-04-30', amount: 100_000 }, // stale
+      ],
+      () => ['b'],
+    );
+    expect(t.untrusted).toEqual([]);
+    expect(t.points.a).toHaveLength(4);
   });
-  it('an account that agrees in most months uses the bank’s balances', () => {
-    const t2 = trustBank(truth, [
-      { assetId: 'ok', date: '2025-01-31', amount: 100_000 },
-      { assetId: 'ok', date: '2025-02-28', amount: 101_000 },
-    ]);
-    expect(t2.untrusted).toEqual([]);
-    expect(t2.points.ok).toHaveLength(2);
+  it('set aside only when another account at the same bank fits it clearly', () => {
+    const t = trustBank(
+      truth,
+      [
+        { assetId: 'a', date: '2025-01-31', amount: 5_000 },
+        { assetId: 'a', date: '2025-02-28', amount: 5_000 },
+        { assetId: 'b', date: '2025-01-31', amount: 100_000 },
+        { assetId: 'b', date: '2025-02-28', amount: 101_000 },
+        { assetId: 'b', date: '2025-03-31', amount: 102_000 },
+      ],
+      () => ['b'],
+    );
+    expect(t.untrusted).toEqual(['a']);
+    expect(t.points.a).toBeUndefined();
   });
 });
 
