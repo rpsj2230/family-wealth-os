@@ -26,6 +26,7 @@ import { addDaysIso } from './harvest-lots';
 import { lineNameGuess } from './line-name';
 import { personNamed } from './statement-lending';
 import {
+  CATEGORIES,
   categorize,
   categoryLabel,
   type CategoryGuess,
@@ -705,8 +706,13 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
     const why = mine
       ? `Your tag: ${guess.label}`
       : `${guess.label}: “${(guess as CategoryGuess).matched}” in the narration`;
-    const cls =
-      l.amount < 0 ? (OUT_CLASS[guess.id] ?? 'spent') : (IN_CLASS[guess.id] ?? 'outside_in');
+    // a tag for money that stays in the family (between your accounts, a deposit, money lent, funds) keeps it in the family
+    const cls: LineClass =
+      CATEGORIES[guess.id]?.side === 'both'
+        ? 'own_transfer'
+        : l.amount < 0
+          ? (OUT_CLASS[guess.id] ?? 'spent')
+          : (IN_CLASS[guess.id] ?? 'outside_in');
     set(l, cls, why);
     out.get(l.id)!.category = guess.id;
   }

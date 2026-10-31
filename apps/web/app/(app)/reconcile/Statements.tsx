@@ -358,7 +358,9 @@ export function Statements({
               <tbody>
                 {tagRows.map(([tag, row]) => (
                   <tr key={tag}>
-                    <th scope="row">{categoryLabel(tag)}</th>
+                    <th scope="row">
+                      <Link href={`/reconcile?tab=lines&tag=${tag}`}>{categoryLabel(tag)}</Link>
+                    </th>
                     {tagFys.map((fy) => (
                       <td key={fy} className="num">
                         {row[fy]?.out ? formatInrCompact(row[fy]!.out) : '–'}

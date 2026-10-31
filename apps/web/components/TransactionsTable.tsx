@@ -12,6 +12,12 @@ export interface TxnRow {
   balance: number | null;
   narration: string;
   kind: string;
+  /** what it was spent on or came in as (the tag), and whether it is the best explanation rather than a certain one */
+  tag?: string | null;
+  bestGuess?: boolean;
+  /** the account, when lines of several accounts are listed together */
+  account?: string;
+  assetId?: string;
   toAnswer: boolean;
   /** the bank's order of the lines (oldest 0): it settles lines of the same day */
   seq?: number;
@@ -120,11 +126,21 @@ export function TransactionsTable({
   rows,
   hrefTemplate,
   fileName = 'transactions',
+  initialTag = '',
 }: {
   rows: TxnRow[];
+  /** a line's page, with {id} for the line and {asset} for its account */
   hrefTemplate: string;
   fileName?: string;
+  /** open with only the lines of this tag (its label) */
+  initialTag?: string;
 }) {
+  const [tag, setTag] = useState(initialTag);
+  const tags = useMemo(
+    () => [...new Set(rows.map((r) => r.tag).filter((t): t is string => !!t))].sort(),
+    [rows],
+  );
+  const withAccount = rows.some((r) => r.account);
   const [q, setQ] = useState('');
   const [period, setPeriod] = useState<Period>('all');
   const [from, setFrom] = useState('');
@@ -158,13 +174,14 @@ export function TransactionsTable({
       if (dir === 'in' && r.amount < 0) return false;
       if (dir === 'out' && r.amount >= 0) return false;
       if (kind && r.kind !== kind) return false;
+      if (tag && r.tag !== tag) return false;
       if (onlyAsk && !r.toAnswer) return false;
       const a = Math.abs(r.amount);
       if (lo !== null && a < lo) return false;
       if (hi !== null && a > hi) return false;
       if (words.length) {
         const hay =
-          `${r.narration} ${r.kind} ${niceDate(r.date)} ${r.date} ${a} ${a.toLocaleString('en-IN')}`.toLowerCase();
+          `${r.narration} ${r.kind} ${r.tag ?? ''} ${r.account ?? ''} ${niceDate(r.date)} ${r.date} ${a} ${a.toLocaleString('en-IN')}`.toLowerCase();
         if (!words.every((w) => hay.includes(w))) return false;
       }
       return true;
@@ -184,7 +201,7 @@ export function TransactionsTable({
       return c * sign || y.date.localeCompare(x.date) || (y.seq ?? 0) - (x.seq ?? 0);
     });
     return out;
-  }, [rows, q, range, dir, kind, onlyAsk, min, max, sort]);
+  }, [rows, q, range, dir, kind, tag, onlyAsk, min, max, sort]);
 
   const pages = Math.max(1, Math.ceil(shown.length / size));
   const at = Math.min(page, pages - 1);
@@ -192,7 +209,7 @@ export function TransactionsTable({
   const ins = shown.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0);
   const outs = shown.filter((r) => r.amount < 0).reduce((s, r) => s - r.amount, 0);
   const filtered =
-    q || period !== 'all' || dir !== 'all' || kind || min || max || onlyAsk ? true : false;
+    q || period !== 'all' || dir !== 'all' || kind || tag || min || max || onlyAsk ? true : false;
   const reset = () => {
     setQ('');
     setPeriod('all');
@@ -200,6 +217,7 @@ export function TransactionsTable({
     setTo('');
     setDir('all');
     setKind('');
+    setTag('');
     setMin('');
     setMax('');
     setOnlyAsk(false);
@@ -218,6 +236,8 @@ export function TransactionsTable({
       'Date',
       'What the bank wrote',
       'What it is',
+      'Tag',
+      'Account',
       'Money in',
       'Money out',
       'Balance',
@@ -228,6 +248,8 @@ export function TransactionsTable({
         r.date,
         r.narration,
         r.kind,
+        r.tag ?? '',
+        r.account ?? '',
         r.amount > 0 ? r.amount : null,
         r.amount < 0 ? -r.amount : null,
         r.balance,
@@ -308,6 +330,19 @@ export function TransactionsTable({
             ))}
           </select>
         </label>
+        {tags.length > 0 && (
+          <label>
+            <span>Tag</span>
+            <select value={tag} onChange={(e) => reset0(setTag)(e.target.value)}>
+              <option value="">Every tag</option>
+              {tags.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="tx-amt">
           <span>Min amount</span>
           <input
@@ -404,7 +439,7 @@ export function TransactionsTable({
           </thead>
           <tbody>
             {slice.map((r) => {
-              const href = hrefTemplate.replace('{id}', r.id);
+              const href = hrefTemplate.replace('{id}', r.id).replace('{asset}', r.assetId ?? '');
               return (
                 <tr key={r.id} className={r.toAnswer ? 'tx-ask' : undefined}>
                   <td className="tx-date" data-label="Date">
@@ -414,9 +449,19 @@ export function TransactionsTable({
                     <Link href={href} title={r.narration}>
                       {r.narration || '—'}
                     </Link>
+                    {withAccount && r.account && <div className="muted small">{r.account}</div>}
                   </td>
                   <td className="tx-kind" data-label="What it is">
                     {r.kind}
+                    {r.tag && (
+                      <span
+                        className="tx-tag"
+                        title={r.bestGuess ? 'Best explanation, not certain' : undefined}
+                      >
+                        {r.tag}
+                        {r.bestGuess ? ' (best guess)' : ''}
+                      </span>
+                    )}
                     {r.toAnswer && <span className="tx-flag">To answer</span>}
                   </td>
                   <td

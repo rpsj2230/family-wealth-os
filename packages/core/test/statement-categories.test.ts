@@ -176,6 +176,18 @@ describe('nothing is asked: every line is placed and tagged', () => {
     );
     expect(withRemit[0]).toMatchObject({ remittanceId: 'w1', category: 'remittance' });
   });
+  it('your tag for money that stays with you keeps it with you, never spending', () => {
+    const t = classifyLines(
+      [
+        {
+          ...l('a', '2025-09-01', -250_000, 'IMPS-SAMPLE FRIEND-SBIN0000001'),
+          category: 'transfer',
+        },
+      ],
+      base,
+    );
+    expect(t[0]).toMatchObject({ cls: 'own_transfer', category: 'transfer' });
+  });
   it('every line has a tag', () => {
     expect(r.filter((c) => !c.category)).toEqual([]);
   });

@@ -18,6 +18,7 @@ import { positionFor } from '@fwos/data';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { confirmProceeds, explainBalance, recordFunding } from './actions';
+import { AllLines } from './AllLines';
 import { Feed } from './Feed';
 import { History } from './History';
 import { Interest, type InterestAnswer } from './Interest';
@@ -34,13 +35,14 @@ export const dynamic = 'force-dynamic';
 export default async function Reconcile({
   searchParams,
 }: {
-  searchParams: Promise<{ msg?: string; tab?: string }>;
+  searchParams: Promise<{ msg?: string; tab?: string; tag?: string }>;
 }) {
-  const { msg, tab: tabParam } = await searchParams;
+  const { msg, tab: tabParam, tag: tagParam } = await searchParams;
   const tab =
     tabParam === 'history' ||
     tabParam === 'interest' ||
     tabParam === 'statements' ||
+    tabParam === 'lines' ||
     tabParam === 'feed'
       ? tabParam
       : 'recent';
@@ -102,7 +104,7 @@ export default async function Reconcile({
     .map((a) => ({ id: a.id, label: labels[a.id]! }))
     .sort((x, y) => x.label.localeCompare(y.label));
   const interest = tab === 'interest' ? await interestTab() : null;
-  const statements = tab === 'statements' ? await statementsTab() : null;
+  const statements = tab === 'statements' || tab === 'lines' ? await statementsTab() : null;
   const { householdId } = await loadContext();
   const feed =
     tab === 'feed' && householdId
@@ -238,10 +240,34 @@ export default async function Reconcile({
           { key: 'history', label: 'Earlier months' },
           { key: 'interest', label: 'Interest (AIS)' },
           { key: 'statements', label: 'Bank statements' },
+          { key: 'lines', label: 'All transactions' },
           { key: 'feed', label: 'Bank feed' },
         ]}
       />
-      {feed ? (
+      {tab === 'lines' && statements ? (
+        <AllLines
+          rows={(() => {
+            const cls = new Map(statements.picture.classified.map((c) => [c.id, c]));
+            return statements.stored.lines.map((l) => {
+              const c = cls.get(l.id);
+              return {
+                id: l.id,
+                date: l.txn_on,
+                amount: Number(l.amount),
+                balance: l.balance === null ? null : Number(l.balance),
+                narration: l.narration,
+                kind: c ? LINE_CLASS_LABEL[c.cls] : 'Not sorted yet',
+                tag: c?.category ? categoryLabel(c.category) : null,
+                bestGuess: !!c?.reason.startsWith('Best guess'),
+                account: labels[l.asset_id] ?? 'An account',
+                assetId: l.asset_id,
+                toAnswer: !c || c.cls === 'ask_in' || c.cls === 'ask_out',
+              };
+            });
+          })()}
+          tag={tagParam ? categoryLabel(tagParam) : ''}
+        />
+      ) : feed ? (
         <Feed rows={feed.rows} mail={feed.mail} />
       ) : statements ? (
         <Statements

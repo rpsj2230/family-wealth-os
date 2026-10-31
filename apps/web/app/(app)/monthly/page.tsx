@@ -17,7 +17,6 @@ import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadAutomation } from '@/lib/automation';
 import { loadContext } from '@/lib/data';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
-import { loadAccountChecks } from '@/lib/account-checks';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
 import { loadJointHolders } from '@/lib/quick-edit-data';
@@ -131,10 +130,7 @@ export default async function MonthlyPage({
       .freshnessDays,
     links: { inbox: '/inbox', accounts: '/accounts' },
   });
-  const [{ cards, inboxWaiting }, checks] = await Promise.all([
-    loadAutomation(supabase, iso),
-    loadAccountChecks(),
-  ]);
+  const { cards, inboxWaiting } = await loadAutomation(supabase, iso);
   const quick = quickModel({
     blocks,
     assets: assetRows,
@@ -194,8 +190,7 @@ export default async function MonthlyPage({
         today={iso}
         fxHint={fxHint}
         institutions
-        checks={checks.checks}
-        ownNames={checks.ownNames}
+        lazyChecks
         returnTo="/monthly"
       />
       <HiddenDepositsNote

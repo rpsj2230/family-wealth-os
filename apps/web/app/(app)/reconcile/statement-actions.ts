@@ -383,6 +383,58 @@ async function ruleRow(
   };
 }
 
+/**
+ * A line's tag, changed by hand (only when the one given by itself is wrong): saved on the line, and with "remember" as a rule for
+ * every line naming the same person or words. A tag for money that stays with you (between your accounts, a deposit, money lent,
+ * funds) is not remembered as a rule: which holding it was is matched line by line.
+ */
+export async function tagLine(f: FormData): Promise<void> {
+  const id = String(f.get('line') ?? '');
+  const to = returnTo(f);
+  const category = tagOf(f);
+  if (!UUID.test(id)) back('That line was not found.', to);
+  const { supabase, householdId } = await loadContext();
+  if (!householdId) back('Create your household first.', to);
+  const { error } = await supabase
+    .from('statement_lines')
+    .update({ category })
+    .eq('id', id)
+    .eq('household_id', householdId!);
+  if (error) back(`That could not be saved: ${error.message}`, to);
+  const name = String(f.get('name') ?? '')
+    .trim()
+    .slice(0, 160);
+  const side = category ? CATEGORIES[category as keyof typeof CATEGORIES].side : null;
+  if (f.get('remember') === 'on' && category && name.length >= 2 && side !== 'both') {
+    const { data: line } = await supabase
+      .from('statement_lines')
+      .select('amount')
+      .eq('id', id)
+      .eq('household_id', householdId!)
+      .maybeSingle();
+    const into = Number((line as { amount: number } | null)?.amount ?? 0) > 0;
+    const action = !into
+      ? 'out'
+      : category === 'interest' || category === 'dividend'
+        ? 'income'
+        : category === 'rent'
+          ? 'rent'
+          : 'outside';
+    const { error: e2 } = await supabase.from('statement_rules').insert({
+      household_id: householdId,
+      name,
+      match: 'name',
+      action,
+      direction: into ? 'in' : 'out',
+      interest: false,
+      category,
+    });
+    if (e2) back(`The tag was saved, but not the rule: ${e2.message}`, to);
+    await rebuildOrSay(`Tag saved, and kept for every line naming “${name}”.`, to);
+  }
+  await rebuildOrSay(category ? 'Tag saved.' : 'The tag is worked out by itself again.', to);
+}
+
 /** The tag chosen on a form: one of the categories, or null (work it out from the narration). */
 function tagOf(f: FormData): string | null {
   const v = String(f.get('category') ?? '');

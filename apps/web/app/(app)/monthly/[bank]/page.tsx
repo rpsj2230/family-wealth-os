@@ -8,7 +8,6 @@ import { QuickEditHost } from '@/components/QuickEditHost';
 import { UpdateGrid } from '@/components/UpdateGrid';
 import { loadContext } from '@/lib/data';
 import { maturedHref, showsMatured } from '@/lib/matured-list';
-import { loadAccountChecks } from '@/lib/account-checks';
 import { loadPortfolio } from '@/lib/portfolio-data';
 import { quickModel } from '@/lib/quick-edit';
 import { loadNominees } from '@fwos/data';
@@ -26,7 +25,6 @@ export default async function BankUpdatePage({
   searchParams: Promise<{ matured?: string }>;
 }) {
   const { bank } = await params;
-  const checks = await loadAccountChecks();
   const showAll = showsMatured((await searchParams).matured);
   const { supabase, householdId } = await loadContext();
   if (!householdId) return <p>Create your household on the dashboard first.</p>;
@@ -101,8 +99,7 @@ export default async function BankUpdatePage({
         fxHint={fxHint}
         institutions
         summary={false}
-        checks={checks.checks}
-        ownNames={checks.ownNames}
+        lazyChecks
         returnTo={`/monthly/${bank}`}
       />
       <HiddenDepositsNote

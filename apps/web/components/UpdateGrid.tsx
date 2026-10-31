@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import {
   Fragment,
+  useEffect,
   useMemo,
   useState,
   useTransition,
@@ -20,6 +21,7 @@ import {
   type PersonStyle,
 } from '@fwos/core';
 import { saveMonthly } from '@/app/(app)/monthly/actions';
+import { accountChecksNow } from '@/app/(app)/monthly/check-actions';
 import { AccordionControls } from './AccordionControls';
 import { BankBadge } from './BankBadge';
 import { BankStatusBoard } from './BankStatusBoard';
@@ -81,9 +83,10 @@ export function UpdateGrid({
   fxHint,
   institutions,
   summary = true,
-  checks,
-  ownNames = [],
+  checks: checksGiven,
+  ownNames: ownNamesGiven,
   returnTo = '/monthly',
+  lazyChecks = false,
 }: {
   blocks: BankBlock[];
   styles: Record<string, PersonStyle>;
@@ -98,8 +101,28 @@ export function UpdateGrid({
   ownNames?: string[];
   /** this page, to come back to after answering a line */
   returnTo?: string;
+  /** fetch the checks once the page is on screen, so the grid never waits for them */
+  lazyChecks?: boolean;
 }) {
   const [checkOpen, setCheckOpen] = useState<Record<string, boolean>>({});
+  const [fetched, setFetched] = useState<{
+    checks: Record<string, AccountCheck>;
+    ownNames: string[];
+  } | null>(null);
+  useEffect(() => {
+    if (!lazyChecks) return;
+    let live = true;
+    accountChecksNow()
+      .then((r) => {
+        if (live) setFetched(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [lazyChecks]);
+  const checks = checksGiven ?? fetched?.checks;
+  const ownNames = ownNamesGiven ?? fetched?.ownNames ?? [];
   const [edits, setEdits] = useState<Record<string, GridEdit>>({});
   const [asOf, setAsOf] = useState(today);
   const [onlyWaiting, setOnlyWaiting] = useState(false);

@@ -242,3 +242,14 @@
     width: 100%;
   }
 }
+.tx-tag {
+  display: block;
+  width: fit-content;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--soft);
+  color: inherit;
+}

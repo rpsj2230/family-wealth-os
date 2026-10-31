@@ -1,6 +1,7 @@
 import {
   classifyLines,
   LINE_CLASS_LABEL,
+  categoryLabel,
   moneyChain,
   moneyTrail,
   type MoneyChain,
@@ -190,6 +191,11 @@ export interface AccountLine {
   narration: string;
   /** what the rules make of it, in a few words */
   kind: string;
+  /** what it was spent on or came in as (its tag's label), and whether that is the best explanation rather than a certain one */
+  tag: string | null;
+  /** the tag's id (statement-categories.ts) */
+  category: string | null;
+  bestGuess: boolean;
   /** still waiting for an answer */
   toAnswer: boolean;
   /** the bank's order of the account's lines, oldest 0 (lines of one day follow the running balance) */
@@ -213,6 +219,9 @@ export function accountLines(t: MoneyTrailData, assetId: string): AccountLine[] 
         balance: l.balance === null ? null : Number(l.balance),
         narration: l.narration,
         kind: c ? LINE_CLASS_LABEL[c.cls] : 'Not sorted yet',
+        tag: c?.category ? categoryLabel(c.category) : null,
+        category: c?.category ?? null,
+        bestGuess: !!c?.reason.startsWith('Best guess'),
         toAnswer: !c || c.cls === 'ask_in' || c.cls === 'ask_out',
         seq: 0,
       };
