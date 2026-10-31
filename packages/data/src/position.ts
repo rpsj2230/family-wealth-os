@@ -173,6 +173,7 @@ export async function loadPositionInput(
       config: cfg,
       today,
       fx,
+      ...(loaded.bank ? { bank: loaded.bank } : {}),
       // today's figure is the engine's own (the portfolio is built by it from the same input): no override
       ...(reuse?.extras.moves ? { moves: reuse.extras.moves } : {}),
       ...(reuse?.extras.rates ? { rates: reuse.extras.rates } : {}),

@@ -22,6 +22,8 @@ import {
   type Portfolio,
   type PortfolioDefaults,
   type ValuationExtras,
+  bankTruth,
+  type BankTruth,
 } from '@fwos/core';
 import { HIST_FUND_REF } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -58,6 +60,8 @@ export interface LoadedPortfolio {
   fundDay: Record<string, { pct: number; from: string; to: string }>;
   /** Settings: a deposit matured longer ago than this many days is hidden from the lists */
   hideMaturedAfterDays: number;
+  /** the bank's own balances from its statement lines, and the periods its statements cover (statement-truth.ts) */
+  bank?: BankTruth;
   /**
    * What the central engine was given beyond the rows (fund ledgers and statement values, savings movements and rates by date, where
    * maturity proceeds went), so the history (loadPositionInput) is built from exactly the same input as today's figures.
@@ -98,6 +102,45 @@ export async function loadPortfolioData(
   const settingsP = loadSettings(supabase, opts.householdId);
   // the account a SIP is paid from is a newer column: a deploy can reach the app before the database has it
   const sipFromCol = await columnExists(supabase, 'mf_positions', 'sip_from_asset_id');
+  // the bank's own balances: read beside the first batch (the account, day, amount and balance of each line; each statement's days)
+  const bankP = Promise.all([
+    pageAll<{
+      asset_id: string;
+      txn_on: string;
+      amount: number | string;
+      balance: number | string | null;
+    }>((from, to) =>
+      sel('statement_lines', 'asset_id, txn_on, amount, balance')
+        .order('txn_on')
+        .order('id')
+        .range(from, to),
+    ),
+    sel('bank_statements', 'asset_id, from_on, to_on, opening, closing'),
+  ]).then(([ls, st]) =>
+    bankTruth(
+      ls.map((l) => ({
+        assetId: l.asset_id,
+        date: l.txn_on,
+        amount: Number(l.amount),
+        balance: l.balance === null ? null : Number(l.balance),
+      })),
+      (
+        (st.data ?? []) as unknown as {
+          asset_id: string;
+          from_on: string;
+          to_on: string;
+          opening: number | string | null;
+          closing: number | string | null;
+        }[]
+      ).map((x) => ({
+        assetId: x.asset_id,
+        from: x.from_on,
+        to: x.to_on,
+        opening: x.opening === null ? null : Number(x.opening),
+        closing: x.closing === null ? null : Number(x.closing),
+      })),
+    ),
+  );
   const [owners, assets, obsRowsRead, fds, positions, institutions, offerRows, sipChangeRows] =
     await Promise.all([
       sel('owners', 'id, display_name'),
@@ -539,8 +582,10 @@ export async function loadPortfolioData(
       slabMethod: config.estimates.savingsSlabIncremental ? 'incremental' : 'whole',
     },
   };
+  const bank = await bankP;
   return {
     today,
+    bank,
     assetRows,
     obsRows,
     sheetObs,

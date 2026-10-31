@@ -3,8 +3,10 @@ import {
   categoryLabel,
   interestCheck,
   LINE_CLASS_LABEL,
+  disagreements,
   positionInputFrom,
   reconcileQueue,
+  statementCoverage,
 } from '@fwos/core';
 import {
   capitalStart,
@@ -19,7 +21,7 @@ import { Tabs } from '@/components/Tabs';
 import { loadHistoryReview } from '@/lib/history-data';
 import { holdingLabels } from '@/lib/holding-label';
 import { loadReportedInterest } from '@/lib/interest-data';
-import { loadStatements, statementPicture } from '@fwos/data';
+import { loadStatements, statementPicture, type StoredBankStatement } from '@fwos/data';
 import { positionFor } from '@fwos/data';
 import { loadAccess, loadContext } from '@/lib/data';
 import { loadPortfolio } from '@/lib/portfolio-data';
@@ -30,6 +32,7 @@ import { History } from './History';
 import { Interest, type InterestAnswer } from './Interest';
 import { Statements, type CoveredMove } from './Statements';
 import { TrailCheck } from './TrailCheck';
+import { CoverageMap } from './CoverageMap';
 import { Recent, type StatementLineView } from './Recent';
 import './reconcile.css';
 
@@ -70,6 +73,7 @@ export async function MovementsView({
     ...(loaded.engine.extras.moves ? { moves: loaded.engine.extras.moves } : {}),
     ...(loaded.engine.extras.rates ? { rates: loaded.engine.extras.rates } : {}),
     ...(loaded.engine.extras.placements ? { placements: loaded.engine.extras.placements } : {}),
+    ...(loaded.bank ? { bank: loaded.bank } : {}),
   });
   const recentDays = Math.max(config.deposits.hideMaturedAfterDays, 120);
   // the bank's lines from a year before the window: the balance before the first one in it may be months older
@@ -313,6 +317,12 @@ export async function MovementsView({
               .sort((x, y) => x.label.localeCompare(y.label))}
             ownNames={[...loaded.ownerName.values()]}
           />
+          {loaded.bank && (
+            <CoverageMap
+              labels={labels}
+              {...coverageOf(loaded, statements.stored.statements, today)}
+            />
+          )}
           <TrailCheck
             lines={statements.picture.lines}
             classified={statements.picture.classified}
@@ -356,4 +366,51 @@ export async function MovementsView({
       )}
     </>
   );
+}
+
+/**
+ * The coverage map's figures: every rupee bank account from its first record or first statement (whichever is earlier) to today, or
+ * to its last record when it is no longer held, against its statements (with their opening and closing balances, for the chain);
+ * and the typed balances inside covered periods that are not the bank's.
+ */
+function coverageOf(
+  loaded: Awaited<ReturnType<typeof loadPortfolio>>,
+  stmts: StoredBankStatement[],
+  today: string,
+) {
+  const bank = loaded.bank!;
+  const recs = new Map<string, string[]>();
+  for (const o of loaded.obsRows) recs.set(o.asset_id, [...(recs.get(o.asset_id) ?? []), o.as_of]);
+  const accounts = loaded.assetRows
+    .filter(
+      (a) =>
+        a.type === 'bank_account' &&
+        a.currency === 'INR' &&
+        a.status !== 'gifted' &&
+        a.status !== 'merged',
+    )
+    .flatMap((a) => {
+      const ds = [...(recs.get(a.id) ?? []), ...(bank.spans[a.id] ?? []).map((s) => s.from)].sort();
+      const held = a.status === 'active' || a.status === 'stopped';
+      return ds.length
+        ? [{ assetId: a.id, from: ds[0]!, to: held ? today : ds[ds.length - 1]! }]
+        : [];
+    });
+  return {
+    rows: statementCoverage(
+      accounts,
+      stmts.map((s) => ({
+        assetId: s.asset_id,
+        from: s.from_on,
+        to: s.to_on,
+        opening: s.opening === null ? null : Number(s.opening),
+        closing: s.closing === null ? null : Number(s.closing),
+      })),
+    ),
+    disagreements: disagreements(
+      loaded.obsRows.map((o) => ({ assetId: o.asset_id, date: o.as_of, amount: Number(o.amount) })),
+      bank,
+      1,
+    ),
+  };
 }

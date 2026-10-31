@@ -36,6 +36,8 @@ export function positionFor(
     ...(moves ? { moves } : {}),
     ...(loaded.engine.extras.rates ? { rates: loaded.engine.extras.rates } : {}),
     ...(loaded.engine.extras.placements ? { placements: loaded.engine.extras.placements } : {}),
+    // the bank's own balances, except for the estimate the statements' interest is compared with (it is the rate's, not the bank's)
+    ...(!forEstimate && loaded.bank ? { bank: loaded.bank } : {}),
   });
 }
 

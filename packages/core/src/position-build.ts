@@ -27,6 +27,7 @@ import {
 } from './deposit-contract';
 import { contractOf } from './position';
 import type { CreditEvery, RateStep, SavingsTxn } from './savings-accrual';
+import { withBankBalances, type BankTruth } from './statement-truth';
 
 export type PositionObservation = ObservationRow & { source_ref?: string | null };
 
@@ -152,14 +153,38 @@ export function positionInputFrom(args: {
   placements?: Record<string, { on: string; amount: number }[]>;
   moves?: Record<string, SavingsTxn[]>;
   rates?: Record<string, RateStep[]>;
+  /**
+   * the bank's own balances from its statement lines (statement-truth.ts): inside the periods an account's statements cover, they
+   * are its records, in place of balances typed or copied from the sheet
+   */
+  bank?: BankTruth;
 }): PositionInput {
   const config = positionConfig(args.config, args.today, args.fx);
   // property is left out of every figure (net worth, own money, lifetime profit) unless Settings counts it
   const assets = args.config.capital.countProperty
     ? args.assets
     : args.assets.filter((a) => a.type !== 'property');
+  const bank = args.bank;
+  const built = positionAssetsFrom({ ...args, assets }).map((a) =>
+    bank && a.type === 'bank_account' && a.currency === 'INR' && bank.spans[a.assetId]
+      ? {
+          ...a,
+          records: withBankBalances(
+            a.records,
+            bank.points[a.assetId],
+            bank.spans[a.assetId],
+            (p) => ({
+              date: p.date,
+              amount: p.amount,
+              currency: 'INR',
+              fxRate: null,
+            }),
+          ),
+        }
+      : a,
+  );
   return {
-    assets: attachProceeds(positionAssetsFrom({ ...args, assets }), config, args.placements),
+    assets: attachProceeds(built, config, args.placements),
     config,
     ...(args.portfolio ? { current: currentValues(args.portfolio) } : {}),
   };

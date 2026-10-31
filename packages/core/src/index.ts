@@ -134,4 +134,5 @@ export * from './statement-lending';
 export * from './statement-categories';
 export * from './saved-by-tag';
 export * from './two-way-people';
+export * from './statement-truth';
 export * from './line-name';
