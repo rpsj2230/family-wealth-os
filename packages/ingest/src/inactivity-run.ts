@@ -28,6 +28,7 @@ import {
   inactivityWarning,
   runDateAfter,
   runDaysBetween,
+  singaporeDate,
   type ChainEntry,
   type FamilyAlert,
   type FamilyAlertInput,
@@ -250,7 +251,7 @@ async function runOne(
     const alertDate = runDateAfter(seen, row.inactiveDays);
     const m = inactivityWarning({
       daysAbsent: days,
-      daysLeft: runDaysBetween(opts.now.slice(0, 10), alertDate),
+      daysLeft: runDaysBetween(singaporeDate(opts.now), alertDate),
       alertDate,
       contactNames: row.contacts.map((c) => c.name),
       reminders: row.reminders,

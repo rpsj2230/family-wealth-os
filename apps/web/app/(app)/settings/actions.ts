@@ -90,7 +90,7 @@ export async function saveDigestSettings(_p: FormResult | null, f: FormData): Pr
   if (error) return { ok: false, message: 'That could not be saved.' };
   revalidatePath('/settings');
   const base = enabled
-    ? 'Saved. The summary e-mail goes out every morning at 08:30 Singapore time.'
+    ? 'Saved. The summary e-mail goes out every morning at about 7:00 AM Singapore time.'
     : 'Saved. The summary e-mail is switched off.';
   return {
     ok: true,

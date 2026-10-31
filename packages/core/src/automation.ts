@@ -156,7 +156,9 @@ export function buildAutomationCards(i: AutomationInput): AutomationCard[] {
     if (!i.digest.enabled) lines.push('The daily summary is switched off in Settings.');
     else if (!l) {
       status = 'Not sent yet';
-      lines.push('Nothing has been sent yet. The first one goes out at 08:30 Singapore time.');
+      lines.push(
+        'Nothing has been sent yet. The first one goes out at about 7:00 AM Singapore time.',
+      );
     } else {
       const age = isoDaysBetween(l.date, i.today);
       if (l.status === 'failed') {
@@ -184,7 +186,8 @@ export function buildAutomationCards(i: AutomationInput): AutomationCard[] {
       title: 'Daily summary',
       tone,
       status,
-      schedule: 'Sent every morning at 08:30 Singapore time.',
+      schedule:
+        'Sent every morning at about 7:00 AM Singapore time, once the day’s fund prices are out.',
       lines,
       link: { href: '/settings#email', label: 'Summary settings' },
     });

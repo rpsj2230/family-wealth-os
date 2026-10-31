@@ -1,8 +1,10 @@
 name: Daily summary email
-# 08:30 Singapore time every day. Only households that switched it on in the app (Settings) receive anything.
+# About 7:00 AM Singapore time every day (scheduled 6:43). Only households that switched it on in the app (Settings) receive anything.
 on:
   schedule:
-    - cron: '30 0 * * *'
+    # 6:43 AM Singapore (22:43 UTC): every fund price of the day just ended is out by then (they come out by about 11 PM India
+    # time). Off the hour, because GitHub starts jobs set on the hour latest.
+    - cron: '43 22 * * *'
   workflow_dispatch:
     inputs:
       test:

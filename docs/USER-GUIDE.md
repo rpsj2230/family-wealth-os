@@ -525,7 +525,7 @@ from day 20; Ragini is told after 30 days; Amit after 38 days if Ragini has not 
    (reminder 2 of 3)", without the *I have received this* button (a member pressing it must not count as Ragini). A member who is also on
    the list gets the message once, as that person. WhatsApp goes only to the trusted person.
 
-The job runs once a day (08:30 Singapore) and takes at most one step per household a day, so a missed day never sends two messages at
+The job runs once a day (about 7:00 AM Singapore) and takes at most one step per household a day, so a missed day never sends two messages at
 once and never skips a person. **Last alert** in the same card shows who was told in the latest absence, how many times, and whether they
 confirmed. **Send a test to me** sends the first person's message to you only, marked TEST (the site needs `SMTP_USER` and
 `SMTP_APP_PASSWORD` in Vercel to send it; otherwise it shows the text).

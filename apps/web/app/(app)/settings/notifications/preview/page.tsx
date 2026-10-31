@@ -11,7 +11,7 @@ import { loadHome } from '@/lib/home-data';
 export const dynamic = 'force-dynamic';
 
 /**
- * Today's summary e-mail, built now from the live figures through the same code the 08:30 job uses, shown at phone and laptop
+ * Today's summary e-mail, built now from the live figures through the same code the morning job uses, shown at phone and laptop
  * width. Nothing is sent from here. A switch left off in Settings is honoured, so the preview is what would arrive.
  */
 export default async function DigestPreviewPage() {
@@ -26,7 +26,7 @@ export default async function DigestPreviewPage() {
     include_goals?: boolean | null;
   } | null;
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore' }).format(new Date());
-  // the money figures are Home's, from Home's own loader, as in the 08:30 job; without them the e-mail leaves those lines out
+  // the money figures are Home's, from Home's own loader, as in the morning job; without them the e-mail leaves those lines out
   const [input, home] = await Promise.all([
     buildDigestInput(supabase as unknown as SupabaseClient, {
       date,
@@ -42,7 +42,7 @@ export default async function DigestPreviewPage() {
     <>
       <PageHead
         title="Preview today’s e-mail"
-        subtitle={`Built just now from your own figures for ${niceDate(date)}, the way the 08:30 e-mail is built. Nothing is sent from here.`}
+        subtitle={`Built just now from your own figures for ${niceDate(date)}, the way the morning e-mail is built. Nothing is sent from here.`}
         pills={[
           {
             label: set?.include_goals === false ? 'Goals left out' : 'Goals included',

@@ -32,8 +32,9 @@ export const ALERT_DAYS_MIN = 7;
 export const ALERT_DAYS_MAX = 365;
 
 const DAY = 86_400_000;
-/** The daily job starts at 00:30 UTC (.github/workflows/digest.yml), 08:30 in Singapore. */
-const JOB_MINUTE_UTC = 30;
+/** The daily job starts at 22:43 UTC (.github/workflows/digest.yml), 6:43 AM in Singapore. */
+const JOB_HOUR_UTC = 22;
+const JOB_MINUTE_UTC = 43;
 /** A run that starts a few minutes earlier than yesterday's still counts as a day later. */
 const GRACE = 6 * 3_600_000;
 
@@ -216,13 +217,26 @@ export function inactivityStep(s: InactivityState, log: readonly ChainEntry[]): 
 export const runDaysBetween = (from: string, to: string): number =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY);
 
-/** The date (YYYY-MM-DD, UTC, the same day in Singapore) of the first daily run after `days` full days from `from`. */
+/** A moment's date in Singapore (UTC+8, no summer time), as the family reads the dates of the daily run. */
+export const singaporeDate = (iso: string | number): string =>
+  new Date(new Date(iso).getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+
+/**
+ * The date in Singapore of the first daily run after `days` full days from `from`: the run is at 22:43 UTC, which is the next
+ * morning in Singapore.
+ */
 export function runDateAfter(from: string, days: number): string {
   const due = Date.parse(from) + days * DAY;
   const d = new Date(due);
-  let run = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, JOB_MINUTE_UTC);
+  let run = Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    JOB_HOUR_UTC,
+    JOB_MINUTE_UTC,
+  );
   if (run <= due) run += DAY;
-  return new Date(run).toISOString().slice(0, 10);
+  return singaporeDate(run);
 }
 
 /** "Ragini", "Ragini and Ravi", "Ragini, Ravi and Meera". */
