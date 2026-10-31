@@ -126,6 +126,19 @@ async function main() {
       console.log(
         `Today: ₹${inr(w.today.amount)} (${pct(w.today.pct)})  of which banks ₹${inr(w.today.banks)}, funds ₹${inr(w.today.funds)}`,
       );
+      // which prices the funds' part compares: the last two published, by their dates, and how many funds rose or fell
+      const spans = new Map<string, { n: number; up: number; down: number }>();
+      for (const m of Object.values(l.fundDay)) {
+        const k = `${m.from} → ${m.to}`;
+        const s = spans.get(k) ?? { n: 0, up: 0, down: 0 };
+        s.n++;
+        if (m.pct > 0) s.up++;
+        else if (m.pct < 0) s.down++;
+        spans.set(k, s);
+      }
+      console.log(
+        `Funds' prices compared: ${[...spans].map(([k, s]) => `${k}: ${s.n} funds (${s.up} up, ${s.down} down)`).join('; ') || 'none'}`,
+      );
       console.log(
         `Cost of current holdings (deposit principal + fund cost): ₹${inr(w.overall.invested)}   Gain on current holdings: ₹${inr(w.overall.profit)} (${pct(w.overall.profitPct)})${w.overall.estimated ? '  [partly estimated]' : ''}`,
       );
