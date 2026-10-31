@@ -14,12 +14,7 @@
  */
 import { ImapFlow, type MessageStructureObject } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import {
-  importBankStatementMail,
-  importCasAttachments,
-  loadSettings,
-  rebuildStatementMoves,
-} from '@fwos/data';
+import { importCasAttachments, loadSettings } from '@fwos/data';
 import {
   lookBackDays,
   maskAddress,
@@ -319,52 +314,6 @@ async function main() {
     },
   };
 
-  // the banks' statements, under their own key so a message the alert reader saw is still read here
-  let bankLines = 0;
-  const bankKey = (id: string) => `bank-statement:${id}`;
-  const bankIo: StatementIo = {
-    // one that waits for a password or an account's last four digits is tried again on every scan, so it goes in by itself once
-    // they are saved
-    async seen(id) {
-      const r = must(
-        await db
-          .from('inbox_messages')
-          .select('outcome, reason')
-          .eq('household_id', hh)
-          .eq('message_id', bankKey(id))
-          .limit(1),
-        'seen check',
-      ) as { outcome: 'applied' | 'needs_review' | 'ignored' | 'error'; reason: string | null }[];
-      if (!r[0]) return null;
-      if (
-        r[0].outcome === 'needs_review' &&
-        /saved passwords|No account ending/i.test(r[0].reason ?? '')
-      )
-        return null;
-      return { outcome: r[0].outcome };
-    },
-    record: (row) => io.record({ ...row, messageId: bankKey(row.messageId) }),
-    async importPdf(m) {
-      const r = await importBankStatementMail(db, hh, m);
-      bankLines += r.lines;
-      return {
-        outcome: r.outcome,
-        reason: r.reason,
-        people: r.ownerIds.map((id) => names.get(id) ?? 'someone'),
-        funds: r.accounts,
-        transactions: r.lines,
-      };
-    },
-  };
-
-  // the first scan for the banks' statements looks as far back as a first scan does, so those already in the mailbox come in
-  const { count: bankSeen } = await db
-    .from('inbox_messages')
-    .select('id', { count: 'exact', head: true })
-    .eq('household_id', hh)
-    .like('message_id', 'bank-statement:%');
-  const bankSince = bankSeen ? since : sinceDate(new Date(), lookBackDays(true, sm));
-
   const own = await ownAddresses(db, hh, cfg.inbox.trustedForwarders);
   const client = new ImapFlow({
     host: 'imap.gmail.com',
@@ -376,7 +325,6 @@ async function main() {
   try {
     await client.connect();
     let report;
-    let bankReport: Awaited<ReturnType<typeof runStatementScan>> | null = null;
     try {
       const path = await allMailPath(client);
       // EXAMINE, not SELECT: the server itself refuses any change to this mailbox for as long as it is open
@@ -390,16 +338,6 @@ async function main() {
           maxPerRun: sm.maxPerRun,
           retryFailed: trigger === 'requested' || trigger === 'manual',
         });
-        if (sm.banksEnabled && sm.bankSenders.length > 0)
-          bankReport = await runStatementScan(readerOver(client), bankIo, {
-            senders: sm.bankSenders,
-            ownAddresses: own,
-            since: bankSince,
-            maxBytes: Math.round(sm.maxMb * 1_048_576),
-            maxPerRun: sm.maxPerRun,
-            retryFailed: trigger === 'requested' || trigger === 'manual',
-            kind: 'bank',
-          });
       } finally {
         lock.release();
       }
@@ -410,30 +348,14 @@ async function main() {
       `Gmail statements (${trigger}, looked back ${days} days): ${scanLine(report)}; ${report.skipped} already handled.`,
     );
     for (const l of report.lines) console.log(' -', l);
-    if (bankReport) {
-      console.log(
-        `Bank statements: ${scanLine(bankReport)}; ${bankReport.skipped} already handled; ${bankLines} new lines.`,
-      );
-      for (const l of bankReport.lines) console.log(' -', l);
-    }
-    // the new lines are sorted by the rules at once, so the trail and the figures follow them today
-    if (bankLines > 0) {
-      const rb = await rebuildStatementMoves(db, hh);
-      console.log(
-        `Movements from statements: ${rb.added} added, ${rb.removed} replaced. Lines to answer: ${rb.toAnswer}.`,
-      );
-    }
     await finish(scanId, {
       ok: true,
       found: report.found,
       imported: report.imported,
       skipped: report.skipped,
       problems: report.problems,
-      note: `${scanLine(report)}${bankReport ? `; bank statements: ${scanLine(bankReport)}` : ''}`.slice(
-        0,
-        500,
-      ),
-      detail: [...report.items, ...(bankReport?.items ?? [])].slice(0, 60),
+      note: scanLine(report).slice(0, 500),
+      detail: report.items.slice(0, 60),
     });
   } catch (e) {
     const msg = (e as Error).message.slice(0, 400);

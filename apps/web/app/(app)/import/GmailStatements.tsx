@@ -289,29 +289,31 @@ export function GmailStatements({ model: m, demo = false }: { model: GmailModel;
       </fieldset>
 
       <details className="disclose gm-help" id="forward-bank-mail">
-        <summary>Your banks’ alerts and statements: make sure they reach this Gmail</summary>
+        <summary>Your banks’ alerts and statements: make sure they get the label</summary>
         <p className="small">
-          The app reads your banks’ alerts and monthly statements only in the Gmail it uses
+          The app reads your banks’ alerts and monthly statements only under the label set in
+          Settings → Connections (FWOS/Inbox unless you changed it), in the Gmail it uses
           {m.mailbox ? (
             <>
               {' '}
               (<span className="mono">{m.mailbox}</span>)
             </>
           ) : null}
-          . If your banks write to another address, forward their mail here once; one filter covers
-          every bank:
+          . Nothing else in the mailbox is opened. One filter puts the label on every bank’s mail:
         </p>
         <ol className="small">
           <li>
-            In the mailbox your banks write to, open Settings → Forwarding, add this Gmail as a
-            forwarding address and confirm it.
-          </li>
-          <li>
-            Create a filter with this in <em>From</em>, choose <em>Forward it to</em> this Gmail,
-            and tick <em>Also apply to matching conversations</em>:
+            In that Gmail, create a filter with this in <em>From</em>, choose{' '}
+            <em>Apply the label</em> (the one above), and tick{' '}
+            <em>Also apply to matching conversations</em>:
             <pre className="mono gm-query" data-testid="bank-filter">
               {bankSenderDomains().join(' OR ')}
             </pre>
+          </li>
+          <li>
+            If your banks write to another address, forward their mail to this Gmail first (in that
+            mailbox: Settings → Forwarding, then a filter with the same <em>From</em> that forwards
+            it). Gmail’s forwarding keeps the bank as the sender, so the filter above labels it.
           </li>
           <li>
             In each bank’s net banking, switch on an e-mail alert for every transaction and the

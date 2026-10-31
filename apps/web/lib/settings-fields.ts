@@ -628,21 +628,6 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         max: 60,
       },
       {
-        name: 'gmailBanks',
-        label: 'Also read the statements my banks e-mail',
-        hint: 'Each month’s account statement is opened with the statement passwords saved for each person (Import > Gmail statements > Statement passwords), placed on the account whose last four digits it prints, and sorted by your rules. No upload is needed.',
-        kind: 'check',
-        path: ['statementMail', 'banksEnabled'],
-      },
-      {
-        name: 'gmailBankSenders',
-        label: 'Banks a statement may come from',
-        hint: 'One per line: a domain such as hdfcbank.net (it covers its sub-domains) or one full address. bank.in covers every bank regulated by the RBI. A message from any other address is never opened.',
-        kind: 'senders',
-        path: ['statementMail', 'bankSenders'],
-        unit: 'one domain or address per line',
-      },
-      {
         name: 'feedSilentDays',
         label: 'Flag an account that has been silent for',
         hint: 'An account in use that has sent no alert, no e-mailed statement and no balance for this long is listed under Needed from you, with how to switch its alerts and e-statements on.',

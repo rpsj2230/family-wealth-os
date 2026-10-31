@@ -41,9 +41,9 @@ export function Feed({
       </p>
       {total === 0 && (
         <p className="notice warn">
-          No bank e-mail has reached the app’s mailbox lately. In the mailbox your banks write to,
-          forward their mail to the app’s address (one filter covers every bank: Import → Gmail
-          statements), or register the app’s address with each bank.
+          No bank e-mail has reached the label lately. Put the label on your banks’ mail with one
+          Gmail filter (Import → Gmail statements shows the exact filter), and forward it to this
+          Gmail if your banks write to another address.
         </p>
       )}
       <div className="tablewrap">
