@@ -6,6 +6,8 @@
 !packages/ingest/test/fixtures/sample-statement.xls
 *.csv
 *.pdf
+# invented sample statements for the tests (no real data)
+!packages/ingest/test/fixtures/sample-bank-statement*.pdf
 .env
 .env.*
 !.env.example

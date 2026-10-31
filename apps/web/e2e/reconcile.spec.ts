@@ -104,7 +104,12 @@ test.describe('Explain movements (public sample)', () => {
       });
     await expect(page.getByRole('heading', { name: 'Bank statement' })).toBeVisible();
     // the account is chosen from the last four digits in the file name
-    await expect(page.locator('select').filter({ hasText: 'Sample Bank' })).toHaveValue('a1');
+    await expect(
+      page
+        .getByRole('region', { name: 'What happens next' })
+        .locator('select')
+        .filter({ hasText: 'Sample Bank' }),
+    ).toHaveValue('a1');
     await noSideways(page);
   });
 
