@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { classifyLines, LINE_CLASS_LABEL, type LineClass } from '@fwos/core';
+import { CATEGORIES, classifyLines, LINE_CLASS_LABEL, type LineClass } from '@fwos/core';
 import {
   classifyContext,
   conflictingBalances,
@@ -273,6 +273,7 @@ async function rebuildOrSay(done: string): Promise<never> {
 export async function answerLine(f: FormData): Promise<void> {
   const id = String(f.get('line') ?? '');
   const answer = String(f.get('answer') ?? '');
+  const category = tagOf(f);
   if (!UUID.test(id) || !['outside', 'own', 'income', 'rent', 'out', ''].includes(answer))
     back('Choose what the line was.');
   const { supabase, householdId } = await loadContext();
@@ -299,6 +300,7 @@ export async function answerLine(f: FormData): Promise<void> {
       holding,
       direction: into ? 'in' : 'out',
       interest: false,
+      category,
     });
     if ('error' in rule) back(rule.error);
     const { error } = await supabase.from('statement_rules').insert(rule.row);
@@ -307,7 +309,7 @@ export async function answerLine(f: FormData): Promise<void> {
   }
   const { error } = await supabase
     .from('statement_lines')
-    .update({ answer: answer || null })
+    .update({ answer: answer || null, category })
     .eq('id', id)
     .eq('household_id', householdId!);
   if (error) back(`That could not be saved: ${error.message}`);
@@ -328,6 +330,8 @@ async function ruleRow(
     holding: string;
     direction: 'in' | 'out' | 'any';
     interest: boolean;
+    /** what the lines are tagged as (a category id), or null to work it out from each narration */
+    category?: string | null;
   },
 ): Promise<{ row: Record<string, unknown> } | { error: string }> {
   const plain: Record<string, string> = {
@@ -361,8 +365,15 @@ async function ruleRow(
       asset_id: assetId,
       direction: r.direction,
       interest: r.interest,
+      ...(r.category ? { category: r.category } : {}),
     },
   };
+}
+
+/** The tag chosen on a form: one of the categories, or null (work it out from the narration). */
+function tagOf(f: FormData): string | null {
+  const v = String(f.get('category') ?? '');
+  return v && v in CATEGORIES ? v : null;
 }
 
 /** A rule added by hand (Rules on the Bank statements tab). */
@@ -381,6 +392,7 @@ export async function addRule(f: FormData): Promise<void> {
     holding: String(f.get('holding') ?? ''),
     direction: direction === 'in' || direction === 'out' ? direction : 'any',
     interest: f.get('interest') === 'on',
+    category: tagOf(f),
   });
   if ('error' in rule) back(rule.error);
   const { error } = await supabase.from('statement_rules').insert(rule.row);

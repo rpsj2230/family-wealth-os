@@ -91,6 +91,10 @@ export interface AppConfig {
     remittanceWords: string[];
     /** a line no rule places is asked about when it is this many rupees or more; a smaller one counts as spending (out) or a small credit (in) */
     reviewAbove: number;
+    /** a line from a known merchant (Swiggy, IndiGo, Amazon, a card bill, TDS) is placed by its kind without asking below this many rupees */
+    autoTagUpTo: number;
+    /** the same for a line known only by a general word (hotel, pharmacy, school) */
+    autoTagWordUpTo: number;
     /** days between a bank debit and the fund allotment the CAS shows (a SIP is debited a day or more before units are allotted) */
     fundMatchDays: number;
     /**
@@ -418,6 +422,8 @@ export const DEFAULT_CONFIG: AppConfig = {
       'sgd',
     ],
     reviewAbove: 10_000,
+    autoTagUpTo: 500_000,
+    autoTagWordUpTo: 50_000,
     fundMatchDays: 5,
     trailRecentFirst: true,
     trailSmallest: 1_000,
@@ -824,6 +830,8 @@ export function configFromJson(raw: unknown): AppConfig {
       rentWords: words(obj(r.statements).rentWords, d.statements.rentWords),
       remittanceWords: words(obj(r.statements).remittanceWords, d.statements.remittanceWords),
       reviewAbove: num(obj(r.statements).reviewAbove, d.statements.reviewAbove, 0, 1e9),
+      autoTagUpTo: num(obj(r.statements).autoTagUpTo, d.statements.autoTagUpTo, 0, 1e9),
+      autoTagWordUpTo: num(obj(r.statements).autoTagWordUpTo, d.statements.autoTagWordUpTo, 0, 1e9),
       fundMatchDays: Math.round(
         num(obj(r.statements).fundMatchDays, d.statements.fundMatchDays, 0, 31),
       ),

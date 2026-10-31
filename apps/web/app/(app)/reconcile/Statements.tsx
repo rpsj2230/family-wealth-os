@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import {
+  CATEGORIES,
+  categoryLabel,
   formatInr,
   formatInrCompact,
   type Classified,
@@ -82,6 +84,23 @@ const DIRECTION: Record<StatementRule['direction'], string> = {
 };
 
 /** The holdings, grouped for a select: loans first (money lent), then property, accounts, deposits and funds. */
+/** The tags a line can carry (core statement-categories.ts), money out or money in, with "work it out" first. */
+function CategoryOptions({ side }: { side: 'in' | 'out' | 'any' }) {
+  const list = (
+    Object.entries(CATEGORIES) as [string, { label: string; side: 'in' | 'out' }][]
+  ).filter(([, c]) => side === 'any' || c.side === side);
+  return (
+    <>
+      <option value="">Work it out from the narration</option>
+      {list.map(([id, c]) => (
+        <option key={id} value={id}>
+          {c.label}
+        </option>
+      ))}
+    </>
+  );
+}
+
 function HoldingOptions({ holdings }: { holdings: RuleHolding[] }) {
   const groups: [string, string[]][] = [
     ['Money lent (a “Loan to …”)', ['receivable']],
@@ -322,6 +341,11 @@ export function Statements({
                       <div className="rc-amount">{signed(l.amount)}</div>
                       <div className="small">{l.narration || 'No narration'}</div>
                       <div className="muted small">{c.reason}</div>
+                      {c.category && (
+                        <span className="chip tiny" data-testid="rc-tag">
+                          {categoryLabel(c.category)}
+                        </span>
+                      )}
                     </div>
                     <form action={act.answer} className="rc-form">
                       <input type="hidden" name="line" value={l.id} />
@@ -353,6 +377,12 @@ export function Statements({
                           </select>
                         </label>
                       )}
+                      <label className="small">
+                        Tag (what it was {into ? 'from' : 'spent on'})
+                        <select name="category" defaultValue={c.category ?? ''}>
+                          <CategoryOptions side={into ? 'in' : 'out'} />
+                        </select>
+                      </label>
                       {act.addRule && (
                         <div className="rc-remember small">
                           <label className="rc-choice">
@@ -408,6 +438,7 @@ export function Statements({
                   → {RULE_ACTION[r.action]}
                   {r.assetId ? ` ${labels[r.assetId] ?? 'a holding'}` : ''}
                   {r.interest ? ', with interest' : ''}
+                  {r.category ? `, tagged ${categoryLabel(r.category)}` : ''}
                   {act.deleteRule && (
                     <form action={act.deleteRule} className="rc-inline">
                       <input type="hidden" name="rule" value={r.id} />
@@ -460,6 +491,12 @@ export function Statements({
                   </select>
                 </label>
               )}
+              <label>
+                Tag
+                <select name="category" defaultValue="">
+                  <CategoryOptions side="any" />
+                </select>
+              </label>
               <label className="rc-choice">
                 <input type="checkbox" name="interest" /> A loan that pays interest (small payments
                 from them are earnings)

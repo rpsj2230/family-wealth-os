@@ -24,6 +24,12 @@
  */
 import { addDaysIso } from './harvest-lots';
 import { personNamed } from './statement-lending';
+import {
+  categorize,
+  categoryLabel,
+  type CategoryGuess,
+  type CategoryId,
+} from './statement-categories';
 
 export type LineClass =
   | 'interest'
@@ -55,6 +61,8 @@ export interface StmtLine {
   amount: number;
   narration: string;
   answer?: LineAnswer | null;
+  /** what a person said it was spent on or came in as (a category id, statement-categories.ts); it wins over the guess */
+  category?: string | null;
 }
 
 export interface ClassifyContext {
@@ -100,6 +108,12 @@ export interface ClassifyContext {
   rentWords: string[];
   remittanceWords: string[];
   reviewAbove: number;
+  /**
+   * a line from a known merchant (its own name in the narration) counts by its kind up to this many rupees without asking; a line
+   * known only by a general word ("hotel", "pharmacy") up to the second limit. Absent: no line is placed by its merchant.
+   */
+  autoTagUpTo?: number;
+  autoTagWordUpTo?: number;
   pairDays: number;
   fundDays: number;
   /** transfers from Singapore already on file (Wise): a credit of the same sum a few days after is that transfer */
@@ -124,6 +138,8 @@ export interface StatementRule {
   direction: 'in' | 'out' | 'any';
   /** a loan that pays interest: a small payment from them while money is owed is their interest */
   interest: boolean;
+  /** what the lines it covers were spent on or came in as (a category id) */
+  category?: string | null;
 }
 
 /** Whether a rule is about this line: its direction, and its person (by the bank's spelling) or its words. */
@@ -154,6 +170,8 @@ export interface Classified {
   fromSingapore?: boolean;
   /** the person whose account is on the other side, when the narration names one of the household */
   person?: string;
+  /** what it was spent on or came in as (a category id); for money that leaves or enters the family */
+  category?: string;
 }
 
 const daysApart = (a: string, b: string) =>
@@ -656,7 +674,38 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
       );
   }
 
-  // 10–11. charges, and everything else
+  // 10. a known merchant or kind of payment: a flight is travel, a card bill is spending, TDS is tax, a refund is money back; a
+  // person's own tag says it outright
+  const OUT_CLASS: Partial<Record<CategoryId, LineClass>> = { fees: 'fee', taxes: 'tax' };
+  const IN_CLASS: Partial<Record<CategoryId, LineClass>> = {
+    salary: 'income',
+    dividend: 'income',
+    interest: 'interest',
+  };
+  for (const l of sorted) {
+    if (!open(l)) continue;
+    const amt = Math.abs(l.amount);
+    const mine = l.category
+      ? { id: l.category as CategoryId, label: categoryLabel(l.category) }
+      : null;
+    const guess = mine ?? categorize(l.narration, l.amount);
+    if (!guess) continue;
+    const limit = mine
+      ? Infinity
+      : 'confidence' in guess && guess.confidence === 'high'
+        ? (ctx.autoTagUpTo ?? 0)
+        : (ctx.autoTagWordUpTo ?? 0);
+    if (amt >= limit) continue;
+    const why = mine
+      ? `Your tag: ${guess.label}`
+      : `${guess.label}: “${(guess as CategoryGuess).matched}” in the narration`;
+    const cls =
+      l.amount < 0 ? (OUT_CLASS[guess.id] ?? 'spent') : (IN_CLASS[guess.id] ?? 'outside_in');
+    set(l, cls, why);
+    out.get(l.id)!.category = guess.id;
+  }
+
+  // 11. charges, and everything else
   for (const l of sorted) {
     if (!open(l)) continue;
     const amt = Math.abs(l.amount);
@@ -678,6 +727,34 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
           ? 'To or from your own account: one not on file here (abroad?) counts as money out or in'
           : 'No rule fits: say what it was',
       );
+  }
+  // what each line that leaves or enters the family was: a person's tag, the rule's, or the guess from its words
+  const TAGGED = new Set<LineClass>([
+    'spent',
+    'fee',
+    'tax',
+    'outside_in',
+    'income',
+    'interest',
+    'interest_tax',
+    'fd_interest',
+  ]);
+  for (const l of lines) {
+    const c = out.get(l.id)!;
+    if (c.category || !TAGGED.has(c.cls)) continue;
+    const rule = ctx.rules?.find((x) => x.category && ruleMatches(x, l));
+    const tag =
+      l.category ??
+      rule?.category ??
+      (c.cls === 'fee'
+        ? 'fees'
+        : c.cls === 'tax' || c.cls === 'interest_tax'
+          ? 'taxes'
+          : c.cls === 'interest' || c.cls === 'fd_interest'
+            ? 'interest'
+            : (categorize(l.narration, l.amount)?.id ??
+              (l.amount < 0 ? 'other_spend' : 'other_in')));
+    c.category = tag;
   }
   return lines.map((l) => out.get(l.id)!);
 }

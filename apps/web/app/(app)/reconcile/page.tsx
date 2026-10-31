@@ -1,5 +1,11 @@
 import { redirect } from 'next/navigation';
-import { interestCheck, LINE_CLASS_LABEL, positionInputFrom, reconcileQueue } from '@fwos/core';
+import {
+  categoryLabel,
+  interestCheck,
+  LINE_CLASS_LABEL,
+  positionInputFrom,
+  reconcileQueue,
+} from '@fwos/core';
 import { capitalStart, loadFeedStatus, loadSettings } from '@fwos/data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { PageHead } from '@/components/PageHead';
@@ -122,7 +128,13 @@ export default async function Reconcile({
           date: l.date,
           amount: l.amount,
           narration: l.narration,
-          what: LINE_CLASS_LABEL[cls.get(l.id)?.cls ?? 'ask_in'],
+          // the kind, and what it was spent on or came in as when known ("Spending · Flights")
+          what: [
+            LINE_CLASS_LABEL[cls.get(l.id)?.cls ?? 'ask_in'],
+            cls.get(l.id)?.category ? categoryLabel(cls.get(l.id)!.category!) : null,
+          ]
+            .filter(Boolean)
+            .join(' · '),
           why: cls.get(l.id)?.reason ?? '',
         }));
     return out;

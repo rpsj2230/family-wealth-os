@@ -509,6 +509,22 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
       },
       {
+        name: 'stmtAutoTagUpTo',
+        label: 'Bank statements: place a line from a known merchant without asking, up to',
+        hint: 'A line naming a known merchant or kind of payment (Swiggy, IndiGo, MakeMyTrip, Amazon, a card bill, TDS, a refund, salary) is tagged and counted by its kind without asking, up to this amount. Larger ones are still asked, with the tag suggested.',
+        kind: 'money',
+        path: ['statements', 'autoTagUpTo'],
+        unit: '₹',
+      },
+      {
+        name: 'stmtAutoTagWordUpTo',
+        label: 'Bank statements: the same for a line known only by a general word, up to',
+        hint: 'A general word (hotel, pharmacy, school, restaurant) is less certain than a merchant’s own name, so it is trusted up to a lower amount.',
+        kind: 'money',
+        path: ['statements', 'autoTagWordUpTo'],
+        unit: '₹',
+      },
+      {
         name: 'stmtFundMatchDays',
         label: 'Bank statements: a debit matches a fund purchase in the CAS within',
         hint: 'A SIP or a purchase is debited a day or more before the units are allotted. A debit of the same amount within this many days of a purchase in the CAS is that purchase: money moved between your own holdings.',

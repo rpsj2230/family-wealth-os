@@ -16,6 +16,7 @@ import {
   type StmtLine,
 } from '@fwos/core';
 import type { LoadedPortfolio } from './index';
+import { columnExists } from './columns';
 import { pageAll } from './paging';
 import type { BankStatement, StatementLine } from '@fwos/ingest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -30,6 +31,8 @@ export interface StoredLine {
   balance: number | null;
   narration: string;
   answer: LineAnswer | null;
+  /** what a person said it was spent on or came in as (a category id) */
+  category?: string | null;
 }
 
 /** An imported statement file. */
@@ -152,12 +155,16 @@ export async function loadStatements(
 }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the query builders of three tables, narrowed alike
   const scoped = (q: any) => (householdId ? q.eq('household_id', householdId) : q);
+  // the tag a person gave a line or a rule (an older database has no such column yet)
+  const tagged = await columnExists(supabase, 'statement_lines', 'category');
   const [lines, statements, remits, rules] = await Promise.all([
     pageAll<StoredLine>((from, to) =>
       scoped(
         supabase
           .from('statement_lines')
-          .select('id, statement_id, asset_id, txn_on, amount, balance, narration, answer'),
+          .select(
+            `id, statement_id, asset_id, txn_on, amount, balance, narration, answer${tagged ? ', category' : ''}`,
+          ),
       )
         .order('txn_on')
         .order('id')
@@ -195,7 +202,9 @@ export async function loadStatements(
       const { data, error } = await scoped(
         supabase
           .from('statement_rules')
-          .select('id, name, match, action, asset_id, direction, interest')
+          .select(
+            `id, name, match, action, asset_id, direction, interest${tagged ? ', category' : ''}`,
+          )
           .order('created_at'),
       );
       return error ? [] : ((data ?? []) as Record<string, unknown>[]);
@@ -224,6 +233,7 @@ export async function loadStatements(
       assetId: (r.asset_id as string | null) ?? null,
       direction: (r.direction as StatementRule['direction']) ?? 'any',
       interest: !!r.interest,
+      category: (r.category as string | null | undefined) ?? null,
     })),
   };
 }
@@ -319,6 +329,8 @@ export function classifyContext(
     rentWords: config.statements.rentWords,
     remittanceWords: config.statements.remittanceWords,
     reviewAbove: config.statements.reviewAbove,
+    autoTagUpTo: config.statements.autoTagUpTo,
+    autoTagWordUpTo: config.statements.autoTagWordUpTo,
     pairDays: config.estimates.transferPairDays,
     fundDays: config.statements.fundMatchDays,
     remittances,
@@ -336,6 +348,7 @@ export function stmtLinesOf(lines: StoredLine[], loaded: LoadedPortfolio): StmtL
     amount: l.amount,
     narration: l.narration,
     answer: l.answer,
+    category: l.category ?? null,
   }));
 }
 
