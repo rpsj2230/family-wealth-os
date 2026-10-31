@@ -86,18 +86,83 @@ describe('the classifier places known merchants without asking', () => {
   it('a transfer to someone the lists do not know is still asked when it is large', () => {
     expect(run([l('p', -150_000, 'IMPS-SAMPLE PERSON-SBIN000001')]).p!.cls).toBe('ask_out');
   });
-  it('a small unknown debit is other spending, and a person’s tag wins over the guess', () => {
+  it('a small payment to a person is money to a person, and a person’s tag wins over the guess', () => {
     const r = run([
       l('small', -900, 'UPI-SAMPLE PERSON-9876'),
       l('mine', -250_000, 'IMPS-SAMPLE PERSON-SBIN000001', { category: 'medical' }),
       l('over', -2_000, 'UPI-SWIGGY', { category: 'groceries' }),
     ]);
-    expect(r.small).toMatchObject({ cls: 'spent', category: 'other_spend' });
+    expect(r.small).toMatchObject({ cls: 'spent', category: 'given' });
     expect(r.mine).toMatchObject({ cls: 'spent', category: 'medical' });
     expect(r.over).toMatchObject({ category: 'groceries' });
   });
   it('without the limits (an older setting) nothing is placed by its merchant', () => {
     const { autoTagUpTo: _a, autoTagWordUpTo: _b, ...old } = ctx;
     expect(run([l('f', -95_000, 'POS INDIGO AIRLINES')], old).f!.cls).toBe('ask_out');
+  });
+});
+
+describe('nothing is asked: every line is placed and tagged', () => {
+  const base: ClassifyContext = {
+    accounts: [
+      { assetId: 'a', ownerId: 'r', last4: '1111' },
+      { assetId: 'b', ownerId: 'r', last4: '2222' },
+    ],
+    deposits: [],
+    fundTxns: [],
+    rentWords: ['sample tenant'],
+    remittanceWords: ['inward remittance'],
+    reviewAbove: 10_000,
+    autoTagUpTo: 500_000,
+    autoTagWordUpTo: 50_000,
+    askLarge: false,
+    pairDays: 3,
+    fundDays: 5,
+  };
+  let n = 0;
+  const l = (assetId: string, date: string, amount: number, narration: string): StmtLine => ({
+    id: `n${++n}`,
+    assetId,
+    ownerId: 'r',
+    date,
+    amount,
+    narration,
+  });
+  const lines = [
+    l('a', '2025-01-10', -300_000, 'IMPS-SAMPLE FRIEND-SBIN0000001'),
+    l('a', '2025-06-10', 150_000, 'NEFT CR-SAMPLE FRIEND-SBIN0000001'),
+    l('a', '2025-07-01', 250_000, 'UPI-SAMPLE STRANGER-sample@oksbi'),
+    l('a', '2025-07-02', -400_000, 'IMPS TO OWN A/C'),
+    l('b', '2025-07-02', 400_000, 'IMPS FROM SAMPLE BANK'),
+    l('a', '2025-07-03', 812, 'SB INT PAID'),
+    l('a', '2025-07-03', -81, 'TDS ON INT'),
+    l('a', '2025-07-04', 30_000, 'NEFT CR-SAMPLE TENANT-JUL RENT'),
+    l('a', '2025-07-05', 200_000, 'INWARD REMITTANCE SGD'),
+  ];
+  const r = classifyLines(lines, base);
+  const by = (narr: string) => r.find((c) => lines.find((x) => x.id === c.id)!.narration === narr)!;
+  it('no line waits for an answer', () => {
+    expect(r.filter((c) => c.cls === 'ask_in' || c.cls === 'ask_out')).toEqual([]);
+  });
+  it('money to a person, and money back from them later, are placed by the best explanation', () => {
+    expect(by('IMPS-SAMPLE FRIEND-SBIN0000001')).toMatchObject({ cls: 'spent', category: 'given' });
+    expect(by('NEFT CR-SAMPLE FRIEND-SBIN0000001')).toMatchObject({
+      cls: 'outside_in',
+      category: 'money_back',
+    });
+    expect(by('UPI-SAMPLE STRANGER-sample@oksbi')).toMatchObject({
+      cls: 'outside_in',
+      category: 'from_person',
+    });
+  });
+  it('internal movements, interest, TDS, rent and remittances carry their own tags', () => {
+    expect(by('IMPS TO OWN A/C')).toMatchObject({ cls: 'own_transfer', category: 'transfer' });
+    expect(by('SB INT PAID')).toMatchObject({ category: 'interest' });
+    expect(by('TDS ON INT')).toMatchObject({ category: 'taxes' });
+    expect(by('NEFT CR-SAMPLE TENANT-JUL RENT')).toMatchObject({ cls: 'rent', category: 'rent' });
+    expect(by('INWARD REMITTANCE SGD')).toMatchObject({ category: 'remittance' });
+  });
+  it('every line has a tag', () => {
+    expect(r.filter((c) => !c.category)).toEqual([]);
   });
 });

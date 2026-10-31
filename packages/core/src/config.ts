@@ -95,6 +95,11 @@ export interface AppConfig {
     autoTagUpTo: number;
     /** the same for a line known only by a general word (hotel, pharmacy, school) */
     autoTagWordUpTo: number;
+    /**
+     * ask about a large line nothing explains (true), or place it by the best explanation without asking (false: money to a person,
+     * money back from someone paid before, money from a person; it can still be changed on the line)
+     */
+    askLarge: boolean;
     /** days between a bank debit and the fund allotment the CAS shows (a SIP is debited a day or more before units are allotted) */
     fundMatchDays: number;
     /**
@@ -424,6 +429,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     reviewAbove: 10_000,
     autoTagUpTo: 500_000,
     autoTagWordUpTo: 50_000,
+    askLarge: false,
     fundMatchDays: 5,
     trailRecentFirst: true,
     trailSmallest: 1_000,
@@ -832,6 +838,7 @@ export function configFromJson(raw: unknown): AppConfig {
       reviewAbove: num(obj(r.statements).reviewAbove, d.statements.reviewAbove, 0, 1e9),
       autoTagUpTo: num(obj(r.statements).autoTagUpTo, d.statements.autoTagUpTo, 0, 1e9),
       autoTagWordUpTo: num(obj(r.statements).autoTagWordUpTo, d.statements.autoTagWordUpTo, 0, 1e9),
+      askLarge: bool(obj(r.statements).askLarge, d.statements.askLarge),
       fundMatchDays: Math.round(
         num(obj(r.statements).fundMatchDays, d.statements.fundMatchDays, 0, 31),
       ),

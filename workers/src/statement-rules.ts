@@ -35,6 +35,8 @@ interface RuleInput {
   interest?: boolean;
   waive?: boolean;
   note?: string;
+  /** the tag every line it covers carries (a category id: remittance, given, food …) */
+  category?: string;
 }
 
 const lakh = (n: number) => `₹${(n / 100_000).toFixed(2)} L`;
@@ -246,6 +248,7 @@ async function main() {
           direction: r.direction ?? 'any',
           interest: !!r.interest,
           note: r.note ?? null,
+          ...(r.category ? { category: r.category } : {}),
         })
         .select('id'),
       `rule ${r.name}`,

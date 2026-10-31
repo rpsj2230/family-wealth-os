@@ -176,6 +176,30 @@ export function Statements({
   }
   const fys = [...years.keys()].sort().reverse();
 
+  // where the money went, by tag, in the latest financial years: out and in kept apart, so spending is not netted against money in
+  const tagFys = fys.slice(0, 3);
+  const byTag = new Map<string, Record<string, { out: number; in: number; n: number }>>();
+  let guessed = 0;
+  for (const l of lines) {
+    const c = cls.get(l.id);
+    if (!c?.category) continue;
+    if (c.reason.startsWith('Best guess')) guessed++;
+    const fy = fyOf(l.date);
+    if (!tagFys.includes(fy)) continue;
+    const row = byTag.get(c.category) ?? {};
+    const cell = row[fy] ?? { out: 0, in: 0, n: 0 };
+    if (l.amount < 0) cell.out -= l.amount;
+    else cell.in += l.amount;
+    cell.n++;
+    row[fy] = cell;
+    byTag.set(c.category, row);
+  }
+  const tagRows = [...byTag.entries()].sort(
+    (a, b) =>
+      Math.max(...tagFys.map((f) => (b[1][f]?.out ?? 0) + (b[1][f]?.in ?? 0))) -
+      Math.max(...tagFys.map((f) => (a[1][f]?.out ?? 0) + (a[1][f]?.in ?? 0))),
+  );
+
   const ask = lines
     .filter((l) => {
       const c = cls.get(l.id)?.cls;
@@ -301,6 +325,55 @@ export function Statements({
             Between your holdings adds up to about nothing when both sides are on file: money that
             moved between your accounts, deposits and funds.
           </p>
+        </section>
+      )}
+
+      {tagRows.length > 0 && (
+        <section className="card rc" aria-labelledby="rc-st" data-testid="rc-s-tags">
+          <h2 id="rc-st">Where the money went, by tag</h2>
+          <p className="muted small">
+            Every line is tagged by itself: from the merchant and words, what it was matched with
+            (your own account, a deposit, a fund, a loan), or the person it names.
+            {guessed > 0
+              ? ` ${guessed} line${guessed === 1 ? ' is' : 's are'} placed by best guess (no rule fitted); ${guessed === 1 ? 'it says' : 'each says'} so on the line, and nothing waits for you.`
+              : ''}
+          </p>
+          <div className="rc-scroll">
+            <table className="table small">
+              <thead>
+                <tr>
+                  <th scope="col">Tag</th>
+                  {tagFys.map((fy) => (
+                    <th key={fy} scope="col" className="num">
+                      {fy} out
+                    </th>
+                  ))}
+                  {tagFys.map((fy) => (
+                    <th key={`${fy}-in`} scope="col" className="num">
+                      {fy} in
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tagRows.map(([tag, row]) => (
+                  <tr key={tag}>
+                    <th scope="row">{categoryLabel(tag)}</th>
+                    {tagFys.map((fy) => (
+                      <td key={fy} className="num">
+                        {row[fy]?.out ? formatInrCompact(row[fy]!.out) : '–'}
+                      </td>
+                    ))}
+                    {tagFys.map((fy) => (
+                      <td key={`${fy}-in`} className="num">
+                        {row[fy]?.in ? formatInrCompact(row[fy]!.in) : '–'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

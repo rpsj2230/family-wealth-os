@@ -525,6 +525,13 @@ export const CONFIG_GROUPS: GroupSpec[] = [
         unit: '₹',
       },
       {
+        name: 'stmtAskLarge',
+        label: 'Bank statements: ask me about large lines nothing explains',
+        hint: 'Off (the default): such a line is placed by the best explanation and nothing waits for you: money to a person is money out, money back from someone you paid before is money back, money from a person is your own money coming in (never profit). Each line says it is a best guess, and can still be changed. On: such lines wait on Explain movements and in the daily e-mail.',
+        kind: 'check',
+        path: ['statements', 'askLarge'],
+      },
+      {
         name: 'stmtFundMatchDays',
         label: 'Bank statements: a debit matches a fund purchase in the CAS within',
         hint: 'A SIP or a purchase is debited a day or more before the units are allotted. A debit of the same amount within this many days of a purchase in the CAS is that purchase: money moved between your own holdings.',

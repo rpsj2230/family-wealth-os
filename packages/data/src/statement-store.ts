@@ -331,6 +331,7 @@ export function classifyContext(
     reviewAbove: config.statements.reviewAbove,
     autoTagUpTo: config.statements.autoTagUpTo,
     autoTagWordUpTo: config.statements.autoTagWordUpTo,
+    askLarge: config.statements.askLarge,
     pairDays: config.estimates.transferPairDays,
     fundDays: config.statements.fundMatchDays,
     remittances,

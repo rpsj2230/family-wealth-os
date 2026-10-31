@@ -312,12 +312,20 @@ export function BankTable({
                   {b.needsYou} need{b.needsYou === 1 ? 's' : ''} you
                 </span>
               ) : b.doneThisMonth ? (
-                <span className="pill ok">
-                  Updated {b.lastUpdated ? fmtDate(b.lastUpdated) : 'this month'}
+                <span className="pill ok" data-testid="bank-updated">
+                  {b.accountsTotal > 1 ? `All ${b.accountsTotal} accounts updated` : 'Updated'}
+                  {b.oldestUpdated ? ` · ${fmtDate(b.oldestUpdated)}` : ''}
                 </span>
               ) : (
-                <span className="pill warn">
-                  {b.lastUpdated ? `Last updated ${fmtDate(b.lastUpdated)}` : 'Not updated yet'}
+                <span className="pill warn" data-testid="bank-updated">
+                  {b.accountsTotal > 1
+                    ? `${b.accountsCurrent} of ${b.accountsTotal} accounts updated this month`
+                    : 'Not updated this month'}
+                  {b.oldestUpdated
+                    ? ` · oldest ${fmtDate(b.oldestUpdated)}`
+                    : b.accountsTotal > 0
+                      ? ' · one has no balance yet'
+                      : ''}
                 </span>
               )}
               <Link className="btn compact" href={`${updateBase}/${slugify(b.name)}`}>

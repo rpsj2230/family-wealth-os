@@ -221,6 +221,7 @@ describe('settings fields', () => {
           reviewAbove: 10000,
           autoTagUpTo: 500000,
           autoTagWordUpTo: 50000,
+          askLarge: false,
           fundMatchDays: 5,
           trailRecentFirst: true,
           trailSmallest: 1000,

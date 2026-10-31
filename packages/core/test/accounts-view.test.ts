@@ -271,6 +271,19 @@ describe('buildBankBlocks', () => {
     expect(blocks[1]!.doneThisMonth).toBe(false); // e-3333 is from September
   });
 
+  it('says how many of a bank’s accounts are updated, and the oldest date, not the newest', () => {
+    const b = blocks[1]!;
+    expect(b.accountsCurrent).toBeLessThan(b.accountsTotal);
+    expect(b.oldestUpdated! <= b.lastUpdated!).toBe(true);
+    expect(b.oldestUpdated!.slice(0, 7)).toBe(
+      b.sections
+        .flatMap((s) => s.rows)
+        .find((r) => r.assetId === 'e-3333')!
+        .asOf!.slice(0, 7),
+    );
+    expect(blocks[0]!.accountsCurrent).toBe(blocks[0]!.accountsTotal);
+  });
+
   it('puts a row added later after the rows it belongs with', () => {
     const more = [
       ...assets,

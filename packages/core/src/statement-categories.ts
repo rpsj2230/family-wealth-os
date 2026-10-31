@@ -30,6 +30,12 @@ export type CategoryId =
   | 'taxes'
   | 'donation'
   | 'other_spend'
+  | 'given'
+  // either way: money that stays in the family
+  | 'transfer'
+  | 'deposit'
+  | 'loan'
+  | 'investment'
   // money in
   | 'interest'
   | 'refund'
@@ -37,12 +43,16 @@ export type CategoryId =
   | 'dividend'
   | 'tax_refund'
   | 'insurance_claim'
+  | 'remittance'
+  | 'rent'
+  | 'money_back'
+  | 'from_person'
   | 'other_in';
 
 export interface Category {
   label: string;
-  /** which way the money goes */
-  side: 'out' | 'in';
+  /** which way the money goes; "both" for money that moves within the family (never guessed from words) */
+  side: 'out' | 'in' | 'both';
   /** a merchant's own name or code (high confidence) */
   merchants: string[];
   /** general words (medium confidence) */
@@ -431,6 +441,11 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     words: ['donation', 'charity', 'temple', 'trust', 'mandir', 'gurudwara'],
   },
   other_spend: { label: 'Other spending', side: 'out', merchants: [], words: [] },
+  given: { label: 'Money to a person', side: 'out', merchants: [], words: [] },
+  transfer: { label: 'Between your own accounts', side: 'both', merchants: [], words: [] },
+  deposit: { label: 'Deposit booked or paid back', side: 'both', merchants: [], words: [] },
+  loan: { label: 'Money lent or paid back', side: 'both', merchants: [], words: [] },
+  investment: { label: 'Funds bought or sold', side: 'both', merchants: [], words: [] },
   interest: {
     label: 'Interest',
     side: 'in',
@@ -479,6 +494,16 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     merchants: [],
     words: ['claim', 'maturity claim', 'survival benefit', 'death claim'],
   },
+  remittance: {
+    label: 'Money from abroad or exchanged',
+    side: 'in',
+    merchants: ['wise', 'transferwise', 'remitly', 'instarem', 'western union', 'xoom'],
+    words: ['inward remittance', 'remittance', 'foreign inward', 'fira', 'swift'],
+    sure: true,
+  },
+  rent: { label: 'Rent received', side: 'in', merchants: [], words: [] },
+  money_back: { label: 'Money back from a person', side: 'in', merchants: [], words: [] },
+  from_person: { label: 'Money from a person', side: 'in', merchants: [], words: [] },
   other_in: { label: 'Other money in', side: 'in', merchants: [], words: [] },
 };
 
@@ -507,6 +532,7 @@ const PHRASES: Record<
   out: [],
 };
 for (const [id, c] of Object.entries(CATEGORIES) as [CategoryId, Category][]) {
+  if (c.side === 'both') continue;
   for (const m of c.merchants)
     PHRASES[c.side].push({ id, phrase: ` ${plain(m).trim()} `, raw: m, confidence: 'high' });
   for (const w of c.words)

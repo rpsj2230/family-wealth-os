@@ -270,6 +270,11 @@ export interface BankBlock {
   /** every balance carries a value dated this month and no deposit awaits confirmation */
   doneThisMonth: boolean;
   lastUpdated: string | null;
+  /** the oldest balance among the bank's open accounts: the whole bank is current only up to this day */
+  oldestUpdated: string | null;
+  /** of the bank's open accounts, how many carry a balance dated this month */
+  accountsCurrent: number;
+  accountsTotal: number;
   owners: string[];
 }
 
@@ -515,6 +520,9 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
     let needsYou = 0;
     let done = rows.length > 0;
     let lastUpdated: string | null = null;
+    let oldestUpdated: string | null = null;
+    let accountsCurrent = 0;
+    let accountsTotal = 0;
     for (const r of rows) {
       if (r.kind === 'fd') {
         // a deposit hidden by age is not nagged about; it is in no total either
@@ -528,6 +536,13 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       if (r.stale) needsYou++;
       if (r.kind === 'cash' && !(r.asOf && r.asOf >= monthStart)) done = false;
       if (r.asOf && (!lastUpdated || r.asOf > lastUpdated)) lastUpdated = r.asOf;
+      if (r.kind === 'cash') {
+        accountsTotal++;
+        if (r.asOf && r.asOf >= monthStart) accountsCurrent++;
+        // an account with no balance at all makes the bank's oldest date unknown: it is "not updated"
+        if (!r.asOf) oldestUpdated = '0000-00-00';
+        else if (!oldestUpdated || r.asOf < oldestUpdated) oldestUpdated = r.asOf;
+      }
     }
     blocks.push({
       key: bankKey,
@@ -538,6 +553,9 @@ export function buildBankBlocks(i: BuildInput): BankBlock[] {
       needsYou,
       doneThisMonth: done,
       lastUpdated,
+      oldestUpdated: oldestUpdated === '0000-00-00' ? null : oldestUpdated,
+      accountsCurrent,
+      accountsTotal,
       owners: sections.map((sct) => sct.ownerId),
     });
   }

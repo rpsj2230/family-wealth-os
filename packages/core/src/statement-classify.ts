@@ -23,6 +23,7 @@
  * Pure: no I/O.
  */
 import { addDaysIso } from './harvest-lots';
+import { lineNameGuess } from './line-name';
 import { personNamed } from './statement-lending';
 import {
   categorize,
@@ -114,6 +115,11 @@ export interface ClassifyContext {
    */
   autoTagUpTo?: number;
   autoTagWordUpTo?: number;
+  /**
+   * false: a large line nothing explains is placed by the best explanation instead of being asked about (money to a person, money
+   * back from someone you paid before, money from a person), and nothing waits for an answer. Absent or true: it is asked.
+   */
+  askLarge?: boolean;
   pairDays: number;
   fundDays: number;
   /** transfers from Singapore already on file (Wise): a credit of the same sum a few days after is that transfer */
@@ -706,6 +712,7 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
   }
 
   // 11. charges, and everything else
+  const paidTo = new Set<string>();
   for (const l of sorted) {
     if (!open(l)) continue;
     const amt = Math.abs(l.amount);
@@ -719,7 +726,34 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
           ? 'Spending: no rule fits, and it is below the limit for asking'
           : 'A small amount coming in (a refund, cashback): below the limit for asking',
       );
-    else
+    else if (ctx.askLarge === false) {
+      // nothing is asked: the best explanation, from the person the line names and what moved between you before
+      const who = lineNameGuess(l.narration);
+      const key = who.toLowerCase();
+      if (l.amount < 0) {
+        if (key) paidTo.add(key);
+        set(
+          l,
+          'spent',
+          who
+            ? `Best guess: money to ${who} (counted as money out; change it if it was something else)`
+            : 'Best guess: money out (counted as spending; change it if it was something else)',
+        );
+        out.get(l.id)!.category = who ? 'given' : 'other_spend';
+      } else {
+        const back = !!key && paidTo.has(key);
+        set(
+          l,
+          'outside_in',
+          back
+            ? `Best guess: money back from ${who}, whom you paid before (counted as your own money coming in)`
+            : who
+              ? `Best guess: money from ${who} (counted as your own money coming in, never as profit)`
+              : 'Best guess: money coming in (counted as your own money, never as profit)',
+        );
+        out.get(l.id)!.category = back ? 'money_back' : who ? 'from_person' : 'other_in';
+      }
+    } else
       set(
         l,
         l.amount < 0 ? 'ask_out' : 'ask_in',
@@ -728,34 +762,47 @@ export function classifyLines(lines: StmtLine[], ctx: ClassifyContext): Classifi
           : 'No rule fits: say what it was',
       );
   }
-  // what each line that leaves or enters the family was: a person's tag, the rule's, or the guess from its words
+  // what every line was: a person's tag, the rule's, the class it was placed in, or the guess from its words
   const tagRules = (ctx.rules ?? []).filter((r) => r.category);
-  const TAGGED = new Set<LineClass>([
-    'spent',
-    'fee',
-    'tax',
-    'outside_in',
-    'income',
-    'interest',
-    'interest_tax',
-    'fd_interest',
-  ]);
+  const lent = new Set((ctx.borrowers ?? []).map((b) => b.assetId));
+  const BY_CLASS: Partial<Record<LineClass, CategoryId>> = {
+    fd_funding: 'deposit',
+    fd_proceeds: 'deposit',
+    fd_interest: 'interest',
+    interest: 'interest',
+    interest_tax: 'taxes',
+    tax: 'taxes',
+    fee: 'fees',
+    fund_buy: 'investment',
+    fund_sell: 'investment',
+    rent: 'rent',
+  };
   for (const l of lines) {
     const c = out.get(l.id)!;
-    if (c.category || !TAGGED.has(c.cls)) continue;
+    if (c.category) continue;
     const rule = tagRules.length ? tagRules.find((x) => ruleMatches(x, l)) : undefined;
-    const tag =
+    const guess = () => categorize(l.narration, l.amount)?.id;
+    const person = () => (lineNameGuess(l.narration) ? true : false);
+    c.category =
       l.category ??
       rule?.category ??
-      (c.cls === 'fee'
-        ? 'fees'
-        : c.cls === 'tax' || c.cls === 'interest_tax'
-          ? 'taxes'
-          : c.cls === 'interest' || c.cls === 'fd_interest'
+      BY_CLASS[c.cls] ??
+      (c.cls === 'own_transfer'
+        ? (c.counterpart && lent.has(c.counterpart)) || /\b(lent|paid back)\b/.test(c.reason)
+          ? 'loan'
+          : 'transfer'
+        : c.cls === 'outside_in' && (c.remittanceId || c.fromSingapore)
+          ? 'remittance'
+          : c.cls === 'income' && /interest/i.test(c.reason)
             ? 'interest'
-            : (categorize(l.narration, l.amount)?.id ??
-              (l.amount < 0 ? 'other_spend' : 'other_in')));
-    c.category = tag;
+            : (guess() ??
+              (l.amount < 0
+                ? person()
+                  ? 'given'
+                  : 'other_spend'
+                : person()
+                  ? 'from_person'
+                  : 'other_in')));
   }
   return lines.map((l) => out.get(l.id)!);
 }

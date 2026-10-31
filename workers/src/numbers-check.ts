@@ -591,6 +591,27 @@ async function main() {
         `  Journeys built for ${journeys} holdings; flows running backwards in time: ${bad}`,
       );
     }
+    // every statement line's tag: how many carry one, by tag, and how many were placed by best guess (counts only)
+    {
+      const tags = new Map<string, number>();
+      let guessed = 0;
+      let asked = 0;
+      for (const l of t.lines) {
+        const c = t.classified.get(l.id);
+        if (!c) continue;
+        tags.set(c.category ?? '(none)', (tags.get(c.category ?? '(none)') ?? 0) + 1);
+        if (c.reason.startsWith('Best guess')) guessed++;
+        if (c.cls === 'ask_in' || c.cls === 'ask_out') asked++;
+      }
+      console.log(
+        `\nTags: ${t.lines.length} lines; placed by best guess ${guessed}; waiting for an answer ${asked}; ${[
+          ...tags,
+        ]
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, n]) => `${k} ${n}`)
+          .join(', ')}`,
+      );
+    }
     // what is still needed from the household, as the tasks say it
     const needs = await loadNeeds(db, String((hh.data ?? [])[0]?.id ?? ''));
     console.log(`\nNeeded from you: ${needs.length}`);
