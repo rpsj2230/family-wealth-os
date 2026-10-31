@@ -157,7 +157,7 @@ export function buildAutomationCards(i: AutomationInput): AutomationCard[] {
     else if (!l) {
       status = 'Not sent yet';
       lines.push(
-        'Nothing has been sent yet. The first one goes out at about 7:00 AM Singapore time.',
+        'Nothing has been sent yet. The first one goes out at about 4:00 AM Singapore time.',
       );
     } else {
       const age = isoDaysBetween(l.date, i.today);
@@ -187,7 +187,7 @@ export function buildAutomationCards(i: AutomationInput): AutomationCard[] {
       tone,
       status,
       schedule:
-        'Sent every morning at about 7:00 AM Singapore time, once the day’s fund prices are out.',
+        'Sent every morning at about 4:00 AM Singapore time, once the day’s fund prices are out.',
       lines,
       link: { href: '/settings#email', label: 'Summary settings' },
     });

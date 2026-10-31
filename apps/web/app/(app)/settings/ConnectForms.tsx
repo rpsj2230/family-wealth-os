@@ -34,7 +34,7 @@ export function DigestForm({
       <Tick
         name="enabled"
         label="Send the daily summary by e-mail"
-        hint="At about 7:00 AM Singapore time, once the day’s fund prices are out, to everyone who can sign in to this household."
+        hint="At about 4:00 AM Singapore time, once the day’s fund prices are out, to everyone who can sign in to this household."
         defaultChecked={enabled}
       />
       <Tick

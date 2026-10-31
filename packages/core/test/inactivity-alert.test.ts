@@ -302,13 +302,13 @@ describe('dates, counts and names', () => {
     expect(daysAbsent(SEEN, SEEN)).toBe(0);
     expect(daysAbsent(SEEN, '2026-09-01T00:00:00Z')).toBe(0);
   });
-  it('gives the Singapore date of the first 22:43 UTC run after the days have passed', () => {
-    // due 31 Oct 10:00 UTC: the run that evening, 22:43 UTC, is the morning of 1 Nov in Singapore
+  it('gives the Singapore date of the first 19:53 UTC run after the days have passed', () => {
+    // due 31 Oct 10:00 UTC: the run that evening, 19:53 UTC, is the early morning of 1 Nov in Singapore
     expect(runDateAfter('2026-10-01T10:00:00Z', 30)).toBe('2026-11-01');
     // due 31 Oct 23:00 UTC, after that evening's run: the next one, the morning of 2 Nov in Singapore
     expect(runDateAfter('2026-10-01T23:00:00Z', 30)).toBe('2026-11-02');
     // due exactly at a run: the next one
-    expect(runDateAfter('2026-10-01T22:43:00Z', 30)).toBe('2026-11-02');
+    expect(runDateAfter('2026-10-01T19:53:00Z', 30)).toBe('2026-11-02');
   });
   it('joins names in plain English', () => {
     expect(peopleList([])).toBe('');

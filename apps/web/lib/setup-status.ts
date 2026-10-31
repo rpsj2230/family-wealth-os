@@ -179,7 +179,7 @@ function checklist(f: SetupFacts): SetupItem[] {
       label: 'Daily summary e-mail on',
       done: f.digestEnabled,
       href: '/settings?tab=notifications#digest',
-      hint: f.digestEnabled ? 'Sent at about 7:00 AM Singapore time.' : 'Switched off.',
+      hint: f.digestEnabled ? 'Sent at about 4:00 AM Singapore time.' : 'Switched off.',
     },
     {
       key: 'emergency',

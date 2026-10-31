@@ -13,8 +13,8 @@ import {
 
 const SECRET = 'service-role-key-for-tests-only';
 const H = 'hh-1';
-// the last sign-in, ten minutes before a daily run (the runs are at 22:43 UTC, the next morning in Singapore)
-const SEEN = '2026-09-30T22:33:00.000Z';
+// the last sign-in, ten minutes before a daily run (the runs are at 19:53 UTC, the next morning in Singapore)
+const SEEN = '2026-09-30T19:43:00.000Z';
 const DAY = 86_400_000;
 const run = (d: number) => new Date(Date.parse(SEEN) + d * DAY + 10 * 60_000).toISOString();
 const APP = 'https://portal.example.com';

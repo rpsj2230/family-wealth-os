@@ -394,7 +394,7 @@ export function NotificationsSection({
         {deliveries.length === 0 ? (
           <p className="empty">
             Nothing sent yet. Switch on the e-mail or Telegram above; the first summary goes out at
-            about 7:00 AM Singapore time.
+            about 4:00 AM Singapore time.
           </p>
         ) : (
           <table className="tbl responsive">

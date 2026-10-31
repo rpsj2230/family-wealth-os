@@ -176,7 +176,7 @@ Tooling: pnpm workspaces · Vitest · Playwright (phone/tablet/desktop) · ESLin
 ### P8 — Reporting, notifications, emergency (M3 / M4)  `[ ]`
 
 - [ ] **P8.1** ⏳ Digest builder built and tested (estimated net worth, change since last snapshot, by person, bank-balance freshness line "No new verified bank balance received", NAV/FX dates, attention list, retirement line). Daily-vs-weekly/monthly cadence pending
-- [ ] **P8.2** ⏳ Email via your own Gmail (SMTP app password; free, no domain). Idempotent per day, 3 retries with backoff, delivery log; records only "handed to the mail server", never "delivered". Workflow runs about 7:00 AM Singapore. **Needs secrets SMTP_USER and SMTP_APP_PASSWORD (NEEDS A8) and the switch in Settings**
+- [ ] **P8.2** ⏳ Email via your own Gmail (SMTP app password; free, no domain). Idempotent per day, 3 retries with backoff, delivery log; records only "handed to the mail server", never "delivered". Workflow runs about 4:00 AM Singapore. **Needs secrets SMTP_USER and SMTP_APP_PASSWORD (NEEDS A8) and the switch in Settings**
 - [x] **P8.3** WhatsApp: one-tap share of today's summary (opens WhatsApp with the text ready; you choose the contact). No unofficial bots
 - [ ] **P8.4** Alerts: maturities, stale data, failed imports, overdue receivables, renewals
 - [ ] **P8.5** **Emergency vault**: asset map, claim checklists per institution (nominee vs legal heir), document locations, trusted contacts
