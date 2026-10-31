@@ -166,8 +166,8 @@ export function InboxBoard({
                 that applies the label <strong>{label}</strong>.
               </li>
               <li>
-                The reader opens that label every hour. A balance from the bank’s own address
-                that matches exactly one account is recorded at once.
+                The reader opens that label every hour. A balance from the bank’s own address that
+                matches exactly one account is recorded at once.
               </li>
               <li>
                 Anything else waits under <Link href={`${base}?tab=review`}>Needs your review</Link>{' '}
