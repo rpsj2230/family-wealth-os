@@ -194,6 +194,11 @@ const BANK_RULES: { bank: string; re: RegExp }[] = [
   },
 ];
 
+/** Every domain a bank's alerts and statements may come from, for searching a whole mailbox for them. */
+export function bankSenderDomains(): string[] {
+  return [...new Set(Object.values(BANK_DOMAINS).flat())];
+}
+
 /** Which bank a sender domain belongs to, or null. */
 export function bankForDomain(domain: string): string | null {
   for (const [bank, domains] of Object.entries(BANK_DOMAINS))

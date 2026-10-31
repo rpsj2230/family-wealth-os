@@ -10,7 +10,11 @@ import { extractText, getDocumentProxy } from 'unpdf';
 import { connectDb, householdId, must, need } from './shared';
 import {
   PROVIDER_SHORT,
+  alertMovement,
+  bankSenderDomains,
+  parseBankEmail,
   runInbox,
+  unwrapForward,
   type AiAttempt,
   type InboxIo,
   type InboxMessage,
@@ -272,6 +276,18 @@ async function main() {
     },
   };
 
+  // your own mailboxes that forward the banks' mail: the addresses listed in Settings and every household member's login address
+  const members = must(
+    await db.from('household_members').select('user_id').eq('household_id', hh),
+    'members',
+  );
+  const inboxSettings = (await loadSettings(db, hh)).config.inbox;
+  const trustedForwarders = new Set<string>(inboxSettings.trustedForwarders);
+  for (const m of members) {
+    const u = await db.auth.admin.getUserById(m.user_id as string);
+    if (u.data.user?.email) trustedForwarders.add(u.data.user.email.toLowerCase());
+  }
+
   const client = new ImapFlow({
     host: 'imap.gmail.com',
     port: 993,
@@ -308,20 +324,76 @@ async function main() {
     } finally {
       lock.release();
     }
+    // the banks' mail anywhere in the mailbox too, so nothing depends on a filter putting the label on it: the banks' own addresses,
+    // and your forwards that name a bank. Read-only (EXAMINE). Only what the rules see as an alert, a balance or a statement is kept;
+    // a bank's other mail (offers, news) is passed over without being logged or shown to the AI.
+    const boxes = await client.list();
+    const allMail = boxes.find((b) => b.specialUse === '\\All')?.path ?? '[Gmail]/All Mail';
+    const all = await client.getMailboxLock(allMail, { readOnly: true });
+    try {
+      const domains = bankSenderDomains();
+      const after = new Date(Date.now() - Number(process.env.INBOX_DAYS || 35) * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
+        .replace(/-/g, '/');
+      const queries = [`from:(${domains.join(' OR ')}) after:${after}`];
+      if (trustedForwarders.size)
+        queries.push(
+          `from:(${[...trustedForwarders].join(' OR ')}) (${domains.map((d) => `"${d}"`).join(' OR ')}) after:${after}`,
+        );
+      const uids = new Set<number>();
+      for (const q of queries)
+        for (const u of (await client.search({ gmraw: q }, { uid: true })) || []) uids.add(u);
+      const have = new Set(messages.map((m) => m.messageId));
+      // the newest first, at most this many in one run (the rest come in the next run)
+      const pick = [...uids].sort((a, b) => b - a).slice(0, 300);
+      let kept = 0;
+      if (pick.length)
+        for await (const m of client.fetch(pick, { source: true, uid: true }, { uid: true })) {
+          if (!m.source) continue;
+          const p = await simpleParser(m.source);
+          const id = p.messageId ?? `uid-${m.uid}@all-mail`;
+          if (have.has(id)) continue;
+          const text = p.text ?? (typeof p.html === 'string' ? stripHtml(p.html) : '');
+          const attachments = p.attachments
+            .filter((a) => /\.pdf$/i.test(a.filename ?? '') || a.contentType === 'application/pdf')
+            .map((a) => ({
+              filename: a.filename ?? 'attachment.pdf',
+              content: new Uint8Array(a.content),
+            }));
+          const unwrapped = unwrapForward(p.subject ?? '', text);
+          const from =
+            unwrapped.found && unwrapped.originalFrom
+              ? unwrapped.originalFrom
+              : (p.from?.text ?? '');
+          const body = text;
+          const kind = parseBankEmail({
+            from,
+            subject: p.subject ?? '',
+            text: body,
+            attachments: attachments.map((a) => a.filename),
+          }).kind;
+          if (kind === 'unknown' && !alertMovement(body)) continue;
+          have.add(id);
+          kept++;
+          messages.push({
+            messageId: id,
+            from: p.from?.text ?? '',
+            subject: p.subject ?? '',
+            text,
+            receivedOn: (p.date ?? new Date()).toISOString().slice(0, 10),
+            receivedAt: (p.date ?? new Date()).toISOString(),
+            attachments,
+          });
+        }
+      console.log(
+        `Bank mail found outside the label: ${uids.size} messages, ${kept} new ones with an alert, a balance or a statement.`,
+      );
+    } finally {
+      all.release();
+    }
   } finally {
     await client.logout();
-  }
-
-  // your own mailboxes that forward the banks' mail: the addresses listed in Settings and every household member's login address
-  const members = must(
-    await db.from('household_members').select('user_id').eq('household_id', hh),
-    'members',
-  );
-  const inboxSettings = (await loadSettings(db, hh)).config.inbox;
-  const trustedForwarders = new Set<string>(inboxSettings.trustedForwarders);
-  for (const m of members) {
-    const u = await db.auth.admin.getUserById(m.user_id as string);
-    if (u.data.user?.email) trustedForwarders.add(u.data.user.email.toLowerCase());
   }
   // messages you pressed "Read again" on (they had no kept copy): read once more, even though they were seen before
   const again = new Set(
