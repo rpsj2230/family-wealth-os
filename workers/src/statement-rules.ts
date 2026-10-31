@@ -125,8 +125,23 @@ async function main() {
     if (r.noRule || dup || (needsTarget && !target.assetId)) continue;
     toSave.push({ ...r, assetId: target.assetId });
   }
-  // lines of one amount after a day (FIND "200000@2023-11-01"): to find a repayment that does not name the person
-  const [findAmount, findAfter] = (process.env.FIND ?? '').split('@');
+  // lines of one amount after a day (FIND "200000@2023-11-01"): to find a repayment that does not name the person; or lines
+  // whose words hold all of these (FIND "words:cold store@2025-01-01"), money in only
+  const findText = process.env.FIND ?? '';
+  if (findText.startsWith('words:')) {
+    const [w, after] = findText.slice(6).split('@');
+    const want = (w ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    for (const l of t.lines.filter(
+      (x) =>
+        x.amount > 0 &&
+        x.txn_on >= (after ?? '') &&
+        want.every((k) => x.narration.toLowerCase().includes(k)),
+    ))
+      console.log(
+        `  found ${l.txn_on} in ${lakh(l.amount)} ${label(l.asset_id)} [${t.classified.get(l.id)?.cls}] "${l.narration.toLowerCase().replace(/\d/g, '#').slice(0, 60)}"`,
+      );
+  }
+  const [findAmount, findAfter] = (findText.startsWith('words:') ? '' : findText).split('@');
   if (Number(findAmount) > 0)
     for (const l of t.lines.filter(
       (x) => Math.abs(Math.abs(x.amount) - Number(findAmount)) < 1 && x.txn_on >= (findAfter ?? ''),
